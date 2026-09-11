@@ -45,6 +45,10 @@ const (
 	// read from an RFC 7662 introspection response.
 	IdentitySourceIntrospection = "introspection"
 
+	// IdentitySourceJWTAccessToken is the identity_source value for claims from
+	// a verified RFC 9068 access token.
+	IdentitySourceJWTAccessToken = "jwt_access_token"
+
 	// interfaceRefreshIntrospection is the enrichment.interfaces key for the
 	// refresh-token introspection that backfills refresh_expires_at.
 	interfaceRefreshIntrospection = "refresh_introspection"
@@ -84,9 +88,10 @@ var EnrichmentRate = ratelimit.PerMinute(60)
 // identitySourceRank orders the interfaces an identity can come from; only an
 // equal or higher rank overwrites the typed identity columns.
 var identitySourceRank = map[string]int{
-	IdentitySourceIDToken:       3,
-	IdentitySourceUserinfo:      2,
-	IdentitySourceIntrospection: 1,
+	IdentitySourceIDToken:        3,
+	IdentitySourceUserinfo:       2,
+	IdentitySourceIntrospection:  1,
+	IdentitySourceJWTAccessToken: 0,
 }
 
 // overwritableIdentitySources lists the stored identity sources an identity
@@ -110,6 +115,23 @@ func overwritableIdentitySources(source string) []string {
 // introspectionRetainedMembers are the RFC 7662 response members kept under enrichment.introspection.
 var introspectionRetainedMembers = []string{"active", "exp", "scope", "sub", "aud", "client_id", "username", "sid"}
 
+// jwtAccessTokenRetainedClaims are the access-token claims kept under enrichment.jwt_access_token.
+var jwtAccessTokenRetainedClaims = []string{
+	"sub", "iss", "aud", "exp", "iat", "nbf", "jti", "client_id", "azp", "scope", "scp",
+	"email", "email_verified", "name", "given_name", "family_name", "preferred_username", "sid", "auth_time",
+}
+
+// retainMembers keeps only the named members of claims.
+func retainMembers(claims map[string]json.RawMessage, names []string) map[string]json.RawMessage {
+	kept := make(map[string]json.RawMessage, len(names))
+	for _, name := range names {
+		if v, ok := claims[name]; ok {
+			kept[name] = v
+		}
+	}
+	return kept
+}
+
 // enrichmentTarget is what one issuer and client registration contribute to an enrichment call.
 type enrichmentTarget struct {
 	issuerID              uuid.UUID
@@ -120,22 +142,29 @@ type enrichmentTarget struct {
 	introspectionAuth     []string
 	jwksURI               string
 	externalClientID      string
+	resource              string
+
+	// resourceIndicatorUnsupported is the issuer's explicit false: the resource never reached it.
+	resourceIndicatorUnsupported bool
+
 	clientSecretEncrypted string
 	tokenEndpointAuth     string
 }
 
 func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, organizationID string) enrichmentTarget {
 	return enrichmentTarget{
-		issuerID:              row.RemoteSessionIssuerID,
-		issuerURL:             row.IssuerUrl,
-		organizationID:        organizationID,
-		userinfoEndpoint:      conv.FromPGTextOrEmpty[string](row.UserinfoEndpoint),
-		introspectionEndpoint: conv.FromPGTextOrEmpty[string](row.IntrospectionEndpoint),
-		introspectionAuth:     row.IntrospectionEndpointAuthMethodsSupported,
-		jwksURI:               conv.FromPGTextOrEmpty[string](row.JwksUri),
-		externalClientID:      row.ExternalClientID,
-		clientSecretEncrypted: conv.FromPGTextOrEmpty[string](row.ClientSecretEncrypted),
-		tokenEndpointAuth:     conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
+		issuerID:                     row.RemoteSessionIssuerID,
+		issuerURL:                    row.IssuerUrl,
+		organizationID:               organizationID,
+		userinfoEndpoint:             conv.FromPGTextOrEmpty[string](row.UserinfoEndpoint),
+		introspectionEndpoint:        conv.FromPGTextOrEmpty[string](row.IntrospectionEndpoint),
+		introspectionAuth:            row.IntrospectionEndpointAuthMethodsSupported,
+		jwksURI:                      conv.FromPGTextOrEmpty[string](row.JwksUri),
+		externalClientID:             row.ExternalClientID,
+		resource:                     "",
+		resourceIndicatorUnsupported: row.ResourceIndicatorSupported.Valid && !row.ResourceIndicatorSupported.Bool,
+		clientSecretEncrypted:        conv.FromPGTextOrEmpty[string](row.ClientSecretEncrypted),
+		tokenEndpointAuth:            conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
 	}
 }
 
@@ -176,6 +205,25 @@ func (r interfaceResult) failed() bool { return r.ran && r.Status == interfaceSt
 type userinfoResult struct {
 	interfaceResult
 	identity *UpstreamIdentity
+}
+
+// jwtAccessTokenResult is local verified-access-token enrichment. It embeds
+// the same outcome contract as issuer interfaces so persistence and privacy
+// handling stay uniform.
+type jwtAccessTokenResult struct {
+	interfaceResult
+	identity     *UpstreamIdentity
+	claims       map[string]json.RawMessage
+	scopes       []string
+	scopePresent bool
+}
+
+// retained returns the allowlisted claims of a verified token, whether or not its identity was selected.
+func (r jwtAccessTokenResult) retained() map[string]json.RawMessage {
+	if !r.ok() {
+		return nil
+	}
+	return r.claims
 }
 
 // introspectionResult is an introspection call; active and the members are
@@ -363,6 +411,143 @@ func (e *SessionEnricher) userinfo(ctx context.Context, target enrichmentTarget,
 	return out
 }
 
+// jwtAccessToken verifies signed access-token claims. Explicit access-token
+// types require RFC 9068 claims; Gram's generic-type compatibility path
+// additionally requires a recorded resource distinct from the OAuth client.
+// ran is false when nothing was examined: an opaque token, an issuer with no
+// key set, or a key set that could not be consulted.
+func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentTarget, accessToken string) jwtAccessTokenResult {
+	now := time.Now()
+	out := jwtAccessTokenResult{
+		interfaceResult: interfaceResult{interfaceRecord: interfaceRecord{Status: interfaceStatusFailed, HTTPStatus: 0, Reason: "", At: now}, ran: false},
+		identity:        nil,
+		claims:          nil,
+		scopes:          nil,
+		scopePresent:    false,
+	}
+	if strings.Count(accessToken, ".") != 2 || e.keys == nil || target.jwksURI == "" {
+		return out
+	}
+	ctx, cancel := context.WithTimeout(ctx, idTokenVerifyBudget)
+	defer cancel()
+	var claims jwt.Claims
+	var all map[string]json.RawMessage
+	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
+	if err != nil {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errJWTKeySetUnavailable) {
+			return out
+		}
+		out.ran = true
+		e.rejectJWTAccessToken(ctx, target, &out, "unverifiable token")
+		return out
+	}
+	out.ran = true
+	// RFC 9068 §2.1: typ distinguishes the access-token profile.
+	typ, typePresent, err := jwtAccessTokenType(header)
+	if err != nil {
+		e.rejectJWTAccessToken(ctx, target, &out, "invalid token type")
+		return out
+	}
+	typ = strings.ToLower(typ)
+	dedicatedType := typ == "at+jwt" || typ == "application/at+jwt"
+	// Gram compatibility: generic/missing typ is only accepted for a distinct resource audience.
+	genericType := !typePresent || typ == "jwt" || typ == "application/jwt"
+	if !dedicatedType && !genericType {
+		e.rejectJWTAccessToken(ctx, target, &out, "wrong token type")
+		return out
+	}
+	// A resource the issuer never saw cannot be the token's audience.
+	resource := target.resource
+	if target.resourceIndicatorUnsupported {
+		resource = ""
+	}
+	// Gram compatibility: without a recorded resource, a dedicated token may use the client audience.
+	expectedAudience := conv.Default(resource, target.externalClientID)
+	if genericType && (resource == "" || resource == target.externalClientID) {
+		e.rejectJWTAccessToken(ctx, target, &out, "ambiguous token type")
+		return out
+	}
+	// RFC 9068 §2.2: iss, sub, aud, and exp are required.
+	if claims.Issuer == "" || claims.Subject == "" || claims.Expiry == nil {
+		e.rejectJWTAccessToken(ctx, target, &out, "missing required claims")
+		return out
+	}
+	// RFC 9068 §4: require the expected resource audience (Gram fallback above).
+	if expectedAudience == "" || !claims.Audience.Contains(expectedAudience) {
+		e.rejectJWTAccessToken(ctx, target, &out, "audience mismatch")
+		return out
+	}
+	// RFC 9068 §4 requires the issuer identifier to match exactly.
+	if claims.Issuer != target.issuerURL {
+		e.rejectJWTAccessToken(ctx, target, &out, "invalid claims")
+		return out
+	}
+	if err := claims.ValidateWithLeeway(jwt.Expected{Issuer: "", Subject: "", AnyAudience: nil, ID: "", Time: now}, idTokenMaxSkew); err != nil {
+		e.rejectJWTAccessToken(ctx, target, &out, "invalid claims")
+		return out
+	}
+	if dedicatedType {
+		if err := validateRFC9068Claims(claims, all, target.externalClientID); err != nil {
+			e.rejectJWTAccessToken(ctx, target, &out, err.Error())
+			return out
+		}
+	} else {
+		// Gram binding policy: a client the token does name must be this OAuth client.
+		for _, name := range []string{"client_id", "azp"} {
+			if _, present := all[name]; present && claimString(all, name) != target.externalClientID {
+				e.rejectJWTAccessToken(ctx, target, &out, "client mismatch")
+				return out
+			}
+		}
+	}
+	if raw, ok := all["scope"]; ok {
+		out.scopePresent = true
+		var scope *string
+		if json.Unmarshal(raw, &scope) != nil || scope == nil {
+			e.rejectJWTAccessToken(ctx, target, &out, "invalid scope")
+			return out
+		}
+		// RFC 6749 §3.3: scope-token syntax separated by single spaces.
+		out.scopes, err = parseJWTAccessTokenScope(*scope)
+		if err != nil {
+			e.rejectJWTAccessToken(ctx, target, &out, "invalid scope")
+			return out
+		}
+	}
+	kept := retainMembers(all, jwtAccessTokenRetainedClaims)
+	out.Status = interfaceStatusOK
+	out.claims = kept
+	out.identity = &UpstreamIdentity{
+		Subject: claims.Subject, Email: claimString(kept, "email"),
+		DisplayName: displayNameFromClaims(kept), Source: IdentitySourceJWTAccessToken, Claims: kept,
+	}
+	return out
+}
+
+// jwtAccessTokenType reads typ from a verified header; present is false when the header carries none.
+func jwtAccessTokenType(header jose.Header) (typ string, present bool, err error) {
+	// RFC 7797 §7: JWTs MUST NOT use the unencoded-payload option, which go-jose would otherwise accept.
+	if rawB64, ok := header.ExtraHeaders[jose.HeaderKey("b64")]; ok {
+		if encoded, isBool := rawB64.(bool); !isBool || !encoded {
+			return "", false, errors.New("jwt requires a base64url-encoded payload")
+		}
+	}
+	rawType, ok := header.ExtraHeaders[jose.HeaderType]
+	if !ok {
+		return "", false, nil
+	}
+	typ, isString := rawType.(string)
+	if !isString {
+		return "", true, errors.New("invalid jwt typ")
+	}
+	return typ, true, nil
+}
+
+func (e *SessionEnricher) rejectJWTAccessToken(ctx context.Context, target enrichmentTarget, out *jwtAccessTokenResult, reason string) {
+	out.fail(reason)
+	logIdentityFailure(ctx, e.logger, "jwt access token rejected", errors.New(reason), attr.SlogOAuthIssuer(target.issuerURL))
+}
+
 // introspect presents a token to the issuer's introspection endpoint,
 // authenticating as the client the way the token endpoint does. Only a 200
 // carrying an active member is a usable answer: a 403 or a body without one
@@ -410,12 +595,7 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		return out
 	}
 	out.active = *active
-	out.members = make(map[string]json.RawMessage, len(introspectionRetainedMembers))
-	for _, name := range introspectionRetainedMembers {
-		if v, ok := members[name]; ok {
-			out.members[name] = v
-		}
-	}
+	out.members = retainMembers(members, introspectionRetainedMembers)
 	var exp int64
 	if raw, ok := members["exp"]; ok && json.Unmarshal(raw, &exp) == nil && exp > 0 {
 		out.expiresAt = time.Unix(exp, 0)
@@ -536,11 +716,9 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 		return none, fmt.Errorf("load issuer for enrichment: %w", err)
 	}
 	target := enrichmentTargetFromClient(client, ref.OrganizationID)
+	target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 	if sess.IdentitySource.Valid && !slices.Contains(overwritableIdentitySources(IdentitySourceUserinfo), sess.IdentitySource.String) {
 		target.userinfoEndpoint = ""
-	}
-	if target.userinfoEndpoint == "" && target.introspectionEndpoint == "" {
-		return none, nil
 	}
 	accessToken, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 	if err != nil {
@@ -555,6 +733,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	callCtx, cancel := context.WithTimeout(ctx, enrichmentVerifyBudget)
 	defer cancel()
 	var userinfo userinfoResult
+	var access jwtAccessTokenResult
 	var introspection introspectionResult
 	var refresh *interfaceRecord
 	var calls sync.WaitGroup
@@ -564,9 +743,6 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 		refresh = m.backfillRefreshDeadline(callCtx, q, ref, sess, target, introspection, attrs)
 	})
 	calls.Wait()
-	if !userinfo.ran && !introspection.ran {
-		return none, nil
-	}
 
 	// The highest-ranked source that answered writes the typed columns. A
 	// different subject is someone else's identity (§12.2): nothing it said
@@ -584,9 +760,21 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 			candidate.res.fail("subject mismatch")
 		}
 	}
-	var identity *UpstreamIdentity
 	stored := storedInterfaceRecords(sess.Enrichment)
 	idTokenRejected := stored[IdentitySourceIDToken].Status == interfaceStatusRejected
+	strongerIdentity := (userinfo.ok() && userinfo.identity != nil) || (introspection.ok() && introspection.identity != nil)
+	jwtCanWrite := !sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String)
+	if !idTokenRejected && !strongerIdentity && jwtCanWrite {
+		access = m.enricher.jwtAccessToken(callCtx, target, accessToken)
+		if subject := identitySubject(access.identity); subject != "" && sess.UpstreamSubject.Valid && subject != sess.UpstreamSubject.String {
+			m.enricher.rejectJWTAccessToken(ctx, target, &access, "subject mismatch")
+			access.identity = nil
+		}
+	}
+	if !userinfo.ran && !access.ran && !introspection.ran {
+		return none, nil
+	}
+	var identity *UpstreamIdentity
 	interfaces := map[string]interfaceRecord{}
 	doc := map[string]any{"interfaces": interfaces}
 	if userinfo.ran {
@@ -610,6 +798,18 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 		}
 	case introspection.failed():
 		doc[IdentitySourceIntrospection] = nil
+	}
+	if access.ran {
+		interfaces[IdentitySourceJWTAccessToken] = access.interfaceRecord
+	}
+	switch {
+	case access.ok():
+		doc[IdentitySourceJWTAccessToken] = retainedClaims(access.identity.Claims)
+		if identity == nil {
+			identity = access.identity
+		}
+	case access.failed():
+		doc[IdentitySourceJWTAccessToken] = nil
 	}
 	if refresh != nil {
 		interfaces[interfaceRefreshIntrospection] = *refresh
@@ -638,6 +838,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 
 	cols := identity.columns()
 	_, err = q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		Scopes:                nil,
 		OverwritableSources:   overwritableIdentitySources(cols.Source.String),
 		UpstreamSubject:       cols.Subject,
 		UpstreamEmail:         cols.Email,

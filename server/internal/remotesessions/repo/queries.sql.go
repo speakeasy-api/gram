@@ -4906,6 +4906,7 @@ SELECT
   s.access_expires_at,
   s.authorization_expires_at,
   s.refresh_expires_at,
+  s.upstream_subject,
   s.upstream_email,
   s.upstream_display_name,
   s.identity_source,
@@ -4956,6 +4957,7 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 	AccessExpiresAt        pgtype.Timestamptz
 	AuthorizationExpiresAt pgtype.Timestamptz
 	RefreshExpiresAt       pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
 	UpstreamEmail          pgtype.Text
 	UpstreamDisplayName    pgtype.Text
 	IdentitySource         pgtype.Text
@@ -5024,6 +5026,7 @@ func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg L
 			&i.AccessExpiresAt,
 			&i.AuthorizationExpiresAt,
 			&i.RefreshExpiresAt,
+			&i.UpstreamSubject,
 			&i.UpstreamEmail,
 			&i.UpstreamDisplayName,
 			&i.IdentitySource,
@@ -7438,60 +7441,63 @@ func (q *Queries) UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx context.Co
 const updateRemoteSessionIdentity = `-- name: UpdateRemoteSessionIdentity :one
 UPDATE remote_sessions
 SET
-    upstream_subject = CASE WHEN identity_source IS NULL OR identity_source = ANY($1::text[])
-        THEN COALESCE($2::text, upstream_subject) ELSE upstream_subject END,
-    upstream_email = CASE WHEN identity_source IS NULL OR identity_source = ANY($1::text[])
-        THEN COALESCE($3::text, upstream_email) ELSE upstream_email END,
-    upstream_display_name = CASE WHEN identity_source IS NULL OR identity_source = ANY($1::text[])
-        THEN COALESCE($4::text, upstream_display_name) ELSE upstream_display_name END,
-    identity_source = CASE WHEN identity_source IS NULL OR identity_source = ANY($1::text[])
-        THEN COALESCE($5::text, identity_source) ELSE identity_source END,
+    -- Scope describes this token generation, independent of which source won typed identity.
+    scopes = COALESCE($1::text[], scopes),
+    upstream_subject = CASE WHEN identity_source IS NULL OR identity_source = ANY($2::text[])
+        THEN COALESCE($3::text, upstream_subject) ELSE upstream_subject END,
+    upstream_email = CASE WHEN identity_source IS NULL OR identity_source = ANY($2::text[])
+        THEN COALESCE($4::text, upstream_email) ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source IS NULL OR identity_source = ANY($2::text[])
+        THEN COALESCE($5::text, upstream_display_name) ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source IS NULL OR identity_source = ANY($2::text[])
+        THEN COALESCE($6::text, identity_source) ELSE identity_source END,
     enrichment = CASE
-        WHEN $6::jsonb IS NULL THEN enrichment
+        WHEN $7::jsonb IS NULL THEN enrichment
         ELSE (
             SELECT CASE
                 WHEN octet_length(merged.doc::text) <= 16384 THEN merged.doc
-                WHEN $6::jsonb ? 'id_token' OR $6::jsonb ? 'token_response' THEN
-                    $6::jsonb
+                WHEN $7::jsonb ? 'id_token' OR $7::jsonb ? 'token_response' THEN
+                    $7::jsonb
                     || CASE WHEN remote_sessions.enrichment #> '{interfaces,id_token}' IS NOT NULL
-                        THEN jsonb_build_object('interfaces', jsonb_build_object('id_token', remote_sessions.enrichment #> '{interfaces,id_token}') || COALESCE($6::jsonb -> 'interfaces', '{}'::jsonb))
+                        THEN jsonb_build_object('interfaces', jsonb_build_object('id_token', remote_sessions.enrichment #> '{interfaces,id_token}') || COALESCE($7::jsonb -> 'interfaces', '{}'::jsonb))
                         ELSE '{}'::jsonb END
                 ELSE
                     COALESCE(remote_sessions.enrichment, '{}'::jsonb)
-                    || COALESCE((SELECT jsonb_object_agg(retired.key, retired.value) FROM jsonb_each($6::jsonb) AS retired WHERE retired.value = 'null'::jsonb), '{}'::jsonb)
-                    || CASE WHEN $6::jsonb ? 'interfaces'
-                        THEN jsonb_build_object('interfaces', COALESCE(remote_sessions.enrichment -> 'interfaces', '{}'::jsonb) || ($6::jsonb -> 'interfaces'))
+                    || COALESCE((SELECT jsonb_object_agg(retired.key, retired.value) FROM jsonb_each($7::jsonb) AS retired WHERE retired.value = 'null'::jsonb), '{}'::jsonb)
+                    || CASE WHEN $7::jsonb ? 'interfaces'
+                        THEN jsonb_build_object('interfaces', COALESCE(remote_sessions.enrichment -> 'interfaces', '{}'::jsonb) || ($7::jsonb -> 'interfaces'))
                         ELSE '{}'::jsonb END
                 END
             FROM (SELECT
-                COALESCE(remote_sessions.enrichment, '{}'::jsonb) || $6::jsonb
-                || CASE WHEN remote_sessions.enrichment ? 'id_token' AND $6::jsonb ? 'id_token'
+                COALESCE(remote_sessions.enrichment, '{}'::jsonb) || $7::jsonb
+                || CASE WHEN remote_sessions.enrichment ? 'id_token' AND $7::jsonb ? 'id_token'
                     THEN jsonb_build_object('id_token',
                         -- A stored email_verified describes the stored email, so a restated email drops it.
-                        CASE WHEN ($6::jsonb -> 'id_token') ? 'email'
-                                AND (remote_sessions.enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($6::jsonb -> 'id_token' -> 'email')
+                        CASE WHEN ($7::jsonb -> 'id_token') ? 'email'
+                                AND (remote_sessions.enrichment -> 'id_token' -> 'email') IS DISTINCT FROM ($7::jsonb -> 'id_token' -> 'email')
                             THEN (remote_sessions.enrichment -> 'id_token') - 'email_verified'
                             ELSE remote_sessions.enrichment -> 'id_token' END
-                        || ($6::jsonb -> 'id_token'))
+                        || ($7::jsonb -> 'id_token'))
                     ELSE '{}'::jsonb END
-                || CASE WHEN remote_sessions.enrichment ? 'token_response' AND $6::jsonb ? 'token_response'
-                    THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || ($6::jsonb -> 'token_response'))
+                || CASE WHEN remote_sessions.enrichment ? 'token_response' AND $7::jsonb ? 'token_response'
+                    THEN jsonb_build_object('token_response', (remote_sessions.enrichment -> 'token_response') || ($7::jsonb -> 'token_response'))
                     ELSE '{}'::jsonb END
-                || CASE WHEN remote_sessions.enrichment ? 'interfaces' AND $6::jsonb ? 'interfaces'
-                    THEN jsonb_build_object('interfaces', (remote_sessions.enrichment -> 'interfaces') || ($6::jsonb -> 'interfaces'))
+                || CASE WHEN remote_sessions.enrichment ? 'interfaces' AND $7::jsonb ? 'interfaces'
+                    THEN jsonb_build_object('interfaces', (remote_sessions.enrichment -> 'interfaces') || ($7::jsonb -> 'interfaces'))
                     ELSE '{}'::jsonb END
                 AS doc) AS merged
         )
     END
-WHERE id = $7
-  AND subject_urn = $8
-  AND remote_session_client_id = $9
+WHERE id = $8
+  AND subject_urn = $9
+  AND remote_session_client_id = $10
   AND deleted IS FALSE
-  AND updated_at = $10
+  AND updated_at = $11
 RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIdentityParams struct {
+	Scopes                []string
 	OverwritableSources   []string
 	UpstreamSubject       pgtype.Text
 	UpstreamEmail         pgtype.Text
@@ -7522,6 +7528,7 @@ type UpdateRemoteSessionIdentityParams struct {
 // evicts what the exchange recorded and a stale answer is still retired.
 func (q *Queries) UpdateRemoteSessionIdentity(ctx context.Context, arg UpdateRemoteSessionIdentityParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionIdentity,
+		arg.Scopes,
 		arg.OverwritableSources,
 		arg.UpstreamSubject,
 		arg.UpstreamEmail,
@@ -8001,6 +8008,12 @@ SET
         ELSE COALESCE($6, refresh_expires_at) END,
     scopes = $7,
     resource = COALESCE(resource, NULLIF($8::text, '')),
+    -- JWT-derived identity describes the access token being replaced. Higher
+    -- ranked identity sources survive rotation until they restate themselves.
+    upstream_subject = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_subject END,
+    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
     -- A refreshed token has not been presented anywhere yet, and the stored
     -- introspection answer described the token it replaces; a rotated refresh
     -- token likewise retires the record of having introspected the old one.
@@ -8009,8 +8022,8 @@ SET
     validation_reason = NULL,
     enrichment = CASE
         WHEN $5::boolean
-        THEN ((enrichment - 'introspection') #- '{interfaces,introspection}') #- '{interfaces,refresh_introspection}'
-        ELSE (enrichment - 'introspection') #- '{interfaces,introspection}' END,
+        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
     updated_at = clock_timestamp()
 WHERE subject_urn = $9
   AND remote_session_client_id = $10

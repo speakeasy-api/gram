@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -53,4 +54,56 @@ func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerM
 // SetIssuerMetadataRefreshSeam replaces the AIM-260 seam so a test can observe the refresh request a 404 makes.
 func (e *SessionEnricher) SetIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) {
 	e.requestIssuerMetadataRefresh = fn
+}
+
+// JWTAccessTokenTarget exposes the inputs to local JWT access-token enrichment to external tests.
+type JWTAccessTokenTarget struct {
+	IssuerID         uuid.UUID
+	IssuerURL        string
+	JWKSURI          string
+	ExternalClientID string
+	Resource         string
+
+	// ResourceIndicatorUnsupported is the issuer's explicit resource_indicator_supported=false.
+	ResourceIndicatorUnsupported bool
+}
+
+// JWTAccessTokenResult exposes the security-relevant local verification result to external tests.
+type JWTAccessTokenResult struct {
+	Ran          bool
+	Status       string
+	Reason       string
+	Subject      string
+	Email        string
+	DisplayName  string
+	Source       string
+	Scopes       []string
+	ScopePresent bool
+
+	// Claims are the retained members an adopted identity carries.
+	Claims map[string]json.RawMessage
+}
+
+// JWTAccessToken runs local access-token verification through the production implementation.
+func (e *SessionEnricher) JWTAccessToken(ctx context.Context, target JWTAccessTokenTarget, raw string) JWTAccessTokenResult {
+	result := e.jwtAccessToken(ctx, enrichmentTarget{
+		issuerID:                     target.IssuerID,
+		issuerURL:                    target.IssuerURL,
+		jwksURI:                      target.JWKSURI,
+		externalClientID:             target.ExternalClientID,
+		resource:                     target.Resource,
+		resourceIndicatorUnsupported: target.ResourceIndicatorUnsupported,
+	}, raw)
+	out := JWTAccessTokenResult{
+		Ran: result.ran, Status: result.Status, Reason: result.Reason,
+		Scopes: result.scopes, ScopePresent: result.scopePresent,
+	}
+	if result.identity != nil {
+		out.Subject = result.identity.Subject
+		out.Email = result.identity.Email
+		out.DisplayName = result.identity.DisplayName
+		out.Source = result.identity.Source
+		out.Claims = result.identity.Claims
+	}
+	return out
 }

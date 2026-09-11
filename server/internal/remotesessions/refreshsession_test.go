@@ -19,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -29,7 +31,7 @@ import (
 // a still-valid access token — so a refresh exercises the "regardless of current
 // expiry" path. enc must share the fixed test key with the service so the seeded
 // refresh token decrypts.
-func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstance, enc *encryption.Client, slug string, handler http.HandlerFunc) uuid.UUID {
+func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstance, enc *encryption.Client, slug string, handler http.HandlerFunc) repo.RemoteSession {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -80,7 +82,7 @@ func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstan
 		Resource:               pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	return row.ID
+	return row
 }
 
 // TestRefreshSession forces an upstream refresh on a session whose access token
@@ -94,16 +96,31 @@ func TestRefreshSession(t *testing.T) {
 
 	// expires_in is 2h, well beyond the seeded session's 1h access expiry, so a
 	// later expiry proves the refresh actually ran and persisted.
-	sessionID := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh", func(w http.ResponseWriter, _ *http.Request) {
+	session := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":7200,"refresh_token":"refreshed-refresh","scope":"read:only"}`))
 	})
+
+	_, err := repo.New(ti.conn).UpdateRemoteSessionIdentity(ctx, repo.UpdateRemoteSessionIdentityParams{
+		Scopes:                nil,
+		OverwritableSources:   []string{"jwt_access_token"},
+		UpstreamSubject:       conv.ToPGText("old-jwt-subject"),
+		UpstreamEmail:         conv.ToPGText("old@example.com"),
+		UpstreamDisplayName:   conv.ToPGText("Old Name"),
+		IdentitySource:        conv.ToPGText("jwt_access_token"),
+		Enrichment:            []byte(`{"jwt_access_token":{"sub":"old-jwt-subject"},"interfaces":{"jwt_access_token":{"status":"ok","at":"2026-01-01T00:00:00Z"}}}`),
+		ID:                    session.ID,
+		SubjectUrn:            session.SubjectUrn,
+		RemoteSessionClientID: session.RemoteSessionClientID,
+		ExpectedUpdatedAt:     session.UpdatedAt,
+	})
+	require.NoError(t, err)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionRefresh)
 	require.NoError(t, err)
 
 	result, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
-		ID:           sessionID.String(),
+		ID:           session.ID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -124,6 +141,11 @@ func TestRefreshSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", plain)
 	require.Equal(t, []string{"read:only"}, stored.Scopes)
+	require.False(t, stored.UpstreamSubject.Valid, "an opaque replacement retires JWT-derived identity atomically")
+	require.False(t, stored.UpstreamEmail.Valid)
+	require.False(t, stored.UpstreamDisplayName.Valid)
+	require.False(t, stored.IdentitySource.Valid)
+	require.NotContains(t, string(stored.Enrichment), "jwt_access_token")
 	require.WithinDuration(t, time.Now().Add(24*time.Hour), stored.AuthorizationExpiresAt.Time, time.Minute,
 		"an omitted authorization_expires_in must preserve the known absolute deadline")
 	require.False(t, stored.RefreshExpiresAt.Valid,
@@ -217,14 +239,14 @@ func TestRefreshSession_UpstreamRejected(t *testing.T) {
 	ctx, ti := newTestService(t)
 	enc := testenv.NewEncryptionClient(t)
 
-	sessionID := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh-reject", func(w http.ResponseWriter, _ *http.Request) {
+	session := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh-reject", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 	})
 
 	_, err := ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
-		ID:           sessionID.String(),
+		ID:           session.ID.String(),
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -300,4 +322,59 @@ func TestRefreshSession_CrossOrgNotFound(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A JWT minted for another subject cannot lend its scope to a grant whose
+// identity it does not restate: the stored scope stands and the record says why.
+func TestRefreshScopeRecoveryRejectsJWTForAnotherSubject(t *testing.T) {
+	t.Parallel()
+
+	issuer := newIDTokenIssuer(t)
+	as := newEnrichmentAS(t)
+	as.script(jsonHandler(http.StatusOK, `{"sub":"user-123","email":"userinfo@example.com"}`), nil)
+	const slug = "jwt-refresh-scope-other-subject"
+	clientID := "synthetic-cid-" + slug
+	initial := jwtGrant{subject: "user-123", responseScope: new("initial:scope")}
+	refreshed := jwtGrant{subject: "other-user", scope: "jwt:new", scopeInToken: true}
+	ctx, env := newSyntheticExpiryEnv(t, slug, jwtGrantHandler(t, issuer, clientID, initial, refreshed),
+		withIDTokenIssuer(issuer), withEnrichmentAS(as))
+	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
+
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	require.NoError(t, err)
+	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.IdentitySourceUserinfo, stored.IdentitySource.String)
+	require.Equal(t, "user-123", stored.UpstreamSubject.String)
+	require.Equal(t, []string{"initial:scope"}, stored.Scopes, "a mismatched JWT recovers no scope")
+	require.Contains(t, string(stored.Enrichment), `"subject mismatch"`)
+}
+
+// A null scope is an unreported one: the exchange records the requested set
+// and a refresh keeps the stored one.
+func TestTokenResponseNullScopeIsUnreportedAtExchangeAndRefresh(t *testing.T) {
+	t.Parallel()
+
+	_, exchanged := newSyntheticExpiryEnv(t, "scope-null-exchange", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600,"scope":null}`))
+	}, withIssuerScopes("channels:history", "openid"))
+	require.Equal(t, []string{"channels:history", "openid"}, exchanged.session.Scopes)
+
+	ctx, env := newSyntheticExpiryEnv(t, "scope-null-refresh", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.FormValue("grant_type") == "refresh_token" {
+			_, _ = w.Write([]byte(`{"access_token":"new-access","token_type":"Bearer","scope":null}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","scope":"initial:read"}`))
+	})
+	require.Equal(t, []string{"initial:read"}, env.session.Scopes)
+
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
+	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	require.Equal(t, []string{"initial:read"}, stored.Scopes, "a null refresh scope keeps the stored scope")
 }

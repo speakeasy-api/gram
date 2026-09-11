@@ -36,6 +36,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -654,7 +655,7 @@ func (s *RefreshService) refreshSessionTokens(
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
 	scopes := tok.Scopes()
-	if len(scopes) == 0 {
+	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.
 		scopes = sess.Scopes
@@ -686,8 +687,9 @@ func (s *RefreshService) refreshSessionTokens(
 	return updated, tok, nil
 }
 
-// identityRestatementBudget bounds one restatement on a context detached from the request.
-const identityRestatementBudget = idTokenVerifyBudget + 5*time.Second
+// identityRestatementBudget bounds one restatement on a context detached from
+// the request: an ID-token verify, a JWT access-token verify, and the write.
+const identityRestatementBudget = 2*idTokenVerifyBudget + 5*time.Second
 
 // restateIdentity writes what a refresh said about the grant's owner after the
 // tokens are stored, outside the lease. Any rejection, including a different
@@ -698,6 +700,7 @@ func (s *RefreshService) restateIdentity(
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	tok tokenResponse,
+	previousSubject string,
 ) remotesessions_repo.RemoteSession {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityRestatementBudget)
 	defer cancel()
@@ -708,6 +711,9 @@ func (s *RefreshService) restateIdentity(
 		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 	}
 	var identity *UpstreamIdentity
+	interfaces := map[string]interfaceRecord{}
+	var access jwtAccessTokenResult
+	idTokenRejected := storedInterfaceRecords(sess.Enrichment)[IdentitySourceIDToken].Status == interfaceStatusRejected
 	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      client.IssuerUrl,
@@ -716,26 +722,55 @@ func (s *RefreshService) restateIdentity(
 			fetchScope:  client.RemoteSessionIssuerID.String(),
 			signingAlgs: client.IDTokenSigningAlgValuesSupported,
 			nonce:       "",
-			subject:     sess.UpstreamSubject.String,
+			subject:     previousSubject,
 		})
 		switch {
 		case errors.Is(err, errIDTokenVerificationDisabled):
+			// Silence, not a rejection: the JWT step below may still run.
 		case err != nil:
+			idTokenRejected = true
 			logIdentityFailure(ctx, s.logger, "refresh id token rejected; stored identity kept", err, attrs...)
 		default:
+			// A verified ID token supersedes an exchange-time rejection for this grant.
+			if idTokenRejected {
+				interfaces[IdentitySourceIDToken] = interfaceRecord{Status: interfaceStatusOK, At: time.Now(), HTTPStatus: 0, Reason: ""}
+			}
+			idTokenRejected = false
 			identity = &verified
 		}
 	}
-	enrichment, err := buildEnrichment(tok, identity, nil)
+	needsIdentity := identity == nil && (!sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String))
+	needsScope := !tok.ScopeReported()
+	if s.enricher != nil && !idTokenRejected && (needsIdentity || needsScope) {
+		target := enrichmentTargetFromClient(client, "")
+		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
+		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
+		// A token for another subject says nothing about this grant, its scope included.
+		if access.identity != nil && previousSubject != "" && access.identity.Subject != previousSubject {
+			s.enricher.rejectJWTAccessToken(ctx, target, &access, "subject mismatch")
+		}
+		if access.ran {
+			interfaces[IdentitySourceJWTAccessToken] = access.interfaceRecord
+		}
+		if needsIdentity && access.ok() {
+			identity = access.identity
+		}
+	}
+	enrichment, err := buildEnrichment(tok, identity, interfaces, access.retained())
 	if err != nil {
 		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
 	}
-	if identity == nil && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
+	if identity == nil && len(interfaces) == 0 && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
 		return sess
 	}
 
 	cols := identity.columns()
+	var scopes []string
+	if !tok.ScopeReported() && access.ok() && access.scopePresent {
+		scopes = access.scopes
+	}
 	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		Scopes:                scopes,
 		OverwritableSources:   overwritableIdentitySources(cols.Source.String),
 		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,

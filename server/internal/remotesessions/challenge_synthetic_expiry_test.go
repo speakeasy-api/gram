@@ -400,6 +400,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 			enricher.SetIssuerMetadataRefreshSeam(options.metadataRefresh)
 		}
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
