@@ -368,17 +368,21 @@ export function ConfigurePoliciesStep({
             categoryDefinitions,
             messageTypes: existing.messageTypes,
           })
-        : // Recommendations have not loaded, so there is nothing to compose
-          // with; scope to the selected kinds alone. The legacy list is no
-          // longer accepted on the wire.
-          {
-            detectionScopes: [
-              {
-                category: cat,
-                ...narrowScopeToKinds(undefined, [...nextCfg.messageTypes]),
-              },
-            ],
-          };
+        : categoryDefinitions === undefined
+          ? // Recommendations have not loaded, so there is nothing to compose
+            // with; scope to the selected kinds alone. The legacy list is no
+            // longer accepted on the wire.
+            {
+              detectionScopes: [
+                {
+                  category: cat,
+                  ...narrowScopeToKinds(undefined, [...nextCfg.messageTypes]),
+                },
+              ],
+            }
+          : // Loaded, and the category takes no message scope (session-scoped).
+            // Sending one would fail the whole update, so send none.
+            {};
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
