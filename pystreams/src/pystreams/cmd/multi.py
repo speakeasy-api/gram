@@ -7,7 +7,14 @@ from functools import partial
 import anyio
 import click
 import structlog
+from google.api_core.retry import Retry
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
+from google.cloud.pubsub_v1.types import (
+    LimitExceededBehavior,
+    PublisherOptions,
+    PublishFlowControl,
+)
+from gram.metering.v1 import meter_reading_pb2
 from gram.ping.v2 import ping_pb2, processor_pb2
 from gram.risk.v1 import (
     finding_pb2,
@@ -33,10 +40,21 @@ from pystreams.ping.handler import PingHandler
 from pystreams.risk.enforce_handler import PresidioEnforceHandler
 from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import flags_control, flags_enforce, flags_gcp, flags_presidio, flags_service
 from .receiver import ReceiverGroup
+
+METER_PUBLISHER_OPTIONS = PublisherOptions(
+    flow_control=PublishFlowControl(
+        message_limit=10_000,
+        byte_limit=128 * 1024 * 1024,
+        limit_exceeded_behavior=LimitExceededBehavior.ERROR,
+    ),
+    retry=Retry(timeout=METER_PUBLISH_TIMEOUT_SECONDS),
+    timeout=METER_PUBLISH_TIMEOUT_SECONDS,
+)
 
 
 @click.command(
@@ -131,6 +149,18 @@ async def multi(
             findings_publisher = await pubsub_publisher_for_message_async(
                 broker, finding_pb2.Finding
             )
+            # Isolate best-effort usage backlog from finding delivery.
+            meter_broker = stack.enter_context(
+                _build_broker(
+                    project_id=project_id,
+                    emulator_host=pubsub_emulator_host,
+                    logger=logger,
+                    publisher_options=METER_PUBLISHER_OPTIONS,
+                )
+            )
+            meter_publisher = await pubsub_publisher_for_message_async(
+                meter_broker, meter_reading_pb2.MeterReading
+            )
 
             # The enforcement lane registers only when both Redis and the
             # pepper keyring are configured; validated before the scan pool
@@ -190,7 +220,7 @@ async def multi(
                 activate_blocking_detection(logger=logger)
 
             presidio_handler = PresidioHandler(
-                logger, findings_publisher, presidio_scanner
+                logger, findings_publisher, meter_publisher, presidio_scanner
             )
 
             enforce_handler = None
@@ -198,6 +228,7 @@ async def multi(
                 enforce_handler = PresidioEnforceHandler(
                     logger,
                     ReplyWriter(enforce_redis),
+                    meter_publisher,
                     presidio_scanner,
                     enforce_fingerprinter,
                 )
@@ -272,6 +303,7 @@ def _build_broker(
     project_id: str,
     emulator_host: str | None,
     logger: structlog.stdlib.BoundLogger,
+    publisher_options: PublisherOptions | None = None,
 ) -> PubSubBroker:
     """Build a broker for the configured environment.
 
@@ -279,6 +311,8 @@ def _build_broker(
     ``EmulatedPubSubBroker`` reconciles the topic and subscription on demand. In
     production ``PubSubBroker`` assumes the resources already exist.
     """
+    if publisher_options is None:
+        publisher_options = PublisherOptions()
     if emulator_host:
         # The google clients auto-detect the emulator from this env var. The CLI
         # flag has already taken precedence over any pre-existing value (Click
@@ -287,11 +321,15 @@ def _build_broker(
         os.environ["PUBSUB_EMULATOR_HOST"] = emulator_host
         return EmulatedPubSubBroker(
             project_id,
-            PublisherClient(),
+            PublisherClient(publisher_options=publisher_options),
             SubscriberClient(),
             logger=logger,
         )
-    return PubSubBroker(project_id, logger=logger)
+    return PubSubBroker(
+        project_id,
+        publisher_client=PublisherClient(publisher_options=publisher_options),
+        logger=logger,
+    )
 
 
 async def _shutdown_on_signal(

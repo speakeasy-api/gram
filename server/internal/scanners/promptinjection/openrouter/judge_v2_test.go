@@ -125,14 +125,24 @@ func TestClassifyBoundsTheEventDeadline(t *testing.T) {
 	t.Parallel()
 
 	client := &fakeCompletionClient{blockUntilCanceled: true}
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	engine := newEngine(t, client)
+	// Inspect the effective deadline at the completion boundary rather than
+	// requiring Redis and the scheduler to reach it inside a 50ms window.
+	deadline := time.Now().Add(JudgeTimeout / 2)
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
 	defer cancel()
+	client.onCompletion = func(completionCtx context.Context) {
+		got, ok := completionCtx.Deadline()
+		require.True(t, ok)
+		require.Equal(t, deadline, got, "the event deadline bounds the completion, not the longer judge timeout")
+		cancel()
+	}
 
-	start := time.Now()
-	results, err := newEngine(t, client).Classify(ctx, req("current event"))
+	results, err := engine.Classify(ctx, req("current event"))
 	require.NoError(t, err)
-	require.Less(t, time.Since(start), 140*time.Millisecond, "the call is bounded by the event deadline")
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
 	require.Equal(t, int64(1), client.calls.Load())
+	require.Len(t, results, 1)
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 }
 

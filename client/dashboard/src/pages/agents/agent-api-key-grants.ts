@@ -8,23 +8,25 @@ import type {
 export const ANY_RESOURCE = "*";
 
 /**
- * The dimensions a delegated request may pin on top of a policy grant.
- * Mirrors allowedSelectorKeys in server/internal/authz/selector.go — the
- * server rejects any other key, so the editor never offers one.
+ * The dimensions API keys may add on top of a policy grant. This is a subset
+ * of allowedSelectorKeys in server/internal/authz/selector.go: keys never add
+ * project narrowing, but must preserve any project restriction already present.
  */
 const NARROWABLE_BY_KIND: Record<string, NarrowingDimension[]> = {
-  mcp: ["projectId", "disposition", "tool"],
-  environment: ["projectId"],
+  mcp: ["disposition", "tool"],
 };
 
-export type NarrowingDimension = "projectId" | "disposition" | "tool";
+export type NarrowingDimension = "disposition" | "tool";
 
 /** Which inventory names the resources a selector of this kind identifies. */
 export type ResourceInventory = "mcp" | "project";
 
 export interface GrantNarrowing {
   resourceId?: string;
+  /** Legacy editor state: ignored; candidate project restrictions are preserved. */
   projectId?: string;
+  tools?: string[];
+  dispositions?: AgentPolicySelectorDisposition[];
   disposition?: AgentPolicySelectorDisposition;
   tool?: string;
 }
@@ -105,23 +107,49 @@ export function requestNarrowsPolicy(
   );
 }
 
-function buildRequestedGrant(selection: GrantSelection): AgentPolicyGrantForm {
+function expandRequestedGrants(
+  selection: GrantSelection,
+): AgentPolicyGrantForm[] {
   const { grant, narrowing } = selection;
+  if (grant.effect !== "allow") {
+    throw new Error("Only allowed permissions can be delegated.");
+  }
   const selector: AgentPolicySelector = { ...grant.selector };
   if (narrowing.resourceId && canNarrowResource(grant)) {
     selector.resourceId = narrowing.resourceId;
   }
   const open = new Set(openDimensions(grant));
-  if (open.has("projectId") && narrowing.projectId) {
-    selector.projectId = narrowing.projectId;
+  // Each axis is a union; combining axes intersects them. Always clone the
+  // complete candidate so project, tool, server identity and other ceilings
+  // survive expansion. Legacy scalar state remains supported.
+  const tools = open.has("tool")
+    ? (narrowing.tools ?? (narrowing.tool ? [narrowing.tool] : undefined))
+    : undefined;
+  const dispositions = open.has("disposition")
+    ? (narrowing.dispositions ??
+      (narrowing.disposition ? [narrowing.disposition] : undefined))
+    : undefined;
+  // An explicit empty selection must not silently become unrestricted.
+  if (
+    tools?.length === 0 ||
+    dispositions?.length === 0 ||
+    tools?.some((tool) => !tool)
+  ) {
+    throw new Error(
+      "Select at least one tool or disposition, or reset the permission.",
+    );
   }
-  if (open.has("disposition") && narrowing.disposition) {
-    selector.disposition = narrowing.disposition;
-  }
-  if (open.has("tool") && narrowing.tool) {
-    selector.tool = narrowing.tool;
-  }
-  return { effect: "allow", scope: grant.scope, selector };
+  return [...new Set(tools ?? [undefined])].flatMap((tool) =>
+    [...new Set(dispositions ?? [undefined])].map((disposition) => ({
+      effect: grant.effect,
+      scope: grant.scope,
+      selector: {
+        ...selector,
+        ...(tool ? { tool } : {}),
+        ...(disposition ? { disposition } : {}),
+      },
+    })),
+  );
 }
 
 /**
@@ -131,11 +159,19 @@ function buildRequestedGrant(selection: GrantSelection): AgentPolicyGrantForm {
  */
 export function delegableGrantKey(form: AgentPolicyGrantForm): string {
   const selector = form.selector as Record<string, string | undefined>;
-  const pairs = Object.keys(selector)
-    .filter((key) => selector[key] !== undefined)
-    .sort()
-    .map((key) => `${key}=${selector[key]}`);
-  return `${form.scope}|${pairs.join("&")}`;
+  // Structured and escaped rather than joined with delimiters. Selector values
+  // are arbitrary strings, so under a sorted `key=value` join two adjacent
+  // free-form dimensions collide: a `serverIdentity` ending in
+  // `&serverUrl=…` keyed identically to a grant constraining both. Every caller
+  // treats a shared key as one grant — the duplicate check, the diff, and the
+  // per-candidate editor state.
+  return JSON.stringify([
+    form.scope,
+    Object.keys(selector)
+      .filter((key) => selector[key] !== undefined)
+      .sort()
+      .map((key) => [key, selector[key]]),
+  ]);
 }
 
 /**
@@ -149,20 +185,21 @@ export function buildRequestedGrants(
   const forms: AgentPolicyGrantForm[] = [];
   const seen = new Set<string>();
   for (const selection of selections) {
-    const form = buildRequestedGrant(selection);
-    if (!requestNarrowsPolicy(selection.grant.selector, form.selector)) {
-      throw new Error(
-        "A requested permission is broader than the agent policy allows. Reset it and try again.",
-      );
+    for (const form of expandRequestedGrants(selection)) {
+      if (!requestNarrowsPolicy(selection.grant.selector, form.selector)) {
+        throw new Error(
+          "A requested permission is broader than the agent policy allows. Reset it and try again.",
+        );
+      }
+      const identity = delegableGrantKey(form);
+      if (seen.has(identity)) {
+        throw new Error(
+          "Two requested permissions are identical. Narrow or remove one of them.",
+        );
+      }
+      seen.add(identity);
+      forms.push(form);
     }
-    const identity = delegableGrantKey(form);
-    if (seen.has(identity)) {
-      throw new Error(
-        "Two requested permissions are identical. Narrow or remove one of them.",
-      );
-    }
-    seen.add(identity);
-    forms.push(form);
   }
   return forms;
 }

@@ -53,6 +53,42 @@ func stripeFlags() []cli.Flag {
 			EnvVars: []string{"STRIPE_METER_EVENT_NAME_MCP_BANDWIDTH_EGRESS"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-gitleaks",
+			Aliases: []string{"stripe.meter_event_name_risk_gitleaks"},
+			Usage:   "The Stripe Gitleaks risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_GITLEAKS"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-presidio",
+			Aliases: []string{"stripe.meter_event_name_risk_presidio"},
+			Usage:   "The Stripe Presidio risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_PRESIDIO"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-prompt-injection",
+			Aliases: []string{"stripe.meter_event_name_risk_prompt_injection"},
+			Usage:   "The Stripe prompt-injection risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_PROMPT_INJECTION"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-prompt-policy",
+			Aliases: []string{"stripe.meter_event_name_risk_prompt_policy"},
+			Usage:   "The Stripe prompt-policy risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_PROMPT_POLICY"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-custom-rules",
+			Aliases: []string{"stripe.meter_event_name_risk_custom_rules"},
+			Usage:   "The Stripe custom-rules risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_CUSTOM_RULES"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name-risk-cli-destructive",
+			Aliases: []string{"stripe.meter_event_name_risk_cli_destructive"},
+			Usage:   "The Stripe destructive-command risk meter event name; empty disables export for this meter",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME_RISK_CLI_DESTRUCTIVE"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "stripe-portal-configuration-id",
 			Aliases: []string{"stripe.portal_configuration_id"},
 			Usage:   "The controlled Stripe customer portal configuration ID",

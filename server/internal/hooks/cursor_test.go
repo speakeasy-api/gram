@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -145,12 +146,14 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	prompt := "do something risky"
 	conversationID := "conv-risk-scan"
 	userEmail := "dev@example.com"
+	idempotencyKey := uuid.NewString()
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName:  "beforeSubmitPrompt",
 		Prompt:         &prompt,
 		ConversationID: &conversationID,
 		UserEmail:      &userEmail,
+		IdempotencyKey: &idempotencyKey,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -162,19 +165,108 @@ func TestCursor_BeforeSubmitPrompt_ScansViaCanonicalEventFields(t *testing.T) {
 	assert.Equal(t, prompt, scanner.text)
 	assert.Equal(t, message.User, scanner.messageType)
 	assert.Empty(t, scanner.toolName)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.Equal(t, authCtx.ActiveOrganizationID, scanner.request.Provenance.OrganizationID)
+	require.Equal(t, *authCtx.ProjectID, scanner.request.Provenance.ProjectID)
+	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatID)
+	require.Equal(t, conversationID, scanner.request.Provenance.ExternalConversationID)
+	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
+	require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
+	require.Empty(t, scanner.request.Provenance.ToolCallID)
+	require.Equal(t, "realtime_local", scanner.request.Provenance.ExecutionPath)
+	require.Equal(t, string(hookevents.ProviderCursor), scanner.request.Provenance.HookSource)
+	require.NotEmpty(t, scanner.request.Provenance.OperationID)
+	_, err = uuid.Parse(scanner.request.Provenance.OperationID)
+	require.NoError(t, err)
+	operationID := scanner.request.Provenance.OperationID
+	_, err = ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeSubmitPrompt",
+		Prompt:         &prompt,
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+		IdempotencyKey: &idempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, operationID, scanner.request.Provenance.OperationID)
+
+	// Identical text in a distinct invocation is not reused scanner work.
+	next := &hooks.CursorPayload{
+		HookEventName:  "beforeSubmitPrompt",
+		Prompt:         &prompt,
+		ConversationID: &conversationID,
+		UserEmail:      &userEmail,
+		IdempotencyKey: new(uuid.NewString()),
+	}
+	_, err = ti.service.Cursor(ctx, next)
+	require.NoError(t, err)
+	require.NotEqual(t, operationID, scanner.request.Provenance.OperationID)
+
+	// Legacy senders without a retry token must not collapse identical prompts.
+	next.IdempotencyKey = nil
+	_, err = ti.service.Cursor(ctx, next)
+	require.NoError(t, err)
+	unkeyedOperationID := scanner.request.Provenance.OperationID
+	_, err = ti.service.Cursor(ctx, next)
+	require.NoError(t, err)
+	require.NotEqual(t, unkeyedOperationID, scanner.request.Provenance.OperationID)
+}
+
+func TestRealtimeToolScanWithoutSenderCallIDRemainsExplicitlyUnlinked(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	scanner := &recordingCursorRiskScanner{result: &risk.ScanResult{}}
+	ti.service.riskScanner = scanner
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolName := "Edit"
+	conversationID := "cursor-unlinked-" + uuid.NewString()
+	idempotencyKey := uuid.NewString()
+	payload := &hooks.CursorPayload{
+		HookEventName:  "preToolUse",
+		ToolName:       &toolName,
+		ToolInput:      map[string]any{"path": "main.go"},
+		ConversationID: &conversationID,
+		IdempotencyKey: &idempotencyKey,
+	}
+	ev := hookevents.Event{
+		Provider:     hookevents.ProviderCursor,
+		Type:         hookevents.EventTypeBeforeToolUse,
+		RawEventType: payload.HookEventName,
+		Timestamp:    time.Now().UTC(),
+		AuthContext:  authCtx,
+		Context: hookevents.EventContext{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			User:           hookevents.User{ID: authCtx.UserID, Email: ""},
+		},
+		ConversationID: conversationID,
+		Raw:            payload,
+	}
+
+	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))
+	require.NotEmpty(t, scanner.request.Provenance.ToolCallID, "synthetic id remains available for tool attribution")
+	require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
+	require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
+	operationID := scanner.request.Provenance.OperationID
+
+	require.NotNil(t, ti.service.scanHookEventForEnforcement(ctx, ev, `{"path":"main.go"}`, message.ToolRequest, toolName))
+	require.Equal(t, operationID, scanner.request.Provenance.OperationID, "sender retries retain their operation identity")
 }
 
 type recordingCursorRiskScanner struct {
 	text        string
 	messageType message.Type
 	toolName    string
+	request     risk.RealtimeScanRequest
 	result      *risk.ScanResult
 }
 
-func (s *recordingCursorRiskScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, text string, messageType message.Type, toolName string) (*risk.ScanResult, error) {
-	s.text = text
-	s.messageType = messageType
-	s.toolName = toolName
+func (s *recordingCursorRiskScanner) ScanForEnforcement(_ context.Context, request risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.request = request
+	s.text = request.Text
+	s.messageType = request.MessageType
+	s.toolName = request.ToolName
 	return s.result, nil
 }
 

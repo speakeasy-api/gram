@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE description="Open the dashboard app"
+#MISE alias="odb"
 
 set -e
 

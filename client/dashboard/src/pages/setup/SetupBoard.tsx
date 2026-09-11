@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import type { SetupTaskStatus } from "@gram/client/models/components/setuptask.js";
 import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -15,7 +16,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { showPylonChat } from "@/lib/pylon";
+import { useOrgRoutes } from "@/routes";
 import {
   useIsPlatformAdmin,
   useOrganization,
@@ -25,15 +26,15 @@ import { useOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { useRBAC } from "@/hooks/useRBAC";
 import { SetupBoardColumns } from "./components/setup-board-columns";
 import { SetupTaskAssignmentDialog } from "./components/setup-task-assignment-dialog";
-import { SetupTaskDialog } from "./components/setup-task-dialog";
 import { SetupShell } from "./components/setup-shell";
+import { setupTaskSlug } from "./task-slugs";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 
 type FailedInvite = { email: string; roleId: string };
 
 function BoardPage({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <SetupShell view="board">
+    <SetupShell>
       <main className="flex min-h-0 flex-1 overflow-hidden">
         <div className="@container/main mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 [&>div]:mb-0 [&>div]:min-h-0 [&>div]:flex-1">
           <Page.Section>
@@ -72,7 +73,7 @@ function BoardLoading(): JSX.Element {
 
 export default function SetupBoard(): JSX.Element {
   return (
-    <RequireScope scope="org:read" level="page">
+    <RequireScope scope="org:admin" level="page">
       <SetupBoardInner />
     </RequireScope>
   );
@@ -80,6 +81,9 @@ export default function SetupBoard(): JSX.Element {
 
 function SetupBoardInner(): JSX.Element {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();
@@ -87,7 +91,6 @@ function SetupBoardInner(): JSX.Element {
   const canAdmin = hasScope("org:admin");
   const [includeHidden, setIncludeHidden] = useState(false);
   const [showMine, setShowMine] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<SetupTask | null>(null);
   const [assignmentTask, setAssignmentTask] = useState<SetupTask | null>(null);
   const [failedInvites, setFailedInvites] = useState<
     Record<string, FailedInvite>
@@ -122,31 +125,6 @@ function SetupBoardInner(): JSX.Element {
       await mutateTask({ taskKey: task.key, status });
     } catch (error) {
       handleMutationError(error, "Failed to update task status");
-    }
-  };
-
-  const completeSelectedTask = async () => {
-    if (!selectedTask) return;
-    try {
-      await mutateTask({ taskKey: selectedTask.key, status: "done" });
-      setSelectedTask(null);
-      toast.success(`${selectedTask.title} completed`);
-    } catch (error) {
-      handleMutationError(error, "Failed to complete setup task");
-    }
-  };
-
-  const requestSupportForSelectedTask = async () => {
-    if (!selectedTask) return;
-    try {
-      await mutateTask({
-        taskKey: selectedTask.key,
-        status: "awaiting_support",
-      });
-      setSelectedTask(null);
-      showPylonChat();
-    } catch (error) {
-      handleMutationError(error, "Failed to request support");
     }
   };
 
@@ -220,6 +198,25 @@ function SetupBoardInner(): JSX.Element {
       );
     }
   };
+
+  // Assignment emails and the identity-provider callback link to
+  // /setup?step=<task>; that means "open this task", which is now a page.
+  const requestedTaskKey = searchParams.get("step");
+  const requestedTask = setupTasks.data?.tasks.find(
+    (task) => task.key === requestedTaskKey,
+  );
+  useEffect(() => {
+    if (requestedTask) {
+      void navigate(
+        orgRoutes.setupTask.href(setupTaskSlug(requestedTask.key)),
+        {
+          replace: true,
+        },
+      );
+    }
+    // orgRoutes is rebuilt every render; only the resolved task matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTask, navigate]);
 
   if (setupTasks.isPending) return <BoardLoading />;
 
@@ -298,7 +295,7 @@ function SetupBoardInner(): JSX.Element {
           isPlatformAdmin={isPlatformAdmin}
           pending={pending}
           retryInviteKeys={new Set(Object.keys(failedInvites))}
-          onOpen={setSelectedTask}
+          onOpen={(task) => orgRoutes.setupTask.goTo(setupTaskSlug(task.key))}
           onStatusChange={(task, status) => void updateStatus(task, status)}
           onAssign={setAssignmentTask}
           onRemind={() => {
@@ -311,14 +308,6 @@ function SetupBoardInner(): JSX.Element {
           }}
         />
       </div>
-      <SetupTaskDialog
-        task={selectedTask}
-        pending={pending}
-        onClose={() => setSelectedTask(null)}
-        onComplete={completeSelectedTask}
-        onSupport={requestSupportForSelectedTask}
-        onSkip={() => setSelectedTask(null)}
-      />
       <SetupTaskAssignmentDialog
         key={assignmentTask?.key ?? "closed"}
         task={assignmentTask}

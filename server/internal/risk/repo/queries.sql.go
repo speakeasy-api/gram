@@ -1779,11 +1779,15 @@ func (q *Queries) GetChatUserAccountEmailForUnmask(ctx context.Context, arg GetC
 }
 
 const getContentPartBatch = `-- name: GetContentPartBatch :many
-SELECT ccp.id, ccp.kind AS message_type, ccp.content_asset_url, ccp.created_at, ccp.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+SELECT ccp.id, c.id AS chat_id, cm.id AS parent_chat_message_id, ccp.kind AS message_type,
+  ccp.content_asset_url, ccp.created_at, ccp.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id
 FROM chat_content_parts ccp
+JOIN chats c ON c.id = ccp.chat_id
+  AND c.project_id = ccp.project_id
 LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
-LEFT JOIN chats c ON c.id = ccp.chat_id AND c.deleted IS FALSE
+  AND cm.project_id = ccp.project_id
+  AND cm.chat_id = ccp.chat_id
 WHERE ccp.id = ANY($1::uuid[])
   AND ccp.project_id = $2
   AND ccp.deleted IS FALSE
@@ -1795,12 +1799,14 @@ type GetContentPartBatchParams struct {
 }
 
 type GetContentPartBatchRow struct {
-	ID              uuid.UUID
-	MessageType     string
-	ContentAssetUrl string
-	CreatedAt       pgtype.Timestamptz
-	Source          pgtype.Text
-	ChatUserID      string
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ParentChatMessageID uuid.NullUUID
+	MessageType         string
+	ContentAssetUrl     string
+	CreatedAt           pgtype.Timestamptz
+	Source              pgtype.Text
+	ChatUserID          string
 }
 
 func (q *Queries) GetContentPartBatch(ctx context.Context, arg GetContentPartBatchParams) ([]GetContentPartBatchRow, error) {
@@ -1814,6 +1820,8 @@ func (q *Queries) GetContentPartBatch(ctx context.Context, arg GetContentPartBat
 		var i GetContentPartBatchRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ChatID,
+			&i.ParentChatMessageID,
 			&i.MessageType,
 			&i.ContentAssetUrl,
 			&i.CreatedAt,
@@ -1866,12 +1874,13 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 }
 
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
-SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
-  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id,
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
+  COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
   COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
   COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
 FROM chat_messages cm
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+JOIN chats c ON c.id = cm.chat_id
+  AND c.project_id = cm.project_id
 LEFT JOIN LATERAL (
   SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
   FROM chat_messages prev
@@ -1904,6 +1913,7 @@ type GetMessageContentBatchParams struct {
 
 type GetMessageContentBatchRow struct {
 	ID                     uuid.UUID
+	ChatID                 uuid.UUID
 	Role                   string
 	Content                string
 	ToolCalls              []byte
@@ -1918,7 +1928,7 @@ type GetMessageContentBatchRow struct {
 // can attribute scanning volume to whose traffic was analyzed. Same
 // attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 // wins, the chat owner's is the fallback — and a soft-deleted chat's owner
-// never is (LEFT JOIN so the message still gets scanned, just unattributed).
+// never is, while its messages remain eligible for scanning.
 // The lateral probes capture bounded causal context at the same event read:
 // the latest preceding user request and the latest tool result strictly after
 // that request. chat_messages_chat_id_created_at_idx supports both reverse
@@ -1933,6 +1943,10 @@ type GetMessageContentBatchRow struct {
 // metric to it, which is the one attribution available when the call resolved
 // to no telemetry row at all — precisely the population that metric exists to
 // measure.
+// Both message queries validate their chat against the row's project before
+// returning linkage. Content-part parents additionally must belong to the
+// content part's chat, so corrupt cross-tenant or cross-chat ids never leave
+// this boundary.
 func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageContentBatchParams) ([]GetMessageContentBatchRow, error) {
 	rows, err := q.db.Query(ctx, getMessageContentBatch, arg.Ids, arg.ProjectID)
 	if err != nil {
@@ -1944,6 +1958,7 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 		var i GetMessageContentBatchRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ChatID,
 			&i.Role,
 			&i.Content,
 			&i.ToolCalls,

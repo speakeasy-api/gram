@@ -604,6 +604,29 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id
 FOR UPDATE OF c;
 
+-- name: LockRemoteSessionClientsBoundToOrganizationUserSessionIssuer :many
+-- Organization-owned issuers can bind clients from any project in the
+-- organization, organization-owned clients, plus global clients. Derive
+-- tenancy from projects for legacy project clients whose organization_id was
+-- not backfilled. Lock the complete set before deciding which clients become
+-- orphaned.
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id IS NULL
+  AND usi.organization_id = @organization_id::text
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND c.deleted IS FALSE
+ORDER BY c.id
+FOR UPDATE OF c;
+
 -- name: LockRemoteSessionClientForSessionWrite :one
 -- Serializes a remote-login callback's session write against the issuer-delete
 -- orphan cascade, which locks the same client row before sweeping the client's
@@ -638,6 +661,30 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
       AND sibling_usi.deleted IS FALSE
   );
 
+-- name: ListRemoteSessionClientsOrphanedByOrganizationUserSessionIssuer :many
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS client_project ON client_project.id = c.project_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id IS NULL
+  AND usi.organization_id = @organization_id::text
+  AND (
+    (c.project_id IS NOT NULL AND client_project.organization_id = @organization_id::text AND client_project.deleted IS FALSE)
+    OR (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (c.project_id IS NULL AND c.organization_id IS NULL)
+  )
+  AND c.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS sibling
+    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
+    WHERE sibling.remote_session_client_id = link.remote_session_client_id
+      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
+      AND sibling_usi.deleted IS FALSE
+  );
+
 -- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
 -- Drops every client binding an issuer holds. Runs only from the orphan
 -- cascade, which must tombstone the sessions these rows still make reachable
@@ -662,11 +709,54 @@ WHERE link.remote_session_client_id = c.id
 -- already sends the upstream AS as client_id (CIMD rows never carry a secret).
 -- Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
 -- client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
-SELECT client_id_metadata_uri, scope
-FROM remote_session_clients
-WHERE id = @id
-  AND client_id_metadata_uri IS NOT NULL
-  AND deleted IS FALSE;
+SELECT
+    c.id,
+    c.client_id_metadata_uri,
+    COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
+    CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
+    c.scope
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+WHERE c.id = @id
+  AND c.client_id_metadata_uri IS NOT NULL
+  AND c.deleted IS FALSE;
+
+-- name: GetRemoteSessionClientJsonWebKeySetDocument :one
+-- Public client JWKS endpoint lookup. Intentionally NOT project-scoped or
+-- entitlement-gated: a counterparty may depend on this unauthenticated URL to
+-- verify client assertions after the organization that configured it loses
+-- management access. The globally unique client primary key is the public
+-- address. A missing/deleted client or missing/deleted attached set yields no
+-- row, while an attached set with no keys yields {"keys":[]}.
+--
+-- Every live key is publishable. Pending keys must be visible before they
+-- become active, active keys verify new assertions, and retired keys remain
+-- visible for assertions minted before rotation. Revoked keys are always
+-- soft-deleted and therefore excluded. Ordering by immutable key id keeps the
+-- serialized document and its HTTP ETag stable between lifecycle changes.
+SELECT jsonb_build_object(
+    'keys',
+    COALESCE(
+        jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL),
+        '[]'::jsonb
+    )
+) AS document
+FROM remote_session_clients AS c
+JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state IN ('pending', 'active', 'retired')
+ AND k.deleted IS FALSE
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+GROUP BY c.id;
 
 -- name: GetLocalFixtureOrganizationRemoteSessionClient :one
 -- The local Platform MCP fixture owns at most one organization-scoped public
@@ -1388,10 +1478,11 @@ WHERE s.subject_urn = @subject_urn
 -- from INSERT, not a lookup key, so a revoke through one bound issuer must
 -- still tombstone a row minted by another. A revoke that left the upstream
 -- tokens alive would not be a revoke.
--- Only agent-management retries include tombstones, retaining ciphertext and
--- subject linkage for best-effort RFC 7009 calls after a failed cache push.
+-- Agent-management stamps grants with the durable user-session revocation boundary.
+-- Retries match only that exact boundary, never live or unrelated deleted grants.
+-- Ordinary revocations pass no boundary and only match live grants.
 UPDATE remote_sessions AS s
-SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
+SET deleted_at = COALESCE(s.deleted_at, sqlc.narg('revoked_at')::timestamptz, clock_timestamp()),
     -- Tombstones keep credentials for upstream revocation but no identity.
     upstream_subject = NULL,
     upstream_email = NULL,
@@ -1401,7 +1492,8 @@ SET deleted_at = COALESCE(s.deleted_at, clock_timestamp()),
 FROM remote_session_clients AS c,
      user_session_issuers AS usi
 WHERE s.subject_urn = @subject_urn
-  AND (s.deleted IS FALSE OR @include_deleted::boolean)
+  AND ((NOT @already_revoked::boolean AND s.deleted IS FALSE)
+       OR (@already_revoked::boolean AND s.deleted_at = sqlc.narg('revoked_at')::timestamptz))
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = @user_session_issuer_id

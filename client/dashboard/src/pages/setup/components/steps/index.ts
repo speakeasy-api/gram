@@ -1,10 +1,8 @@
-export { ConnectIdpStep } from "./connect-idp-step";
-export { DirectorySyncStep } from "./directory-sync-step";
-export { CreateMarketplaceStep } from "./create-marketplace-step";
-export { EnableLoggingStep } from "./enable-logging-step";
-export { DistributeServersStep } from "./distribute-servers-step";
+export { IdentityProviderStep } from "./identity-provider-step";
+export { AnthropicInferenceHooksStep } from "./anthropic-inference-hooks-step";
+export { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 export { InstrumentAgentsStep } from "./instrument-agents-step";
-export { PlatformMCPSetupStep } from "./platform-mcp-setup-step";
 export { AdditionalAgentConfigStep } from "./additional-agent-config-step";
-export { ConfirmTrafficStep } from "./confirm-traffic-step";
+export { DistributeServersStep } from "./distribute-servers-step";
 export { ConfigurePoliciesStep } from "./configure-policies-step";
+export { PlatformMCPSetupStep } from "./platform-mcp-setup-step";

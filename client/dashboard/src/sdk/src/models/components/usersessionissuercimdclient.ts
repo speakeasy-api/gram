@@ -22,7 +22,11 @@ export type UserSessionIssuerCimdClient = {
    */
   id: string;
   /**
-   * The owning project id.
+   * The owning organization id.
+   */
+  organizationId: string;
+  /**
+   * The owning project id; empty for organization-owned entries.
    */
   projectId: string;
   updatedAt: Date;
@@ -44,6 +48,7 @@ export const UserSessionIssuerCimdClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    organization_id: z.string(),
     project_id: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -55,6 +60,7 @@ export const UserSessionIssuerCimdClient$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "client_id_metadata_uri": "clientIdMetadataUri",
       "created_at": "createdAt",
+      "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
