@@ -513,6 +513,7 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writ
 
 // WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
 // observation of the same turn to the authoritative native-hook source.
+// Only initial storage emits usage. Promotion preserves the original usage fact.
 func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, write MessageWrite, externalMessageID string) (int64, error) {
 	occurredAt := time.Now().UTC()
 	writes := []MessageWrite{write}
@@ -572,19 +573,21 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
-	writes[0].Params.ID = stored.ID
-	writes[0].Params.Content = stored.Content
-	writes[0].Params.ToolCalls = stored.ToolCalls
-	writes[0].Params.Model = stored.Model
-	writes[0].Params.UserID = stored.UserID
-	writes[0].Params.ExternalUserID = stored.ExternalUserID
-	writes[0].Params.Source = stored.Source
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
-	if err != nil {
-		return 0, err
-	}
-	if err := metering.Enqueue(ctx, tx, readings); err != nil {
-		return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
+	if stored.Inserted {
+		writes[0].Params.ID = stored.ID
+		writes[0].Params.Content = stored.Content
+		writes[0].Params.ToolCalls = stored.ToolCalls
+		writes[0].Params.Model = stored.Model
+		writes[0].Params.UserID = stored.UserID
+		writes[0].Params.ExternalUserID = stored.ExternalUserID
+		writes[0].Params.Source = stored.Source
+		readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
+		if err != nil {
+			return 0, err
+		}
+		if err := metering.Enqueue(ctx, tx, readings); err != nil {
+			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)
