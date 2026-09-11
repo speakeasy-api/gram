@@ -475,6 +475,9 @@ jobs:
     env:
       RUNNER_TARGET: x86_64-unknown-linux-musl
       RUNNER_BINARY_DIR: /tmp/runner-binary
+      # This job runs GitHub-hosted, so keep its cache keys out of the
+      # Blacksmith-backed CI namespace (see .mise-tasks/github/pre-cache.mts).
+      CACHE_NAMESPACE: github-v1
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -485,7 +488,7 @@ jobs:
           minimum_release_age: 1d
           install: true
           cache: true
-          cache_key_prefix: mise-blacksmith-v1
+          cache_key_prefix: mise-github-v1
           env: false
 
       - name: Prepare GitHub Actions environment
