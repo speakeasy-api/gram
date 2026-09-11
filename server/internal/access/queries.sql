@@ -1064,7 +1064,9 @@ WHERE s.archived_at IS NULL
       OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
     )
   )
-ORDER BY COALESCE(s.display_name, s.name);
+-- SELECT DISTINCT only permits ORDER BY over selected columns, and
+-- skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
+ORDER BY s.display_name, s.name;
 
 -- name: ListAccessibleSkillsViaPlugins :many
 -- Returns skills accessible to a user through plugin assignments.
@@ -1091,4 +1093,6 @@ WHERE s.archived_at IS NULL
       AND sv.spec_valid IS TRUE
       AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
   )
-ORDER BY COALESCE(s.display_name, s.name);
+-- SELECT DISTINCT only permits ORDER BY over selected columns, and
+-- skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
+ORDER BY s.display_name, s.name;

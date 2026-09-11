@@ -1039,7 +1039,7 @@ WHERE s.archived_at IS NULL
       OR (ug.selectors->>'resource_kind' = 'skill' AND ug.selectors->>'resource_id' = '*' AND ug.selectors->>'project_id' = s.project_id::text)
     )
   )
-ORDER BY COALESCE(s.display_name, s.name)
+ORDER BY s.display_name, s.name
 `
 
 type ListAccessibleSkillsForUserParams struct {
@@ -1059,6 +1059,8 @@ type ListAccessibleSkillsForUserRow struct {
 
 // Returns skills accessible to a user through direct RBAC grants.
 // Scoped to the user's principals (user:id and their assigned roles).
+// SELECT DISTINCT only permits ORDER BY over selected columns, and
+// skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleSkillsForUser, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -1110,7 +1112,7 @@ WHERE s.archived_at IS NULL
       AND sv.spec_valid IS TRUE
       AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
   )
-ORDER BY COALESCE(s.display_name, s.name)
+ORDER BY s.display_name, s.name
 `
 
 type ListAccessibleSkillsViaPluginsParams struct {
@@ -1130,6 +1132,8 @@ type ListAccessibleSkillsViaPluginsRow struct {
 
 // Returns skills accessible to a user through plugin assignments.
 // Includes skills distributed to plugins assigned to the user's principals.
+// SELECT DISTINCT only permits ORDER BY over selected columns, and
+// skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsViaPlugins(ctx context.Context, arg ListAccessibleSkillsViaPluginsParams) ([]ListAccessibleSkillsViaPluginsRow, error) {
 	rows, err := q.db.Query(ctx, listAccessibleSkillsViaPlugins, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
