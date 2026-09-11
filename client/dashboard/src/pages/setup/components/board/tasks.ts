@@ -40,6 +40,7 @@ export type OnboardingTaskId =
   | "anthropic-admin-controls"
   | "connect-idp"
   | "directory-sync"
+  | "enable-logging"
   | "create-marketplace"
   | "instrument-agents"
   | "additional-agent-config"
@@ -50,8 +51,6 @@ export type OnboardingTaskId =
 
 export interface OnboardingTaskDefinition {
   id: OnboardingTaskId;
-  title: string;
-  description: string;
   /**
    * The role in the customer's organization that usually owns this task.
    * Shown as the card's eyebrow so the board reads as a checklist of
@@ -67,80 +66,19 @@ const ENGINEERING_LEAD = "Engineering lead";
 const SECURITY_LEAD = "Security lead";
 
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
-  {
-    id: "identity-provider",
-    title: "Set up identity provider",
-    description: "Connect SSO and sync people and groups",
-    suggestedOwner: IT_ADMIN,
-  },
-  {
-    id: "anthropic-observability",
-    title: "Set up Anthropic observability",
-    description:
-      "Enable inference hooks and confirm Claude conversations arrive",
-    suggestedOwner: ENGINEERING_LEAD,
-  },
-  {
-    id: "anthropic-admin-controls",
-    title: "Set up Anthropic admin controls",
-    description: "Publish the marketplace and connect Claude Code and Cowork",
-    suggestedOwner: IT_ADMIN,
-  },
-  {
-    id: "connect-idp",
-    title: "Connect identity provider",
-    description: "Link SSO for authentication",
-    suggestedOwner: IT_ADMIN,
-  },
-  {
-    id: "directory-sync",
-    title: "Directory sync",
-    description: "Confirm users and roles",
-    suggestedOwner: IT_ADMIN,
-  },
-  {
-    id: "create-marketplace",
-    title: "Create plugin marketplace",
-    description: "For distributing servers to your users",
-    suggestedOwner: ENGINEERING_LEAD,
-  },
-  {
-    id: "instrument-agents",
-    title: "Set up observability in other platforms",
-    description: "Connect other AI coding assistants",
-    suggestedOwner: ENGINEERING_LEAD,
-  },
-  {
-    id: "additional-agent-config",
-    title: "Additional agent configuration",
-    description: "Optional API keys for usage and compliance data",
-    suggestedOwner: ENGINEERING_LEAD,
-  },
-  {
-    id: "confirm-traffic",
-    title: "Confirm traffic",
-    description: "Verify connectivity and compliance",
-    suggestedOwner: SECURITY_LEAD,
-  },
-  {
-    id: "distribute-servers",
-    title: "Distribute MCP servers",
-    description: "Choose some MCP Servers to distribute to your organization",
-    suggestedOwner: ENGINEERING_LEAD,
-  },
-  {
-    id: "configure-policies",
-    title: "Configure policies",
-    description: "Pick the categories to flag in agent traffic",
-    suggestedOwner: SECURITY_LEAD,
-  },
-  {
-    id: "platform-mcp",
-    title: "Set up Platform MCP",
-    description: "Optional agent-assisted MCP setup",
-    suggestedOwner: ENGINEERING_LEAD,
-    badge: "Optional",
-  },
+  { id: "identity-provider", suggestedOwner: IT_ADMIN },
+  { id: "connect-idp", suggestedOwner: IT_ADMIN },
+  { id: "directory-sync", suggestedOwner: IT_ADMIN },
+  { id: "enable-logging", suggestedOwner: ENGINEERING_LEAD },
+  { id: "anthropic-observability", suggestedOwner: ENGINEERING_LEAD },
+  { id: "anthropic-admin-controls", suggestedOwner: IT_ADMIN },
+  { id: "create-marketplace", suggestedOwner: ENGINEERING_LEAD },
+  { id: "instrument-agents", suggestedOwner: ENGINEERING_LEAD },
+  { id: "additional-agent-config", suggestedOwner: ENGINEERING_LEAD },
+  { id: "confirm-traffic", suggestedOwner: SECURITY_LEAD },
+  { id: "distribute-servers", suggestedOwner: ENGINEERING_LEAD },
+  { id: "configure-policies", suggestedOwner: SECURITY_LEAD },
+  { id: "platform-mcp", suggestedOwner: ENGINEERING_LEAD, badge: "Optional" },
 ];
 
 export interface OnboardingWorkstreamDefinition {
@@ -163,6 +101,7 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
     title: "Observe agents",
     description: "Instrument agents, add integrations, and verify traffic.",
     taskIds: [
+      "enable-logging",
       "anthropic-observability",
       "instrument-agents",
       "additional-agent-config",

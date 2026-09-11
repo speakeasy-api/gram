@@ -1,11 +1,9 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { type Action, MoreActions } from "@/components/ui/MoreActions";
-import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
-import { remindDisabledReason } from "./remind-disabled-reason";
 import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
 
 // Inline controls sit inside a card whose own click opens the task dialog.
@@ -14,12 +12,13 @@ const stopPropagation = (event: MouseEvent) => event.stopPropagation();
 interface TaskCardProps {
   task: BoardTask;
   canHide: boolean;
-  isReminding: boolean;
+  canAssign: boolean;
+  canSetStatus: boolean;
+  isPending: boolean;
   onOpen: () => void;
   onSetStatus: (status: TaskStatus) => void;
   onAssign: (assignee: Assignee | undefined) => void;
   onToggleHidden: () => void;
-  onRemind: () => void;
 }
 
 function buildMenuActions({
@@ -28,8 +27,8 @@ function buildMenuActions({
   onOpen,
   onSetStatus,
   onToggleHidden,
-  isReminding,
-  onRemind,
+  canSetStatus,
+  isPending,
 }: Pick<
   TaskCardProps,
   | "task"
@@ -37,26 +36,20 @@ function buildMenuActions({
   | "onOpen"
   | "onSetStatus"
   | "onToggleHidden"
-  | "isReminding"
-  | "onRemind"
+  | "canSetStatus"
+  | "isPending"
 >): Action[] {
   const actions: Action[] = [
     { icon: "maximize-2", label: "Open task", onClick: onOpen },
-    {
-      icon: "bell",
-      label: isReminding ? "Sending reminder…" : "Remind",
-      onClick: onRemind,
-      disabled: isReminding || remindDisabledReason(task) !== undefined,
-      description: remindDisabledReason(task),
-    },
   ];
-  if (!task.verified) {
+  if (canSetStatus && !task.verified) {
     for (const status of TASK_STATUSES) {
       if (status === task.status) continue;
       actions.push({
         label: `Move to ${TASK_STATUS_META[status].label}`,
         onClick: () => onSetStatus(status),
-        separatorBefore: actions.length === 2,
+        separatorBefore: actions.length === 1,
+        disabled: isPending || (status !== "todo" && task.blockedBy.length > 0),
       });
     }
   }
@@ -66,6 +59,7 @@ function buildMenuActions({
       label: task.hidden ? "Show on board" : "Hide from board",
       onClick: onToggleHidden,
       separatorBefore: true,
+      disabled: isPending,
     });
   }
   return actions;
@@ -74,12 +68,13 @@ function buildMenuActions({
 export function TaskCard({
   task,
   canHide,
-  isReminding,
+  canAssign,
+  canSetStatus,
+  isPending,
   onOpen,
   onSetStatus,
   onAssign,
   onToggleHidden,
-  onRemind,
 }: TaskCardProps): JSX.Element {
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Keys pressed inside the assignee picker or menu belong to them.
@@ -98,7 +93,7 @@ export function TaskCard({
       onClick={onOpen}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex cursor-pointer flex-col gap-0.5 border px-3 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+        "group bg-card border-border hover:border-foreground/40 focus-visible:ring-ring flex min-w-0 cursor-pointer flex-col gap-0.5 border px-3 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
         task.hidden && "opacity-60",
       )}
     >
@@ -123,8 +118,8 @@ export function TaskCard({
               onOpen,
               onSetStatus,
               onToggleHidden,
-              isReminding,
-              onRemind,
+              canSetStatus,
+              isPending,
             })}
           />
         </div>
@@ -146,7 +141,13 @@ export function TaskCard({
         className="border-border flex items-center justify-between gap-2 border-t pt-0.5"
         onClick={stopPropagation}
       >
-        <AssigneePicker assignee={task.assignee} onChange={onAssign} />
+        <div className="min-w-0 flex-1">
+          <AssigneePicker
+            assignee={task.assignee}
+            onChange={onAssign}
+            disabled={!canAssign || isPending}
+          />
+        </div>
         <span className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs">
           <span
             className={cn(
@@ -158,9 +159,9 @@ export function TaskCard({
         </span>
       </div>
 
-      {task.lastRemindedAt && (
-        <span className="text-muted-foreground text-[11px]">
-          Reminded {formatRelativeTime(task.lastRemindedAt)}
+      {task.blockedBy.length > 0 && (
+        <span className="text-muted-foreground text-xs">
+          Blocked by: {task.blockedBy.join(", ")}
         </span>
       )}
     </article>

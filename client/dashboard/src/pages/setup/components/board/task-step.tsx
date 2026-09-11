@@ -13,6 +13,9 @@ import {
   PlatformMCPSetupStep,
 } from "../steps";
 import type { OnboardingTaskId } from "./tasks";
+import { RequireScope } from "@/components/require-scope";
+import { useProject, useOrganization } from "@/contexts/Auth";
+import { EnableLoggingSection } from "../enable-logging-section";
 
 export interface TaskStepProps {
   taskId: OnboardingTaskId;
@@ -30,13 +33,62 @@ export interface TaskStepProps {
  * linear wizard, so their Back and Skip controls map to closing the dialog and
  * Continue maps to marking the task done.
  */
-export function TaskStep({
+export function TaskStep(props: TaskStepProps): JSX.Element {
+  const project = useProject();
+  const organization = useOrganization();
+  const handoff = (
+    <p>
+      Ask an organization administrator with the required product permissions to
+      complete this setup. Task assignment does not grant configuration access.
+    </p>
+  );
+  let content = <TaskStepContent {...props} />;
+  if (props.taskId === "distribute-servers") {
+    content = (
+      <RequireScope
+        scope={["project:write", "mcp:write"]}
+        all
+        resourceId={project.id}
+        level="section"
+        fallback={handoff}
+      >
+        {content}
+      </RequireScope>
+    );
+  }
+  if (props.taskId === "anthropic-observability") {
+    content = (
+      <RequireScope
+        scope="project:read"
+        resourceId={project.id}
+        level="section"
+        fallback={handoff}
+      >
+        {content}
+      </RequireScope>
+    );
+  }
+  return (
+    <RequireScope
+      scope="org:admin"
+      resourceId={organization.id}
+      level="section"
+      fallback={handoff}
+    >
+      {content}
+    </RequireScope>
+  );
+}
+
+export function TaskStepContent({
   taskId,
   projectSlug,
   onComplete,
   onClose,
 }: TaskStepProps): JSX.Element {
   switch (taskId) {
+    case "enable-logging":
+      return <EnableLoggingSection index={0} />;
     case "identity-provider":
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":
@@ -74,5 +126,7 @@ export function TaskStep({
           currentProjectSlug={projectSlug}
         />
       );
+    default:
+      return <p role="alert">Unsupported setup task: {taskId}</p>;
   }
 }

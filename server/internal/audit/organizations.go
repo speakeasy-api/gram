@@ -26,6 +26,7 @@ const (
 	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
 	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
 	ActionOrganizationSetupTaskUpdated       Action = "organization:setup_task_updated"
+	ActionOrganizationOnboardingUpdated      Action = "organization:onboarding_updated"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
@@ -53,6 +54,40 @@ type LogOrganizationSetupTaskUpdatedEvent struct {
 
 	SetupTaskSnapshotBefore *OrganizationSetupTaskSnapshot
 	SetupTaskSnapshotAfter  *OrganizationSetupTaskSnapshot
+}
+
+type OrganizationOnboardingSnapshot struct {
+	Preset          *string  `json:"preset"`
+	VisibleTaskKeys []string `json:"visible_task_keys"`
+}
+
+type LogOrganizationOnboardingUpdatedEvent struct {
+	OrganizationID           string
+	Actor                    urn.Principal
+	ActorDisplayName         *string
+	OrganizationName         string
+	OrganizationSlug         string
+	OnboardingSnapshotBefore *OrganizationOnboardingSnapshot
+	OnboardingSnapshotAfter  *OrganizationOnboardingSnapshot
+}
+
+func (l *Logger) LogOrganizationOnboardingUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationOnboardingUpdatedEvent) error {
+	before, err := marshalAuditPayload(event.OnboardingSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.OnboardingSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal onboarding after snapshot: %w", err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionOrganizationOnboardingUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
+		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationOnboardingV1})
 }
 
 type OrganizationSetupTaskAssigneeSnapshot struct {

@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
+import { Button } from "@/components/ui/Button";
+import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
+import { assignedTo, type BoardTask } from "./board-store";
+import { useRBAC } from "@/hooks/useRBAC";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import SetupBoard from "../../SetupBoard";
+import { canonicalSetupSearch } from "../../task-slugs";
 import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
@@ -19,6 +27,8 @@ import { WorkstreamColumn } from "./workstream-column";
 const WORKSTREAM_GRID_CLASS =
   "grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-4 xl:overflow-hidden";
 
+type SetupView = "workstreams" | "kanban";
+
 function BoardHeader(): JSX.Element {
   return (
     <div className="max-w-2xl">
@@ -27,8 +37,8 @@ function BoardHeader(): JSX.Element {
         Onboarding
       </h1>
       <p className="text-muted-foreground mt-2 text-sm">
-        Every setup task on one board. Hand each one to an owner, track where it
-        stands, and send a reminder when it stalls.
+        Progress is now shared across your organization. Browser-only progress
+        is not imported; existing browser records are retained.
       </p>
     </div>
   );
@@ -42,6 +52,9 @@ function BoardToolbar({
   canHide,
   showHidden,
   onShowHiddenChange,
+  view,
+  canSwitchView,
+  onViewChange,
 }: {
   doneCount: number;
   totalCount: number;
@@ -50,21 +63,44 @@ function BoardToolbar({
   canHide: boolean;
   showHidden: boolean;
   onShowHiddenChange: (show: boolean) => void;
+  view: SetupView;
+  canSwitchView: boolean;
+  onViewChange: (view: SetupView) => void;
 }): JSX.Element {
   return (
-    <div className="border-border bg-surface-secondary-default flex flex-wrap items-center justify-between gap-4 border px-4 py-2.5">
-      <div className="flex min-w-0 items-center">
+    <Page.Toolbar>
+      <Page.Toolbar.Leading>
         <span className="text-foreground whitespace-nowrap text-sm">
-          {doneCount} of {totalCount} required tasks complete
+          {totalCount === 0
+            ? "No required tasks"
+            : `${doneCount} of ${totalCount} required tasks complete`}
         </span>
-      </div>
-      <div className="flex items-center gap-6">
+      </Page.Toolbar.Leading>
+      <Page.Toolbar.Actions>
+        {canSwitchView && (
+          <SegmentedControl
+            value={view}
+            onChange={onViewChange}
+            options={[
+              {
+                value: "workstreams",
+                label: "Workstreams",
+                tooltip: "Group tasks by outcome",
+              },
+              {
+                value: "kanban",
+                label: "Kanban",
+                tooltip: "Group the same tasks by status",
+              },
+            ]}
+          />
+        )}
         <label className="text-foreground flex items-center gap-2 text-sm font-medium">
-          <span>My tasks</span>
+          <span>Assigned to me</span>
           <Switch
             checked={showMine}
             onCheckedChange={onShowMineChange}
-            aria-label="My tasks"
+            aria-label="Assigned to me"
           />
         </label>
         {canHide && (
@@ -77,8 +113,8 @@ function BoardToolbar({
             />
           </label>
         )}
-      </div>
-    </div>
+      </Page.Toolbar.Actions>
+    </Page.Toolbar>
   );
 }
 
@@ -102,6 +138,37 @@ function BoardSkeleton(): JSX.Element {
  * step in a dialog; `?task=<id>` deep links straight to one.
  */
 export function OnboardingBoard(): JSX.Element {
+  const session = useSession();
+  const { isLoading, error, hasScope } = useRBAC();
+  if (!session.organization.id || !session.user.id || isLoading) {
+    return (
+      <div role="status" className="p-8">
+        Loading onboarding access...
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div role="alert" className="p-8">
+        Could not load onboarding access.{" "}
+        <Button onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
+  return (
+    <RequireScope
+      scope="org:read"
+      resourceId={session.organization.id}
+      level="page"
+    >
+      <OnboardingBoardInner
+        key={`${session.organization.id}:${session.user.id}:${session.session}:${session.organizationOverride}:${hasScope("org:admin", session.organization.id)}`}
+      />
+    </RequireScope>
+  );
+}
+
+function OnboardingBoardInner(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,17 +179,32 @@ export function OnboardingBoard(): JSX.Element {
   }, [markSetupStarted]);
 
   const projectSlug = searchParams.get("projectSlug") ?? undefined;
-  const board = useOnboardingBoard(orgSlug);
+  const board = useOnboardingBoard();
   const session = useSession();
   const [showMine, setShowMine] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const { hasScope } = useRBAC();
+  const canSwitchView = hasScope("org:admin", session.organization.id);
+  const [viewChoice, setViewChoice] = useState<SetupView | null>(null);
+  const defaultView = session.organizationOverride ? "kanban" : "workstreams";
+  const view = canSwitchView ? (viewChoice ?? defaultView) : defaultView;
 
-  const taskParam = searchParams.get("task");
+  const canonicalSearch = canonicalSetupSearch(searchParams).toString();
+  useEffect(() => {
+    if (canonicalSearch !== searchParams.toString())
+      setSearchParams(canonicalSearch, { replace: true });
+  }, [canonicalSearch, searchParams, setSearchParams]);
+
+  const taskParam = new URLSearchParams(canonicalSearch).get("task");
   const openTaskId =
     taskParam && isOnboardingTaskId(taskParam) ? taskParam : null;
   const openTask = useMemo(
-    () => board.tasks.find((task) => task.id === openTaskId) ?? null,
-    [board.tasks, openTaskId],
+    () =>
+      board.tasks.find(
+        (task) =>
+          task.id === openTaskId && (!task.hidden || board.canHideTasks),
+      ) ?? null,
+    [board.tasks, openTaskId, board.canHideTasks],
   );
 
   const setOpenTask = useCallback(
@@ -130,6 +212,7 @@ export function OnboardingBoard(): JSX.Element {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
+          next.delete("step");
           if (id) {
             next.set("task", id);
           } else {
@@ -144,29 +227,34 @@ export function OnboardingBoard(): JSX.Element {
   );
 
   const activeTasks = board.tasks.filter((task) => !task.hidden);
-  const requiredTasks = activeTasks.filter(
-    (task) => task.id !== "platform-mcp",
-  );
+  const requiredTasks = activeTasks.filter((task) => !task.badge);
   const doneCount = requiredTasks.filter(
     (task) => task.status === "done",
   ).length;
   const displayedTasks =
     board.canHideTasks && showHidden ? board.tasks : activeTasks;
   const visibleTasks = showMine
-    ? displayedTasks.filter((task) => {
-        if (!task.assignee) return false;
-        return task.assignee.kind === "user"
-          ? task.assignee.userId === session.user.id ||
-              task.assignee.email.toLowerCase() ===
-                session.user.email.toLowerCase()
-          : task.assignee.email.toLowerCase() ===
-              session.user.email.toLowerCase();
-      })
+    ? displayedTasks.filter((task) => assignedTo(task, session.user))
     : displayedTasks;
 
   const handleLeave = () => {
     void navigate(`/${orgSlug}`);
   };
+
+  const renderTask = (task: BoardTask) => (
+    <TaskCard
+      key={task.id}
+      task={task}
+      canHide={board.canHideTasks}
+      canAssign={board.canAssign}
+      canSetStatus={board.canSetStatus(task)}
+      isPending={board.isPending}
+      onOpen={() => setOpenTask(task.id)}
+      onSetStatus={(next) => void board.setStatus(task.id, next)}
+      onAssign={(assignee) => void board.assign(task.id, assignee)}
+      onToggleHidden={() => void board.setHidden(task.id, !task.hidden)}
+    />
+  );
 
   return (
     <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
@@ -175,6 +263,26 @@ export function OnboardingBoard(): JSX.Element {
       <main className="flex min-h-0 flex-1 justify-center px-8 py-6">
         <div className="flex min-h-0 w-full max-w-7xl flex-col gap-4">
           <BoardHeader />
+          {session.organizationOverride && (
+            <p className="text-muted-foreground text-sm">
+              Support access: switching views keeps your support permissions.
+              Workstreams is a presentation preview, not member impersonation.
+            </p>
+          )}
+          {board.error && (
+            <div role="alert">
+              Could not load setup tasks: {board.error}
+              <Button onClick={() => void board.retry()}>Retry</Button>
+            </div>
+          )}
+          {board.writeError && <p role="alert">{board.writeError}</p>}
+          {!board.isLoading && !board.error && taskParam && !openTask && (
+            <p role="status">
+              {openTaskId
+                ? "This task is not part of your current onboarding"
+                : "Setup task not found"}
+            </p>
+          )}
           <BoardToolbar
             doneCount={doneCount}
             totalCount={requiredTasks.length}
@@ -183,11 +291,25 @@ export function OnboardingBoard(): JSX.Element {
             canHide={board.canHideTasks}
             showHidden={showHidden}
             onShowHiddenChange={setShowHidden}
+            view={view}
+            canSwitchView={canSwitchView}
+            onViewChange={setViewChoice}
           />
+          {!board.isLoading && !board.error && visibleTasks.length === 0 && (
+            <p role="status">
+              {showMine ? "No tasks assigned to you" : "No selected tasks"}
+            </p>
+          )}
 
-          {board.isLoading ? (
-            <BoardSkeleton />
-          ) : (
+          {board.isLoading && <BoardSkeleton />}
+          {!board.isLoading && !board.error && view === "kanban" && (
+            <SetupBoard
+              tasks={visibleTasks}
+              board={board}
+              renderTask={renderTask}
+            />
+          )}
+          {!board.isLoading && !board.error && view === "workstreams" && (
             <div
               role="region"
               aria-label="Setup workstreams"
@@ -197,27 +319,14 @@ export function OnboardingBoard(): JSX.Element {
                 const workstreamTasks = workstream.taskIds
                   .map((id) => visibleTasks.find((task) => task.id === id))
                   .filter((task) => task !== undefined);
+                if (workstreamTasks.length === 0 || board.error) return null;
                 return (
                   <WorkstreamColumn
                     key={workstream.id}
                     workstream={workstream}
                     tasks={workstreamTasks}
                   >
-                    {workstreamTasks.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        canHide={board.canHideTasks}
-                        isReminding={board.remindingTaskId === task.id}
-                        onOpen={() => setOpenTask(task.id)}
-                        onSetStatus={(next) => board.setStatus(task.id, next)}
-                        onAssign={(assignee) => board.assign(task.id, assignee)}
-                        onToggleHidden={() =>
-                          board.setHidden(task.id, !task.hidden)
-                        }
-                        onRemind={() => board.remind(task.id)}
-                      />
-                    ))}
+                    {workstreamTasks.map(renderTask)}
                   </WorkstreamColumn>
                 );
               })}
@@ -229,14 +338,16 @@ export function OnboardingBoard(): JSX.Element {
       <OnboardingFooter />
 
       <TaskDialog
-        task={openTask}
+        task={board.error ? null : openTask}
         projectSlug={projectSlug}
-        isReminding={openTask !== null && board.remindingTaskId === openTask.id}
+        canAssign={board.canAssign}
+        canSetStatus={openTask !== null && board.canSetStatus(openTask)}
+        isPending={board.isPending}
+        error={board.writeError}
         onClose={() => setOpenTask(null)}
         onOpenTask={setOpenTask}
         onSetStatus={board.setStatus}
-        onAssign={board.assign}
-        onRemind={board.remind}
+        onAssign={(id, assignee) => void board.assign(id, assignee)}
       />
     </div>
   );

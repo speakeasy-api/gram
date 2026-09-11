@@ -1,5 +1,3 @@
-import { useOrgRoutes } from "@/routes";
-import { SETUP_TASK_SLUGS } from "../../task-slugs";
 import { StepSupportProvider } from "../step-container";
 import { showPylonChat } from "@/lib/pylon";
 import { Badge } from "@/components/ui/Badge";
@@ -14,7 +12,6 @@ import {
 import { cn } from "@/lib/utils";
 import { AssigneePicker } from "./assignee-picker";
 import type { Assignee, BoardTask } from "./board-store";
-import { RemindButton } from "./remind-button";
 import { TaskStep } from "./task-step";
 import {
   type OnboardingTaskId,
@@ -26,10 +23,12 @@ import {
 function StatusSelect({
   value,
   disabled,
+  blocked,
   onChange,
 }: {
   value: TaskStatus;
   disabled: boolean;
+  blocked: boolean;
   onChange: (status: TaskStatus) => void;
 }): JSX.Element {
   return (
@@ -43,7 +42,11 @@ function StatusSelect({
       </SelectTrigger>
       <SelectContent>
         {TASK_STATUSES.map((status) => (
-          <SelectItem key={status} value={status}>
+          <SelectItem
+            key={status}
+            value={status}
+            disabled={blocked && status !== "todo"}
+          >
             <span
               className={cn(
                 "size-2 rounded-full",
@@ -62,12 +65,14 @@ function StatusSelect({
 interface TaskDialogProps {
   task: BoardTask | null;
   projectSlug?: string;
-  isReminding: boolean;
+  canAssign: boolean;
+  canSetStatus: boolean;
+  isPending: boolean;
+  error: string | null;
   onClose: () => void;
   onOpenTask: (id: OnboardingTaskId) => void;
-  onSetStatus: (id: OnboardingTaskId, status: TaskStatus) => void;
+  onSetStatus: (id: OnboardingTaskId, status: TaskStatus) => Promise<boolean>;
   onAssign: (id: OnboardingTaskId, assignee: Assignee | undefined) => void;
-  onRemind: (id: OnboardingTaskId) => void;
 }
 
 /**
@@ -77,17 +82,15 @@ interface TaskDialogProps {
 export function TaskDialog({
   task,
   projectSlug,
-  isReminding,
+  canAssign,
+  canSetStatus,
+  isPending,
+  error,
   onClose,
   onOpenTask,
   onSetStatus,
   onAssign,
-  onRemind,
 }: TaskDialogProps): JSX.Element {
-  const orgRoutes = useOrgRoutes();
-  // Only mapped tasks have content in the standalone guided flow.
-  const guidedSlug = task ? SETUP_TASK_SLUGS[task.id] : undefined;
-
   return (
     <Dialog
       open={task !== null}
@@ -105,8 +108,9 @@ export function TaskDialog({
           <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3 pr-14">
             <StatusSelect
               value={task.status}
-              disabled={task.verified}
-              onChange={(status) => onSetStatus(task.id, status)}
+              disabled={task.verified || !canSetStatus || isPending}
+              blocked={task.blockedBy.length > 0}
+              onChange={(status) => void onSetStatus(task.id, status)}
             />
             {task.verified && (
               <Badge variant="success" size="sm">
@@ -117,29 +121,20 @@ export function TaskDialog({
               assignee={task.assignee}
               onChange={(assignee) => onAssign(task.id, assignee)}
               size="sm"
+              disabled={!canAssign || isPending}
             />
-            <RemindButton
-              task={task}
-              isReminding={isReminding}
-              onRemind={() => onRemind(task.id)}
-              size="sm"
-            />
-            {guidedSlug && (
-              <orgRoutes.setupTask.Link
-                params={[guidedSlug]}
-                queryParams={projectSlug ? { projectSlug } : undefined}
-                className="text-primary text-sm font-medium"
-              >
-                Open guided setup
-              </orgRoutes.setupTask.Link>
-            )}
           </div>
 
           <div className="overflow-y-auto px-8 py-6">
+            {error && <p role="alert">{error}</p>}
+            {task.blockedBy.length > 0 && (
+              <p>Blocked by: {task.blockedBy.join(", ")}</p>
+            )}
             <StepSupportProvider
               onSupport={() => {
-                onSetStatus(task.id, "awaiting_support");
-                showPylonChat();
+                void onSetStatus(task.id, "awaiting_support").then((saved) => {
+                  if (saved) showPylonChat();
+                });
               }}
             >
               <TaskStep
@@ -147,8 +142,10 @@ export function TaskDialog({
                 taskId={task.id}
                 projectSlug={projectSlug}
                 onComplete={() => {
-                  onSetStatus(task.id, "done");
-                  onClose();
+                  if (task.verified) return;
+                  void onSetStatus(task.id, "done").then((saved) => {
+                    if (saved) onClose();
+                  });
                 }}
                 onClose={onClose}
                 onOpenTask={onOpenTask}

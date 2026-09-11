@@ -9,6 +9,7 @@ import {
   PlatformMCPSetupStep,
 } from "./steps";
 import { StepSupportProvider } from "./step-container";
+import { EnableLoggingSection } from "./enable-logging-section";
 
 type SetupTaskContentProps = {
   taskKey: string;
@@ -25,6 +26,9 @@ export function SetupTaskContent({
 }: SetupTaskContentProps): JSX.Element | null {
   let step: JSX.Element | null;
   switch (taskKey) {
+    case "enable-logging":
+      step = <EnableLoggingSection index={0} />;
+      break;
     case "identity-provider":
       step = <IdentityProviderStep onComplete={onComplete} />;
       break;

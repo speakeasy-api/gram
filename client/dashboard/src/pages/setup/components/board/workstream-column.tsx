@@ -20,7 +20,7 @@ export function WorkstreamColumn({
   tasks,
   children,
 }: WorkstreamColumnProps): JSX.Element {
-  const requiredTasks = tasks.filter((task) => task.id !== "platform-mcp");
+  const requiredTasks = tasks.filter((task) => !task.hidden && !task.badge);
   const completedTasks = requiredTasks.filter(
     (task) => task.status === "done",
   ).length;
@@ -49,7 +49,7 @@ export function WorkstreamColumn({
   return (
     <section
       aria-labelledby={headingId}
-      className="bg-card flex min-h-0 max-h-full flex-col overflow-hidden border"
+      className="bg-card flex min-h-64 max-h-full flex-col overflow-hidden border md:min-h-0"
     >
       <header className="bg-surface-secondary-default flex h-16 shrink-0 items-center justify-between gap-4 border-b px-3 py-2">
         <div className="min-w-0">
@@ -61,7 +61,9 @@ export function WorkstreamColumn({
           </p>
         </div>
         <p className="text-muted-foreground shrink-0 text-sm font-medium tabular-nums">
-          {completedTasks} / {requiredTasks.length}
+          {requiredTasks.length === 0
+            ? "No required tasks"
+            : `${completedTasks} / ${requiredTasks.length}`}
         </p>
       </header>
       <div

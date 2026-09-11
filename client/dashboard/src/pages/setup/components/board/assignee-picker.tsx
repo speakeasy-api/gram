@@ -48,6 +48,7 @@ interface AssigneePickerProps {
   /** Trigger label while nobody is assigned. */
   placeholder?: string;
   size?: "xs" | "sm";
+  disabled?: boolean;
 }
 
 /**
@@ -61,11 +62,12 @@ export function AssigneePicker({
   onChange,
   placeholder = "Assign",
   size = "xs",
+  disabled = false,
 }: AssigneePickerProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { data, isLoading } = useListOrganizationUsers(undefined, undefined, {
-    enabled: open,
+    enabled: open && !disabled,
   });
 
   const users = useMemo(
@@ -105,6 +107,7 @@ export function AssigneePicker({
         <Button
           variant="tertiary"
           size={size}
+          disabled={disabled}
           className="min-w-0 max-w-full gap-1.5 px-1.5 font-normal"
           aria-label={
             assignee ? `Assigned to ${assigneeLabel(assignee)}` : placeholder

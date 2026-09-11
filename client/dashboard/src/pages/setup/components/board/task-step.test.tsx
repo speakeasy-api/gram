@@ -1,9 +1,32 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { AnthropicObservabilityStep } from "../steps";
-import { TaskStep, type TaskStepProps } from "./task-step";
+import { TaskStep, TaskStepContent, type TaskStepProps } from "./task-step";
 import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 import { SETUP_TASK_SLUGS } from "../../task-slugs";
+const protectedHook = vi.hoisted(() => vi.fn());
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-a" }),
+  useOrganization: () => ({ id: "org-a" }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasAllScopes: () => false,
+    hasAnyScope: () => false,
+    isLoading: false,
+  }),
+}));
+vi.mock("../enable-logging-section", () => ({
+  EnableLoggingSection: () => {
+    protectedHook();
+    return null;
+  },
+}));
+afterEach(() => {
+  cleanup();
+  protectedHook.mockClear();
+});
 vi.mock("../steps", () =>
   Object.fromEntries(
     [
@@ -19,14 +42,37 @@ vi.mock("../steps", () =>
       "IdentityProviderStep",
       "InstrumentAgentsStep",
       "PlatformMCPSetupStep",
-    ].map((name) => [name, () => null]),
+    ].map((name) => [
+      name,
+      () => {
+        protectedHook();
+        return null;
+      },
+    ]),
   ),
 );
 describe("workstream task coverage", () => {
+  it.each(ONBOARDING_TASKS)(
+    "does not mount protected $id hooks for readers",
+    ({ id }) => {
+      render(
+        <TaskStep
+          taskId={id}
+          onComplete={vi.fn<() => void>()}
+          onClose={vi.fn<() => void>()}
+          onOpenTask={vi.fn<() => void>()}
+        />,
+      );
+      expect(protectedHook).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/Ask an organization administrator/),
+      ).toBeTruthy();
+    },
+  );
   it("routes Anthropic observability to the shared platform setup step", () => {
     const onComplete = vi.fn<TaskStepProps["onComplete"]>();
     const onClose = vi.fn<TaskStepProps["onClose"]>();
-    const step = TaskStep({
+    const step = TaskStepContent({
       taskId: "anthropic-observability",
       onComplete,
       onClose,
@@ -50,7 +96,7 @@ describe("workstream task coverage", () => {
       ...Object.keys(SETUP_TASK_SLUGS),
       ...Array.from(catalog.matchAll(/Key: "([^"]+)"/g), (match) => match[1]),
     ])
-      expect(ids).toContain(key === "enable-logging" ? "confirm-traffic" : key);
+      expect(ids).toContain(key);
   });
   it.each(ONBOARDING_TASKS)(
     "renders $id and places it in exactly one workstream",
@@ -61,7 +107,7 @@ describe("workstream task coverage", () => {
         ),
       ).toHaveLength(1);
       expect(
-        TaskStep({
+        TaskStepContent({
           taskId: task.id,
           onComplete: vi.fn<TaskStepProps["onComplete"]>(),
           onClose: vi.fn<TaskStepProps["onClose"]>(),

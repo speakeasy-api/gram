@@ -1,7 +1,10 @@
-// URL slugs for each setup task's own page, /{org}/setup/{slug}. Kept apart
-// from the task keys the server uses so a key can change without moving a
-// page, and so the URLs read as destinations rather than identifiers.
+// Legacy /{org}/setup/{slug} aliases normalize to the shared ?task=<key> entry.
 export const SETUP_TASK_SLUGS: Record<string, string> = {
+  "enable-logging": "enable-logging",
+  "connect-idp": "connect-idp",
+  "directory-sync": "directory-sync",
+  "create-marketplace": "create-marketplace",
+  "confirm-traffic": "confirm-traffic",
   "identity-provider": "idp",
   "anthropic-observability": "anthropic-observability",
   "anthropic-admin-controls": "anthropic-admin-controls",
@@ -17,12 +20,28 @@ export function setupTaskSlug(taskKey: string): string {
 }
 
 export function setupTaskKeyForSlug(slug: string): string | undefined {
-  // The workstream combines the legacy logging task with traffic verification.
-  if (slug === "enable-logging") return "confirm-traffic";
   const match = Object.entries(SETUP_TASK_SLUGS).find(
     ([, candidate]) => candidate === slug,
   );
   if (match) return match[0];
   // Task keys still work as slugs, so links minted with a key keep resolving.
-  return slug in SETUP_TASK_SLUGS ? slug : undefined;
+  return Object.hasOwn(SETUP_TASK_SLUGS, slug) ? slug : undefined;
+}
+
+export function canonicalSetupSearch(
+  search: URLSearchParams,
+  taskSlug?: string,
+): URLSearchParams {
+  const next = new URLSearchParams(search);
+  const step = next.get("step");
+  const legacyTask =
+    step && Object.hasOwn(SETUP_TASK_SLUGS, step) ? step : undefined;
+  if (!next.has("task")) {
+    const task = taskSlug
+      ? (setupTaskKeyForSlug(taskSlug) ?? taskSlug)
+      : legacyTask;
+    if (task) next.set("task", task);
+  }
+  if (legacyTask) next.delete("step");
+  return next;
 }

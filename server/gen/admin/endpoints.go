@@ -50,6 +50,8 @@ type Endpoints struct {
 	CancelStripeSubscription            goa.Endpoint
 	ResumeStripeSubscription            goa.Endpoint
 	MarkEnterpriseTrialConverted        goa.Endpoint
+	GetOrganizationOnboarding           goa.Endpoint
+	SetOrganizationOnboarding           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -91,6 +93,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CancelStripeSubscription:            NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:            NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboarding:           NewGetOrganizationOnboardingEndpoint(s, a.APIKeyAuth),
+		SetOrganizationOnboarding:           NewSetOrganizationOnboardingEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -130,6 +134,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 	e.MarkEnterpriseTrialConverted = m(e.MarkEnterpriseTrialConverted)
+	e.GetOrganizationOnboarding = m(e.GetOrganizationOnboarding)
+	e.SetOrganizationOnboarding = m(e.SetOrganizationOnboarding)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -881,5 +887,51 @@ func NewMarkEnterpriseTrialConvertedEndpoint(s Service, authAPIKeyFn security.Au
 			return nil, err
 		}
 		return s.MarkEnterpriseTrialConverted(ctx, p)
+	}
+}
+
+// NewGetOrganizationOnboardingEndpoint returns an endpoint function that calls
+// the method "getOrganizationOnboarding" of service "admin".
+func NewGetOrganizationOnboardingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationOnboardingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationOnboarding(ctx, p)
+	}
+}
+
+// NewSetOrganizationOnboardingEndpoint returns an endpoint function that calls
+// the method "setOrganizationOnboarding" of service "admin".
+func NewSetOrganizationOnboardingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationOnboardingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationOnboarding(ctx, p)
 	}
 }

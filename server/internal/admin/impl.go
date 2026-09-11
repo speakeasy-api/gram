@@ -360,6 +360,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationOnboarding = service.preauthorizeAdmin(server.GetOrganizationOnboarding)
+	server.SetOrganizationOnboarding = service.strictAdminJSON(server.SetOrganizationOnboarding, func() any { return new(onboardingRequestBody) })
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)

@@ -1,65 +1,68 @@
 import { describe, expect, it } from "vitest";
-
-import { resolveBoardTasks, verifiedTaskIds } from "./board-store";
+import { assignedTo, resolveBoardTasks } from "./board-store";
 import { ONBOARDING_TASKS } from "./tasks";
 
-describe("verifiedTaskIds", () => {
-  it("is empty until the server confirms something", () => {
-    expect(verifiedTaskIds(undefined, undefined).size).toBe(0);
-  });
-
-  it("locks the tasks the server can vouch for", () => {
-    const ids = verifiedTaskIds(
-      { ssoConfigured: true, dsyncConfigured: false },
-      { configured: true, connected: true },
-    );
-    expect([...ids]).toEqual(["connect-idp", "create-marketplace"]);
-  });
-});
-
-describe("resolveBoardTasks", () => {
-  it("starts every task in To Do", () => {
-    const tasks = resolveBoardTasks({}, new Set());
-    expect(tasks.map((task) => task.id)).toEqual(
-      ONBOARDING_TASKS.map((task) => task.id),
-    );
-    expect(
-      tasks.every(
-        (task) => task.status === "todo" && !task.hidden && !task.verified,
-      ),
-    ).toBe(true);
-  });
-
-  it("applies the stored status, assignee, hidden flag and reminder", () => {
-    const tasks = resolveBoardTasks(
-      {
-        "connect-idp": {
-          status: "awaiting_support",
-          assignee: { kind: "email", email: "it-admin@example.com" },
-          hidden: true,
-          lastRemindedAt: "2026-09-01T10:00:00.000Z",
-        },
-      },
-      new Set(),
-    );
-    const task = tasks.find((task) => task.id === "connect-idp");
-    expect(task).toMatchObject({
-      id: "connect-idp",
-      status: "awaiting_support",
+describe("server task projection", () => {
+  it("preserves every server field for all catalog keys", () => {
+    const input = ONBOARDING_TASKS.map(({ id }) => ({
+      key: id,
+      title: `Server ${id}`,
+      description: "Server copy",
+      status: "todo" as const,
+      completedByFact: false,
       hidden: true,
-      assignee: { kind: "email", email: "it-admin@example.com" },
+      blockedBy: ["instrument-agents"],
+    }));
+    const tasks = resolveBoardTasks(input);
+    expect(tasks).toHaveLength(13);
+    tasks.forEach((task, index) => {
+      expect(task).toMatchObject({
+        id: input[index]!.key,
+        title: input[index]!.title,
+        description: "Server copy",
+        hidden: true,
+        status: "todo",
+        blockedBy: ["instrument-agents"],
+      });
     });
-    expect(task?.lastRemindedAt?.toISOString()).toBe(
-      "2026-09-01T10:00:00.000Z",
-    );
   });
-
-  it("pins verified tasks to Done whatever the board says", () => {
-    const tasks = resolveBoardTasks(
-      { "connect-idp": { status: "todo" } },
-      new Set(["connect-idp"]),
-    );
-    const task = tasks.find((task) => task.id === "connect-idp");
-    expect(task).toMatchObject({ status: "done", verified: true });
+  it("does not silently omit unknown keys", () => {
+    expect(() =>
+      resolveBoardTasks([
+        {
+          key: "future-task",
+          title: "Future",
+          description: "",
+          status: "todo",
+          completedByFact: false,
+          hidden: false,
+          blockedBy: [],
+        },
+      ]),
+    ).toThrow("Unsupported setup task");
+  });
+  it("uses server-resolved assignment and fact completion", () => {
+    const [task] = resolveBoardTasks([
+      {
+        key: "connect-idp",
+        title: "SSO",
+        description: "",
+        status: "done",
+        completedByFact: true,
+        hidden: false,
+        blockedBy: [],
+        assignee: { userId: "user-a", email: "ADMIN@example.test" },
+      },
+    ]);
+    expect(task!.verified).toBe(true);
+    expect(
+      assignedTo(task!, { id: "user-a", email: "other@example.test" }),
+    ).toBe(true);
+    expect(
+      assignedTo(task!, { id: "user-b", email: "admin@example.test" }),
+    ).toBe(true);
+    expect(
+      assignedTo(task!, { id: "user-b", email: "other@example.test" }),
+    ).toBe(false);
   });
 });

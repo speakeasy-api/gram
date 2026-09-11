@@ -176,3 +176,13 @@ func ResumeStripeSubscriptionAdminPath() string {
 func MarkEnterpriseTrialConvertedAdminPath() string {
 	return "/admin/trial.convert"
 }
+
+// GetOrganizationOnboardingAdminPath returns the URL path to the admin service getOrganizationOnboarding HTTP endpoint.
+func GetOrganizationOnboardingAdminPath() string {
+	return "/admin/organization.onboarding"
+}
+
+// SetOrganizationOnboardingAdminPath returns the URL path to the admin service setOrganizationOnboarding HTTP endpoint.
+func SetOrganizationOnboardingAdminPath() string {
+	return "/admin/organization.onboarding"
+}

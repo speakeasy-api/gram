@@ -1,117 +1,117 @@
-import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
-import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
+import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
+import { useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
+  buildOrganizationSetupTasksQuery,
+  invalidateOrganizationSetupTasks,
+} from "@/hooks/useOrganizationSetupTasks";
+import {
+  assignedTo,
+  resolveBoardTasks,
   type Assignee,
   type BoardTask,
-  onboardingBoardStore,
-  resolveBoardTasks,
-  type TaskRecord,
-  verifiedTaskIds,
 } from "./board-store";
-import { sendTaskReminder } from "./reminders";
 import type { OnboardingTaskId, TaskStatus } from "./tasks";
 
-interface OnboardingBoardActions {
-  setStatus: (id: OnboardingTaskId, status: TaskStatus) => void;
-  assign: (id: OnboardingTaskId, assignee: Assignee | undefined) => void;
-  setHidden: (id: OnboardingTaskId, hidden: boolean) => void;
-  remind: (id: OnboardingTaskId) => void;
-}
-
-export interface OnboardingBoard extends OnboardingBoardActions {
+export interface OnboardingBoardState {
   tasks: BoardTask[];
-  /** True while the server signals that lock verified tasks are loading. */
+  error: string | undefined;
+  writeError: string | null;
   isLoading: boolean;
-  /** Whether the viewer may hide tasks from the board and see hidden ones. */
+  isPending: boolean;
+  retry: () => Promise<unknown>;
+  canAssign: boolean;
   canHideTasks: boolean;
-  /** The task whose reminder is in flight, if any. */
-  remindingTaskId: OnboardingTaskId | null;
+  canSetStatus: (task: BoardTask) => boolean;
+  setStatus: (id: OnboardingTaskId, status: TaskStatus) => Promise<boolean>;
+  assign: (
+    id: OnboardingTaskId,
+    owner: Assignee | undefined,
+  ) => Promise<boolean>;
+  setHidden: (id: OnboardingTaskId, hidden: boolean) => Promise<boolean>;
 }
 
-export function useOnboardingBoard(
-  orgSlug: string | undefined,
-): OnboardingBoard {
-  const state = onboardingBoardStore.useValue(orgSlug);
-  const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
-    useOnboardingStatus();
-  const { data: publishStatus, isLoading: isPublishStatusLoading } =
-    usePublishStatus();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const [remindingTaskId, setRemindingTaskId] =
-    useState<OnboardingTaskId | null>(null);
-
-  const tasks = useMemo(
-    () =>
-      resolveBoardTasks(
-        state,
-        verifiedTaskIds(onboardingStatus, publishStatus),
-      ),
-    [state, onboardingStatus, publishStatus],
+export function useOnboardingBoard(): OnboardingBoardState {
+  const session = useSession();
+  const organizationId = session.organization.id;
+  const client = useGramContext();
+  const queryClient = useQueryClient();
+  const { hasScope } = useRBAC();
+  const canAssign = hasScope("org:admin", organizationId);
+  const canHideTasks = session.user.isAdmin;
+  const query = useQuery(
+    buildOrganizationSetupTasksQuery(client, organizationId, canHideTasks, {
+      retry: false,
+    }),
   );
-
-  const updateTask = useCallback(
-    (id: OnboardingTaskId, patch: TaskRecord) => {
-      if (!orgSlug) return;
-      // Read at write time rather than closing over `state`: `remind` patches
-      // after an await, by which point the board may have moved on.
-      const current = onboardingBoardStore.read(orgSlug);
-      onboardingBoardStore.write(orgSlug, {
-        ...current,
-        [id]: { ...current[id], ...patch },
+  const mutation = useUpdateSetupTaskMutation();
+  const inFlight = useRef(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
+  let tasks: BoardTask[] = [];
+  let error = query.error?.message;
+  try {
+    tasks = resolveBoardTasks(query.data?.tasks ?? []);
+  } catch (cause) {
+    error =
+      cause instanceof Error ? cause.message : "Could not read setup tasks";
+  }
+  const canSetStatus = (task: BoardTask) =>
+    !task.verified && (canAssign || assignedTo(task, session.user));
+  const update = async (body: UpdateSetupTaskRequestBody): Promise<boolean> => {
+    if (inFlight.current || error || query.isPending) return false;
+    inFlight.current = true;
+    setWriteError(null);
+    try {
+      await mutation.mutateAsync({
+        request: { updateSetupTaskRequestBody: body },
       });
-    },
-    [orgSlug],
-  );
-
-  const setStatus = useCallback(
-    (id: OnboardingTaskId, status: TaskStatus) => updateTask(id, { status }),
-    [updateTask],
-  );
-
-  const assign = useCallback(
-    (id: OnboardingTaskId, assignee: Assignee | undefined) =>
-      updateTask(id, { assignee }),
-    [updateTask],
-  );
-
-  const setHidden = useCallback(
-    (id: OnboardingTaskId, hidden: boolean) => updateTask(id, { hidden }),
-    [updateTask],
-  );
-
-  const remind = useCallback(
-    (id: OnboardingTaskId) => {
-      const task = tasks.find((candidate) => candidate.id === id);
-      if (!task?.assignee || remindingTaskId) return;
-      setRemindingTaskId(id);
-      void sendTaskReminder({ taskTitle: task.title, assignee: task.assignee })
-        .then(({ recipient }) => {
-          updateTask(id, { lastRemindedAt: new Date().toISOString() });
-          toast.success(`Reminder sent to ${recipient}`);
-        })
-        .catch((error: unknown) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to send reminder",
-          );
-        })
-        .finally(() => setRemindingTaskId(null));
-    },
-    [tasks, remindingTaskId, updateTask],
-  );
-
+      await invalidateOrganizationSetupTasks(queryClient, organizationId);
+      return true;
+    } catch (cause) {
+      setWriteError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not save task. Try again.",
+      );
+      return false;
+    } finally {
+      inFlight.current = false;
+    }
+  };
   return {
     tasks,
-    isLoading: isOnboardingStatusLoading || isPublishStatusLoading,
-    // Mirrors PlatformAdminGate: local dev always unlocks admin affordances so
-    // the hidden-task flow can be exercised without a platform-admin account.
-    canHideTasks: import.meta.env.DEV || isPlatformAdmin,
-    remindingTaskId,
-    setStatus,
-    assign,
-    setHidden,
-    remind,
+    error,
+    writeError,
+    isLoading: query.isPending,
+    isPending: mutation.isPending,
+    retry: () => query.refetch(),
+    canAssign,
+    canHideTasks,
+    canSetStatus,
+    setStatus: (id: OnboardingTaskId, status: TaskStatus) => {
+      const task = tasks.find((item) => item.id === id);
+      if (
+        !task ||
+        !canSetStatus(task) ||
+        (status !== "todo" && task.blockedBy.length > 0)
+      )
+        return Promise.resolve(false);
+      return update({ taskKey: id, status });
+    },
+    assign: (id: OnboardingTaskId, owner: Assignee | undefined) => {
+      if (!canAssign) return Promise.resolve(false);
+      if (!owner) return update({ taskKey: id, clearAssignee: true });
+      const assignee =
+        owner.kind === "user"
+          ? { userId: owner.userId }
+          : { email: owner.email };
+      return update({ taskKey: id, assignee });
+    },
+    setHidden: (id: OnboardingTaskId, hidden: boolean) =>
+      canHideTasks ? update({ taskKey: id, hidden }) : Promise.resolve(false),
   };
 }

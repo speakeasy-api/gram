@@ -25,11 +25,17 @@ vi.mock("@/components/ui/MoreActions", () => ({
 
 afterEach(cleanup);
 
-function renderCard(overrides: Partial<BoardTask> = {}, isReminding = false) {
-  const onRemind = vi.fn<() => void>();
+function renderCard(
+  overrides: Partial<BoardTask> = {},
+  isPending = false,
+  canSetStatus = true,
+) {
   const onOpen = vi.fn<() => void>();
   const task: BoardTask = {
     ...ONBOARDING_TASKS[0]!,
+    title: "Task",
+    description: "Task description",
+    blockedBy: [],
     status: "todo",
     verified: false,
     hidden: false,
@@ -40,42 +46,47 @@ function renderCard(overrides: Partial<BoardTask> = {}, isReminding = false) {
     <TaskCard
       task={task}
       canHide={false}
-      isReminding={isReminding}
+      isPending={isPending}
+      canAssign={false}
+      canSetStatus={canSetStatus}
       onOpen={onOpen}
-      onRemind={onRemind}
       onSetStatus={vi.fn<() => void>()}
       onAssign={vi.fn<() => void>()}
       onToggleHidden={vi.fn<() => void>()}
     />,
   );
-  return { onRemind, onOpen };
+  return { onOpen };
 }
 
-describe("TaskCard reminder menu", () => {
-  it("sends a reminder from the menu without opening the task", () => {
-    const { onRemind, onOpen } = renderCard();
-    const remind = screen.getByRole("button", { name: "Remind" });
-    expect(screen.getByTestId("task-menu").contains(remind)).toBe(true);
-    fireEvent.click(remind);
-    expect(onRemind).toHaveBeenCalledOnce();
-    expect(onOpen).not.toHaveBeenCalled();
+describe("TaskCard controls", () => {
+  it("removes reminders and retains keyboard opening", () => {
+    const { onOpen } = renderCard();
+    expect(screen.queryByText(/remind/i)).toBeNull();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Task, To Do" }), {
+      key: "Enter",
+    });
+    expect(onOpen).toHaveBeenCalledOnce();
   });
-
-  it.each([
-    [{ assignee: undefined }, "Assign someone first"],
-    [{ status: "done" }, "This task is already done"],
-  ] as const)("preserves reminder eligibility: %s", (overrides, reason) => {
-    renderCard(overrides);
-    const remind = screen.getByRole("button", { name: `Remind ${reason}` });
-    expect((remind as HTMLButtonElement).disabled).toBe(true);
+  it("hides unauthorized transitions", () => {
+    renderCard({}, false, false);
+    expect(screen.queryByText("Move to Done")).toBeNull();
   });
-
-  it("disables repeat reminders while sending", () => {
+  it("locks fact completion", () => {
+    renderCard({ verified: true, status: "done" });
+    expect(screen.queryByText("Move to To Do")).toBeNull();
+  });
+  it("disables blocked transitions", () => {
+    renderCard({ blockedBy: ["instrument-agents"] });
+    expect(
+      (screen.getByText("Move to Done") as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+  it("disables transitions while saving", () => {
     renderCard({}, true);
     expect(
       (
         screen.getByRole("button", {
-          name: "Sending reminder…",
+          name: "Move to Done",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);

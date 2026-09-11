@@ -99,7 +99,11 @@ type ContentProps = {
   candidatePlugins?: { name: string; slug: string; description?: string }[];
 };
 
-const providers = agentProvidersForSurface("plugins");
+const providers = agentProvidersForSurface("plugins").map((provider) => ({
+  ...provider,
+  // OpenClaw supports plugins, but this dialog has no install walkthrough yet.
+  available: provider.available && provider.id !== "openclaw",
+}));
 type Provider = (typeof providers)[number]["id"];
 
 function ExternalTextLink({

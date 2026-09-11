@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useOrgRoutes } from "@/routes";
@@ -13,8 +19,14 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "example-org", projectSlug: "default" }),
 }));
 vi.mock("./assignee-picker", () => ({ AssigneePicker: () => null }));
-vi.mock("./remind-button", () => ({ RemindButton: () => null }));
-vi.mock("./task-step", () => ({ TaskStep: () => <p>Inline task content</p> }));
+vi.mock("./task-step", () => ({
+  TaskStep: ({ onComplete }: { onComplete: () => void }) => (
+    <div>
+      <p>Inline task content</p>
+      <button onClick={onComplete}>Finish</button>
+    </div>
+  ),
+}));
 
 afterEach(cleanup);
 
@@ -33,14 +45,24 @@ function renderTask(id: OnboardingTaskId, projectSlug?: string) {
     <MemoryRouter initialEntries={["/example-org/setup"]}>
       <RouteState />
       <TaskDialog
-        task={{ ...definition, status: "todo", verified: false, hidden: false }}
+        task={{
+          ...definition,
+          title: id,
+          description: "Setup task",
+          blockedBy: [],
+          status: "todo",
+          verified: false,
+          hidden: false,
+        }}
         projectSlug={projectSlug}
-        isReminding={false}
+        canAssign={true}
+        canSetStatus={true}
+        isPending={false}
+        error={null}
         onClose={vi.fn<() => void>()}
         onOpenTask={vi.fn<() => void>()}
-        onSetStatus={vi.fn<() => void>()}
+        onSetStatus={vi.fn<() => Promise<boolean>>().mockResolvedValue(true)}
         onAssign={vi.fn<() => void>()}
-        onRemind={vi.fn<() => void>()}
       />
     </MemoryRouter>,
   );
@@ -57,6 +79,41 @@ function GuidedRoute() {
 }
 
 describe("guided setup from the board dialog", () => {
+  it("keeps the dialog open on a failed write and has no reminder action", async () => {
+    const onClose = vi.fn<() => void>();
+    const onSetStatus = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValue(false);
+    render(
+      <MemoryRouter>
+        <TaskDialog
+          task={{
+            id: "instrument-agents",
+            suggestedOwner: "Admin",
+            title: "Task",
+            description: "Description",
+            blockedBy: [],
+            status: "todo",
+            verified: false,
+            hidden: false,
+          }}
+          canAssign
+          canSetStatus
+          isPending={false}
+          error="Save failed"
+          onClose={onClose}
+          onOpenTask={vi.fn<() => void>()}
+          onSetStatus={onSetStatus}
+          onAssign={vi.fn<() => void>()}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    await waitFor(() => expect(onSetStatus).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toBe("Save failed");
+    expect(screen.queryByText(/remind/i)).toBeNull();
+  });
   it("retains the standalone guided page in the actual route definition", async () => {
     render(
       <MemoryRouter>
@@ -66,41 +123,8 @@ describe("guided setup from the board dialog", () => {
     expect(await screen.findByText("Standalone guided page")).toBeTruthy();
   });
 
-  it.each([
-    ["identity-provider", "idp"],
-    ["anthropic-observability", "anthropic-observability"],
-    ["anthropic-admin-controls", "anthropic-admin-controls"],
-    ["instrument-agents", "other-platforms"],
-    ["additional-agent-config", "integrations"],
-    ["distribute-servers", "distribute-servers"],
-    ["configure-policies", "policies"],
-    ["platform-mcp", "platform-mcp"],
-  ] as const)("links %s through the actual organization route", (id, slug) => {
-    renderTask(id, "selected project");
-    const link = screen.getByRole("link", { name: "Open guided setup" });
-    const destination = `/example-org/setup/${slug}?projectSlug=selected+project`;
-    expect(link.getAttribute("href")).toBe(destination);
-    expect(screen.getByText("Inline task content")).toBeTruthy();
-    fireEvent.click(link);
-    expect(screen.getByTestId("location").textContent).toBe(destination);
-  });
-
-  it("omits the query when no project was selected", () => {
-    renderTask("platform-mcp");
-    expect(
-      screen
-        .getByRole("link", { name: "Open guided setup" })
-        .getAttribute("href"),
-    ).toBe("/example-org/setup/platform-mcp");
-  });
-
-  it.each([
-    "connect-idp",
-    "directory-sync",
-    "create-marketplace",
-    "confirm-traffic",
-  ] as const)(
-    "keeps unsupported %s inline without a dead guided link",
+  it.each(ONBOARDING_TASKS.map((task) => task.id))(
+    "keeps %s in the shared dialog without a redirect loop",
     (id) => {
       renderTask(id);
       expect(

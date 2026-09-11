@@ -14,6 +14,10 @@ import {
   type AdminListOrganizationActivityPageParams,
 } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
+import { buildAdminOrganizationOnboardingQuery } from "@gram/admin-client/react-query/adminOrganizationOnboarding.core";
+import { buildSetAdminOrganizationOnboardingMutation } from "@gram/admin-client/react-query/setAdminOrganizationOnboarding";
+import type { AdminOnboardingConfiguration } from "@gram/admin-client/models/components/adminonboardingconfiguration";
+import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
@@ -106,6 +110,31 @@ export function organizationFeaturesQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationFeaturesQuery> {
   return createOrganizationFeaturesQuery(organizationId);
+}
+
+function createOrganizationOnboardingQuery(organizationId: string) {
+  const generated = buildAdminOrganizationOnboardingQuery(redirectingClient, {
+    organizationId,
+  });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationOnboardingQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationOnboardingQuery> {
+  return createOrganizationOnboardingQuery(organizationId);
+}
+
+const generatedOnboardingMutation =
+  buildSetAdminOrganizationOnboardingMutation(mutationClient);
+
+export function setAdminOrganizationOnboarding(
+  request: SetOrganizationOnboardingRequestBody,
+): Promise<AdminOnboardingConfiguration> {
+  return generatedOnboardingMutation.mutationFn({ request });
 }
 
 function createOrganizationActivityQuery(organizationId: string) {
