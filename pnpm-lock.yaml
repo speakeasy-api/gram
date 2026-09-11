@@ -358,7 +358,7 @@ importers:
         version: 0.4.6(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
       nuqs:
         specifier: ^2.9.0
-        version: 2.9.0(@tanstack/react-router@1.170.29(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))(react@19.2.8)(react-router@8.3.0(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))
+        version: 2.9.0(@tanstack/react-router@1.170.29(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))(react@19.2.8)(react-router@8.3.1(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))
       posthog-js:
         specifier: ^1.411.0
         version: 1.411.0
@@ -384,8 +384,8 @@ importers:
         specifier: ^4.12.2
         version: 4.12.2(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
       react-router:
-        specifier: ^8.3.0
-        version: 8.3.0(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
+        specifier: ^8.3.1
+        version: 8.3.1(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
       recharts:
         specifier: ^3.9.2
         version: 3.9.2(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(react-is@17.0.2)
@@ -6486,8 +6486,8 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
-  react-router@8.3.0:
-    resolution: {integrity: sha512-qyPMvW83jGIct3yiieisxdk9M745anqhpIMKN5m1t6yBMfgVPpt77aHOqs5fUlEJRMCGffg9BaQLH9oPVOL7xQ==}
+  react-router@8.3.1:
+    resolution: {integrity: sha512-TEOpiO2g0TJHEOJeRVv4amUFun9v1npCKszvcquNvzETUtJ8udV86ah5eFoHT7g26bsBvT6EiIhqulR8eDF++A==}
     engines: {node: '>=22.22.0'}
     peerDependencies:
       react: '>=19.2.7'
@@ -12882,13 +12882,13 @@ snapshots:
       path-key: 4.0.0
       unicorn-magic: 0.3.0
 
-  nuqs@2.9.0(@tanstack/react-router@1.170.29(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))(react@19.2.8)(react-router@8.3.0(react@19.2.8)(react-dom@19.2.8(react@19.2.8))):
+  nuqs@2.9.0(@tanstack/react-router@1.170.29(react@19.2.8)(react-dom@19.2.8(react@19.2.8)))(react@19.2.8)(react-router@8.3.1(react@19.2.8)(react-dom@19.2.8(react@19.2.8))):
     dependencies:
       '@standard-schema/spec': 1.0.0
       react: 19.2.8
     optionalDependencies:
       '@tanstack/react-router': 1.170.29(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
-      react-router: 8.3.0(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
+      react-router: 8.3.1(react@19.2.8)(react-dom@19.2.8(react@19.2.8))
 
   object-assign@4.1.1: {}
 
@@ -13474,7 +13474,7 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  react-router@8.3.0(react@19.2.8)(react-dom@19.2.8(react@19.2.8)):
+  react-router@8.3.1(react@19.2.8)(react-dom@19.2.8(react@19.2.8)):
     dependencies:
       cookie-es: 3.1.1
       react: 19.2.8
