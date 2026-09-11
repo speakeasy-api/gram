@@ -236,61 +236,66 @@ func TestRemoteSessionRecheck_RateLimitedHostStopsThePass(t *testing.T) {
 	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 }
 
-// A disabled endpoint listed ahead of a live one on the same issuer does not shadow it: the grant is probed through the live one.
-func TestRemoteSessionRecheck_DisabledEndpointDoesNotShadowLiveSibling(t *testing.T) {
+// A resolvable endpoint is not necessarily one that can route the grant.
+func TestRemoteSessionRecheck_UnusableEndpointDoesNotShadowLiveSibling(t *testing.T) {
 	t.Parallel()
+	for _, visibility := range []string{"disabled", "public"} {
+		t.Run(visibility, func(t *testing.T) {
+			t.Parallel()
 
-	const prefix = "aim261-shadow"
-	ctx, fx := seedStandaloneValidationFixture(t, prefix)
-	makeKeepaliveShaped(t, ctx, fx, prefix)
-	projectID := fx.endpoint.ProjectID
-	endpoints := mcpendpoints_repo.New(fx.ti.conn)
+			prefix := "aim261-shadow-" + visibility
+			ctx, fx := seedStandaloneValidationFixture(t, prefix)
+			makeKeepaliveShaped(t, ctx, fx, prefix)
+			projectID := fx.endpoint.ProjectID
+			endpoints := mcpendpoints_repo.New(fx.ti.conn)
 
-	// Re-create the live endpoint after a disabled sibling so the disabled one sorts first.
-	live, err := endpoints.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
-		Slug:           fx.endpoint.Slug,
-		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	require.NoError(t, err)
-	_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpoints_repo.DeleteMCPEndpointParams{ID: live.ID, ProjectID: projectID})
-	require.NoError(t, err)
-	deadUpstream, err := remotemcp_repo.New(fx.ti.conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
-		ID:            uuid.New(),
-		ProjectID:     projectID,
-		TransportType: "streamable-http",
-		Url:           fx.member.url,
-	})
-	require.NoError(t, err)
-	dead, err := mcpservers_repo.New(fx.ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
-		ID:                  uuid.New(),
-		ProjectID:           projectID,
-		Name:                conv.ToPGText(prefix + "-dead"),
-		Slug:                conv.ToPGText(prefix + "-dead"),
-		RemoteMcpServerID:   conv.ToNullUUID(deadUpstream.ID),
-		Visibility:          "disabled",
-		UserSessionIssuerID: conv.ToNullUUID(fx.endpoint.UserSessionIssuerID),
-	})
-	require.NoError(t, err)
-	for _, ep := range []struct {
-		slug     string
-		serverID uuid.UUID
-	}{{prefix + "-dead", dead.ID}, {fx.endpoint.Slug, fx.endpoint.McpServerID.UUID}} {
-		_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
-			ProjectID:       projectID,
-			CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			McpServerID:     conv.ToNullUUID(ep.serverID),
-			MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Slug:            ep.slug,
+			// Re-create the live endpoint after a sibling that is disabled or routes another resource.
+			live, err := endpoints.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
+				Slug:           fx.endpoint.Slug,
+				CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			})
+			require.NoError(t, err)
+			_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpoints_repo.DeleteMCPEndpointParams{ID: live.ID, ProjectID: projectID})
+			require.NoError(t, err)
+			deadUpstream, err := remotemcp_repo.New(fx.ti.conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
+				ID:            uuid.New(),
+				ProjectID:     projectID,
+				TransportType: "streamable-http",
+				Url:           fx.member.url + "/unrelated",
+			})
+			require.NoError(t, err)
+			dead, err := mcpservers_repo.New(fx.ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+				ID:                  uuid.New(),
+				ProjectID:           projectID,
+				Name:                conv.ToPGText(prefix + "-dead"),
+				Slug:                conv.ToPGText(prefix + "-dead"),
+				RemoteMcpServerID:   conv.ToNullUUID(deadUpstream.ID),
+				Visibility:          visibility,
+				UserSessionIssuerID: conv.ToNullUUID(fx.endpoint.UserSessionIssuerID),
+			})
+			require.NoError(t, err)
+			for _, ep := range []struct {
+				slug     string
+				serverID uuid.UUID
+			}{{prefix + "-dead", dead.ID}, {fx.endpoint.Slug, fx.endpoint.McpServerID.UUID}} {
+				_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+					ProjectID:       projectID,
+					CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					McpServerID:     conv.ToNullUUID(ep.serverID),
+					MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					Slug:            ep.slug,
+				})
+				require.NoError(t, err)
+			}
+
+			fx.member.set(memberRejects)
+			checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 1, checked)
+			requireProbe(t, fx.member.drain(), "token-"+prefix, false, false)
+			require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), storedSession(t, ctx, fx).ValidationStatus.String)
 		})
-		require.NoError(t, err)
 	}
-
-	fx.member.set(memberRejects)
-	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, checked)
-	requireProbe(t, fx.member.drain(), "token-"+prefix, false, false)
-	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), storedSession(t, ctx, fx).ValidationStatus.String)
 }
 
 // A private-only endpoint refuses the public surface; the sweep presents the grant through the organization's own instead.
@@ -447,4 +452,28 @@ func TestRemoteSessionRecheck_OfflineTunnelRecordsNothing(t *testing.T) {
 	require.False(t, sess.LastValidatedAt.Valid)
 	require.True(t, sess.LastRefreshAttemptAt.Valid, "the claim lease paces the retry")
 	require.Empty(t, validationCounts(t, fx.reader))
+}
+
+// Old unroutable grants must not consume the quota before a usable grant is placed.
+func TestRemoteSessionRecheck_UnroutableGrantDoesNotSpendHostQuota(t *testing.T) {
+	t.Parallel()
+	const prefix = "aim261-unroutable-quota"
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	fx.ti.service.SetRemoteSessionRecheckPacing(ratelimit.PerMinute(1), 1)
+	unroutableSubject := urn.NewUserSubject(uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, fx.clientID, unroutableSubject, "token-unroutable", "https://unrelated.example/mcp")
+	shapeGrantForKeepalive(t, ctx, fx.ti, fx.endpoint.ProjectID, fx.endpoint.UserSessionIssuerID, fx.clientID, unroutableSubject, 30*time.Hour, "jti-"+prefix+"-old")
+	makeKeepaliveShaped(t, ctx, fx, prefix)
+
+	fx.member.set(memberAccepts)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+	require.True(t, storedSession(t, ctx, fx).LastValidatedAt.Valid)
+	unroutable, err := remotesessions_repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: unroutableSubject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.False(t, unroutable.LastValidatedAt.Valid)
+	require.True(t, unroutable.LastRefreshAttemptAt.Valid, "unroutable rows retain their retry lease")
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 }
