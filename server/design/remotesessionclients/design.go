@@ -9,7 +9,17 @@ import (
 )
 
 func tokenEndpointAuthMethodEnum() {
-	Enum("client_secret_basic", "client_secret_post", "none")
+	Enum("client_secret_basic", "client_secret_post", "none", "private_key_jwt")
+}
+
+// TokenEndpointAuthMethodEnum applies the shared outbound-client auth-method
+// enumeration to design packages that cannot use this package's forms.
+func TokenEndpointAuthMethodEnum() {
+	tokenEndpointAuthMethodEnum()
+}
+
+func tokenEndpointAuthAudienceFormatEnum() {
+	Enum("issuer", "token_endpoint")
 }
 
 // scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
@@ -692,6 +702,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
@@ -726,6 +737,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	})
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
@@ -815,6 +827,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.", tokenEndpointAuthAudienceFormatEnum)
 	// Read-only here. The link is mutated through attachKeySet / detachKeySet
 	// rather than the create and update forms: it is entitlement-gated where the
 	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in

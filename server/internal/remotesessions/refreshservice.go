@@ -93,6 +93,8 @@ type RefreshService struct {
 	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
 	issuerMetadata *IssuerMetadataRefresher
 
+	assertions TokenEndpointAssertionSigner
+
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
 }
@@ -117,6 +119,10 @@ func WithRefreshIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) Refr
 	return func(s *RefreshService) { s.issuerMetadata = refresher }
 }
 
+func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) RefreshOption {
+	return func(s *RefreshService) { s.assertions = signer }
+}
+
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
@@ -127,6 +133,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		metrics:        remotesessionmetrics.NewRefresh(logger, meterProvider),
 		idTokens:       NoIDTokenVerifier(),
 		issuerMetadata: nil,
+		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
 	}
 	for _, opt := range opts {

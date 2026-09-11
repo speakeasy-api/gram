@@ -7,12 +7,28 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat = {
+  Issuer: "issuer",
+  TokenEndpoint: "token_endpoint",
+} as const;
+/**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export type CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
+  ClosedEnum<
+    typeof CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  >;
+
+/**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
 export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
+  PrivateKeyJwt: "private_key_jwt",
 } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -46,6 +62,12 @@ export type CreateRemoteSessionClientForm = {
    */
   scope?: Array<string> | undefined;
   /**
+   * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+   */
+  tokenEndpointAuthAudienceFormat?:
+    | CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+    | undefined;
+  /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
   tokenEndpointAuthMethod?:
@@ -56,6 +78,12 @@ export type CreateRemoteSessionClientForm = {
    */
   userSessionIssuerIds?: Array<string> | undefined;
 };
+
+/** @internal */
+export const CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  > = z.enum(CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat);
 
 /** @internal */
 export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
@@ -69,6 +97,7 @@ export type CreateRemoteSessionClientForm$Outbound = {
   client_secret?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
+  token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
 };
@@ -84,6 +113,9 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
+    tokenEndpointAuthAudienceFormat: z.optional(
+      CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
+    ),
     tokenEndpointAuthMethod: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
     ),
@@ -94,6 +126,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       clientId: "client_id",
       clientSecret: "client_secret",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerIds: "user_session_issuer_ids",
     });

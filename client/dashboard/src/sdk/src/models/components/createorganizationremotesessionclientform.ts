@@ -7,6 +7,22 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
+  {
+    Issuer: "issuer",
+    TokenEndpoint: "token_endpoint",
+  } as const;
+/**
+ * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+ */
+export type CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
+  ClosedEnum<
+    typeof CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  >;
+
+/**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
 export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod =
@@ -14,6 +30,7 @@ export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod =
     ClientSecretBasic: "client_secret_basic",
     ClientSecretPost: "client_secret_post",
     None: "none",
+    PrivateKeyJwt: "private_key_jwt",
   } as const;
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -52,12 +69,26 @@ export type CreateOrganizationRemoteSessionClientForm = {
    */
   scope?: Array<string> | undefined;
   /**
+   * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+   */
+  tokenEndpointAuthAudienceFormat?:
+    | CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+    | undefined;
+  /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
   tokenEndpointAuthMethod?:
     | CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod
     | undefined;
 };
+
+/** @internal */
+export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat
+  > = z.enum(
+    CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  );
 
 /** @internal */
 export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
@@ -73,6 +104,7 @@ export type CreateOrganizationRemoteSessionClientForm$Outbound = {
   project_id?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
+  token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
 };
 
@@ -89,6 +121,9 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
       projectId: z.optional(z.string()),
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),
+      tokenEndpointAuthAudienceFormat: z.optional(
+        CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
+      ),
       tokenEndpointAuthMethod: z.optional(
         CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
       ),
@@ -99,6 +134,7 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
         clientSecret: "client_secret",
         projectId: "project_id",
         remoteSessionIssuerId: "remote_session_issuer_id",
+        tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
         tokenEndpointAuthMethod: "token_endpoint_auth_method",
       });
     }),

@@ -1458,11 +1458,21 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
 
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve local kms signing key cache: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalSigningClient(
+		alg,
+		filepath.Join(cacheDir, "gram", "local-kms", strings.ToLower(string(alg))+".pem"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load local kms signing key: %w", err)
+	}
+
+	// Close is a no-op for the local client, so every caller can retain the
+	// production ownership contract while server and worker reuse one key.
 	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
-		client, err := gcpkms.NewLocalSigningClient(alg)
-		if err != nil {
-			return nil, fmt.Errorf("build local signing client: %w", err)
-		}
 		return client, nil
 	}, nil
 }

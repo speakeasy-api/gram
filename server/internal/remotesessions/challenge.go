@@ -110,15 +110,19 @@ type RemoteLoginState struct {
 	// OrganizationID scopes the callback's client lookup so an organization-level
 	// client (project_id NULL) bound to this project's user_session_issuer
 	// resolves on the way back. Empty for in-flight states minted before it.
-	OrganizationID        string              `json:"organization_id,omitempty"`
-	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
-	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
-	TokenEndpoint         string              `json:"token_endpoint"`
-	RedirectURI           string              `json:"redirect_uri"`
-	CodeVerifier          string              `json:"code_verifier"`
-	Resource              string              `json:"resource,omitempty"`
-	Subject               *urn.SessionSubject `json:"subject,omitempty"`
-	McpSlug               string              `json:"mcp_slug"`
+	OrganizationID        string    `json:"organization_id,omitempty"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	TokenEndpoint         string    `json:"token_endpoint"`
+	// AssertionIssuer is the RFC 8414 issuer identifier captured with the
+	// authorization request. It is the default private_key_jwt audience. Empty
+	// for an in-flight state minted by a server from before AIM-156.
+	AssertionIssuer string              `json:"assertion_issuer,omitempty"`
+	RedirectURI     string              `json:"redirect_uri"`
+	CodeVerifier    string              `json:"code_verifier"`
+	Resource        string              `json:"resource,omitempty"`
+	Subject         *urn.SessionSubject `json:"subject,omitempty"`
+	McpSlug         string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
@@ -205,6 +209,9 @@ type ChallengeManager struct {
 	// idTokens verifies the ID token a code exchange or refresh returns.
 	idTokens IDTokenVerifier
 
+	// assertions signs outbound private_key_jwt client authentication.
+	assertions TokenEndpointAssertionSigner
+
 	// issuerMetadata refreshes an issuer's stored metadata when a flow uses it; nil leaves the stored row as is.
 	issuerMetadata *IssuerMetadataRefresher
 	// enricher asks the issuer's userinfo and introspection endpoints about a grant.
@@ -262,6 +269,10 @@ func WithSessionEnricher(enricher *SessionEnricher) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.enricher = enricher }
 }
 
+func WithTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.assertions = signer }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -296,6 +307,7 @@ func NewChallengeManager(
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
+		assertions:                unavailableTokenEndpointAssertionSigner{},
 	}
 	for _, option := range options {
 		option(manager)
@@ -304,7 +316,7 @@ func NewChallengeManager(
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	return manager
 }
 
@@ -330,6 +342,9 @@ type Client struct {
 
 	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
 	IssuerIdentifier string
+	// ClientAssertionIssuer preserves the exact RFC 8414 issuer identifier for
+	// private_key_jwt aud claims, including a significant trailing slash.
+	ClientAssertionIssuer string
 
 	AuthorizationEndpoint string
 	TokenEndpoint         string
@@ -403,6 +418,17 @@ func issuerIdentifier(metadata []byte, issuerURL string) string {
 	return strings.TrimRight(issuerURL, "/")
 }
 
+// clientAssertionIssuer is the RFC 8414 issuer identifier used as the default
+// private_key_jwt audience. Preserve the configured URL verbatim when no
+// discovery document is stored: a trailing slash is significant to audience
+// comparison (notably for Auth0 issuers).
+func clientAssertionIssuer(metadata []byte, issuerURL string) string {
+	if doc := rawDocumentIssuer(metadata); doc != "" && issuerURLsCanonicallyEqual(doc, issuerURL) {
+		return doc
+	}
+	return strings.TrimSpace(issuerURL)
+}
+
 // ListClients returns the joined client + issuer rows linked to a user
 // session issuer. Used by the consent renderer to materialise the
 // per-remote cards.
@@ -433,6 +459,7 @@ func (m *ChallengeManager) ListClients(
 			IssuerLogoAssetID:                r.IssuerLogoAssetID,
 			IssuerURL:                        r.IssuerUrl,
 			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
+			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
 			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
 			ClientScope:                      r.ClientScope,
@@ -791,6 +818,7 @@ func (m *ChallengeManager) mintAuthorization(
 		UserSessionIssuerID:   parent.UserSessionIssuerID,
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
+		AssertionIssuer:       client.ClientAssertionIssuer,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
 		Resource:              parent.Resource,
@@ -979,7 +1007,31 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
-	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
+	assertionIssuer := state.AssertionIssuer
+	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
+		// Rolling-deploy compatibility: the prior binary could mint a login state
+		// without AssertionIssuer. The scoped client read above established
+		// authority; this id-only joined read only recovers its issuer metadata.
+		joined, jerr := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
+		if jerr != nil {
+			return none, oops.E(oops.CodeUnexpected, jerr, "load the remote session client's assertion issuer").LogError(ctx, logger)
+		}
+		assertionIssuer = clientAssertionIssuer(joined.IssuerMetadata, joined.IssuerUrl)
+	}
+	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
+	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
+		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
+	}
+	tok, err := m.exchangeCode(ctx, state, tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: client.ID,
+		OrganizationID:        client.OrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     assertionAudience,
+		AssertionSigner:       m.assertions,
+	}, audience, code)
 	if err != nil {
 		var oauthErr oautherr.RFC6749Error
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
@@ -1266,9 +1318,7 @@ func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *h
 func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
 	state RemoteLoginState,
-	externalClientID string,
-	clientSecret string,
-	authMethod TokenEndpointAuthMethod,
+	clientAuth tokenEndpointClientAuth,
 	audience string,
 	code string,
 ) (tokenResponse, error) {
@@ -1284,7 +1334,7 @@ func (m *ChallengeManager) exchangeCode(
 		form.Set("resource", state.Resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, authMethod, externalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}

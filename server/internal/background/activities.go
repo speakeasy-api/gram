@@ -244,6 +244,7 @@ func NewActivities(
 	tumMeterStreamingEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
+	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -325,6 +326,7 @@ func NewActivities(
 			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter,
 				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 			),
 		)
 	}

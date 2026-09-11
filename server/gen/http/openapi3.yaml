@@ -74788,6 +74788,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
+                        - private_key_jwt
             description: Form for creating a global remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
             required:
                 - remote_session_issuer_id
@@ -75122,6 +75123,12 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                token_endpoint_auth_audience_format:
+                    type: string
+                    description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+                    enum:
+                        - issuer
+                        - token_endpoint
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -75129,6 +75136,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
+                        - private_key_jwt
             description: Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.
             required:
                 - remote_session_issuer_id
@@ -75377,6 +75385,12 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                token_endpoint_auth_audience_format:
+                    type: string
+                    description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+                    enum:
+                        - issuer
+                        - token_endpoint
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -75384,6 +75398,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
+                        - private_key_jwt
                 user_session_issuer_ids:
                     type: array
                     items:
@@ -87553,6 +87568,12 @@ components:
                     items:
                         type: string
                     description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+                token_endpoint_auth_audience_format:
+                    type: string
+                    description: Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
+                    enum:
+                        - issuer
+                        - token_endpoint
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -87560,6 +87581,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
+                        - private_key_jwt
                 updated_at:
                     type: string
                     format: date-time
@@ -96816,6 +96838,12 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
+                token_endpoint_auth_audience_format:
+                    type: string
+                    description: Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.
+                    enum:
+                        - issuer
+                        - token_endpoint
                 token_endpoint_auth_method:
                     type: string
                     description: Change how the client authenticates at the issuer's token endpoint.
@@ -96823,6 +96851,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
+                        - private_key_jwt
             description: Form for updating a remote_session_client. All non-id fields are optional patches.
             required:
                 - id

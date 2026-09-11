@@ -545,7 +545,16 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 	form.Set("token", token)
 	form.Set("token_type_hint", hint)
 
-	req, err := newTokenEndpointRequest(ctx, endpoint, form, authMethod, client.ExternalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, endpoint, form, tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: uuid.Nil,
+		OrganizationID:        "",
+		JSONWebKeySetID:       uuid.Nil,
+		ClientID:              client.ExternalClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     "",
+		AssertionSigner:       unavailableTokenEndpointAssertionSigner{},
+	})
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: could not build request", attr.SlogError(err))
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal

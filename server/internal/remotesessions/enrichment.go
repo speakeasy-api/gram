@@ -259,7 +259,14 @@ func introspectionAuthMethod(advertised []string, tokenEndpointMethod string, cl
 		case TokenEndpointAuthMethodPrivateKeyJWT:
 		}
 	}
-	return ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	method, err := ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	if err != nil {
+		return "", err
+	}
+	if method == TokenEndpointAuthMethodPrivateKeyJWT {
+		return "", fmt.Errorf("private_key_jwt introspection authentication is not supported")
+	}
+	return method, nil
 }
 
 // run performs one enrichment call: the endpoint and budget gates, the request build, and the read.
@@ -384,7 +391,16 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		form := url.Values{}
 		form.Set("token", token)
 		form.Set("token_type_hint", hint)
-		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, authMethod, target.externalClientID, clientSecret)
+		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, tokenEndpointClientAuth{
+			Method:                authMethod,
+			RemoteSessionClientID: uuid.Nil,
+			OrganizationID:        "",
+			JSONWebKeySetID:       uuid.Nil,
+			ClientID:              target.externalClientID,
+			ClientSecret:          clientSecret,
+			AssertionAudience:     "",
+			AssertionSigner:       unavailableTokenEndpointAssertionSigner{},
+		})
 		if err != nil {
 			return nil, err
 		}

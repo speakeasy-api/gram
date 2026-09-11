@@ -282,17 +282,18 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		client, err = queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-			ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			OrganizationID:          conv.ToPGText(request.OrganizationID),
-			RemoteSessionIssuerID:   issuerID,
-			ClientID:                clientID,
-			ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
-			ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-			ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
-			TokenEndpointAuthMethod: conv.ToPGText("none"),
-			Scope:                   []string{"tools:read"},
-			Audience:                pgtype.Text{String: "", Valid: false},
-			LegacyCallbackUrl:       false,
+			ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:                  conv.ToPGText(request.OrganizationID),
+			RemoteSessionIssuerID:           issuerID,
+			ClientID:                        clientID,
+			ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
+			ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+			ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+			TokenEndpointAuthMethod:         conv.ToPGText("none"),
+			TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+			Scope:                           []string{"tools:read"},
+			Audience:                        pgtype.Text{String: "", Valid: false},
+			LegacyCallbackUrl:               false,
 		})
 		if err != nil {
 			return fmt.Errorf("create local fixture client: %w", err)

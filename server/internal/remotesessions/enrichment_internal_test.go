@@ -92,6 +92,9 @@ func TestIntrospectionAuthMethod(t *testing.T) {
 
 	_, err = introspectionAuthMethod(nil, "client_secret_basic", "")
 	require.Error(t, err, "the fallback keeps the token endpoint's validation")
+
+	_, err = introspectionAuthMethod(nil, "private_key_jwt", "")
+	require.ErrorContains(t, err, "private_key_jwt introspection authentication is not supported")
 }
 
 func TestIntrospectedTokenFromEnrichment(t *testing.T) {
