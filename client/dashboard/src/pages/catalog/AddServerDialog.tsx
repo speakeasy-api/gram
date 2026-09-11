@@ -2,7 +2,10 @@ import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
+import { Alert } from "@/components/ui/Alert";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
@@ -684,6 +687,10 @@ function ConfigurePhaseContent({
   bulk?: boolean;
   onClose: () => void;
 }) {
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateIdentity =
+    !rbacLoading && hasScope("project:write", project.id);
   // Multi-remote servers were already named in the selectRemotes phase; only
   // servers with a single endpoint still need a name input here.
   const singleRemoteConfigs = releaseState.serverConfigs.filter(
@@ -710,7 +717,13 @@ function ConfigurePhaseContent({
   const nothingToConfigure =
     singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
 
-  const canSubmit = releaseState.canInstall && missingRequiredHeaders === 0;
+  const userIdentityPermissionBlocked =
+    !canCreateIdentity &&
+    releaseState.serverConfigs.some((config) => config.identityMode === "user");
+  const canSubmit =
+    releaseState.canInstall &&
+    missingRequiredHeaders === 0 &&
+    !userIdentityPermissionBlocked;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSubmit) {
@@ -753,7 +766,11 @@ function ConfigurePhaseContent({
             singleRemoteConfigs={singleRemoteConfigs}
           />
         )}
-        <IdentityConfigurations releaseState={releaseState} />
+        <IdentityConfigurations
+          releaseState={releaseState}
+          canCreateIdentity={canCreateIdentity}
+          rbacLoading={rbacLoading}
+        />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
       </Stack>
       <Dialog.Footer>
@@ -795,8 +812,12 @@ function ConfigurePhaseContent({
 
 function IdentityConfigurations({
   releaseState,
+  canCreateIdentity,
+  rbacLoading,
 }: {
   releaseState: ConfigurePhase;
+  canCreateIdentity: boolean;
+  rbacLoading: boolean;
 }) {
   const configs = releaseState.serverConfigs.filter(
     (config) => !isFigmaCatalogServer(config.server),
@@ -833,6 +854,7 @@ function IdentityConfigurations({
                 value="user"
                 label="User"
                 description="Each user authorizes their account."
+                disabled={!canCreateIdentity}
               />
               <CatalogIdentityChoice
                 value="agent"
@@ -845,6 +867,15 @@ function IdentityConfigurations({
                 description="No upstream credential."
               />
             </RadioGroup>
+            {config.identityMode === "user" &&
+            !rbacLoading &&
+            !canCreateIdentity ? (
+              <Alert variant="warning" dismissible={false}>
+                User Identity creates a provider or OAuth client and requires
+                project:write. Choose another identity mode or ask a project
+                administrator.
+              </Alert>
+            ) : null}
             {config.identityMode === "agent" ? (
               <Input
                 type="password"
@@ -869,14 +900,26 @@ function CatalogIdentityChoice({
   value,
   label,
   description,
+  disabled = false,
 }: {
   value: ServerConfig["identityMode"];
   label: string;
   description: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-2 border p-2">
-      <RadioGroupItem value={value} className="mt-0.5" />
+    <label
+      className={cn(
+        "flex items-start gap-2 border p-2",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+      )}
+    >
+      <RadioGroupItem
+        value={value}
+        disabled={disabled}
+        aria-label={label}
+        className="mt-0.5"
+      />
       <span>
         <Text small className="block font-medium">
           {label}

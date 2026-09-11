@@ -241,6 +241,84 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "replace-target")
+
+	initial, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		McpServerID:      targetID.String(),
+		ProviderID:       nil,
+		CreateProvider:   serverIdentityProviderForm("replace-initial-provider", nil, false),
+		ClientMode:       "manual",
+		ExistingClientID: nil,
+		ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+			ClientID:                conv.PtrEmpty("replace-initial-client"),
+			ClientSecret:            nil,
+			TokenEndpointAuthMethod: conv.PtrEmpty("none"),
+			Scope:                   nil,
+			Audience:                nil,
+		},
+	})
+	require.NoError(t, err)
+	initialClientID, err := uuid.Parse(initial.Client.ID)
+	require.NoError(t, err)
+
+	replacementProviderID := createServerIdentityProvider(t, ctx, ti, "replace-next-provider", "", false, []string{"none"})
+	replacementClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectIDFromContext(t, ctx)),
+		OrganizationID:        conv.ToPGText(activeOrganizationID(t, ctx)),
+		RemoteSessionIssuerID: replacementProviderID,
+		ClientID:              "replace-next-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	detachAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	require.NoError(t, err)
+
+	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		McpServerID:         targetID.String(),
+		ProviderID:          conv.PtrEmpty(replacementProviderID.String()),
+		CreateProvider:      nil,
+		ClientMode:          "existing",
+		ExistingClientID:    conv.PtrEmpty(replacementClient.ID.String()),
+		ClientConfiguration: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "linked", *result.Status)
+
+	oldClient, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             initialClientID,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, oldClient.UserSessionIssuerIds, userIssuerID)
+	newClient, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             replacementClient.ID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, newClient.UserSessionIssuerIds, userIssuerID)
+	storedTarget, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        targetID,
+		ProjectID: projectIDFromContext(t, ctx),
+	})
+	require.NoError(t, err)
+	require.Equal(t, replacementProviderID, storedTarget.RemoteSessionIssuerID.UUID)
+	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
+	require.NoError(t, err)
+	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
+}
+
 func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInstance, slug string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)

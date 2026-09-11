@@ -250,22 +250,24 @@ export function AttachRemoteIdentityProviderSheet({
   // Existing clients of the picked issuer (this project's clients, whether the
   // issuer is organization-level or project-level). Only an existing issuer can
   // have clients, so the walk is disabled in Add-new-issuer mode. Filter out
-  // any already bound to this user_session_issuer — none today, since
-  // selectableIssuers excludes already-associated issuers, but defensive
-  // against that invariant changing.
+  // the client already bound to this target; the configured Remote MCP flow can
+  // include its current provider so the operator can replace that client.
   const { items: issuerClients, isLoading: isLoadingIssuerClients } =
     useAllRemoteSessionClients(
       { remoteSessionIssuerId: selectedIssuerId },
       { enabled: mode === "select" && !!selectedIssuerId },
     );
+  const attachedUserSessionIssuerId =
+    userSessionIssuer?.id ??
+    (isRemoteMcp ? target.userSessionIssuerId : undefined);
   const attachableClients = useMemo(
     () =>
       issuerClients.filter(
         (candidate) =>
-          !userSessionIssuer ||
-          !candidate.userSessionIssuerIds.includes(userSessionIssuer.id),
+          !attachedUserSessionIssuerId ||
+          !candidate.userSessionIssuerIds.includes(attachedUserSessionIssuerId),
       ),
-    [issuerClients, userSessionIssuer],
+    [attachedUserSessionIssuerId, issuerClients],
   );
 
   // The Session Client toggle only appears for an existing issuer that has

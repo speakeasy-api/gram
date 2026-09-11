@@ -175,10 +175,12 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		if existing.RemoteSessionClient.RemoteSessionIssuerID != provider.ID {
 			return nil, oops.E(oops.CodeBadRequest, nil, "existing client does not belong to the selected provider").LogError(ctx, logger)
 		}
-		if err := preflightServerUserIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, existing.RemoteSessionClient.ID); err != nil {
-			return nil, serverUserIdentityPreflightError(err)
+		if !target.RemoteSessionIssuerID.Valid || target.RemoteSessionIssuerID.UUID != provider.ID {
+			if err := preflightServerUserIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, existing.RemoteSessionClient.ID); err != nil {
+				return nil, serverUserIdentityPreflightError(err)
+			}
 		}
-	} else if plan.createProvider == nil {
+	} else if plan.createProvider == nil && (!target.RemoteSessionIssuerID.Valid || target.RemoteSessionIssuerID.UUID != provider.ID) {
 		if err := preflightServerUserIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, uuid.Nil); err != nil {
 			return nil, serverUserIdentityPreflightError(err)
 		}
@@ -261,7 +263,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock MCP server").LogError(ctx, logger)
 	}
-	if !lockedTarget.RemoteMcpServerID.Valid || !lockedTarget.UserSessionIssuerID.Valid || lockedTarget.RemoteMcpServerID.UUID != target.RemoteMcpServerID.UUID || lockedTarget.UserSessionIssuerID.UUID != target.UserSessionIssuerID.UUID {
+	if !lockedTarget.RemoteMcpServerID.Valid || !lockedTarget.UserSessionIssuerID.Valid || lockedTarget.RemoteMcpServerID.UUID != target.RemoteMcpServerID.UUID || lockedTarget.UserSessionIssuerID.UUID != target.UserSessionIssuerID.UUID || lockedTarget.RemoteSessionIssuerID != target.RemoteSessionIssuerID {
 		return nil, oops.E(oops.CodeConflict, nil, "MCP server identity configuration changed while preparing the request").LogError(ctx, logger)
 	}
 	if _, err := remotemcprepo.New(dbtx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: lockedTarget.RemoteMcpServerID.UUID, ProjectID: *authCtx.ProjectID}); err != nil {
@@ -319,6 +321,50 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 			Name:                   conv.FromPGText[string](provider.Name),
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log Remote Identity Provider creation").LogError(ctx, logger)
+		}
+	}
+
+	if lockedTarget.RemoteSessionIssuerID.Valid {
+		bound, err := txRepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+			UserSessionIssuerID:   target.UserSessionIssuerID.UUID,
+			ProjectID:             *authCtx.ProjectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			RemoteSessionIssuerID: lockedTarget.RemoteSessionIssuerID,
+			Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			LimitValue:            2,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list current MCP server identity clients").LogError(ctx, logger)
+		}
+		if len(bound) > 1 {
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "MCP server has multiple clients for its current Remote Identity Provider").LogError(ctx, logger)
+		}
+		for _, current := range bound {
+			if plan.clientMode == serverUserIdentityClientModeExisting && current.RemoteSessionClient.ID == plan.existingClientID {
+				continue
+			}
+			affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+				RemoteSessionClientID: current.RemoteSessionClient.ID,
+				UserSessionIssuerID:   target.UserSessionIssuerID.UUID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "detach previous MCP server identity client").LogError(ctx, logger)
+			}
+			if affected == 0 {
+				continue
+			}
+			if err := s.auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
+				OrganizationID:         authCtx.ActiveOrganizationID,
+				ProjectID:              *authCtx.ProjectID,
+				Actor:                  actor,
+				ActorDisplayName:       authCtx.Email,
+				ActorSlug:              nil,
+				RemoteSessionClientURN: urn.NewRemoteSessionClient(current.RemoteSessionClient.ID),
+				ClientID:               current.RemoteSessionClient.ClientID,
+				UserSessionIssuerURN:   urn.NewUserSessionIssuer(target.UserSessionIssuerID.UUID),
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "log previous MCP server identity client detachment").LogError(ctx, logger)
+			}
 		}
 	}
 

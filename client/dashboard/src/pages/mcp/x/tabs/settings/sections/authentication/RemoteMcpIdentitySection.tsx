@@ -188,9 +188,10 @@ export function RemoteMcpIdentitySectionBody({
   const associatedIssuers = allIssuers.filter((issuer) =>
     associatedIssuerIds.has(issuer.id),
   );
-  const selectableIssuers = allIssuers.filter(
-    (issuer) => !associatedIssuerIds.has(issuer.id),
-  );
+  const selectableIssuers =
+    actualMode === "user"
+      ? allIssuers
+      : allIssuers.filter((issuer) => !associatedIssuerIds.has(issuer.id));
   const identityError = headersQuery.error ?? clientsQueryError;
 
   return (
@@ -482,9 +483,19 @@ function UserIdentityDetails({
     <div className="border p-4">
       <div className="mb-2 flex items-center justify-between gap-3">
         <Text className="font-medium">Linked identity provider</Text>
-        <Badge variant="information">
-          <Badge.Text>User Identity</Badge.Text>
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="information">
+            <Badge.Text>User Identity</Badge.Text>
+          </Badge>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={disabled || isLoading}
+            onClick={onConfigure}
+          >
+            <Button.Text>Change</Button.Text>
+          </Button>
+        </div>
       </div>
       <Stack gap={3}>
         {issuers.map((issuer) => {

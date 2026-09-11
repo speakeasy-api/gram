@@ -311,6 +311,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .getAttribute("href"),
     ).toBe("/org/providers/provider-1/clients/client-1");
     expect(screen.getByText(/1 connection/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByRole("dialog", { name: "" })).toBeDefined();
+    expect(mocks.attachSheet).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        selectableIssuers: [expect.objectContaining({ id: "provider-1" })],
+      }),
+    );
     expect(mocks.authenticationProbe).toHaveBeenLastCalledWith(
       "remote-source-1",
       false,
