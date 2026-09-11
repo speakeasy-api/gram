@@ -919,39 +919,41 @@ BEGIN
   -- available: it signs an assertion with a key it publishes, so Gram holds no
   -- secret for it. This is the row the "Key-authenticated" badge appears on.
   INSERT INTO user_session_clients
-    (id, project_id, user_session_issuer_id, client_id, client_name, redirect_uris,
-     client_id_issued_at, client_id_metadata_uri, client_id_metadata_fetched_at,
-     client_id_metadata_cache_expires_at, client_id_metadata_etag,
-     token_endpoint_auth_method, client_jwks_uri)
+    (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+     redirect_uris, client_id_issued_at, client_id_metadata_uri,
+     client_id_metadata_fetched_at, client_id_metadata_cache_expires_at,
+     client_id_metadata_etag, token_endpoint_auth_method, client_jwks_uri)
   VALUES
-    (usc_key, proj_a, us_issuer, demo_cimd_url, 'Partner Reconciliation Agent',
+    (usc_key, proj_a, demo_org, us_issuer, demo_cimd_url, 'Partner Reconciliation Agent',
      ARRAY['https://agents.example.com/callback'],
      now() - interval '9 days', demo_cimd_url, now() - interval '2 hours',
      now() + interval '22 hours', '"demo-etag-v3"',
      'private_key_jwt', 'https://agents.example.com/.well-known/jwks.json');
 
   INSERT INTO user_session_clients
-    (id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name,
-     redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+    (id, project_id, organization_id, user_session_issuer_id, client_id,
+     client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+     token_endpoint_auth_method)
   VALUES
     -- A public client: it presents nothing, and PKCE is the whole proof. The
     -- ordinary case, and deliberately unbadged in the list.
-    (usc_public, proj_a, us_issuer, 'gram_demo_client_public', NULL, 'Claude Code',
-     ARRAY['http://127.0.0.1:41293/callback'], now() - interval '11 days', 'none'),
+    (usc_public, proj_a, demo_org, us_issuer, 'gram_demo_client_public', NULL,
+     'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
+     now() - interval '11 days', 'none'),
     -- A confidential client presenting a secret Gram issued it.
-    (usc_secret, proj_a, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
+    (usc_secret, proj_a, demo_org, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
      'Acme Nightly Batch', ARRAY['https://batch.example.com/callback'],
      now() - interval '12 days', 'client_secret_basic'),
     -- Registered before the method was recorded. The kind still resolves --
     -- off the stored secret -- rather than reading as unknown, which is the
     -- whole reason it is derived on the server.
-    (usc_legacy, proj_a, us_issuer, 'gram_demo_client_legacy', demo_secret_hash,
+    (usc_legacy, proj_a, demo_org, us_issuer, 'gram_demo_client_legacy', demo_secret_hash,
      'Acme Legacy Connector', ARRAY['https://legacy.example.com/callback'],
      now() - interval '40 days', NULL),
     -- Contradicts itself: it committed to signed assertions and yet carries a
     -- secret, so the token endpoint refuses it. It holds a session it obtained
     -- before it was broken, and cannot refresh that session.
-    (usc_broken, proj_a, us_issuer, 'gram_demo_client_broken', demo_secret_hash,
+    (usc_broken, proj_a, demo_org, us_issuer, 'gram_demo_client_broken', demo_secret_hash,
      'Vendor Sync (misconfigured)', ARRAY['https://vendor.example.com/callback'],
      now() - interval '6 days', 'private_key_jwt');
 
@@ -959,32 +961,33 @@ BEGIN
   -- literal: two tenants seeded into one database would otherwise collide.
   -- Nothing ever presents these; no demo session can be refreshed.
   INSERT INTO user_sessions
-    (id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti,
-     refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+    (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+     subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+     last_used_at, created_at)
   VALUES
-    (demo.det_uuid('gram-demo-user-session-1'), proj_a, us_issuer, usc_key,
+    (demo.det_uuid('gram-demo-user-session-1'), proj_a, demo_org, us_issuer, usc_key,
      'user:' || demo_user_ids[1], 'demo-jti-1',
      demo.det_uuid('gram-demo-user-session-refresh-1')::text,
      now() + interval '21 days', now() + interval '40 minutes',
      now() - interval '25 minutes', now() - interval '9 days'),
-    (demo.det_uuid('gram-demo-user-session-2'), proj_a, us_issuer, usc_key,
+    (demo.det_uuid('gram-demo-user-session-2'), proj_a, demo_org, us_issuer, usc_key,
      'user:' || demo_user_ids[3], 'demo-jti-2',
      demo.det_uuid('gram-demo-user-session-refresh-2')::text,
      now() + interval '19 days', now() - interval '5 minutes',
      now() - interval '3 hours', now() - interval '7 days'),
-    (demo.det_uuid('gram-demo-user-session-3'), proj_a, us_issuer, usc_public,
+    (demo.det_uuid('gram-demo-user-session-3'), proj_a, demo_org, us_issuer, usc_public,
      'user:' || demo_user_ids[2], 'demo-jti-3',
      demo.det_uuid('gram-demo-user-session-refresh-3')::text,
      now() + interval '27 days', now() + interval '35 minutes',
      now() - interval '2 hours', now() - interval '11 days'),
-    (demo.det_uuid('gram-demo-user-session-4'), proj_a, us_issuer, usc_secret,
+    (demo.det_uuid('gram-demo-user-session-4'), proj_a, demo_org, us_issuer, usc_secret,
      'user:' || demo_user_ids[4], 'demo-jti-4',
      demo.det_uuid('gram-demo-user-session-refresh-4')::text,
      now() + interval '3 days', now() - interval '20 minutes',
      now() - interval '4 days', now() - interval '12 days'),
     -- Expiring, and its registration can no longer authenticate, so this one
     -- is the connection an operator is meant to notice.
-    (demo.det_uuid('gram-demo-user-session-5'), proj_a, us_issuer, usc_broken,
+    (demo.det_uuid('gram-demo-user-session-5'), proj_a, demo_org, us_issuer, usc_broken,
      'user:' || demo_user_ids[5], 'demo-jti-5',
      demo.det_uuid('gram-demo-user-session-refresh-5')::text,
      now() + interval '16 hours', now() - interval '50 minutes',
@@ -1100,46 +1103,47 @@ BEGIN
   -- person also gets at least one, so no one's tab reads "no connections"
   -- while their usage panels show a week of traffic.
   INSERT INTO user_session_clients
-    (id, project_id, user_session_issuer_id, client_id, client_secret_hash,
-     client_name, redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+    (id, project_id, organization_id, user_session_issuer_id, client_id,
+     client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+     token_endpoint_auth_method)
   VALUES
-    (demo.det_uuid('gram-demo-usc-linear'), proj_a,
+    (demo.det_uuid('gram-demo-usc-linear'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-linear'), 'gram_demo_client_linear', NULL,
      'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
      now() - interval '10 days', 'none'),
-    (demo.det_uuid('gram-demo-usc-slack'), proj_a,
+    (demo.det_uuid('gram-demo-usc-slack'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-slack'), 'gram_demo_client_slack', NULL,
      'Cursor', ARRAY['http://127.0.0.1:41294/callback'],
      now() - interval '8 days', 'none'),
-    (demo.det_uuid('gram-demo-usc-gateway'), proj_a,
+    (demo.det_uuid('gram-demo-usc-gateway'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-gateway'), 'gram_demo_client_gateway', NULL,
      'Claude Desktop', ARRAY['http://127.0.0.1:41295/callback'],
      now() - interval '13 days', 'none');
 
   INSERT INTO user_sessions
-    (id, project_id, user_session_issuer_id, user_session_client_id, subject_urn,
-     jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at,
-     created_at)
+    (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+     subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+     last_used_at, created_at)
   VALUES
-    (demo.det_uuid('gram-demo-user-session-6'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-6'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-linear'), demo.det_uuid('gram-demo-usc-linear'),
      'user:' || demo_user_ids[1], 'demo-jti-6',
      demo.det_uuid('gram-demo-user-session-refresh-6')::text,
      now() + interval '11 days', now() + interval '6 hours',
      now() - interval '40 minutes', now() - interval '10 days'),
-    (demo.det_uuid('gram-demo-user-session-7'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-7'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-linear'), demo.det_uuid('gram-demo-usc-linear'),
      'user:' || demo_user_ids[3], 'demo-jti-7',
      demo.det_uuid('gram-demo-user-session-refresh-7')::text,
      now() + interval '9 days', now() + interval '4 hours',
      now() - interval '3 hours', now() - interval '9 days'),
-    (demo.det_uuid('gram-demo-user-session-8'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-8'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-slack'), demo.det_uuid('gram-demo-usc-slack'),
      'user:' || demo_user_ids[2], 'demo-jti-8',
      demo.det_uuid('gram-demo-user-session-refresh-8')::text,
      now() + interval '12 days', now() + interval '9 hours',
      now() - interval '1 hour', now() - interval '8 days'),
-    (demo.det_uuid('gram-demo-user-session-9'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-9'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-slack'), demo.det_uuid('gram-demo-usc-slack'),
      'user:' || demo_user_ids[5], 'demo-jti-9',
      demo.det_uuid('gram-demo-user-session-refresh-9')::text,
@@ -1148,13 +1152,13 @@ BEGIN
     -- The engineering manager reaches everything through the gateway, which
     -- is the whole point of a meta server; without this he was the one person
     -- with no connection at all.
-    (demo.det_uuid('gram-demo-user-session-10'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-10'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-gateway'), demo.det_uuid('gram-demo-usc-gateway'),
      'user:' || demo_user_ids[6], 'demo-jti-10',
      demo.det_uuid('gram-demo-user-session-refresh-10')::text,
      now() + interval '13 days', now() + interval '7 hours',
      now() - interval '2 hours', now() - interval '13 days'),
-    (demo.det_uuid('gram-demo-user-session-11'), proj_a,
+    (demo.det_uuid('gram-demo-user-session-11'), proj_a, demo_org,
      demo.det_uuid('gram-demo-issuer-gateway'), demo.det_uuid('gram-demo-usc-gateway'),
      'user:' || demo_user_ids[4], 'demo-jti-11',
      demo.det_uuid('gram-demo-user-session-refresh-11')::text,
