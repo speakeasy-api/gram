@@ -18,7 +18,11 @@ export function DirectorySyncStep({
 }: DirectorySyncStepProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
+  const {
+    data: onboardingStatus,
+    refetch: refetchOnboardingStatus,
+    isLoading: statusLoading,
+  } = useOnboardingStatus(undefined, undefined, { throwOnError: false });
 
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
@@ -43,7 +47,13 @@ export function DirectorySyncStep({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error(
+              "Unable to open the WorkOS portal. Allow popups and try again.",
+            );
+          }
         },
       },
     );
@@ -65,15 +75,17 @@ export function DirectorySyncStep({
     }
   };
 
-  const continueAction = portalOpened ? handleVerify : handleConnect;
-  const continueLabel = portalOpened
-    ? verifying
-      ? "Verifying..."
-      : "Continue"
-    : generatePortalLink.isPending
-      ? "Opening..."
-      : "Connect directory";
-  const isLoading = generatePortalLink.isPending || verifying;
+  const connected = onboardingStatus?.dsyncConfigured === true;
+  let continueAction = handleConnect;
+  let continueLabel = "Connect directory";
+  if (connected) {
+    continueAction = onComplete;
+    continueLabel = "Continue";
+  } else if (portalOpened) {
+    continueAction = () => void handleVerify();
+    continueLabel = "Continue";
+  }
+  const isLoading = generatePortalLink.isPending || verifying || statusLoading;
 
   return (
     <StepContainer
@@ -89,6 +101,7 @@ export function DirectorySyncStep({
       isLoading={isLoading}
     >
       <div className="space-y-6">
+        {connected && <p role="status">Directory sync is connected.</p>}
         <div className="bg-card border-border border p-4">
           <div className="flex items-start gap-3">
             <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
