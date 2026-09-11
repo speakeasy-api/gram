@@ -4657,6 +4657,10 @@ components:
           items:
             type: string
           description: Token endpoint auth methods advertised by the issuer.
+        tunneled_mcp_server_id:
+          type: string
+          description: Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
+          format: uuid
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
@@ -5161,6 +5165,10 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+          format: uuid
         updated_at:
           type: string
           format: date-time
@@ -5588,6 +5596,9 @@ components:
           type: array
           items:
             type: string
+        tunneled_mcp_server_id:
+          type: string
+          description: Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
         userinfo_endpoint:
           type: string
           description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
