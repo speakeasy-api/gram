@@ -42,8 +42,6 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 		PromptInjectionRules: []string{"rule"},
 		DisabledRules:        []string{"disabled"},
 		CustomRuleIds:        []string{"custom.rule"},
-		MessageTypes:         []string{"user_message"},
-		ScopeInclude:         pgtype.Text{String: `kind == "user_message"`, Valid: true},
 		Action:               "block",
 		AudienceType:         "targeted",
 		AutoName:             true,
