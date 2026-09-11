@@ -9,7 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 )
 
-// CEL predicates in the seed (custom rule detection_expr, policy scope_*) are
+// CEL predicates in the seed (custom rule detection_expr, per-category
+// detection scope include/exempt) are
 // opaque strings the seed inserts past the API's validation, so a typo yields a
 // policy that silently never matches. Auto-discovers SQL literals that open
 // with a celenv root variable followed by a dot or a space; CEL string literals
@@ -23,7 +24,7 @@ func TestSeedCELCompiles(t *testing.T) {
 	require.NoError(t, err)
 
 	matches := seedCELExpr.FindAllStringSubmatch(postgresSQL, -1)
-	require.Len(t, matches, 4, "CEL literal count changed; add the new expression here or fix seedCELExpr so it is discovered")
+	require.Len(t, matches, 10, "CEL literal count changed; add the new expression here or fix seedCELExpr so it is discovered")
 
 	for _, m := range matches {
 		_, err := eng.Compile(m[1])
