@@ -190,31 +190,14 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if expect.jwksURI == "" {
 		return UpstreamIdentity{}, errors.New("issuer advertises no jwks_uri")
 	}
-	source, err := jwks.NewRemoteSource(expect.jwksURI)
-	if err != nil {
-		return UpstreamIdentity{}, fmt.Errorf("issuer jwks_uri: %w", err)
-	}
 	algorithms, err := acceptedIDTokenAlgorithms(expect.signingAlgs)
 	if err != nil {
 		return UpstreamIdentity{}, err
 	}
-	token, err := jwt.ParseSigned(rawIDToken, algorithms)
-	if err != nil {
-		return UpstreamIdentity{}, fmt.Errorf("parse id token: %w", err)
-	}
-	if len(token.Headers) != 1 {
-		return UpstreamIdentity{}, errors.New("id token must carry exactly one signature")
-	}
-	header := token.Headers[0]
-	key, err := v.keys.VerificationKeyForAlgorithm(ctx, source.WithFetchScope(conv.Default(expect.fetchScope, expect.issuer)), header.KeyID, jose.SignatureAlgorithm(header.Algorithm))
-	if err != nil {
-		return UpstreamIdentity{}, fmt.Errorf("resolve id token signing key: %w", err)
-	}
-
 	var claims jwt.Claims
 	var all map[string]json.RawMessage
-	if err := token.Claims(key, &claims, &all); err != nil {
-		return UpstreamIdentity{}, fmt.Errorf("verify id token signature: %w", err)
+	if _, err := verifyIssuerSignedJWT(ctx, v.keys, expect.jwksURI, conv.Default(expect.fetchScope, expect.issuer), rawIDToken, algorithms, &claims, &all); err != nil {
+		return UpstreamIdentity{}, err
 	}
 	if claims.Expiry == nil {
 		return UpstreamIdentity{}, errors.New("id token has no exp")
@@ -259,6 +242,33 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	return identity, nil
 }
 
+// verifyIssuerSignedJWT checks one signature on raw against the issuer's
+// published key set, charging key fetches to fetchScope, and decodes the
+// claims into dest. The header comes back for checks the caller owns.
+func verifyIssuerSignedJWT(ctx context.Context, keys *jwks.KeyResolver, jwksURI, fetchScope, raw string, algorithms []jose.SignatureAlgorithm, dest ...any) (jose.Header, error) {
+	var none jose.Header
+	source, err := jwks.NewRemoteSource(jwksURI)
+	if err != nil {
+		return none, fmt.Errorf("issuer jwks_uri: %w", err)
+	}
+	token, err := jwt.ParseSigned(raw, algorithms)
+	if err != nil {
+		return none, fmt.Errorf("parse jwt: %w", err)
+	}
+	if len(token.Headers) != 1 {
+		return none, errors.New("jwt must carry exactly one signature")
+	}
+	header := token.Headers[0]
+	key, err := keys.VerificationKeyForAlgorithm(ctx, source.WithFetchScope(fetchScope), header.KeyID, jose.SignatureAlgorithm(header.Algorithm))
+	if err != nil {
+		return none, fmt.Errorf("resolve jwt signing key: %w", err)
+	}
+	if err := token.Claims(key, dest...); err != nil {
+		return none, fmt.Errorf("verify jwt signature: %w", err)
+	}
+	return header, nil
+}
+
 // displayNameFromClaims picks the best human-readable name the standard
 // OpenID Connect claims offer.
 func displayNameFromClaims(claims map[string]json.RawMessage) string {
@@ -281,26 +291,38 @@ func claimString(claims map[string]json.RawMessage, name string) string {
 	return ""
 }
 
-// enrichmentDocument is the enrichment column: ID token claims and non-standard token response members.
+// enrichmentDocument is the enrichment column: each interface's answer under
+// its own key, the non-standard token response members, and the last outcome
+// of every interface that was asked.
 type enrichmentDocument struct {
 	IDToken       map[string]json.RawMessage `json:"id_token,omitempty"`
 	TokenResponse map[string]json.RawMessage `json:"token_response,omitempty"`
+	Userinfo      map[string]json.RawMessage `json:"userinfo,omitempty"`
+	Introspection map[string]json.RawMessage `json:"introspection,omitempty"`
+	Interfaces    map[string]interfaceRecord `json:"interfaces,omitempty"`
 }
 
-// buildEnrichment serializes the enrichment column; nil when there is nothing to keep.
-func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity) ([]byte, error) {
-	doc := enrichmentDocument{IDToken: nil, TokenResponse: tok.extras()}
-	if identity != nil && identity.Source == IdentitySourceIDToken {
-		doc.IDToken = retainedClaims(identity.Claims)
-	}
-	// email_verified describes the email beside it; without one it is meaningless.
-	if claimString(doc.IDToken, "email") == "" {
-		delete(doc.IDToken, "email_verified")
-		if len(doc.IDToken) == 0 {
-			doc.IDToken = nil
+// buildEnrichment serializes the enrichment column at exchange or refresh;
+// nil when there is nothing to keep.
+func buildEnrichment(tok tokenResponse, identity *UpstreamIdentity, interfaces map[string]interfaceRecord) ([]byte, error) {
+	doc := enrichmentDocument{IDToken: nil, TokenResponse: tok.extras(), Userinfo: nil, Introspection: nil, Interfaces: interfaces}
+	if identity != nil {
+		claims := retainedClaims(identity.Claims)
+		// email_verified describes the email beside it; without one it is meaningless.
+		if claimString(claims, "email") == "" {
+			delete(claims, "email_verified")
+			if len(claims) == 0 {
+				claims = nil
+			}
+		}
+		switch identity.Source {
+		case IdentitySourceIDToken:
+			doc.IDToken = claims
+		case IdentitySourceUserinfo:
+			doc.Userinfo = claims
 		}
 	}
-	if doc.IDToken == nil && doc.TokenResponse == nil {
+	if doc.IDToken == nil && doc.TokenResponse == nil && doc.Userinfo == nil && len(doc.Interfaces) == 0 {
 		return nil, nil
 	}
 	raw, err := json.Marshal(doc)

@@ -1134,6 +1134,8 @@ func newStartCommand() *cli.Command {
 				}),
 				remotesessions.WithIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithSessionEnricher(remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
+					ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))

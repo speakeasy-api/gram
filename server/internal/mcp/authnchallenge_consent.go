@@ -240,10 +240,20 @@ type remoteSessionCard struct {
 
 	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
 	ConnectedAs string
+	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
+	AccountChips []string
 
-	// Verified, Rejected, Unverified: the last probe's verdict; all false when none ran.
+	// TokenActive is set when the provider's introspection last reported the access token active.
+	TokenActive bool
+	// TokenExpiresAt and TokenExpiresIn are that token's deadline: introspection's exp, else the
+	// stored access expiry; empty when neither is known.
+	TokenExpiresAt string
+	TokenExpiresIn string
+
+	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
 	Verified   bool
 	Rejected   bool
+	Inactive   bool
 	Unverified bool
 	// ValidatedAt and ValidatedAgo describe when that validation ran.
 	ValidatedAt  string
@@ -256,6 +266,54 @@ type remoteSessionCard struct {
 	CanValidate bool
 	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
 	Pending bool
+}
+
+// cardPanel is which detail lines a card renders. The status line says whether
+// the grant is live; the panel describes a live grant, plus the one thing that
+// stays useful when it is not: which account it was. The template checks only
+// these booleans.
+type cardPanel struct {
+	// GrantLive is a connected card whose status line does not say reconnect.
+	GrantLive bool
+
+	ShowIdentity         bool
+	ShowAccountContext   bool
+	ShowToken            bool
+	ShowValidationReason bool
+	ShowLapse            bool
+	ShowAutoRefresh      bool
+	ShowAccessEnd        bool
+
+	// ShowDetails is whether the disclosure renders at all: any line above.
+	ShowDetails bool
+}
+
+// Panel decides the detail lines from the card's state.
+func (c remoteSessionCard) Panel() cardPanel {
+	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect
+	hasGrant := c.Connected || c.Expired || c.Unroutable
+	p := cardPanel{
+		GrantLive:            c.Connected && !reconnect,
+		ShowIdentity:         hasGrant && c.ConnectedAs != "",
+		ShowAccountContext:   false,
+		ShowToken:            false,
+		ShowValidationReason: false,
+		ShowLapse:            false,
+		ShowAutoRefresh:      false,
+		ShowAccessEnd:        false,
+		ShowDetails:          false,
+	}
+	p.ShowAccountContext = hasGrant && len(c.AccountChips) > 0
+	if p.GrantLive {
+		p.ShowToken = c.TokenActive
+		p.ShowValidationReason = c.Unverified && c.ValidationReason != ""
+		// Auto refresh is what defeats the idle lapse, so the two lines are exclusive.
+		p.ShowLapse = c.RefreshExpiresIn != "" && !c.AutoRefreshChecked
+		p.ShowAutoRefresh = c.AutoRefreshChecked
+		p.ShowAccessEnd = c.AuthorizationExpiresIn != ""
+	}
+	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd
+	return p
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -1045,7 +1103,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Pending || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1131,6 +1189,26 @@ func desiredSessionDurationHours(raw string) int {
 		return 0
 	}
 	return hours
+}
+
+// tokenLine is the card's "Token active" line: the introspection answer while
+// its deadline (else the stored access expiry) is still ahead. An answer about
+// a token that has since expired says nothing about the current one.
+func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, accessExpiresAt *time.Time) (active bool, expiresAt, expiresIn string) {
+	if token == nil || !token.Active {
+		return false, "", ""
+	}
+	deadline := token.ExpiresAt
+	if deadline.IsZero() && accessExpiresAt != nil {
+		deadline = *accessExpiresAt
+	}
+	if deadline.IsZero() {
+		return true, "", ""
+	}
+	if !deadline.After(renderedAt) {
+		return false, "", ""
+	}
+	return true, deadline.UTC().Format(time.RFC3339), formatTimeRemaining(renderedAt, deadline)
 }
 
 // issuerCardBranding resolves the branding a consent card renders for its
@@ -1240,6 +1318,7 @@ func (s *Service) buildRemoteSessionCards(
 			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
 			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
 		}
+		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		requested, _ := c.RequestedScopes()
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
@@ -1261,8 +1340,13 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
+			AccountChips:           state.AccountChips,
+			TokenActive:            tokenActive,
+			TokenExpiresAt:         tokenExpiresAt,
+			TokenExpiresIn:         tokenExpiresIn,
 			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
 			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
+			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,
 			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
 			ValidatedAt:            validatedAt,
 			ValidatedAgo:           validatedAgo,

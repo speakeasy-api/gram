@@ -6,6 +6,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+
+	"github.com/google/uuid"
 )
 
 // WaitIdentityRestatements blocks until every detached identity restatement has finished.
@@ -46,4 +48,9 @@ func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerM
 		return r.record(ctx, candidate.IssuerURL, outcome), err
 	}
 	return r.refresh(ctx, existing)
+}
+
+// SetIssuerMetadataRefreshSeam replaces the AIM-260 seam so a test can observe the refresh request a 404 makes.
+func (e *SessionEnricher) SetIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) {
+	e.requestIssuerMetadataRefresh = fn
 }

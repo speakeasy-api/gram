@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -100,7 +99,7 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:      db,
 		enc:     enc,
-		client:  policy.PooledClient(),
+		client:  noRedirectClient(policy.PooledClient()),
 		metrics: remotesessionmetrics.NewRevoke(logger, meterProvider),
 	}
 }
@@ -511,15 +510,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
 	}
 
-	// The endpoint is a URL a customer's identity provider handed us, so it is
-	// attacker-influenceable in the same way the token endpoint is. The guardian
-	// policy below is the actual SSRF control; this check rejects values that
-	// are not absolute HTTPS URLs. Tokens are sensitive credentials that must
-	// not be transmitted in plaintext, so only https:// is accepted.
-	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
-		logger.WarnContext(ctx, "upstream revoke: issuer advertises an unusable revocation endpoint",
-			attr.SlogOAuthFailureReason("revocation_endpoint must be an absolute https url, or http on loopback"),
-		)
+	if !usableUpstreamEndpoint(ctx, logger, "revocation", endpoint) {
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 

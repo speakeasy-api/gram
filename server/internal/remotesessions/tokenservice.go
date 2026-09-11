@@ -627,8 +627,11 @@ func (s *RefreshService) refreshSessionTokens(
 	if err != nil {
 		return zero, noToken, fmt.Errorf("encrypt new access token: %w", err)
 	}
+	// An echoed refresh token keeps its stored ciphertext: re-encrypting it
+	// would read as a rotation to anything comparing the columns.
 	newRefreshEnc := sess.RefreshTokenEncrypted
-	if tok.RefreshToken != "" {
+	refreshRotated := tok.RefreshToken != "" && tok.RefreshToken != refreshToken
+	if refreshRotated {
 		v, eerr := s.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
 			return zero, noToken, fmt.Errorf("encrypt new refresh token: %w", eerr)
@@ -668,6 +671,7 @@ func (s *RefreshService) refreshSessionTokens(
 		RefreshTokenEncrypted:  newRefreshEnc,
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
+		RefreshTokenRotated:    refreshRotated,
 		Scopes:                 scopes,
 		BackfillResource:       conv.ToPGTextEmpty(resource), // the query's COALESCE/NULLIF keeps a stored binding and rejects an empty stamp
 		ExpectedUpdatedAt:      sess.UpdatedAt,
@@ -722,7 +726,7 @@ func (s *RefreshService) restateIdentity(
 			identity = &verified
 		}
 	}
-	enrichment, err := buildEnrichment(tok, identity)
+	enrichment, err := buildEnrichment(tok, identity, nil)
 	if err != nil {
 		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
 	}
@@ -732,6 +736,7 @@ func (s *RefreshService) restateIdentity(
 
 	cols := identity.columns()
 	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		OverwritableSources:   overwritableIdentitySources(cols.Source.String),
 		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
@@ -772,7 +777,7 @@ func (s *RefreshService) postRefreshGrant(
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := s.policy.PooledClient().Do(req)
+	resp, err := noRedirectClient(s.policy.PooledClient()).Do(req)
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

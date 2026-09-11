@@ -49,10 +49,10 @@ type RemoteSessionValidation struct {
 }
 
 // RecordRemoteSessionValidation stores a verdict; false means the grant changed or vanished since ref was read,
-// or an unknown lost the race to a valid already stored.
+// or an unknown lost the race to a valid or inactive already stored.
 func (m *ChallengeManager) RecordRemoteSessionValidation(ctx context.Context, ref RemoteSessionRef, verdict RemoteSessionValidation) (bool, error) {
 	switch verdict.Status {
-	case ValidationOutcomeValid, ValidationOutcomeRejectedByMember, ValidationOutcomeUnknown:
+	case ValidationOutcomeValid, ValidationOutcomeRejectedByMember, ValidationOutcomeInactive, ValidationOutcomeUnknown:
 	default:
 		return false, fmt.Errorf("record remote session validation: %q is not a probe verdict", verdict.Status)
 	}
