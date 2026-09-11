@@ -30,6 +30,9 @@ import (
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
 
+// errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
+var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
+
 // errValidationRateLimited marks a verify refused before any probe ran.
 var errValidationRateLimited = errors.New("remote session validation rate limited")
 
@@ -118,6 +121,11 @@ func (s *Service) probeRemoteSession(
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
 	}
 
+	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
+		return fmt.Errorf("%w: %s", errRemoteSessionMemberOffline, target.name)
+	}
+
 	ref := remotesessions.RemoteSessionRef{
 		ID:             entry.RemoteSessionID,
 		Subject:        subject,
@@ -138,14 +146,7 @@ func (s *Service) probeRemoteSession(
 		}
 	}()
 	probedAt := time.Now()
-	var verdict remotesessions.ValidationOutcome
-	var reason string
-	// A keepalive never dials a tunnel with no live route: the member is offline, not rejecting.
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
-		verdict, reason = remotesessions.ValidationOutcomeUnknown, target.name+" is offline"
-	} else {
-		verdict, reason = s.probeUpstream(probeCtx, logger, target.build, target.name)
-	}
+	verdict, reason := s.probeUpstream(probeCtx, logger, target.build, target.name)
 	<-enriched
 	issuerDisplay, _ := issuerCardBranding(client, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
@@ -365,8 +366,9 @@ func (s *Service) standaloneValidationTarget(
 	}), tunnelID: server.TunneledMcpServerID}, nil
 }
 
-// tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel.
+// tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.
 func (s *Service) tunnelHasRoute(ctx context.Context, tunnelID uuid.UUID) bool {
+	// No route store means no gateway can be dialled, so the member reads offline.
 	if s.tunnelManager == nil || s.tunnelManager.routes == nil {
 		return false
 	}

@@ -16,6 +16,7 @@ type MetaRuntimeConfig struct {
 	AutoVerifyWait time.Duration
 
 	// RecheckInterval is how long an idle grant with no refresh token goes between keepalive re-checks of its stored verdict.
+	// Unlike the other fields, zero or negative disables the sweep; the CLI flag carries the default.
 	RecheckInterval time.Duration
 }
 
@@ -28,9 +29,6 @@ func (c MetaRuntimeConfig) withDefaults() MetaRuntimeConfig {
 	}
 	if c.AutoVerifyWait <= 0 {
 		c.AutoVerifyWait = 3 * time.Second
-	}
-	if c.RecheckInterval <= 0 {
-		c.RecheckInterval = 24 * time.Hour
 	}
 	return c
 }

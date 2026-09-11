@@ -4,6 +4,8 @@ package mcp_test
 
 import (
 	"context"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,33 +20,56 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// makeKeepaliveShaped turns the fixture's grant into the population the sweep owns: no access expiry, no refresh
-// token (the fixture never stores one), and a live Gram session for the subject under the endpoint's issuer.
-func makeKeepaliveShaped(t *testing.T, ctx context.Context, fx validationFixture, prefix string) {
+const recheckTestInterval = 24 * time.Hour
+
+// shapeGrantForKeepalive turns one grant into the population the sweep owns: no access expiry, no refresh token (the
+// fixture never stores one), created age ago so it is past the interval, and a live Gram session for the subject.
+func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID, clientID uuid.UUID, subject urn.SessionSubject, age time.Duration, jti string) remotesessions_repo.RemoteSession {
 	t.Helper()
-	sess := storedSession(t, ctx, fx)
+	q := remotesessions_repo.New(ti.conn)
+	sess, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	require.NoError(t, err)
 	require.False(t, sess.RefreshTokenEncrypted.Valid)
-	require.NoError(t, remotesessions_repo.New(fx.ti.conn).SetRemoteSessionAccessExpiresAt(ctx, remotesessions_repo.SetRemoteSessionAccessExpiresAtParams{
+	require.NoError(t, q.SetRemoteSessionAccessExpiresAt(ctx, remotesessions_repo.SetRemoteSessionAccessExpiresAtParams{
 		AccessExpiresAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		ID:              sess.ID,
-		ProjectID:       conv.ToNullUUID(fx.endpoint.ProjectID),
+		ProjectID:       conv.ToNullUUID(projectID),
 	}))
-	persistTestUserSession(t, fx.ti, fx.endpoint.UserSessionIssuerID, fx.subject, "jti-"+prefix)
+	require.NoError(t, q.SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+		LastValidatedAt:      pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		LastRefreshAttemptAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedAt:            conv.ToPGTimestamptz(time.Now().Add(-age)),
+		ID:                   sess.ID,
+		ProjectID:            conv.ToNullUUID(projectID),
+	}))
+	persistTestUserSession(t, ti, issuerID, subject, jti)
+	return sess
+}
+
+// makeKeepaliveShaped shapes the fixture's own grant; see shapeGrantForKeepalive.
+func makeKeepaliveShaped(t *testing.T, ctx context.Context, fx validationFixture, prefix string) {
+	t.Helper()
+	shapeGrantForKeepalive(t, ctx, fx.ti, fx.endpoint.ProjectID, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, recheckTestInterval+time.Hour, "jti-"+prefix)
 }
 
 // ageIntoRecheckWindow backdates the tracking columns so the grant is due again and its claim lease has lapsed.
 func ageIntoRecheckWindow(t *testing.T, ctx context.Context, fx validationFixture) {
 	t.Helper()
 	sess := storedSession(t, ctx, fx)
-	ago := conv.ToPGTimestamptz(time.Now().Add(-25 * time.Hour))
+	ago := conv.ToPGTimestamptz(time.Now().Add(-(recheckTestInterval + time.Hour)))
 	require.NoError(t, remotesessions_repo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      ago,
 		LastRefreshAttemptAt: ago,
+		CreatedAt:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		ID:                   sess.ID,
 		ProjectID:            conv.ToNullUUID(fx.endpoint.ProjectID),
 	}))
@@ -118,6 +143,23 @@ func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	require.NoError(t, fx.ti.service.Shutdown(ctx))
 }
 
+// A grant connected inside the interval is the connect auto-verify's; the sweep leaves it alone until it ages.
+func TestRemoteSessionRecheck_LeavesFreshGrantsToConnectVerify(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "aim261-fresh")
+	shapeGrantForKeepalive(t, ctx, fx.ti, fx.endpoint.ProjectID, fx.endpoint.UserSessionIssuerID, fx.clientID, fx.subject, time.Hour, "jti-aim261-fresh")
+
+	fx.member.set(memberRejects)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Zero(t, checked)
+	require.Empty(t, fx.member.drain())
+	sess := storedSession(t, ctx, fx)
+	require.False(t, sess.ValidationStatus.Valid)
+	require.False(t, sess.LastRefreshAttemptAt.Valid, "never claimed")
+}
+
 // A grant that still carries a refresh token belongs to the refresh sweep and is never probed here.
 func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.T) {
 	t.Parallel()
@@ -150,8 +192,146 @@ func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.
 	require.False(t, storedSession(t, ctx, fx).ValidationStatus.Valid)
 }
 
+// A rate-limited issuer host stops the pass: the refused row gives its lease back and is not counted, and rows
+// that were never claimed wait for the next tick instead of being leased unprobed.
+func TestRemoteSessionRecheck_RateLimitedHostStopsThePass(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "aim261-pace"
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	fx.ti.service.SetRemoteSessionRecheckPacing(ratelimit.PerMinute(1), 1)
+	projectID, orgID := fx.endpoint.ProjectID, fx.endpoint.OrganizationID
+	shared := fx.endpoint.UserSessionIssuerID
+
+	// Three due grants, oldest first: two on the fixture's issuer host, one on another host.
+	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, fx.clientID, fx.subject, 30*time.Hour, "jti-"+prefix+"-a")
+	subjectB := urn.NewUserSubject(uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, fx.clientID, subjectB, "token-"+prefix+"-b", fx.member.url)
+	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, fx.clientID, subjectB, 29*time.Hour, "jti-"+prefix+"-b")
+	otherClient := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{shared})
+	subjectC := urn.NewUserSubject(uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, otherClient, subjectC, "token-"+prefix+"-c", fx.member.url)
+	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, otherClient, subjectC, 28*time.Hour, "jti-"+prefix+"-c")
+
+	fx.member.set(memberAccepts)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked, "only the probed grant is counted")
+	requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+
+	q := remotesessions_repo.New(fx.ti.conn)
+	sessA := storedSession(t, ctx, fx)
+	require.Equal(t, string(remotesessions.ValidationOutcomeValid), sessA.ValidationStatus.String)
+	require.True(t, sessA.LastRefreshAttemptAt.Valid)
+
+	sessB, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subjectB, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.False(t, sessB.ValidationStatus.Valid, "the refused row was never probed")
+	require.False(t, sessB.LastRefreshAttemptAt.Valid, "the refused row gives its lease back")
+
+	sessC, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subjectC, RemoteSessionClientID: otherClient})
+	require.NoError(t, err)
+	require.False(t, sessC.ValidationStatus.Valid)
+	require.False(t, sessC.LastRefreshAttemptAt.Valid, "the pass stopped claiming after the refusal")
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+}
+
+// A disabled endpoint listed ahead of a live one on the same issuer does not shadow it: the grant is probed through the live one.
+func TestRemoteSessionRecheck_DisabledEndpointDoesNotShadowLiveSibling(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "aim261-shadow"
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	makeKeepaliveShaped(t, ctx, fx, prefix)
+	projectID := fx.endpoint.ProjectID
+	endpoints := mcpendpoints_repo.New(fx.ti.conn)
+
+	// Re-create the live endpoint after a disabled sibling so the disabled one sorts first.
+	live, err := endpoints.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           fx.endpoint.Slug,
+		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = endpoints.DeleteMCPEndpoint(ctx, mcpendpoints_repo.DeleteMCPEndpointParams{ID: live.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	deadUpstream, err := remotemcp_repo.New(fx.ti.conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "streamable-http",
+		Url:           fx.member.url,
+	})
+	require.NoError(t, err)
+	dead, err := mcpservers_repo.New(fx.ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(prefix + "-dead"),
+		Slug:                conv.ToPGText(prefix + "-dead"),
+		RemoteMcpServerID:   conv.ToNullUUID(deadUpstream.ID),
+		Visibility:          "disabled",
+		UserSessionIssuerID: conv.ToNullUUID(fx.endpoint.UserSessionIssuerID),
+	})
+	require.NoError(t, err)
+	for _, ep := range []struct {
+		slug     string
+		serverID uuid.UUID
+	}{{prefix + "-dead", dead.ID}, {fx.endpoint.Slug, fx.endpoint.McpServerID.UUID}} {
+		_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+			ProjectID:       projectID,
+			CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			McpServerID:     conv.ToNullUUID(ep.serverID),
+			MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Slug:            ep.slug,
+		})
+		require.NoError(t, err)
+	}
+
+	fx.member.set(memberRejects)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "token-"+prefix, false, false)
+	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), storedSession(t, ctx, fx).ValidationStatus.String)
+}
+
+// A private-only endpoint refuses the public surface; the sweep presents the grant through the organization's own instead.
+func TestRemoteSessionRecheck_PrivateOnlyEndpointIsProbedPrivately(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "aim261-private"
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	makeKeepaliveShaped(t, ctx, fx, prefix)
+	servers := mcpservers_repo.New(fx.ti.conn)
+	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: fx.endpoint.McpServerID.UUID, ProjectID: fx.endpoint.ProjectID})
+	require.NoError(t, err)
+	_, err = servers.UpdateMCPServer(ctx, mcpservers_repo.UpdateMCPServerParams{
+		Name:                  server.Name,
+		Slug:                  server.Slug,
+		EnvironmentID:         server.EnvironmentID,
+		UserSessionIssuerID:   server.UserSessionIssuerID,
+		RemoteMcpServerID:     server.RemoteMcpServerID,
+		TunneledMcpServerID:   server.TunneledMcpServerID,
+		ToolsetID:             server.ToolsetID,
+		UnproxiedMcpServerID:  server.UnproxiedMcpServerID,
+		ToolVariationsGroupID: server.ToolVariationsGroupID,
+		Visibility:            server.Visibility,
+		NetworkAccessModeSet:  true,
+		NetworkAccessMode:     conv.ToPGText(string(networkaccess.ModePrivateOnly)),
+		ID:                    server.ID,
+		ProjectID:             server.ProjectID,
+	})
+	require.NoError(t, err)
+
+	fx.member.set(memberRejects)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "token-"+prefix, false, false)
+	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), storedSession(t, ctx, fx).ValidationStatus.String)
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+}
+
 // A gateway member's grant is placed through the gateway endpoint and judged by the member it routes to.
-func TestRemoteSessionRecheck_MetaMemberGrantIsProbedThroughTheGateway(t *testing.T) {
+func TestRemoteSessionRecheck_ProbesMetaMemberThroughGateway(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedMetaValidationFixture(t, "aim261-meta")
@@ -177,7 +357,7 @@ func TestRemoteSessionRecheck_MetaMemberGrantIsProbedThroughTheGateway(t *testin
 }
 
 // createPrivateTunneledServer is createTunneledServer under private visibility: a public tunnel has no OAuth surface to place a grant on.
-func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug, identifier string) uuid.UUID {
+func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug, identifier string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	tunneled, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
 		ID:                 uuid.New(),
@@ -198,20 +378,17 @@ func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInst
 		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
-	return server.ID
+	return server.ID, tunneled.ID
 }
 
-// A tunneled backend with no live route is never dialed: the grant reads unknown with an offline reason, never a rejection.
-func TestRemoteSessionRecheck_OfflineTunnelRecordsUnknown(t *testing.T) {
-	t.Parallel()
-
-	const prefix = "aim261-tunnel"
-	const identifier = "urn:gram:tunnel:aim261"
+// seedTunneledRecheckFixture: a private tunneled endpoint with a keepalive-shaped grant keyed by the tunnel's identifier.
+func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string) (context.Context, validationFixture, uuid.UUID) {
+	t.Helper()
 	reader, provider := newValidationMeterProvider()
-	ctx, ti := newTestMCPServiceWithMetaRuntime(t, provider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: 0})
+	ctx, ti := newTestMCPServiceWithMetaRuntime(t, provider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	serverID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)
+	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)
 	endpoint, _, subject := mintFirstPartyConsentState(t, ctx, ti, projectID, orgID, shared, prefix+"-server")
 	endpoint.McpServerID = conv.ToNullUUID(serverID)
 	_, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
@@ -225,14 +402,49 @@ func TestRemoteSessionRecheck_OfflineTunnelRecordsUnknown(t *testing.T) {
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, identifier)
+	// The sweep probes as the subject, who must hold mcp:connect on a private server just as they did to connect.
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, serverID)
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: "", subject: subject, member: nil, clientID: clientID, name: prefix + "-server"}
 	makeKeepaliveShaped(t, ctx, fx, prefix)
+	return ctx, fx, tunnelID
+}
 
-	checked, err := ti.service.SweepRemoteSessionRechecks(ctx)
+// A tunneled backend with a live route is dialled through its gateway under the keepalive trigger.
+func TestRemoteSessionRecheck_LiveTunnelIsProbedThroughTheGateway(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "aim261-tunnel-live"
+	ctx, fx, tunnelID := seedTunneledRecheckFixture(t, prefix, "urn:gram:tunnel:aim261-live")
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, busy: false, challenge: "", mu: sync.Mutex{}, forwards: nil, forwardBodies: nil}
+	gatewayServer := httptest.NewServer(gateway)
+	t.Cleanup(gatewayServer.Close)
+	require.NoError(t, fx.ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
+
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, checked)
+	headers, bodies := tunnelForwards(gateway)
+	requireTunnelProbe(t, headers, bodies, "token-"+prefix)
 	sess := storedSession(t, ctx, fx)
-	require.Equal(t, string(remotesessions.ValidationOutcomeUnknown), sess.ValidationStatus.String)
-	require.Equal(t, fx.name+" is offline", sess.ValidationReason.String)
-	require.Equal(t, map[string]int64{"unknown": 1}, validationCounts(t, reader))
+	require.Equal(t, string(remotesessions.ValidationOutcomeValid), sess.ValidationStatus.String)
+	require.Equal(t, map[string]int64{"valid": 1}, validationCounts(t, fx.reader))
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+}
+
+// A tunneled backend with no live route is never dialed and nothing is recorded: the member is offline, not answering,
+// and a reconnect is judged on the next attempt window instead of waiting out a stale verdict.
+func TestRemoteSessionRecheck_OfflineTunnelRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	const prefix = "aim261-tunnel"
+	ctx, fx, _ := seedTunneledRecheckFixture(t, prefix, "urn:gram:tunnel:aim261")
+
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Zero(t, checked, "an offline member is a skip, not a probe")
+	sess := storedSession(t, ctx, fx)
+	require.False(t, sess.ValidationStatus.Valid, "no verdict is written")
+	require.False(t, sess.LastValidatedAt.Valid)
+	require.True(t, sess.LastRefreshAttemptAt.Valid, "the claim lease paces the retry")
+	require.Empty(t, validationCounts(t, fx.reader))
 }

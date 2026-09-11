@@ -473,8 +473,9 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.DurationFlag{
 			Name:    "remote-session-recheck-interval",
-			Usage:   "How long an idle remote session with no refresh token goes between keepalive re-checks of its stored credential (0 uses the built-in 24h default)",
+			Usage:   "How long an idle remote session with no refresh token goes between keepalive re-checks of its stored credential; zero or negative disables the sweep",
 			EnvVars: []string{"GRAM_REMOTE_SESSION_RECHECK_INTERVAL"},
+			Value:   mcp.DefaultRemoteSessionRecheckInterval,
 		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
