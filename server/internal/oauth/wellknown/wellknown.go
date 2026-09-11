@@ -74,7 +74,15 @@ type OAuthProtectedResourceMetadata struct {
 // origin-style well-known path may describe a sibling resource; callers that
 // persist display members must not do so unless this holds.
 func (m OAuthProtectedResourceMetadata) IdentifiesResource(resourceURL string) bool {
-	return m.Resource != "" && resourceURLsEquivalent(m.Resource, resourceURL)
+	return SameResource(m.Resource, resourceURL)
+}
+
+// SameResource reports whether two resource identifiers name one resource,
+// trailing slash aside (RFC 9728 §3.3); an empty identifier names none.
+// Display members recorded for one resource may only be shown for another
+// when this holds.
+func SameResource(recorded, resourceURL string) bool {
+	return recorded != "" && resourceURL != "" && resourceURLsEquivalent(recorded, resourceURL)
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).

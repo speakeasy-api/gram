@@ -32,7 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -1228,15 +1230,18 @@ func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, ac
 // identity provider. The display fallback matches
 // formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
 // name wins, otherwise the identifier the page always rendered (the slug).
+// The resource's own name outranks both, but only when the client recorded
+// it for a resource this endpoint fronts (ownResource): a client shared with
+// another endpoint must not lend that endpoint's name to this one.
 // The logo URL points at the public assets.serveImage endpoint on the
 // platform origin, the same construction mcpmetadata uses for MCP server
 // logos, and is empty when the issuer has no logo.
-func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+func issuerCardBranding(c remotesessions.Client, ownResource bool, serverURL *url.URL) (display, logoURL string) {
 	display = c.IssuerSlug
 	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
 		display = name
 	}
-	if c.ResourceName != "" {
+	if ownResource && c.ResourceName != "" {
 		display = c.ResourceName
 	}
 	if c.IssuerLogoAssetID.Valid {
@@ -1251,13 +1256,37 @@ func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, l
 }
 
 // cardLinks picks the documentation, policy, and terms links a card shows:
-// the resource's own (RFC 9728) when the client carries any, else the
-// authorization server's (RFC 8414).
-func cardLinks(c remotesessions.Client) (documentation, policy, tos string) {
-	if c.ResourceDocumentationURL != "" || c.ResourcePolicyURL != "" || c.ResourceTosURL != "" {
+// the resource's own (RFC 9728) when the client carries any for a resource
+// this endpoint fronts (ownResource), else the authorization server's (RFC 8414).
+func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy, tos string) {
+	if ownResource && (c.ResourceDocumentationURL != "" || c.ResourcePolicyURL != "" || c.ResourceTosURL != "") {
 		return c.ResourceDocumentationURL, c.ResourcePolicyURL, c.ResourceTosURL
 	}
 	return c.IssuerDocumentationURL, c.IssuerPolicyURL, c.IssuerTosURL
+}
+
+// ownsResourceDisplay reports whether the client recorded its RFC 9728
+// display members for a resource this endpoint routes the client's grant
+// to: the single proxied server's upstream, or a meta member claiming the
+// client's authorization server. A client that recorded none owns none.
+func (s *Service) ownsResourceDisplay(ctx context.Context, endpoint *ResolvedMcpEndpoint, c remotesessions.Client) (bool, error) {
+	if c.ResourceIdentifier == "" {
+		return false, nil
+	}
+	if !endpoint.MetaMcpServerID.Valid {
+		return wellknown.SameResource(c.ResourceIdentifier, endpoint.UpstreamResource), nil
+	}
+	members, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
+		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
+		ProjectID:             endpoint.ProjectID,
+		RemoteSessionIssuerID: conv.ToNullUUID(c.RemoteSessionIssuerID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("list meta MCP members for resource display: %w", err)
+	}
+	return slices.ContainsFunc(members, func(m metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow) bool {
+		return wellknown.SameResource(c.ResourceIdentifier, m.UpstreamUrl)
+	}), nil
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -1337,8 +1366,12 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
-		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
-		documentationURL, policyURL, tosURL := cardLinks(c)
+		ownResource, err := s.ownsResourceDisplay(ctx, endpoint, c)
+		if err != nil {
+			return nil, err
+		}
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, ownResource, s.serverURL)
+		documentationURL, policyURL, tosURL := cardLinks(c, ownResource)
 		validatedAt := ""
 		validatedAgo := ""
 		if state.LastValidatedAt != nil {
