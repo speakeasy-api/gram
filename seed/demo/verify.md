@@ -137,14 +137,12 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-16. **Organization setup board** — with the `gram-setup-board` flag enabled,
-    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
-    Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, and Set up identity provider and Set up
-    Anthropic observability sit in To Do. Distribute MCP servers, Configure
-    policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
-    all three appear with a Hidden badge.
+16. **Organization onboarding** — open `/<ORG_SLUG>/setup`. Customer sessions default to workstreams; authenticated support sessions default to Kanban. An organization admin can switch views without changing permissions, selection, assignments, or progress. Both views read server state; old browser records remain untouched and are not imported.
+    - With the preset seed installed, confirm 13 task rows and 10 visible tasks. Security is customized to include server distribution and defer Anthropic admin controls. Instrument agents is assigned and In Progress, additional configuration is Awaiting Support, and policies is Done. Hidden tasks must stay excluded for readers.
+    - In Admin organization Features, confirm the customized Security selection. Apply a preset to a draft, then discard it. Saving a changed selection must preserve existing assignments and status.
+    - Open an included task with `?task=<key>` and a legacy `?step=<key>` link. Check the matching dialog, excluded-task feedback, and preservation of `projectSlug`. For a supported task, follow **Open guided setup** and verify the full-page flow and return link on desktop and mobile.
+    - Open Anthropic observability to inspect logging, inference hooks, and traffic confirmation. If Anthropic admin controls is included in the selection, inspect logging, marketplace publication, platform instructions, and hook traffic confirmation. Do not expect a hidden task to appear merely because it has guided content.
+    - Repeat in a fresh browser context. Changes must persist across views and sessions. A failed read must offer retry, not an empty-success screen; a failed write must keep the dialog and display an error.
 
 17. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
