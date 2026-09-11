@@ -46,7 +46,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -100,7 +99,6 @@ func handleToolsCall(
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemLogger *tm.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
@@ -155,7 +153,7 @@ func handleToolsCall(
 	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore, temporalEnv)
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
 		case describeToolsToolName:
 			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
 		case executeToolToolName:

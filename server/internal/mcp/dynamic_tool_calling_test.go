@@ -1,11 +1,8 @@
 package mcp
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -15,29 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type blockingWorkflowResult struct{}
-
-func (blockingWorkflowResult) Get(ctx context.Context, _ any) error {
-	<-ctx.Done()
-	return fmt.Errorf("wait for workflow result: %w", ctx.Err())
-}
-
-func TestWaitForToolSearchIndexBoundsTheWait(t *testing.T) {
+func TestRequireToolSearchIndex_EmptyToolsetNeedsNoIndex(t *testing.T) {
 	t.Parallel()
 
-	err := waitForToolSearchIndex(t.Context(), blockingWorkflowResult{}, time.Millisecond)
-	require.ErrorIs(t, err, errToolSearchIndexUnavailable)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-}
-
-func TestWaitForToolSearchIndexPreservesParentCancellation(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	err := waitForToolSearchIndex(ctx, blockingWorkflowResult{}, time.Hour)
-	require.ErrorIs(t, err, context.Canceled)
-	require.NotErrorIs(t, err, errToolSearchIndexUnavailable)
+	require.NoError(t, requireToolSearchIndex(t.Context(), &types.Toolset{}, nil))
 }
 
 func TestBuildDynamicSearchToolsSchema(t *testing.T) {

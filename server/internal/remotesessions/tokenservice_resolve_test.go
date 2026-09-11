@@ -108,6 +108,7 @@ func tokenCredentials(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uui
 func tokenCredential(token remotesessions.UpstreamToken) remotesessions.UpstreamToken {
 	token.RemoteSessionID = uuid.Nil
 	token.RemoteSessionUpdatedAt = time.Time{}
+	token.RemoteSessionResolvedFromUpdatedAt = time.Time{}
 	return token
 }
 

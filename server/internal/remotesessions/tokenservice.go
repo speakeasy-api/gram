@@ -178,8 +178,9 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	// Rebinds sess to the row the token came from, so a refresh that backfilled
-	// a legacy NULL resource routes on this same request.
-	tok, sess, err := m.validateAndRefresh(ctx, sess, resource)
+	// a legacy NULL resource routes on this same request. resolvedFromUpdatedAt
+	// remains the original snapshot only when this resolution won the refresh.
+	tok, sess, resolvedFromUpdatedAt, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
@@ -216,11 +217,12 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	return UpstreamToken{
-		Token:                  tok,
-		Resource:               conv.FromPGTextOrEmpty[string](sess.Resource),
-		RemoteSessionClientID:  clientID,
-		RemoteSessionID:        sess.ID,
-		RemoteSessionUpdatedAt: sess.UpdatedAt.Time,
+		Token:                              tok,
+		Resource:                           conv.FromPGTextOrEmpty[string](sess.Resource),
+		RemoteSessionClientID:              clientID,
+		RemoteSessionID:                    sess.ID,
+		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
+		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
 	}, nil
 }
 
@@ -315,6 +317,10 @@ type UpstreamToken struct {
 	// persisting outcomes from work performed with this credential.
 	RemoteSessionID        uuid.UUID
 	RemoteSessionUpdatedAt time.Time
+
+	// RemoteSessionResolvedFromUpdatedAt identifies the grant snapshot loaded
+	// before token resolution refreshed it.
+	RemoteSessionResolvedFromUpdatedAt time.Time
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It
@@ -454,10 +460,10 @@ func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (string, remotesessions_repo.RemoteSession, error) {
+) (string, remotesessions_repo.RemoteSession, time.Time, error) {
 	now := time.Now()
 	if !authorizationUsable(sess, now) {
-		return "", sess, ErrNoValidToken
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
 	hasRefresh := hasRefreshToken(sess)
@@ -468,13 +474,13 @@ func (m *ChallengeManager) validateAndRefresh(
 	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
-			return "", sess, fmt.Errorf("decrypt access token: %w", err)
+			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token: %w", err)
 		}
-		return plain, sess, nil
+		return plain, sess, sess.UpdatedAt.Time, nil
 	}
 
 	if !hasRefresh {
-		return "", sess, ErrNoValidToken
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
@@ -486,18 +492,20 @@ func (m *ChallengeManager) validateAndRefresh(
 		// nobody is sent to reconnect while holding a token that still works.
 		// Past the deadline there is nothing to fall back to.
 		if !accessTokenLive(sess, time.Now()) {
-			return "", sess, err
+			return "", sess, sess.UpdatedAt.Time, err
 		}
 		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if derr != nil {
-			return "", sess, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
+			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
 		}
 		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
-		return plain, sess, nil
+		return plain, sess, sess.UpdatedAt.Time, nil
 	}
+	// SourceUpdatedAt comes from the post-lock snapshot actually refreshed. An
+	// adopted concurrent winner instead identifies its final snapshot.
 	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
-	return res.AccessToken, res.Session, nil
+	return res.AccessToken, res.Session, res.SourceUpdatedAt, nil
 }
 
 // refreshFailureAttrs is the attribute set a failed request-path refresh is
