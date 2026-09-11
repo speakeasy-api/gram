@@ -14,6 +14,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
+
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -75,6 +79,10 @@ type DispatchRequest struct {
 
 	// Lanes is the distinct set of scanner and policy results required.
 	Lanes []Lane
+
+	// Origins carries immutable per-lane attribution. Lane.PolicyID remains
+	// reserved for reply correlation and is not policy provenance.
+	Origins map[Lane]metering.RiskProvenance
 }
 
 // Dispatcher fans enforcement work out over independent request brokers.
@@ -85,6 +93,8 @@ type Dispatcher struct {
 	waitTimeout time.Duration
 	logger      *slog.Logger
 	truncations metric.Int64Counter
+	// stokenCodec counts prepared Presidio input before dispatch.
+	stokenCodec *stokens.Codec
 }
 
 // NewDispatcher resolves request brokers for the supported enforcement lanes.
@@ -138,6 +148,7 @@ func NewDispatcher(ctx context.Context, logger *slog.Logger, meterProvider metri
 		waitTimeout: cfg.WaitTimeout,
 		logger:      logger,
 		truncations: newTruncationCounter(meterProvider),
+		stokenCodec: stokens.NewCodec(),
 	}, nil
 }
 
@@ -176,6 +187,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			return Outcome{}, fmt.Errorf("duplicate enforcement lane %s", lane.String())
 		}
 		seen[lane] = struct{}{}
+		if _, ok := request.Origins[lane]; !ok {
+			return Outcome{}, fmt.Errorf("missing enforcement origin for lane %s", lane.String())
+		}
 		supported := lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS ||
 			lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO
 		if !supported || lane.PolicyID != "" {
@@ -183,11 +197,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		}
 	}
 
-	requestID, err := uuid.NewV7()
+	requestID, err := uuid.Parse(request.Origins[request.Lanes[0]].OperationID)
 	if err != nil {
-		return Outcome{}, fmt.Errorf("mint enforcement request id: %w", err)
+		return Outcome{}, fmt.Errorf("parse enforcement operation id: %w", err)
 	}
-	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+	createdAt := time.Now().UTC()
+	createdAtText := createdAt.Format(time.RFC3339Nano)
 	byLane := make(map[Lane]*riskv1.EnforcementReply, len(request.Lanes))
 	failed := make(map[Lane]error, len(request.Lanes))
 	deadline := false
@@ -202,25 +217,69 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			switch lane.Scanner {
 			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO:
 				laneBroker = d.presidio
+				origin := request.Origins[lane]
+				origin.RequestID = requestID.String()
+				origin.OperationID = scanners.AsyncRiskOperationID(
+					origin.ExecutionPath, origin.RiskPolicyID.String(), origin.RiskPolicyVersion,
+					"", "", origin.OperationID,
+				)
+				var meterReading []byte
+				stokenCount, countErr := d.stokenCodec.Count(laneCtx, request.Content)
+				if countErr == nil {
+					reading, prepareErr := metering.PrepareRiskReading(metering.RiskPresidio(), origin, int64(stokenCount), createdAt)
+					if prepareErr == nil && reading != nil {
+						meterReading, _ = proto.Marshal(reading)
+					}
+				}
 				enforcement = riskv1.PresidioEnforcement_builder{
-					RequestId:        new(requestID.String()),
-					ProjectId:        new(request.ProjectID),
-					OrganizationId:   new(request.OrganizationID),
-					CreatedAt:        new(createdAt),
-					Content:          new(request.Content),
-					Entities:         request.PresidioEntities,
-					ScoreThreshold:   request.PresidioScoreThreshold,
-					ContentTruncated: new(truncated),
+					RequestId:               new(requestID.String()),
+					ChatMessageId:           stringPointer(origin.ChatMessageID),
+					ProjectId:               new(request.ProjectID),
+					OrganizationId:          new(request.OrganizationID),
+					CreatedAt:               new(createdAtText),
+					Content:                 new(request.Content),
+					ContentPartId:           stringPointer(origin.ContentPartID),
+					Entities:                request.PresidioEntities,
+					ScoreThreshold:          request.PresidioScoreThreshold,
+					ChatId:                  stringPointer(origin.ChatID),
+					ExternalConversationId:  new(origin.ExternalConversationID),
+					OriginRiskPolicyId:      stringPointer(origin.RiskPolicyID),
+					OriginRiskPolicyVersion: new(origin.RiskPolicyVersion),
+					MessageLinkReason:       new(origin.MessageLinkReason),
+					PolicyLinkReason:        new(origin.PolicyLinkReason),
+					ExecutionPath:           new(origin.ExecutionPath),
+					ToolCallId:              new(origin.ToolCallID),
+					ToolName:                new(origin.ToolName),
+					HookSource:              new(origin.HookSource),
+					UserId:                  new(origin.UserID),
+					MessageType:             new(origin.MessageType),
+					MeterReading:            meterReading,
+					ContentTruncated:        new(truncated),
 				}.Build()
 			default:
 				laneBroker = d.gitleaks
+				origin := request.Origins[lane]
 				enforcement = riskv1.GitleaksEnforcement_builder{
-					RequestId:        new(requestID.String()),
-					ProjectId:        new(request.ProjectID),
-					OrganizationId:   new(request.OrganizationID),
-					CreatedAt:        new(createdAt),
-					Content:          new(request.Content),
-					ContentTruncated: new(truncated),
+					RequestId:               new(requestID.String()),
+					ChatMessageId:           stringPointer(origin.ChatMessageID),
+					ProjectId:               new(request.ProjectID),
+					OrganizationId:          new(request.OrganizationID),
+					CreatedAt:               new(createdAtText),
+					Content:                 new(request.Content),
+					ContentPartId:           stringPointer(origin.ContentPartID),
+					ChatId:                  stringPointer(origin.ChatID),
+					ExternalConversationId:  new(origin.ExternalConversationID),
+					OriginRiskPolicyId:      stringPointer(origin.RiskPolicyID),
+					OriginRiskPolicyVersion: new(origin.RiskPolicyVersion),
+					MessageLinkReason:       new(origin.MessageLinkReason),
+					PolicyLinkReason:        new(origin.PolicyLinkReason),
+					ExecutionPath:           new(origin.ExecutionPath),
+					ToolCallId:              new(origin.ToolCallID),
+					ToolName:                new(origin.ToolName),
+					HookSource:              new(origin.HookSource),
+					UserId:                  new(origin.UserID),
+					MessageType:             new(origin.MessageType),
+					ContentTruncated:        new(truncated),
 				}.Build()
 			}
 			reply, requestErr := laneBroker.Request(laneCtx, enforcement)
@@ -251,6 +310,13 @@ func truncateAtRuneBoundary(s string, n int) string {
 		n--
 	}
 	return s[:n]
+}
+
+func stringPointer(id uuid.UUID) *string {
+	if id == uuid.Nil {
+		return nil
+	}
+	return new(id.String())
 }
 
 // Close flushes and stops the dispatcher's publishers.

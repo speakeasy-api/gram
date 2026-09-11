@@ -6,6 +6,198 @@ info:
 servers:
   - url: /
 paths:
+  /admin/assets.serveImage:
+    get:
+      description: Serve a public image, preserving the existing image serving contract.
+      operationId: adminServeImage
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to serve
+            type: string
+      responses:
+        "200":
+          description: OK response.
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Cross-Origin-Resource-Policy:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+                description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: serveImage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: serveImage
+  /admin/assets.uploadImage:
+    post:
+      description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+      operationId: adminUploadPlatformImage
+      parameters:
+        - allowEmptyValue: true
+          in: header
+          name: Content-Type
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadImageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: uploadPlatformImage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: uploadPlatformImage
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
   /admin/auth.callback:
     get:
       tags:
@@ -1752,6 +1944,177 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: setInferenceKeyMonthlyLimit
+  /admin/organization.setStripeCustomer:
+    post:
+      tags:
+        - admin
+      summary: setStripeCustomer admin
+      description: Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.
+      operationId: adminSetStripeCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStripeCustomerRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setStripeCustomer
+  /admin/organization.stripeCustomer:
+    get:
+      tags:
+        - admin
+      summary: getStripeCustomer admin
+      description: Returns Stripe customer details for confirmation before assigning the customer to an organization.
+      operationId: adminGetStripeCustomer
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: stripe_customer_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            pattern: ^cus_[A-Za-z0-9_]+$
+            maxLength: 255
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStripeCustomer'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getStripeCustomer
   /admin/organization.stripeSubscription:
     get:
       tags:
@@ -2301,6 +2664,966 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getProject
+  /admin/remote-session-issuers.createGlobalIssuer:
+    post:
+      description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
+      operationId: adminCreateGlobalIssuer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: createGlobalIssuer admin
+      tags:
+        - admin
+      x-speakeasy-name-override: createGlobalIssuer
+  /admin/remote-session-issuers.deleteGlobalIssuer:
+    delete:
+      description: Soft-delete a global remote_session_issuer. Blocked when any global remote_session_clients still reference it. Requires platform admin.
+      operationId: adminDeleteGlobalIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The remote_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The remote_session_issuer id.
+            format: uuid
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: deleteGlobalIssuer admin
+      tags:
+        - admin
+      x-speakeasy-name-override: deleteGlobalIssuer
+  /admin/remote-session-issuers.fetchGlobalIssuerMetadata:
+    post:
+      description: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+      operationId: adminFetchGlobalIssuerMetadata
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FetchIssuerMetadataRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDraft'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: fetchGlobalIssuerMetadata admin
+      tags:
+        - admin
+      x-speakeasy-name-override: fetchGlobalIssuerMetadata
+  /admin/remote-session-issuers.getGlobalIssuer:
+    get:
+      description: Get a global remote_session_issuer by id. Requires platform admin.
+      operationId: adminGetGlobalIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The remote_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The remote_session_issuer id.
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getGlobalIssuer admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getGlobalIssuer
+  /admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight:
+    get:
+      description: |-
+        Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+
+        Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+
+        The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
+      operationId: adminGetGlobalIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getGlobalIssuerDuplicatePreflight admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getGlobalIssuerDuplicatePreflight
+  /admin/remote-session-issuers.getGlobalIssuerMigratePreflight:
+    get:
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
+      operationId: adminGetGlobalIssuerMigratePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The organization- or project-level remote_session_issuer to migrate away from.
+          in: query
+          name: source_id
+          required: true
+          schema:
+            description: The organization- or project-level remote_session_issuer to migrate away from.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The global remote_session_issuer to migrate onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer to migrate onto.
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuerMigratePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: getGlobalIssuerMigratePreflight admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getGlobalIssuerMigratePreflight
+  /admin/remote-session-issuers.list:
+    get:
+      description: List global remote_session_issuers. Requires platform admin.
+      operationId: adminListGlobalIssuers
+      parameters:
+        - allowEmptyValue: true
+          description: Pagination cursor.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor.
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListGlobalRemoteSessionIssuersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listGlobalIssuers admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listGlobalIssuers
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+  /admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates:
+    get:
+      description: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
+      operationId: adminListGlobalIssuerConvergenceCandidates
+      parameters:
+        - allowEmptyValue: true
+          description: The global remote_session_issuer that candidates would be consolidated onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer that candidates would be consolidated onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor.
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIssuerConvergenceCandidatesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listGlobalIssuerConvergenceCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listGlobalIssuerConvergenceCandidates
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+  /admin/remote-session-issuers.migrateToGlobalIssuer:
+    post:
+      description: 'Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.'
+      operationId: adminMigrateToGlobalIssuer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateRemoteSessionIssuerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateRemoteSessionIssuerResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: migrateToGlobalIssuer admin
+      tags:
+        - admin
+      x-speakeasy-name-override: migrateToGlobalIssuer
+  /admin/remote-session-issuers.refreshGlobalIssuerMetadata:
+    post:
+      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+      operationId: adminRefreshGlobalIssuerMetadata
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerRefresh'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: refreshGlobalIssuerMetadata admin
+      tags:
+        - admin
+      x-speakeasy-name-override: refreshGlobalIssuerMetadata
+  /admin/remote-session-issuers.updateGlobalIssuer:
+    post:
+      description: Update a global remote_session_issuer. Requires platform admin.
+      operationId: adminUpdateGlobalIssuer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRemoteSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: updateGlobalIssuer admin
+      tags:
+        - admin
+      x-speakeasy-name-override: updateGlobalIssuer
   /admin/session.get:
     get:
       tags:
@@ -2780,6 +4103,12 @@ components:
         slug:
           type: string
           description: The slug of the organization
+        stripe_customer_id:
+          type: string
+          description: Stripe customer ID, if billing metadata has a customer.
+        stripe_subscription_id:
+          type: string
+          description: Current Stripe subscription ID, if subscribed.
         trial_converted_at:
           type: string
           description: The time at which the trial converted to a paid plan, if any.
@@ -3031,6 +4360,23 @@ components:
           type: string
       required:
         - email
+    AdminStripeCustomer:
+      type: object
+      properties:
+        description:
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+        livemode:
+          type: boolean
+        name:
+          type: string
+      description: Stripe customer details shown to an admin before assignment.
+      required:
+        - id
+        - livemode
     AdminStripeSubscription:
       type: object
       properties:
@@ -3073,6 +4419,46 @@ components:
         - current_period_end
         - cancel_at_period_end
         - payment_failed
+    Asset:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          description: The content length of the asset
+          format: int64
+        content_type:
+          type: string
+          description: The content type of the asset
+        created_at:
+          type: string
+          description: The creation date of the asset.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the asset
+        kind:
+          type: string
+          enum:
+            - openapiv3
+            - image
+            - functions
+            - chat_attachment
+            - unknown
+        sha256:
+          type: string
+          description: The SHA256 hash of the asset
+        updated_at:
+          type: string
+          description: The last update date of the asset.
+          format: date-time
+      required:
+        - id
+        - kind
+        - sha256
+        - content_type
+        - content_length
+        - created_at
+        - updated_at
     AuditLog:
       type: object
       properties:
@@ -3162,6 +4548,122 @@ components:
           minLength: 1
       required:
         - name
+    CreateRemoteSessionIssuerForm:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+        client_id_metadata_document_supported:
+          type: boolean
+          description: When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+          description: Grant types advertised by the issuer.
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+        issuer:
+          type: string
+          description: Issuer URL; matches the iss claim.
+        jwks_uri:
+          type: string
+          description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
+        oidc:
+          type: boolean
+          description: When true, may unlock OIDC-aware behaviour. Default false.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        passthrough:
+          type: boolean
+          description: When true, the MCP client registers and transacts directly with this issuer. Default false.
+        registration_endpoint:
+          type: string
+          description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: 'Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.'
+        response_types_supported:
+          type: array
+          items:
+            type: string
+          description: Response types advertised by the issuer.
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+        scopes_supported:
+          type: array
+          items:
+            type: string
+          description: Scopes advertised by the issuer.
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
+        slug:
+          type: string
+          description: Project-unique slug.
+        token_endpoint:
+          type: string
+          description: Upstream token endpoint.
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Token endpoint auth methods advertised by the issuer.
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+      description: Form for creating a remote_session_issuer.
+      required:
+        - slug
+        - issuer
     DisableOrganizationRequestBody:
       type: object
       properties:
@@ -3229,6 +4731,159 @@ components:
       required:
         - id
         - days
+    FetchIssuerMetadataRequestBody:
+      type: object
+      properties:
+        issuer:
+          type: string
+          description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+      required:
+        - issuer
+    GlobalRemoteSessionIssuer:
+      type: object
+      properties:
+        global_client_count:
+          type: integer
+          description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
+          format: int64
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        tenant_client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
+          format: int64
+      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+      required:
+        - issuer
+        - global_client_count
+        - tenant_client_count
+    IssuerConvergenceCandidate:
+      type: object
+      properties:
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would move onto the target issuer.
+          format: int64
+        endpoint_mismatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        organization_id:
+          type: string
+          description: The organization that owns the candidate. Empty for a legacy project-scoped issuer written before this column existed.
+        organization_name:
+          type: string
+          description: Display name of the owning organization. Empty when the organization has no synced metadata.
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
+      description: An organization- or project-level remote_session_issuer that names the same upstream authorization server as a global issuer, and so could be consolidated onto it.
+      required:
+        - issuer
+        - organization_id
+        - organization_name
+        - client_count
+        - endpoint_mismatches
+        - warnings
+    IssuerFieldMismatch:
+      type: object
+      properties:
+        field:
+          type: string
+          description: 'The differing field''s name: issuer, token_endpoint, authorization_endpoint, oidc, passthrough, or scopes_supported.'
+        source_value:
+          type: string
+          description: The source issuer's value for a scalar field, rendered as a string. Null when the source leaves the field unset, and null for a list-valued field.
+        source_values:
+          type: array
+          items:
+            type: string
+          description: The source issuer's entries for a list-valued field. Absent for a scalar field, and absent when the source's list is empty.
+        target_value:
+          type: string
+          description: The target issuer's value for a scalar field, rendered as a string. Null when the target leaves the field unset, and null for a list-valued field.
+        target_values:
+          type: array
+          items:
+            type: string
+          description: The target issuer's entries for a list-valued field. Absent for a scalar field, and absent when the target's list is empty.
+      description: One remote_session_issuer field whose value differs between the source and target of a consolidation, with both sides' values.
+      required:
+        - field
+    IssuerMigratePreflight:
+      type: object
+      properties:
+        can_migrate:
+          type: boolean
+          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
+          format: int64
+        conflicting_mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        endpoint_mismatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
+        mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers attached to the source issuer's clients.
+        target_tenant_client_count:
+          type: integer
+          description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
+          format: int64
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
+      required:
+        - client_count
+        - mcp_server_names
+        - endpoint_mismatches
+        - conflicting_mcp_server_names
+        - warnings
+        - can_migrate
+        - target_tenant_client_count
+    ListGlobalRemoteSessionIssuersResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlobalRemoteSessionIssuer'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+      description: Result type for the platform-administrator global issuer listing.
+      required:
+        - items
+    ListIssuerConvergenceCandidatesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerConvergenceCandidate'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+      description: Result type for the platform-administrator convergence-candidate listing.
+      required:
+        - items
     MarkEnterpriseTrialConvertedRequestBody:
       type: object
       properties:
@@ -3252,6 +4907,37 @@ components:
       required:
         - organization_id
         - converted_at
+    MigrateRemoteSessionIssuerRequestBody:
+      type: object
+      properties:
+        source_id:
+          type: string
+          description: The organization- or project-level remote_session_issuer to migrate away from; soft-deleted on success.
+          format: uuid
+        target_id:
+          type: string
+          description: The global remote_session_issuer to migrate onto; survives and adopts the source's clients.
+          format: uuid
+      required:
+        - source_id
+        - target_id
+    MigrateRemoteSessionIssuerResult:
+      type: object
+      properties:
+        clients_migrated:
+          type: integer
+          description: Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.
+          format: int64
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        source_deleted:
+          type: boolean
+          description: TRUE when the source issuer was soft-deleted.
+      description: 'Outcome of consolidating a tenant remote_session_issuer onto a global issuer: the surviving global issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
+      required:
+        - issuer
+        - clients_migrated
+        - source_deleted
     ProductFeatures:
       type: object
       properties:
@@ -3282,6 +4968,9 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
+        network_ingress_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed private network ingress entitlement
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Gram Platform MCP capability
@@ -3331,6 +5020,7 @@ components:
         - remote_session_auto_refresh_enforced_enabled
         - consent_tool_filtering_enabled
         - session_portability_enabled
+        - network_ingress_enabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -3348,6 +5038,320 @@ components:
       required:
         - id
         - days
+    RemoteSessionIssuer:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          description: The remote_session_issuer id.
+          format: uuid
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+          nullable: true
+        issuer:
+          type: string
+          description: Issuer URL; matches the iss claim.
+        jwks_uri:
+          type: string
+          description: Upstream JWKS URI; null when not advertised.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id; null when unset.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name; null when unset.
+        oidc:
+          type: boolean
+          description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+        organization_id:
+          type: string
+          description: The owning organization id. Empty for legacy rows not yet backfilled.
+        passthrough:
+          type: boolean
+          description: When true, the MCP client registers and transacts directly with this issuer.
+        project_id:
+          type: string
+          description: The owning project id. Empty for organization-level issuers.
+        registration_endpoint:
+          type: string
+          description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+          nullable: true
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.
+        slug:
+          type: string
+          description: Project-unique slug.
+        token_endpoint:
+          type: string
+          description: Upstream token endpoint.
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+        updated_at:
+          type: string
+          format: date-time
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
+      description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+      required:
+        - id
+        - project_id
+        - organization_id
+        - slug
+        - issuer
+        - oidc
+        - passthrough
+        - client_id_metadata_document_supported
+        - created_at
+        - updated_at
+    RemoteSessionIssuerDraft:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the discovery document advertises OpenID Connect Back-Channel Logout support; false when the document omits the field.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Null when the document omits the field.
+          nullable: true
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.
+          nullable: true
+        discovery_warnings:
+          type: array
+          items:
+            type: string
+          description: Warnings describing any RFC 8414 deviations encountered during discovery.
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Null when the document omits the field.
+          nullable: true
+        introspection_endpoint:
+          type: string
+          description: RFC 7662 token introspection endpoint advertised in the discovery document. Null when not advertised.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Null when the document omits the field.
+          nullable: true
+        issuer:
+          type: string
+          description: Issuer URL; matches the iss claim.
+        jwks_uri:
+          type: string
+          description: Upstream JWKS URI; null when not advertised.
+        oidc:
+          type: boolean
+          description: When true, may unlock OIDC-aware behaviour.
+        op_policy_uri:
+          type: string
+          description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+        passthrough:
+          type: boolean
+          description: When true, the MCP client registers and transacts directly with this issuer.
+        registration_endpoint:
+          type: string
+          description: Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter. Never proposed by discovery, so always null on a draft.
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scope request. Never proposed by discovery, so always null on a draft.
+          nullable: true
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        service_documentation:
+          type: string
+          description: RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.
+        token_endpoint:
+          type: string
+          description: Upstream token endpoint.
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+        userinfo_endpoint:
+          type: string
+          description: OpenID Connect userinfo endpoint advertised in the discovery document. Null when not advertised.
+      description: A draft remote_session_issuer returned by discover. Same shape as RemoteSessionIssuer minus id/project_id/timestamps, plus discovery_warnings describing any RFC 8414 deviations.
+      required:
+        - issuer
+        - oidc
+        - passthrough
+        - client_id_metadata_document_supported
+        - backchannel_logout_supported
+        - authorization_response_iss_parameter_supported
+        - discovery_warnings
+    RemoteSessionIssuerDuplicateMatch:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The matching remote_session_issuer id.
+          format: uuid
+        issuer:
+          type: string
+          description: The matching issuer's stored upstream URL. May differ in spelling from the URL that was looked up, since canonicalization is applied to the supplied URL only.
+        name:
+          type: string
+          description: The matching issuer's display name. Empty when it has none, in which case a caller should fall back to the slug.
+        project_name:
+          type: string
+          description: The owning project's name, for a project-specific match an organization administrator may not otherwise be able to place. Empty for organization-level and platform-level matches, and for project-specific matches returned to a caller already scoped to that project.
+        slug:
+          type: string
+          description: The matching issuer's slug.
+        tier:
+          type: string
+          description: 'Which tenancy tier owns the match: project-specific, organization-level, or platform-level.'
+          enum:
+            - project-specific
+            - organization-level
+            - platform-level
+      description: An existing remote_session_issuer that already describes the upstream authorization server a caller is about to add.
+      required:
+        - id
+        - slug
+        - name
+        - issuer
+        - tier
+        - project_name
+    RemoteSessionIssuerDuplicatePreflight:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSessionIssuerDuplicateMatch'
+          description: 'The matching issuers in resolution order: project-specific first, then organization-level, then platform-level, and oldest first within a tier. The first entry is therefore the issuer this caller would resolve the URL to today. Empty when nothing describes the URL yet, and empty when the supplied URL is not a usable issuer identifier. Truncated to a fixed cap, since a warning only has to establish that duplicates exist and name a few.'
+      description: 'Existing remote_session_issuers that already describe an upstream issuer URL. Advisory: a non-empty result never blocks a create or an update.'
+      required:
+        - matches
+    RemoteSessionIssuerRefresh:
+      type: object
+      properties:
+        discovery_warnings:
+          type: array
+          items:
+            type: string
+          description: Warnings describing any RFC 8414 deviations encountered while re-reading the issuer's metadata document. A refresh that returns warnings still persisted its result; deviations severe enough to distrust the document abort the refresh with an error instead.
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+      description: 'Result of refreshMetadata: the stored remote_session_issuer as it now stands, plus any warnings raised while re-reading the upstream RFC 8414 document. Distinct from RemoteSessionIssuerDraft, which describes an issuer that may not exist yet and is never persisted.'
+      required:
+        - issuer
+        - discovery_warnings
     ResumeStripeSubscriptionRequestBody:
       type: object
       properties:
@@ -3355,6 +5359,15 @@ components:
           type: string
       required:
         - organization_id
+    RiskIDRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The resource ID.
+          format: uuid
+      required:
+        - id
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:
@@ -3422,6 +5435,7 @@ components:
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
             - session_portability
+            - network_ingress
           maxLength: 60
         organization_id:
           type: string
@@ -3429,6 +5443,18 @@ components:
         - organization_id
         - feature_name
         - enabled
+    SetStripeCustomerRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        stripe_customer_id:
+          type: string
+          pattern: ^cus_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - organization_id
+        - stripe_customer_id
     TriggerOrganizationChatAnalysisRequestBody:
       type: object
       properties:
@@ -3455,6 +5481,126 @@ components:
           description: New whitelisted flag.
       required:
         - id
+    UpdateRemoteSessionIssuerForm:
+      type: object
+      properties:
+        authorization_endpoint:
+          type: string
+          description: Upstream authorization endpoint.
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
+        backchannel_logout_supported:
+          type: boolean
+          description: Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field leaves the stored value unchanged.
+        claims_supported:
+          type: array
+          items:
+            type: string
+          description: Claims the issuer can return in ID tokens and from userinfo. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+        client_id_metadata_document_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
+        client_setup_documentation_url:
+          type: string
+          description: Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+          description: PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          description: The remote_session_issuer id.
+          format: uuid
+        id_token_signing_alg_values_supported:
+          type: array
+          items:
+            type: string
+          description: JWS algorithms the issuer signs ID tokens with. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+        introspection_endpoint:
+          type: string
+          description: Set or clear the RFC 7662 token introspection endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+          description: Client authentication methods the introspection endpoint accepts. Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises none.
+        issuer:
+          type: string
+          description: Issuer URL; matches the iss claim.
+        jwks_uri:
+          type: string
+          description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.
+        name:
+          type: string
+          description: Set or clear the display name. An empty string clears it to NULL.
+        oidc:
+          type: boolean
+        op_policy_uri:
+          type: string
+          description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        op_tos_uri:
+          type: string
+          description: Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        passthrough:
+          type: boolean
+        registration_endpoint:
+          type: string
+          description: Upstream RFC 7591 registration endpoint.
+        resource_indicator_supported:
+          type: boolean
+          description: Whether the issuer accepts the RFC 8707 resource parameter. Omitting the field leaves the stored value unchanged.
+        response_types_supported:
+          type: array
+          items:
+            type: string
+        revocation_endpoint:
+          type: string
+          description: Upstream RFC 7009 revocation endpoint.
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Set or clear the operator-pinned scope request. Omitting the field (or sending null) leaves the stored value unchanged; an empty array clears it.
+          nullable: true
+        scopes_supported:
+          type: array
+          items:
+            type: string
+        service_documentation:
+          type: string
+          description: Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+        slug:
+          type: string
+          description: Rename the slug.
+        token_endpoint:
+          type: string
+          description: Upstream token endpoint.
+        token_endpoint_auth_methods_supported:
+          type: array
+          items:
+            type: string
+        userinfo_endpoint:
+          type: string
+          description: Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
+      description: Form for updating a remote_session_issuer. All non-id fields are optional patches.
+      required:
+        - id
+    UploadImageResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/Asset'
+      required:
+        - asset
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
@@ -16,10 +17,7 @@ export default function BookDemo(): JSX.Element {
     organizationSlug: session?.organization?.slug ?? "",
   });
 
-  const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
-  };
+  const handleLogout = () => logoutToLogin(client);
 
   return (
     <AuthShell

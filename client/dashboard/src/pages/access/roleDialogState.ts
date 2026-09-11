@@ -16,12 +16,15 @@ export interface SaveButtonInput {
   description: string;
   grants: Record<string, RoleGrant>;
   selectedMembers: Set<string>;
+  /** Agent principals assigned to the role */
+  selectedAgents: Set<string>;
   /** Snapshot of form values when the dialog opened for editing */
   initial: {
     name: string;
     description: string;
     grantKeys: string;
     members: Set<string>;
+    agents: Set<string>;
   };
 }
 
@@ -47,7 +50,7 @@ export function visiblePermissionCount(
   ).length;
 }
 
-/** Whether the selected members differ from the initial snapshot */
+/** Whether a selected set of principals differs from the initial snapshot */
 export function membersHaveChanged(
   selected: Set<string>,
   initial: Set<string>,
@@ -83,6 +86,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
   if (!input.isEditing) return true; // create mode — always "dirty"
   return (
     membersHaveChanged(input.selectedMembers, input.initial.members) ||
+    membersHaveChanged(input.selectedAgents, input.initial.agents) ||
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
     grantKeysString(input.grants) !== input.initial.grantKeys

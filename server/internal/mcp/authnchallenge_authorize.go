@@ -179,20 +179,29 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		subject = &sub
 	}
 
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
+	agentTarget, _ := agentAuthorizationTarget(endpoint)
 	challengeState := AuthnChallengeState{
-		ID:                  challengeID,
-		FlowID:              flowID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Endpoint:            endpoint.EndpointRef(baseURL),
-		ClientID:            req.ClientID,
-		RedirectURI:         req.RedirectURI,
-		State:               req.State,
-		CodeChallenge:       req.CodeChallenge,
-		CodeChallengeMethod: req.CodeChallengeMethod,
-		CSRFToken:           csrfToken,
-		Subject:             subject,
-		CreatedAt:           time.Now(),
-		FirstParty:          false,
+		ID:                       challengeID,
+		FlowID:                   flowID,
+		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
+		AuthorizerUserID:         "",
+		AuthorizerImpersonated:   nil,
+		AgentAuthorizationTarget: agentTarget,
+		Endpoint:                 endpointRef,
+		ClientID:                 req.ClientID,
+		RedirectURI:              req.RedirectURI,
+		State:                    req.State,
+		CodeChallenge:            req.CodeChallenge,
+		CodeChallengeMethod:      req.CodeChallengeMethod,
+		CSRFToken:                csrfToken,
+		Subject:                  subject,
+		CreatedAt:                time.Now(),
+		FirstParty:               false,
+
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
 	}

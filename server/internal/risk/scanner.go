@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -49,9 +51,7 @@ type RiskScanner interface {
 	// ScanForEnforcement scans text against enabled blocking policies that
 	// apply to the given user. Everyone-audience policies always apply;
 	// targeted policies require a matching risk_policy:evaluate grant.
-	// toolName is the tool-call name for tool_request/tool_response messages
-	// ("" otherwise); it is surfaced to prompt-based policies.
-	ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error)
+	ScanForEnforcement(ctx context.Context, request RealtimeScanRequest) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
 	// policy that applies to the given user. Returns nil when no such policy
 	// exists. Used by hooks to gate the realtime deny path.
@@ -71,6 +71,18 @@ type RiskScanner interface {
 	// the challenge is auditable and linkable. Keyed per concrete call via
 	// callFingerprint. Log-safe: never receives the raw matched value. Best-effort.
 	RecordPolicyChallenge(ctx context.Context, organizationID string, projectID uuid.UUID, userID, policyID, toolName, policyName, entity, ruleID, callFingerprint string)
+}
+
+// RealtimeScanRequest snapshots one hook call and its immutable attribution.
+type RealtimeScanRequest struct {
+	// Provenance carries immutable tenant, request, message, and hook attribution.
+	Provenance metering.RiskProvenance
+	// Text is the exact content sent to each applicable scanner.
+	Text string
+	// MessageType identifies the semantic message role used by scopes and judges.
+	MessageType message.Type
+	// ToolName identifies the invoked tool when MessageType is tool-shaped.
+	ToolName string
 }
 
 // ShadowMCPPolicy is the minimal policy view the hooks layer needs to render
@@ -210,20 +222,26 @@ type EnforcementDispatcher interface {
 // It pre-creates a gitleaks detector at construction time to avoid the
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	db                *pgxpool.Pool
-	repo              *repo.Queries
-	gitleaks          *gitleaks.Scanner           // warm at startup, reused across scans
-	customRuleScanner *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
-	piiScanner        ra.PIIScanner               // nil if Presidio is unavailable
-	piScanner         *promptinjection.Scanner    // never nil
-	promptPolicy      *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
-	flags             feature.Provider            // nil disables prompt_based enforcement
-	dispatcher        EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
-	metrics           *scannerMetrics
-	celEng            *celenv.Engine
-	recommended       ra.RecommendedSet
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	db                    *pgxpool.Pool
+	repo                  *repo.Queries
+	gitleaks              *gitleaks.Scanner           // warm at startup, reused across scans
+	customRuleScanner     *customruleanalyzer.Scanner // required; evaluates custom CEL detection rules
+	piiScanner            ra.PIIScanner               // nil if Presidio is unavailable
+	piScanner             *promptinjection.Scanner    // never nil
+	promptPolicy          *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
+	flags                 feature.Provider            // nil disables prompt_based enforcement
+	dispatcher            EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
+	riskRecorder          *metering.RiskRecorder
+	realtimeRecordsMu     sync.Mutex
+	realtimeRecords       sync.WaitGroup
+	realtimeRecordCancels map[uint64]context.CancelFunc
+	nextRealtimeRecordID  uint64
+	realtimeDraining      bool
+	metrics               *scannerMetrics
+	celEng                *celenv.Engine
+	recommended           ra.RecommendedSet
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
@@ -244,8 +262,12 @@ func NewScanner(
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
+	riskRecorder *metering.RiskRecorder,
 ) (*Scanner, error) {
-	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, nil)
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcherConfig{
+		dispatcher:   nil,
+		riskRecorder: riskRecorder,
+	})
 }
 
 // NewScannerWithEnforcementDispatcher creates a scanner with Pub/Sub enforcement enabled when flagged.
@@ -261,8 +283,17 @@ func NewScannerWithEnforcementDispatcher(
 	flags feature.Provider,
 	celEng *celenv.Engine,
 	dispatcher EnforcementDispatcher,
+	riskRecorder *metering.RiskRecorder,
 ) (*Scanner, error) {
-	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcher)
+	return newScanner(logger, tracerProvider, meterProvider, db, customRuleScanner, piiScanner, piScanner, promptPolicy, flags, celEng, dispatcherConfig{
+		dispatcher:   dispatcher,
+		riskRecorder: riskRecorder,
+	})
+}
+
+type dispatcherConfig struct {
+	dispatcher   EnforcementDispatcher
+	riskRecorder *metering.RiskRecorder
 }
 
 func newScanner(
@@ -276,7 +307,7 @@ func newScanner(
 	promptPolicy *promptpolicy.Scanner,
 	flags feature.Provider,
 	celEng *celenv.Engine,
-	dispatcher EnforcementDispatcher,
+	cfg dispatcherConfig,
 ) (*Scanner, error) {
 	if piScanner == nil {
 		piScanner = promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
@@ -292,32 +323,70 @@ func newScanner(
 	}
 
 	return &Scanner{
-		logger:            logger.With(attr.SlogComponent("risk-scanner")),
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		db:                db,
-		repo:              repo.New(db),
-		customRuleScanner: customRuleScanner,
-		gitleaks:          gitleaksScanner,
-		piiScanner:        piiScanner,
-		piScanner:         piScanner,
-		promptPolicy:      promptPolicy,
-		flags:             flags,
-		dispatcher:        dispatcher,
-		metrics:           newScannerMetrics(meterProvider, logger),
-		celEng:            celEng,
-		recommended:       recommended,
+		logger:                logger.With(attr.SlogComponent("risk-scanner")),
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		db:                    db,
+		repo:                  repo.New(db),
+		customRuleScanner:     customRuleScanner,
+		gitleaks:              gitleaksScanner,
+		piiScanner:            piiScanner,
+		piScanner:             piScanner,
+		promptPolicy:          promptPolicy,
+		flags:                 flags,
+		dispatcher:            cfg.dispatcher,
+		riskRecorder:          cfg.riskRecorder,
+		realtimeRecordsMu:     sync.Mutex{},
+		realtimeRecords:       sync.WaitGroup{},
+		realtimeRecordCancels: make(map[uint64]context.CancelFunc),
+		nextRealtimeRecordID:  0,
+		realtimeDraining:      false,
+		metrics:               newScannerMetrics(meterProvider, logger),
+		celEng:                celEng,
+		recommended:           recommended,
 	}, nil
+}
+
+// Shutdown stops accepting detached realtime recordings and waits for every
+// recording already admitted to finish. Call it after HTTP handlers quiesce
+// and before stopping the meter publisher.
+func (s *Scanner) Shutdown(ctx context.Context) error {
+	s.realtimeRecordsMu.Lock()
+	s.realtimeDraining = true
+	s.realtimeRecordsMu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		s.realtimeRecords.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		// Cancel the bounded, cancellation-detached publish contexts before
+		// returning so publisher teardown cannot race a recording after the
+		// graceful-shutdown deadline.
+		s.realtimeRecordsMu.Lock()
+		for _, cancel := range s.realtimeRecordCancels {
+			cancel()
+		}
+		s.realtimeRecordsMu.Unlock()
+		<-done
+		return fmt.Errorf("drain realtime meter recordings: %w", context.Cause(ctx))
+	}
 }
 
 func (s *Scanner) ScanForEnforcement(
 	ctx context.Context,
-	organizationID string,
-	projectID uuid.UUID,
-	userID string,
-	text string,
-	messageType message.Type,
-	toolName string,
+	request RealtimeScanRequest,
 ) (result *ScanResult, retErr error) {
+	organizationID := request.Provenance.OrganizationID
+	projectID := request.Provenance.ProjectID
+	userID := request.Provenance.UserID
+	text := request.Text
+	messageType := request.MessageType
+	toolName := request.ToolName
 	// An empty body is only a no-op when there is also no tool attribution: a
 	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
 	// a tool-scoped prompt policy can match, so let those events through.
@@ -404,7 +473,7 @@ func (s *Scanner) ScanForEnforcement(
 
 	var pubsubFindings map[string][]scanners.Finding
 	if len(applicablePolicies) > 0 && s.projectFlagEnabled(ctx, organizationID, projectID, feature.FlagRiskEnforcementPubsub) {
-		pubsubFindings = s.dispatchEnforcement(ctx, organizationID, projectID, text, applicablePolicies)
+		pubsubFindings = s.dispatchEnforcement(ctx, request.Provenance, text, applicablePolicies)
 	}
 	hasQuarantinePolicy := slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return p.Action == "quarantine"
@@ -424,7 +493,7 @@ func (s *Scanner) ScanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, pubsubFindings)
+			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, pubsubFindings)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -581,7 +650,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call - its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, pubsubFindings map[string][]scanners.Finding) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -596,6 +665,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		}
 		span.End()
 	}()
+	provenance := baseProvenance
+	provenance.RiskPolicyID = policy.ID
+	provenance.RiskPolicyVersion = policy.Version
+	provenance.PolicyLinkReason = ""
+	provenance.MessageType = messageType
+	provenance.ToolName = toolName
 
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
@@ -621,7 +696,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		if !categoryScope.SourceInScope(view, promptpolicy.Source) {
 			return nil, nil
 		}
-		return s.scanPromptPolicy(ctx, policy, userID, text, messageType, toolName, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -645,7 +720,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 	// applied above via the policy's scope_exempt.
 	var customFindings []scanners.Finding
 	if len(policy.CustomRuleIds) > 0 {
-		customFindings, err = s.scanCustomRules(ctx, policy, view)
+		scanStarted := time.Now()
+		customResult, scanErr := s.scanCustomRules(ctx, policy, view)
+		s.recordRealtimeResult(ctx, metering.RiskCustomRules(), provenance, customResult, scanStarted)
+		customFindings, err = customResult.Findings, scanErr
 		if err != nil {
 			// A broken custom rule must not disable the built-in detectors (a
 			// fail-open bypass); drop its findings and keep scanning.
@@ -682,7 +760,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		case ra.SourceGitleaks:
 			gitleaksFindings := pubsubFindings[ra.SourceGitleaks]
 			if pubsubFindings == nil {
-				gitleaksFindings, err = s.scanGitleaks(ctx, text)
+				scanStarted := time.Now()
+				gitleaksResult, scanErr := s.scanGitleaks(ctx, text)
+				s.recordRealtimeResult(ctx, metering.RiskGitleaks(), provenance, gitleaksResult, scanStarted)
+				gitleaksFindings, err = gitleaksResult.Findings, scanErr
 				if err != nil {
 					return failWithHeldSentinel(fmt.Errorf("gitleaks scan: %w", err))
 				}
@@ -712,6 +793,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				if s.piiScanner == nil {
 					continue
 				}
+				scanStarted := time.Now()
 				batchResults, analyzeErr := s.piiScanner.AnalyzeBatch(
 					ctx,
 					[]string{text},
@@ -723,7 +805,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 					return failWithHeldSentinel(fmt.Errorf("presidio scan: %w", analyzeErr))
 				}
 				if len(batchResults) > 0 {
-					presidioFindings = batchResults[0]
+					s.recordRealtimeResult(ctx, metering.RiskPresidio(), provenance, batchResults[0], scanStarted)
+					presidioFindings = batchResults[0].Findings
 				}
 			}
 			if len(presidioFindings) > 0 {
@@ -768,11 +851,16 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), userID, judgemessage.New(messageType, toolName, text))
+			scanStarted := time.Now()
+			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			scanProvenance := provenance
+			scanProvenance.Model = verdict.Model
+			scanProvenance.Provider = verdict.Provider
+			s.recordRealtimeResult(ctx, metering.RiskPromptInjection(), scanProvenance, scanResult, scanStarted)
 			if err != nil {
 				return failWithHeldSentinel(fmt.Errorf("prompt injection scan: %w", err))
 			}
-			findings = categoryScope.FilterFindings(view, filter(findings))
+			findings := categoryScope.FilterFindings(view, filter(scanResult.Findings))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:           policy.Action,
@@ -791,7 +879,9 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 			}
 		}
 	}
-	if denyFindings := filter(customFindings); len(denyFindings) > 0 {
+	// Custom findings pass the category scope like every other source, so a
+	// specified `custom` scope narrows realtime enforcement too.
+	if denyFindings := categoryScope.FilterFindings(view, filter(customFindings)); len(denyFindings) > 0 {
 		return &ScanResult{
 			Action:           policy.Action,
 			PolicyID:         policy.ID.String(),
@@ -832,7 +922,7 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, userID string, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
@@ -841,15 +931,29 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	if policy.Prompt.Valid {
 		prompt = policy.Prompt.String
 	}
-	var findings []scanners.Finding
+	scanStarted := time.Now()
+	var scanResult scanners.Result
+	var verdict *promptpolicy.Verdict
 	if s.promptPolicy != nil {
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		findings = s.promptPolicy.Scan(ctx, policy.OrganizationID, policy.ProjectID.String(), userID, prompt, cfg, judgemessage.New(messageType, toolName, text))
+		scanResult, verdict = s.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, prompt, cfg, judgemessage.New(messageType, toolName, text))
 	} else {
-		findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+		scanResult = scanners.Result{Findings: promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}
 	}
+	provenance := baseProvenance
+	provenance.RiskPolicyID = policy.ID
+	provenance.RiskPolicyVersion = policy.Version
+	provenance.PolicyLinkReason = ""
+	provenance.MessageType = messageType
+	provenance.ToolName = toolName
+	if verdict != nil {
+		provenance.Model = verdict.Model
+		provenance.Provider = verdict.Provider
+	}
+	s.recordRealtimeResult(ctx, metering.RiskPromptPolicy(), provenance, scanResult, scanStarted)
+	findings := scanResult.Findings
 	if len(findings) == 0 {
 		return nil
 	}
@@ -872,14 +976,27 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}
 }
 
-func (s *Scanner) dispatchEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, text string, policies []repo.RiskPolicy) map[string][]scanners.Finding {
+func (s *Scanner) dispatchEnforcement(ctx context.Context, baseProvenance metering.RiskProvenance, text string, policies []repo.RiskPolicy) map[string][]scanners.Finding {
 	lanes := make([]enforcereply.Lane, 0, 2)
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool { return slices.Contains(p.Sources, ra.SourceGitleaks) }) {
-		lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""})
+	origins := make(map[enforcereply.Lane]metering.RiskProvenance, 2)
+	addLane := func(scanner riskv1.EnforcementScanner, source string) {
+		lane := enforcereply.Lane{Scanner: scanner, PolicyID: ""}
+		for _, policy := range policies {
+			if !slices.Contains(policy.Sources, source) {
+				continue
+			}
+			origin := baseProvenance
+			origin.RiskPolicyID = policy.ID
+			origin.RiskPolicyVersion = policy.Version
+			origin.PolicyLinkReason = ""
+			origin.ExecutionPath = "realtime_streams"
+			origins[lane] = origin
+			lanes = append(lanes, lane)
+			return
+		}
 	}
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool { return slices.Contains(p.Sources, ra.SourcePresidio) }) {
-		lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""})
-	}
+	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, ra.SourceGitleaks)
+	addLane(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, ra.SourcePresidio)
 	findings := make(map[string][]scanners.Finding, len(lanes))
 	if len(lanes) == 0 {
 		return findings
@@ -893,12 +1010,13 @@ func (s *Scanner) dispatchEnforcement(ctx context.Context, organizationID string
 
 	presidioThreshold := presidioDispatchThreshold(policies)
 	outcome, err := s.dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
-		OrganizationID:         organizationID,
-		ProjectID:              projectID.String(),
+		OrganizationID:         baseProvenance.OrganizationID,
+		ProjectID:              baseProvenance.ProjectID.String(),
 		Content:                text,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: presidioThreshold,
 		Lanes:                  lanes,
+		Origins:                origins,
 	})
 	if err != nil {
 		for _, lane := range lanes {
@@ -1051,9 +1169,9 @@ func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectI
 	return policyflags.ProjectFlagEnabled(ctx, s.logger, s.repo, s.flags, orgID, projectID, flag)
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]scanners.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (scanners.Result, error) {
 	if len(policy.CustomRuleIds) == 0 {
-		return []scanners.Finding{}, nil
+		return scanners.Result{Findings: []scanners.Finding{}, STokens: 0, Completed: false}, nil
 	}
 
 	toolCalls := make([]customruleanalyzer.ScanToolCall, 0, len(view.Tools))
@@ -1061,7 +1179,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		toolCalls = append(toolCalls, customruleanalyzer.ScanToolCall{Name: t.Name, Arguments: t.Arguments})
 	}
 
-	findings, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{
+	result, err := s.customRuleScanner.Scan(ctx, customruleanalyzer.ScanRequest{
 		ProjectID:     policy.ProjectID,
 		CustomRuleIDs: policy.CustomRuleIds,
 		Content:       view.Content,
@@ -1069,16 +1187,50 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		ToolCalls:     toolCalls,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scan custom detection rules: %w", err)
+		return result, fmt.Errorf("scan custom detection rules: %w", err)
 	}
-	return findings, nil
+	return result, nil
 }
 
 // scanGitleaks scans text on the warm, reused gitleaks scanner.
-func (s *Scanner) scanGitleaks(ctx context.Context, text string) ([]scanners.Finding, error) {
-	findings, err := s.gitleaks.Scan(ctx, text)
+func (s *Scanner) scanGitleaks(ctx context.Context, text string) (scanners.Result, error) {
+	result, err := s.gitleaks.Scan(ctx, text)
 	if err != nil {
-		return nil, fmt.Errorf("gitleaks scan: %w", err)
+		return result, fmt.Errorf("gitleaks scan: %w", err)
 	}
-	return findings, nil
+	return result, nil
+}
+
+func (s *Scanner) recordRealtimeResult(ctx context.Context, definition metering.Definition, provenance metering.RiskProvenance, result scanners.Result, occurredAt time.Time) {
+	if !result.Completed {
+		return
+	}
+	provenance.ExecutionPath = "realtime_local"
+	if provenance.RequestID == "" {
+		provenance.RequestID = provenance.OperationID
+	}
+	provenance.OperationID = scanners.AsyncRiskOperationID(
+		provenance.ExecutionPath, provenance.RiskPolicyID.String(), provenance.RiskPolicyVersion,
+		"", "", provenance.OperationID,
+	)
+	s.realtimeRecordsMu.Lock()
+	defer s.realtimeRecordsMu.Unlock()
+	if s.realtimeDraining {
+		return
+	}
+	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	recordID := s.nextRealtimeRecordID
+	s.nextRealtimeRecordID++
+	s.realtimeRecordCancels[recordID] = cancel
+	s.realtimeRecords.Go(func() {
+		defer func() {
+			cancel()
+			s.realtimeRecordsMu.Lock()
+			delete(s.realtimeRecordCancels, recordID)
+			s.realtimeRecordsMu.Unlock()
+		}()
+		if err := s.riskRecorder.Record(recordCtx, definition, provenance, result.STokens, occurredAt); err != nil {
+			s.logger.ErrorContext(recordCtx, "record realtime risk scan usage", attr.SlogError(err))
+		}
+	})
 }

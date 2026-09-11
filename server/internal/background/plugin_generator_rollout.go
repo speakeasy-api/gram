@@ -37,6 +37,17 @@ const (
 	pluginGeneratorRolloutInterval         = 1 * time.Hour
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
+
+	// pluginGeneratorRolloutRepairChangeID versions the orphaned-key repair
+	// activity that now runs at the start of a fresh sweep. In-flight
+	// executions started before this change have ListPluginPublishCandidates
+	// as their first recorded command; GetVersion returns DefaultVersion on
+	// those replays so they keep that sequence.
+	pluginGeneratorRolloutRepairChangeID = "plugin-rollout-repair-orphaned-creators"
+
+	// pluginGeneratorRolloutRepairVersion is the current command sequence:
+	// repair once on a fresh sweep, then list candidates.
+	pluginGeneratorRolloutRepairVersion = 1
 )
 
 type PluginGeneratorRolloutInput struct {
@@ -120,6 +131,12 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		}
 	}
 
+	if workflow.GetVersion(ctx, pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion) == pluginGeneratorRolloutRepairVersion && input.AfterProjectID == nil {
+		if err := workflow.ExecuteActivity(ctx, a.RepairOrphanedAPIKeyCreators).Get(ctx, nil); err != nil {
+			return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
+		}
+	}
+
 	after := input.AfterProjectID
 	for {
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
@@ -150,6 +167,14 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
+				if !plugins.UsableAPIKeyCreatorID(candidate.CreatedByUserID) {
+					result.Skipped++
+					workflow.GetLogger(ctx).Warn("plugin project publish skipped: no real actor",
+						"project_id", candidate.ProjectID.String(),
+						"created_by_user_id", candidate.CreatedByUserID,
+					)
+					continue
+				}
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
 					ProjectID:       candidate.ProjectID,
 					CreatedByUserID: candidate.CreatedByUserID,

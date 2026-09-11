@@ -1,6 +1,7 @@
 package mcpversions_test
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,23 @@ func TestAllIsChronologicallyOrdered(t *testing.T) {
 
 	versions := mcpversions.All()
 	require.True(t, slices.IsSorted(versions), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
+}
+
+// TestAllAreDatedRevisions makes the assumption TestAllIsChronologicallyOrdered
+// rests on explicit: that lexical order is chronological order here. It holds
+// only while every recognized revision is an ISO date. The specification also
+// names an undated `draft` revision, and recognizing one would break that
+// equivalence, so this fails rather than letting the ordering check quietly
+// stop meaning what it says.
+func TestAllAreDatedRevisions(t *testing.T) {
+	t.Parallel()
+
+	dated := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	for _, v := range mcpversions.All() {
+		require.Regexpf(t, dated, v,
+			"revision %q is not a date, so lexical ordering no longer implies chronological ordering; "+
+				"place it in All by release order and confirm the comparisons in this package still hold", v)
+	}
 }
 
 func TestAllHasNoDuplicates(t *testing.T) {
@@ -45,6 +63,7 @@ func TestSupportedSetsAreKnownAndOrdered(t *testing.T) {
 		mcpversions.SupportedHostedToolset(),
 		mcpversions.SupportedPlatformToolset(),
 		mcpversions.SupportedMetaServer(),
+		mcpversions.SupportedConsentToolset(),
 	} {
 		require.NotEmpty(t, supported)
 		require.True(t, slices.IsSorted(supported), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
@@ -60,9 +79,11 @@ func TestSupportedSetsReturnCopies(t *testing.T) {
 
 	mcpversions.SupportedHostedToolset()[0] = "mutated"
 	mcpversions.SupportedPlatformToolset()[0] = "mutated"
+	mcpversions.SupportedConsentToolset()[0] = "mutated"
 
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedHostedToolset()[0], "SupportedHostedToolset must not hand out a mutable view of package state")
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedPlatformToolset()[0], "SupportedPlatformToolset must not hand out a mutable view of package state")
+	require.Equal(t, mcpversions.Version20250326, mcpversions.SupportedConsentToolset()[0], "SupportedConsentToolset must not hand out a mutable view of package state")
 }
 
 // TestSupportedSetsExclude20260728 pins the current ceiling: advertising
@@ -74,6 +95,7 @@ func TestSupportedSetsExclude20260728(t *testing.T) {
 	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedMetaServer(), mcpversions.Version20260728)
+	require.NotContains(t, mcpversions.SupportedConsentToolset(), mcpversions.Version20260728)
 }
 
 func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
@@ -263,4 +285,65 @@ func TestSupportedMetaServerSpansFloorToCeiling(t *testing.T) {
 
 	mcpversions.SupportedMetaServer()[0] = "mutated"
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedMetaServer()[0], "SupportedMetaServer must not hand out a mutable view of package state")
+}
+
+// TestAtLeast_ComparesChronologically covers the ordering the wire-format
+// branches rest on.
+func TestAtLeast_ComparesChronologically(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20260728, mcpversions.Version20251125))
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20251125, mcpversions.Version20251125))
+	require.False(t, mcpversions.AtLeast(mcpversions.Version20250618, mcpversions.Version20251125))
+}
+
+// TestAtLeast_UnrecognizedInputIsNeverAtLeast covers the case lexical
+// comparison alone would get wrong: a garbage value can sort above a real
+// revision, and reading that as the newer behavior would serve a wire format
+// to a client that cannot possibly have asked for it.
+func TestAtLeast_UnrecognizedInputIsNeverAtLeast(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, mcpversions.AtLeast("zzzz-zz-zz", mcpversions.Version20260728))
+	require.False(t, mcpversions.AtLeast("9999-12-31", mcpversions.Version20260728))
+	require.False(t, mcpversions.AtLeast("", mcpversions.Version20260728))
+}
+
+// TestAtLeast_SplitsAtTheStatelessBoundary pins which side of the
+// handshake/stateless divide each recognized revision falls on.
+func TestAtLeast_SplitsAtTheStatelessBoundary(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20260728, mcpversions.Version20260728))
+
+	for _, v := range []string{
+		mcpversions.Version20241105,
+		mcpversions.Version20250326,
+		mcpversions.Version20250618,
+		mcpversions.Version20251125,
+	} {
+		require.False(t, mcpversions.AtLeast(v, mcpversions.Version20260728), "revision %s", v)
+	}
+}
+
+// TestAtLeast_NoSupportedSetIsModernYet records that every
+// revision-conditional branch keyed on the 2026-07-28 boundary is unreachable
+// in production until a surface advertises that revision, and fails the day one
+// does, which is when those branches need their own end-to-end coverage.
+func TestAtLeast_NoSupportedSetIsModernYet(t *testing.T) {
+	t.Parallel()
+
+	for _, supported := range [][]string{
+		mcpversions.SupportedHostedToolset(),
+		mcpversions.SupportedPlatformToolset(),
+		mcpversions.SupportedMetaServer(),
+		mcpversions.SupportedConsentToolset(),
+	} {
+		for _, v := range supported {
+			require.Falsef(t, mcpversions.AtLeast(v, mcpversions.Version20260728),
+				"revision %s is now served, so the version-conditional wire behavior it gates is reachable for the first time. "+
+					"That behavior currently has unit coverage only: give the modern error codes and HTTP statuses end-to-end "+
+					"coverage on every surface, then delete this test.", v)
+		}
+	}
 }

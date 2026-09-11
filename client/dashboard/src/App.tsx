@@ -243,7 +243,10 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
-    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
+    // The killswitch addresses only forward to the identity they belong to,
+    // so recording one would file a redirect under the reader's recent pages
+    // instead of the page they actually ended up on.
+    if (orgRoutes.killswitch.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -319,7 +322,10 @@ const RouteProvider = () => {
       Object.entries(orgRoutes).filter(
         ([key, route]) =>
           (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          (key !== "killswitch" || killswitchAccess.canAccess),
+          // Killswitch routes only redirect to identity access.
+          key !== "killswitch" &&
+          // Parameterized routes have no destination without an id.
+          !route.url.includes(":"),
       ),
     );
     const orgActions = routesToNavActions(
@@ -340,7 +346,6 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
-    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
@@ -462,7 +467,8 @@ const routesToNavActions = (
         !route.unauthenticated &&
         !route.outsideMainLayout &&
         Boolean(route.component) &&
-        Boolean(route.title),
+        Boolean(route.title) &&
+        !route.legacyRedirect,
     )
     .map(([key, route]) =>
       routeToNavAction(route, group, `${idPrefix}-${key}`),

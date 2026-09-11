@@ -577,6 +577,7 @@ func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, ar
 
 const countSkillFeedbackOutcomes = `-- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
@@ -594,6 +595,7 @@ type CountSkillFeedbackOutcomesParams struct {
 }
 
 type CountSkillFeedbackOutcomesRow struct {
+	WindowEnd       pgtype.Timestamptz
 	Total           int64
 	Helped          int64
 	PartiallyHelped int64
@@ -606,6 +608,7 @@ func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkill
 	row := q.db.QueryRow(ctx, countSkillFeedbackOutcomes, arg.ProjectID, arg.SkillID)
 	var i CountSkillFeedbackOutcomesRow
 	err := row.Scan(
+		&i.WindowEnd,
 		&i.Total,
 		&i.Helped,
 		&i.PartiallyHelped,

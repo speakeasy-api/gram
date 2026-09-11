@@ -26,6 +26,10 @@ export type PublishStatusResult = {
    */
   connected: boolean;
   /**
+   * Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.
+   */
+  cursorObservabilityPlugin?: string | undefined;
+  /**
    * Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.
    */
   hasCollaborators?: boolean | undefined;
@@ -69,6 +73,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     codex_observability_plugin: z.optional(z.string()),
     configured: z.boolean(),
     connected: z.boolean(),
+    cursor_observability_plugin: z.optional(z.string()),
     has_collaborators: z.optional(z.boolean()),
     last_published_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -84,6 +89,7 @@ export const PublishStatusResult$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "claude_observability_plugin": "claudeObservabilityPlugin",
       "codex_observability_plugin": "codexObservabilityPlugin",
+      "cursor_observability_plugin": "cursorObservabilityPlugin",
       "has_collaborators": "hasCollaborators",
       "last_published_at": "lastPublishedAt",
       "live_version": "liveVersion",

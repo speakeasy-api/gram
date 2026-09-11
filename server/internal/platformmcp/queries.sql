@@ -590,25 +590,16 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: IsPlatformMCPCatalogRegistrationTargetEligible :one
--- Registration is safe for a new organization: the selected project may be
--- empty. It remains unavailable for a project that already owns an active
--- toolset-backed MCP, because that legacy model must not be mixed with the
--- Platform registration lifecycle. Package admission retains its independent
--- organization-level cohort check.
+-- Registration may add a separately managed MCP server to any live project in
+-- the active organization. Existing toolset-backed servers can coexist because
+-- registration identity, component ownership, and active caps are enforced on
+-- the Platform registration and its own component rows.
 SELECT EXISTS (
     SELECT 1
     FROM projects AS target
     WHERE target.id = @project_id
       AND target.organization_id = @organization_id
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 );
 
 -- name: LockPlatformMCPOperationReceipt :exec
@@ -2427,7 +2418,11 @@ SELECT
     m.id AS mcp_server_id,
     m.project_id,
     COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COUNT(*) FILTER (
+      WHERE sibling.id IS NOT NULL
+        AND sibling.deleted IS FALSE
+    )::bigint AS toolset_mcp_count
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -2435,12 +2430,16 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
- AND toolset.project_id = m.project_id
- AND toolset.organization_id = @organization_id
- AND toolset.deleted IS FALSE
+  AND toolset.project_id = m.project_id
+  AND toolset.organization_id = @organization_id
+  AND toolset.deleted IS FALSE
+LEFT JOIN mcp_servers AS sibling
+  ON sibling.project_id = m.project_id
+  AND sibling.toolset_id = m.toolset_id
 WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
-  AND m.deleted IS FALSE;
+  AND m.deleted IS FALSE
+GROUP BY m.id, m.project_id, m.slug, toolset.slug;
 
 -- Session recall (list_my_sessions / continue_session). Every read below
 -- fuses tenancy and ownership into the row filter — organization, owner

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -35,15 +37,6 @@ func TestOperationalReadersRequireHTTPSDashboardURL(t *testing.T) {
 	require.True(t, validDashboardURL(mustParseURL(t, "https://app.getgram.test")))
 	require.False(t, validDashboardURL(mustParseURL(t, "http://localhost:5173")))
 	require.False(t, validDashboardURL(mustParseURL(t, "https://user@app.getgram.test")))
-}
-
-func TestRecentToolCallsRequirePostgres(t *testing.T) {
-	t.Parallel()
-
-	reader := NewPostgresReader(testenv.NewLogger(t), nil).
-		WithRecentToolCalls(&recordingRecentToolCallReader{}, mustParseURL(t, "https://app.getgram.test"))
-	_, err := reader.ListRecentToolCalls(t.Context(), Principal{OrganizationID: "organization"}, ListRecentToolCallsInput{ProjectSlug: "project"})
-	require.ErrorIs(t, err, ErrUnavailable)
 }
 
 func TestListDataExportsReturnsSafeStructuredConfiguration(t *testing.T) {
@@ -424,4 +417,185 @@ func TestRecentToolCallTargetOmitsUnclassifiedShadowSource(t *testing.T) {
 		TargetLabel: "npx --yes package --token private",
 	})
 	require.Empty(t, target)
+}
+
+func TestOrganizationEventsRequireLogsFeature(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_require_logs")
+	require.NoError(t, err)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(&recordingEventFeedReader{}, nil, mustParseURL(t, "https://app.getgram.test"))
+	_, err = reader.ListOrganizationEvents(ctx, Principal{OrganizationID: "organization"}, ListOrganizationEventsInput{})
+	require.ErrorIs(t, err, ErrUnavailable)
+}
+
+func TestListOrganizationEventsUsesBoundedSafeProjection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	fixedNow := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	events := &recordingEventFeedReader{rows: []chrepo.EventLogRow{{
+		TimeUnixNano:       fixedNow.Add(-time.Minute).UnixNano(),
+		Kind:               chrepo.EventKindLog,
+		Source:             "payments",
+		Name:               "refund.completed",
+		BodyPreview:        "refund issued",
+		TraceID:            "trace-id-must-not-leave",
+		SpanID:             "span-id-must-not-leave",
+		ProjectID:          "project-id",
+		Attributes:         `{"user.email":"person@example.test","secret":"private-attr"}`,
+		ResourceAttributes: `{"service.name":"payments","user.id":"private-user-key"}`,
+	}}}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
+	reader.eventFeed.now = func() time.Time { return fixedNow }
+
+	output, err := reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{})
+	require.NoError(t, err)
+	require.Equal(t, DiagnosticWindowLastDay, output.Window.Window)
+	require.False(t, output.More)
+	require.Len(t, output.Events, 1)
+	require.Equal(t, "log", output.Events[0].Kind)
+	require.Equal(t, "payments", output.Events[0].Source)
+	require.Equal(t, "refund.completed", output.Events[0].Name)
+	require.Equal(t, "refund issued", output.Events[0].BodyPreview)
+	require.Equal(t, "project-id", output.Events[0].ProjectID)
+	require.True(t, strings.HasSuffix(output.EventFeedURL, "/data/event-feed"))
+
+	require.Equal(t, principal.OrganizationID, events.params.OrganizationID)
+	require.Equal(t, fixedNow.Add(-24*time.Hour).UnixNano(), events.params.TimeStart)
+	require.Equal(t, fixedNow.UnixNano(), events.params.TimeEnd)
+	require.Empty(t, events.params.Kinds)
+	require.Empty(t, events.params.Sources)
+	require.Empty(t, events.params.Names)
+	require.Empty(t, events.params.Search)
+	require.Zero(t, events.params.CursorTimeUnixNano)
+	require.Equal(t, defaultOrganizationEventLimit+1, events.params.Limit)
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "trace-id-must-not-leave")
+	require.NotContains(t, string(encoded), "span-id-must-not-leave")
+	require.NotContains(t, string(encoded), "person@example.test")
+	require.NotContains(t, string(encoded), "private-attr")
+	require.NotContains(t, string(encoded), "private-user-key")
+}
+
+func TestListOrganizationEventsRejectsInvalidKindAndHonorsLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_filters")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	events := &recordingEventFeedReader{}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
+
+	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Kind: "trace"})
+	require.ErrorContains(t, err, "kind must be one of log, span")
+
+	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Limit: 200, Kind: "span"})
+	require.NoError(t, err)
+	require.Equal(t, []string{chrepo.EventKindSpan}, events.params.Kinds)
+	require.Equal(t, maxOrganizationEventLimit+1, events.params.Limit)
+}
+
+func TestListOrganizationEventsRefusesWhenLogsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_logs_disabled")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	events := &recordingEventFeedReader{rows: []chrepo.EventLogRow{{
+		TimeUnixNano:       time.Now().UnixNano(),
+		Kind:               chrepo.EventKindLog,
+		Source:             "payments",
+		Name:               "must-not-be-read",
+		BodyPreview:        "",
+		TraceID:            "",
+		SpanID:             "",
+		ProjectID:          "project-id",
+		Attributes:         `{"secret":"private-attr"}`,
+		ResourceAttributes: "",
+	}}}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysDisabledFeature, mustParseURL(t, "https://app.getgram.test"))
+
+	_, err = reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{})
+	require.ErrorIs(t, err, errOrganizationEventsDisabled)
+	require.Empty(t, events.params.OrganizationID)
+
+	result, ok := organizationEventsToolResult(err)
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"feature_unavailable","feature":"logs","message":"The Event Feed is not enabled for this organization."}`, text.Text)
+}
+
+func TestListOrganizationEventsReportsMoreWhenPageOverflows(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_organization_events_overflow")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	fixedNow := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	rows := make([]chrepo.EventLogRow, maxOrganizationEventLimit+1)
+	for i := range rows {
+		rows[i] = chrepo.EventLogRow{
+			TimeUnixNano:       fixedNow.Add(-time.Duration(i) * time.Minute).UnixNano(),
+			Kind:               chrepo.EventKindLog,
+			Source:             "payments",
+			Name:               fmt.Sprintf("event-%d", i),
+			BodyPreview:        "",
+			TraceID:            "",
+			SpanID:             "",
+			ProjectID:          "project-id",
+			Attributes:         `{"secret":"private-attr"}`,
+			ResourceAttributes: "",
+		}
+	}
+	events := &recordingEventFeedReader{rows: rows}
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithOrganizationEvents(events, alwaysEnabledFeature, mustParseURL(t, "https://app.getgram.test"))
+	reader.eventFeed.now = func() time.Time { return fixedNow }
+
+	output, err := reader.ListOrganizationEvents(ctx, principal, ListOrganizationEventsInput{Limit: maxOrganizationEventLimit})
+	require.NoError(t, err)
+	require.True(t, output.More)
+	require.Len(t, output.Events, maxOrganizationEventLimit)
+	require.Equal(t, "event-0", output.Events[0].Name)
+	require.Equal(t, fmt.Sprintf("event-%d", maxOrganizationEventLimit-1), output.Events[len(output.Events)-1].Name)
+	require.Equal(t, maxOrganizationEventLimit+1, events.params.Limit)
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-attr")
+}
+
+type recordingEventFeedReader struct {
+	params chrepo.ListEventLogParams
+	rows   []chrepo.EventLogRow
+	err    error
+}
+
+func (r *recordingEventFeedReader) ListEventLog(_ context.Context, params chrepo.ListEventLogParams) ([]chrepo.EventLogRow, error) {
+	r.params = params
+	return r.rows, r.err
+}
+
+func alwaysEnabledFeature(context.Context, string) (bool, error) {
+	return true, nil
+}
+
+func alwaysDisabledFeature(context.Context, string) (bool, error) {
+	return false, nil
 }

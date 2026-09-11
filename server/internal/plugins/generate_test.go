@@ -1634,6 +1634,27 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
+func TestHooksBootstrapAvoidsWindowsChecksumFilenameEscaping(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksBootstrap(GenerateConfig{}))
+
+	// Git Bash receives LOCALAPPDATA with native backslashes. Normalizing the
+	// cache root avoids mixed paths for every downstream MSYS utility.
+	require.Contains(t, script, `printf '%s' "$LOCALAPPDATA" | tr '\\' '/'`)
+
+	// More importantly, never give checksum utilities the filename: GNU
+	// coreutils prefixes the digest with an escape marker when that filename
+	// contains a backslash. Stdin produces an unconditionally plain digest.
+	for _, command := range []string{
+		`sha256sum < "$archive"`,
+		`shasum -a 256 < "$archive"`,
+		`openssl dgst -sha256 < "$archive"`,
+	} {
+		require.Contains(t, script, command)
+	}
+	require.NotContains(t, script, `sha256sum "$archive"`)
+}
+
 func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -2834,14 +2855,14 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
 
-	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
 	require.NoError(t, err)
 	// One entry per plugin plus the reserved shared entry.
 	require.Contains(t, first, "engineering-tools")
 	require.Contains(t, first, mcpSharedFingerprintKey)
 	require.True(t, strings.HasPrefix(first["engineering-tools"], "sha256:"))
 
-	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
@@ -2856,7 +2877,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
-	})
+	}, true)
 	require.NoError(t, err)
 
 	// Version and the injected API keys vary on every publish; the fingerprints
@@ -2868,7 +2889,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 		Version:     "1750000000",
 		APIKey:      "gram_live_realkey",
 		HooksAPIKey: "gram_live_realhookskey",
-	})
+	}, true)
 	require.NoError(t, err)
 
 	require.Equal(t, base, withNoise, "manifest version and API keys must not affect the fingerprints")
@@ -2885,7 +2906,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
 
-	base, err := MCPFingerprints(plugins, cfg)
+	base, err := MCPFingerprints(plugins, cfg, true)
 	require.NoError(t, err)
 
 	// Add a server to plugin A only.
@@ -2896,7 +2917,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		}},
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
-	changedFP, err := MCPFingerprints(changed, cfg)
+	changedFP, err := MCPFingerprints(changed, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
@@ -2965,11 +2986,11 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 		return []PluginInfo{a, b}
 	}
 
-	base, err := MCPFingerprints(makePlugins(""), cfg)
+	base, err := MCPFingerprints(makePlugins(""), cfg, true)
 	require.NoError(t, err)
-	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg)
+	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg, true)
 	require.NoError(t, err)
-	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg)
+	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"io"
 	"log/slog"
 	"math"
@@ -47,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -54,6 +57,8 @@ import (
 )
 
 type Service struct {
+	remoteSessions       *remotesessions.Service
+	assets               *assets.Service
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -84,6 +89,7 @@ type Service struct {
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
+	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
@@ -198,7 +204,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{
+	return &Service{remoteSessions: nil, assets: nil,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -244,7 +250,7 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
-		SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
+		NetworkIngressEnabled: snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
 	}
 }
 
@@ -356,14 +362,30 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Goa lazily assigns a nil error formatter inside a shared request closure.
+	// Supply its default eagerly so concurrent error responses do not race.
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
+	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
+	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	server.CreateGlobalIssuer = service.strictAdminJSON(server.CreateGlobalIssuer, func() any { return new(adminserver.CreateGlobalIssuerRequestBody) })
+	server.GetGlobalIssuerDuplicatePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerDuplicatePreflight)
+	server.ListGlobalIssuers = service.preauthorizeAdmin(server.ListGlobalIssuers)
+	server.GetGlobalIssuer = service.preauthorizeAdmin(server.GetGlobalIssuer)
+	server.UpdateGlobalIssuer = service.strictAdminJSON(server.UpdateGlobalIssuer, func() any { return new(adminserver.UpdateGlobalIssuerRequestBody) })
+	server.DeleteGlobalIssuer = service.preauthorizeAdmin(server.DeleteGlobalIssuer)
+	server.FetchGlobalIssuerMetadata = service.strictAdminJSON(server.FetchGlobalIssuerMetadata, func() any { return new(adminserver.FetchGlobalIssuerMetadataRequestBody) })
+	server.RefreshGlobalIssuerMetadata = service.strictAdminJSON(server.RefreshGlobalIssuerMetadata, func() any { return new(adminserver.RefreshGlobalIssuerMetadataRequestBody) })
+	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
+	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
+	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
+	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	adminserver.Mount(mux, server)
 
 }
@@ -1515,41 +1537,45 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 
 func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        conv.FromPGText[string](row.TrialTier),
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: pgTimestampPtr(row.TrialConvertedAt),
-		TrialDemotedAt:   pgTimestampPtr(row.TrialDemotedAt),
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Slug:                 row.Slug,
+		AccountType:          row.AccountType,
+		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
+		Whitelisted:          row.Whitelisted,
+		DisabledAt:           pgTimestampPtr(row.DisabledAt),
+		TrialState:           &row.TrialState,
+		TrialTier:            conv.FromPGText[string](row.TrialTier),
+		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
+		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
 func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
-		ID:               row.ID,
-		Name:             row.Name,
-		Slug:             row.Slug,
-		AccountType:      row.AccountType,
-		WorkosID:         conv.FromPGText[string](row.WorkosID),
-		Whitelisted:      row.Whitelisted,
-		DisabledAt:       pgTimestampPtr(row.DisabledAt),
-		TrialState:       &row.TrialState,
-		TrialTier:        nil,
-		TrialEndsAt:      pgTimestampPtr(row.TrialEndsAt),
-		TrialConvertedAt: nil,
-		TrialDemotedAt:   nil,
-		MemberCount:      int(row.MemberCount),
-		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Slug:                 row.Slug,
+		AccountType:          row.AccountType,
+		WorkosID:             conv.FromPGText[string](row.WorkosID),
+		StripeCustomerID:     conv.FromPGText[string](row.StripeCustomerID),
+		StripeSubscriptionID: conv.FromPGText[string](row.StripeSubscriptionID),
+		Whitelisted:          row.Whitelisted,
+		DisabledAt:           pgTimestampPtr(row.DisabledAt),
+		TrialState:           &row.TrialState,
+		TrialTier:            nil,
+		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
+		TrialConvertedAt:     nil,
+		TrialDemotedAt:       nil,
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

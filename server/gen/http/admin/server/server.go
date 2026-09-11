@@ -8,7 +8,9 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"net/http"
 
 	admin "github.com/speakeasy-api/gram/server/gen/admin"
@@ -18,39 +20,54 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts                              []*MountPoint
-	Login                               http.Handler
-	Callback                            http.Handler
-	Logout                              http.Handler
-	GetSession                          http.Handler
-	GetOrganizationFeatures             http.Handler
-	SetOrganizationFeature              http.Handler
-	GetOrganizationChatAnalysisSettings http.Handler
-	SetOrganizationChatAnalysisSettings http.Handler
-	TriggerOrganizationChatAnalysis     http.Handler
-	OpenOrganizationInDashboard         http.Handler
-	GetProject                          http.Handler
-	UpdateOrganization                  http.Handler
-	BulkUpdateAccountType               http.Handler
-	DisableOrganization                 http.Handler
-	EnableOrganization                  http.Handler
-	GetOrganization                     http.Handler
-	ListOrganizationMembers             http.Handler
-	ListOrganizationProjects            http.Handler
-	ListOrganizationActivity            http.Handler
-	ListOrganizations                   http.Handler
-	ExtendTrial                         http.Handler
-	CreateOrganization                  http.Handler
-	RearmTrial                          http.Handler
-	GetOrganizationStats                http.Handler
-	GetInferenceKeys                    http.Handler
-	SetInferenceKeyMonthlyLimit         http.Handler
-	GetInferenceSpendHistory            http.Handler
-	GetPaygBillingSummary               http.Handler
-	GetStripeSubscription               http.Handler
-	CancelStripeSubscription            http.Handler
-	ResumeStripeSubscription            http.Handler
-	MarkEnterpriseTrialConverted        http.Handler
+	Mounts                                []*MountPoint
+	Login                                 http.Handler
+	Callback                              http.Handler
+	Logout                                http.Handler
+	GetSession                            http.Handler
+	GetOrganizationFeatures               http.Handler
+	SetOrganizationFeature                http.Handler
+	GetOrganizationChatAnalysisSettings   http.Handler
+	SetOrganizationChatAnalysisSettings   http.Handler
+	TriggerOrganizationChatAnalysis       http.Handler
+	OpenOrganizationInDashboard           http.Handler
+	GetProject                            http.Handler
+	UpdateOrganization                    http.Handler
+	BulkUpdateAccountType                 http.Handler
+	DisableOrganization                   http.Handler
+	EnableOrganization                    http.Handler
+	GetOrganization                       http.Handler
+	ListOrganizationMembers               http.Handler
+	ListOrganizationProjects              http.Handler
+	ListOrganizationActivity              http.Handler
+	ListOrganizations                     http.Handler
+	ExtendTrial                           http.Handler
+	CreateOrganization                    http.Handler
+	RearmTrial                            http.Handler
+	GetOrganizationStats                  http.Handler
+	GetInferenceKeys                      http.Handler
+	SetInferenceKeyMonthlyLimit           http.Handler
+	GetInferenceSpendHistory              http.Handler
+	GetPaygBillingSummary                 http.Handler
+	GetStripeCustomer                     http.Handler
+	SetStripeCustomer                     http.Handler
+	GetStripeSubscription                 http.Handler
+	CancelStripeSubscription              http.Handler
+	ResumeStripeSubscription              http.Handler
+	MarkEnterpriseTrialConverted          http.Handler
+	CreateGlobalIssuer                    http.Handler
+	GetGlobalIssuerDuplicatePreflight     http.Handler
+	ListGlobalIssuers                     http.Handler
+	GetGlobalIssuer                       http.Handler
+	UpdateGlobalIssuer                    http.Handler
+	DeleteGlobalIssuer                    http.Handler
+	FetchGlobalIssuerMetadata             http.Handler
+	RefreshGlobalIssuerMetadata           http.Handler
+	ListGlobalIssuerConvergenceCandidates http.Handler
+	GetGlobalIssuerMigratePreflight       http.Handler
+	MigrateToGlobalIssuer                 http.Handler
+	UploadPlatformImage                   http.Handler
+	ServeImage                            http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -108,43 +125,73 @@ func New(
 			{"SetInferenceKeyMonthlyLimit", "POST", "/admin/organization.setInferenceKeyMonthlyLimit"},
 			{"GetInferenceSpendHistory", "GET", "/admin/organization.inferenceSpendHistory"},
 			{"GetPaygBillingSummary", "GET", "/admin/organization.paygBillingSummary"},
+			{"GetStripeCustomer", "GET", "/admin/organization.stripeCustomer"},
+			{"SetStripeCustomer", "POST", "/admin/organization.setStripeCustomer"},
 			{"GetStripeSubscription", "GET", "/admin/organization.stripeSubscription"},
 			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 			{"MarkEnterpriseTrialConverted", "POST", "/admin/trial.convert"},
+			{"CreateGlobalIssuer", "POST", "/admin/remote-session-issuers.createGlobalIssuer"},
+			{"GetGlobalIssuerDuplicatePreflight", "GET", "/admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight"},
+			{"ListGlobalIssuers", "GET", "/admin/remote-session-issuers.list"},
+			{"GetGlobalIssuer", "GET", "/admin/remote-session-issuers.getGlobalIssuer"},
+			{"UpdateGlobalIssuer", "POST", "/admin/remote-session-issuers.updateGlobalIssuer"},
+			{"DeleteGlobalIssuer", "DELETE", "/admin/remote-session-issuers.deleteGlobalIssuer"},
+			{"FetchGlobalIssuerMetadata", "POST", "/admin/remote-session-issuers.fetchGlobalIssuerMetadata"},
+			{"RefreshGlobalIssuerMetadata", "POST", "/admin/remote-session-issuers.refreshGlobalIssuerMetadata"},
+			{"ListGlobalIssuerConvergenceCandidates", "GET", "/admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates"},
+			{"GetGlobalIssuerMigratePreflight", "GET", "/admin/remote-session-issuers.getGlobalIssuerMigratePreflight"},
+			{"MigrateToGlobalIssuer", "POST", "/admin/remote-session-issuers.migrateToGlobalIssuer"},
+			{"UploadPlatformImage", "POST", "/admin/assets.uploadImage"},
+			{"ServeImage", "GET", "/admin/assets.serveImage"},
 		},
-		Login:                               NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		Callback:                            NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Logout:                              NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		GetSession:                          NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationFeatures:             NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationFeature:              NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationChatAnalysisSettings: NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationChatAnalysisSettings: NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
-		TriggerOrganizationChatAnalysis:     NewTriggerOrganizationChatAnalysisHandler(e.TriggerOrganizationChatAnalysis, mux, decoder, encoder, errhandler, formatter),
-		OpenOrganizationInDashboard:         NewOpenOrganizationInDashboardHandler(e.OpenOrganizationInDashboard, mux, decoder, encoder, errhandler, formatter),
-		GetProject:                          NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		UpdateOrganization:                  NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
-		BulkUpdateAccountType:               NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
-		DisableOrganization:                 NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
-		EnableOrganization:                  NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
-		GetOrganization:                     NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationMembers:             NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationProjects:            NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationActivity:            NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizations:                   NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
-		ExtendTrial:                         NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
-		CreateOrganization:                  NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
-		RearmTrial:                          NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationStats:                NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceKeys:                    NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
-		SetInferenceKeyMonthlyLimit:         NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceSpendHistory:            NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
-		GetPaygBillingSummary:               NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscription:               NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		CancelStripeSubscription:            NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ResumeStripeSubscription:            NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		MarkEnterpriseTrialConverted:        NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:                                NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetSession:                            NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationFeatures:               NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationFeature:                NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationChatAnalysisSettings:   NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationChatAnalysisSettings:   NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		TriggerOrganizationChatAnalysis:       NewTriggerOrganizationChatAnalysisHandler(e.TriggerOrganizationChatAnalysis, mux, decoder, encoder, errhandler, formatter),
+		OpenOrganizationInDashboard:           NewOpenOrganizationInDashboardHandler(e.OpenOrganizationInDashboard, mux, decoder, encoder, errhandler, formatter),
+		GetProject:                            NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateOrganization:                    NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
+		BulkUpdateAccountType:                 NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
+		DisableOrganization:                   NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
+		EnableOrganization:                    NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
+		GetOrganization:                       NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationMembers:               NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationProjects:              NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationActivity:              NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizations:                     NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ExtendTrial:                           NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
+		CreateOrganization:                    NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
+		RearmTrial:                            NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationStats:                  NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceKeys:                      NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
+		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:                 NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetStripeCustomer:                     NewGetStripeCustomerHandler(e.GetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
+		SetStripeCustomer:                     NewSetStripeCustomerHandler(e.SetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:                 NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:              NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:              NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalIssuer:                    NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuers:                     NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuer:                       NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalIssuer:                    NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchGlobalIssuerMetadata:             NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshGlobalIssuerMetadata:           NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuerConvergenceCandidates: NewListGlobalIssuerConvergenceCandidatesHandler(e.ListGlobalIssuerConvergenceCandidates, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerMigratePreflight:       NewGetGlobalIssuerMigratePreflightHandler(e.GetGlobalIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerHandler(e.MigrateToGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UploadPlatformImage:                   NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
+		ServeImage:                            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -181,10 +228,25 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetInferenceKeyMonthlyLimit = m(s.SetInferenceKeyMonthlyLimit)
 	s.GetInferenceSpendHistory = m(s.GetInferenceSpendHistory)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
+	s.GetStripeCustomer = m(s.GetStripeCustomer)
+	s.SetStripeCustomer = m(s.SetStripeCustomer)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
 	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
 	s.MarkEnterpriseTrialConverted = m(s.MarkEnterpriseTrialConverted)
+	s.CreateGlobalIssuer = m(s.CreateGlobalIssuer)
+	s.GetGlobalIssuerDuplicatePreflight = m(s.GetGlobalIssuerDuplicatePreflight)
+	s.ListGlobalIssuers = m(s.ListGlobalIssuers)
+	s.GetGlobalIssuer = m(s.GetGlobalIssuer)
+	s.UpdateGlobalIssuer = m(s.UpdateGlobalIssuer)
+	s.DeleteGlobalIssuer = m(s.DeleteGlobalIssuer)
+	s.FetchGlobalIssuerMetadata = m(s.FetchGlobalIssuerMetadata)
+	s.RefreshGlobalIssuerMetadata = m(s.RefreshGlobalIssuerMetadata)
+	s.ListGlobalIssuerConvergenceCandidates = m(s.ListGlobalIssuerConvergenceCandidates)
+	s.GetGlobalIssuerMigratePreflight = m(s.GetGlobalIssuerMigratePreflight)
+	s.MigrateToGlobalIssuer = m(s.MigrateToGlobalIssuer)
+	s.UploadPlatformImage = m(s.UploadPlatformImage)
+	s.ServeImage = m(s.ServeImage)
 }
 
 // MethodNames returns the methods served.
@@ -220,10 +282,25 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetInferenceKeyMonthlyLimitHandler(mux, h.SetInferenceKeyMonthlyLimit)
 	MountGetInferenceSpendHistoryHandler(mux, h.GetInferenceSpendHistory)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
+	MountGetStripeCustomerHandler(mux, h.GetStripeCustomer)
+	MountSetStripeCustomerHandler(mux, h.SetStripeCustomer)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
 	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
 	MountMarkEnterpriseTrialConvertedHandler(mux, h.MarkEnterpriseTrialConverted)
+	MountCreateGlobalIssuerHandler(mux, h.CreateGlobalIssuer)
+	MountGetGlobalIssuerDuplicatePreflightHandler(mux, h.GetGlobalIssuerDuplicatePreflight)
+	MountListGlobalIssuersHandler(mux, h.ListGlobalIssuers)
+	MountGetGlobalIssuerHandler(mux, h.GetGlobalIssuer)
+	MountUpdateGlobalIssuerHandler(mux, h.UpdateGlobalIssuer)
+	MountDeleteGlobalIssuerHandler(mux, h.DeleteGlobalIssuer)
+	MountFetchGlobalIssuerMetadataHandler(mux, h.FetchGlobalIssuerMetadata)
+	MountRefreshGlobalIssuerMetadataHandler(mux, h.RefreshGlobalIssuerMetadata)
+	MountListGlobalIssuerConvergenceCandidatesHandler(mux, h.ListGlobalIssuerConvergenceCandidates)
+	MountGetGlobalIssuerMigratePreflightHandler(mux, h.GetGlobalIssuerMigratePreflight)
+	MountMigrateToGlobalIssuerHandler(mux, h.MigrateToGlobalIssuer)
+	MountUploadPlatformImageHandler(mux, h.UploadPlatformImage)
+	MountServeImageHandler(mux, h.ServeImage)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -1725,6 +1802,112 @@ func NewGetPaygBillingSummaryHandler(
 	})
 }
 
+// MountGetStripeCustomerHandler configures the mux to serve the "admin"
+// service "getStripeCustomer" endpoint.
+func MountGetStripeCustomerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.stripeCustomer", f)
+}
+
+// NewGetStripeCustomerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getStripeCustomer" endpoint.
+func NewGetStripeCustomerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStripeCustomerRequest(mux, decoder)
+		encodeResponse = EncodeGetStripeCustomerResponse(encoder)
+		encodeError    = EncodeGetStripeCustomerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStripeCustomer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetStripeCustomerHandler configures the mux to serve the "admin"
+// service "setStripeCustomer" endpoint.
+func MountSetStripeCustomerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.setStripeCustomer", f)
+}
+
+// NewSetStripeCustomerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setStripeCustomer" endpoint.
+func NewSetStripeCustomerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetStripeCustomerRequest(mux, decoder)
+		encodeResponse = EncodeSetStripeCustomerResponse(encoder)
+		encodeError    = EncodeSetStripeCustomerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setStripeCustomer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetStripeSubscriptionHandler configures the mux to serve the "admin"
 // service "getStripeSubscription" endpoint.
 func MountGetStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
@@ -1936,6 +2119,736 @@ func NewMarkEnterpriseTrialConvertedHandler(
 			if errhandler != nil {
 				errhandler(ctx, w, err)
 			}
+		}
+	})
+}
+
+// MountCreateGlobalIssuerHandler configures the mux to serve the "admin"
+// service "createGlobalIssuer" endpoint.
+func MountCreateGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/remote-session-issuers.createGlobalIssuer", f)
+}
+
+// NewCreateGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "createGlobalIssuer" endpoint.
+func NewCreateGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeCreateGlobalIssuerResponse(encoder)
+		encodeError    = EncodeCreateGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerDuplicatePreflightHandler configures the mux to serve
+// the "admin" service "getGlobalIssuerDuplicatePreflight" endpoint.
+func MountGetGlobalIssuerDuplicatePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight", f)
+}
+
+// NewGetGlobalIssuerDuplicatePreflightHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "getGlobalIssuerDuplicatePreflight" endpoint.
+func NewGetGlobalIssuerDuplicatePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerDuplicatePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerDuplicatePreflightResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerDuplicatePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuerDuplicatePreflight")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListGlobalIssuersHandler configures the mux to serve the "admin"
+// service "listGlobalIssuers" endpoint.
+func MountListGlobalIssuersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/remote-session-issuers.list", f)
+}
+
+// NewListGlobalIssuersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listGlobalIssuers" endpoint.
+func NewListGlobalIssuersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListGlobalIssuersRequest(mux, decoder)
+		encodeResponse = EncodeListGlobalIssuersResponse(encoder)
+		encodeError    = EncodeListGlobalIssuersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listGlobalIssuers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerHandler configures the mux to serve the "admin" service
+// "getGlobalIssuer" endpoint.
+func MountGetGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/remote-session-issuers.getGlobalIssuer", f)
+}
+
+// NewGetGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getGlobalIssuer" endpoint.
+func NewGetGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateGlobalIssuerHandler configures the mux to serve the "admin"
+// service "updateGlobalIssuer" endpoint.
+func MountUpdateGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/remote-session-issuers.updateGlobalIssuer", f)
+}
+
+// NewUpdateGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "updateGlobalIssuer" endpoint.
+func NewUpdateGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeUpdateGlobalIssuerResponse(encoder)
+		encodeError    = EncodeUpdateGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteGlobalIssuerHandler configures the mux to serve the "admin"
+// service "deleteGlobalIssuer" endpoint.
+func MountDeleteGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/admin/remote-session-issuers.deleteGlobalIssuer", f)
+}
+
+// NewDeleteGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "deleteGlobalIssuer" endpoint.
+func NewDeleteGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeDeleteGlobalIssuerResponse(encoder)
+		encodeError    = EncodeDeleteGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountFetchGlobalIssuerMetadataHandler configures the mux to serve the
+// "admin" service "fetchGlobalIssuerMetadata" endpoint.
+func MountFetchGlobalIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/remote-session-issuers.fetchGlobalIssuerMetadata", f)
+}
+
+// NewFetchGlobalIssuerMetadataHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "fetchGlobalIssuerMetadata"
+// endpoint.
+func NewFetchGlobalIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeFetchGlobalIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeFetchGlobalIssuerMetadataResponse(encoder)
+		encodeError    = EncodeFetchGlobalIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchGlobalIssuerMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshGlobalIssuerMetadataHandler configures the mux to serve the
+// "admin" service "refreshGlobalIssuerMetadata" endpoint.
+func MountRefreshGlobalIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/remote-session-issuers.refreshGlobalIssuerMetadata", f)
+}
+
+// NewRefreshGlobalIssuerMetadataHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "refreshGlobalIssuerMetadata"
+// endpoint.
+func NewRefreshGlobalIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshGlobalIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeRefreshGlobalIssuerMetadataResponse(encoder)
+		encodeError    = EncodeRefreshGlobalIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshGlobalIssuerMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListGlobalIssuerConvergenceCandidatesHandler configures the mux to
+// serve the "admin" service "listGlobalIssuerConvergenceCandidates" endpoint.
+func MountListGlobalIssuerConvergenceCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates", f)
+}
+
+// NewListGlobalIssuerConvergenceCandidatesHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "listGlobalIssuerConvergenceCandidates" endpoint.
+func NewListGlobalIssuerConvergenceCandidatesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListGlobalIssuerConvergenceCandidatesRequest(mux, decoder)
+		encodeResponse = EncodeListGlobalIssuerConvergenceCandidatesResponse(encoder)
+		encodeError    = EncodeListGlobalIssuerConvergenceCandidatesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listGlobalIssuerConvergenceCandidates")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetGlobalIssuerMigratePreflightHandler configures the mux to serve the
+// "admin" service "getGlobalIssuerMigratePreflight" endpoint.
+func MountGetGlobalIssuerMigratePreflightHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/remote-session-issuers.getGlobalIssuerMigratePreflight", f)
+}
+
+// NewGetGlobalIssuerMigratePreflightHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getGlobalIssuerMigratePreflight" endpoint.
+func NewGetGlobalIssuerMigratePreflightHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetGlobalIssuerMigratePreflightRequest(mux, decoder)
+		encodeResponse = EncodeGetGlobalIssuerMigratePreflightResponse(encoder)
+		encodeError    = EncodeGetGlobalIssuerMigratePreflightError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getGlobalIssuerMigratePreflight")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateToGlobalIssuerHandler configures the mux to serve the "admin"
+// service "migrateToGlobalIssuer" endpoint.
+func MountMigrateToGlobalIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/remote-session-issuers.migrateToGlobalIssuer", f)
+}
+
+// NewMigrateToGlobalIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "migrateToGlobalIssuer" endpoint.
+func NewMigrateToGlobalIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateToGlobalIssuerRequest(mux, decoder)
+		encodeResponse = EncodeMigrateToGlobalIssuerResponse(encoder)
+		encodeError    = EncodeMigrateToGlobalIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateToGlobalIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUploadPlatformImageHandler configures the mux to serve the "admin"
+// service "uploadPlatformImage" endpoint.
+func MountUploadPlatformImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/assets.uploadImage", f)
+}
+
+// NewUploadPlatformImageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "uploadPlatformImage" endpoint.
+func NewUploadPlatformImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUploadPlatformImageRequest(mux, decoder)
+		encodeResponse = EncodeUploadPlatformImageResponse(encoder)
+		encodeError    = EncodeUploadPlatformImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "uploadPlatformImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &admin.UploadPlatformImageRequestData{Payload: payload, Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountServeImageHandler configures the mux to serve the "admin" service
+// "serveImage" endpoint.
+func MountServeImageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/assets.serveImage", f)
+}
+
+// NewServeImageHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "serveImage" endpoint.
+func NewServeImageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeImageRequest(mux, decoder)
+		encodeResponse = EncodeServeImageResponse(encoder)
+		encodeError    = EncodeServeImageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveImage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*admin.ServeImageResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
 		}
 	})
 }

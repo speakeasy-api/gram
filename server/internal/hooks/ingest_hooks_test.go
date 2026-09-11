@@ -64,7 +64,7 @@ func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, valu
 	return nil
 }
 
-func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
@@ -628,7 +628,7 @@ func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
 		Prompt: &gen.HookPromptData{Text: &text},
 	}
 
-	title := canonicalChatTitle(payload, "")
+	title := canonicalChatTitle(payload, "", "custom-adapter")
 	require.True(t, utf8.ValidString(title))
 	require.Len(t, []rune(title), 80)
 }

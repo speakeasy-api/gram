@@ -31,6 +31,19 @@ type Message struct {
 	ToolCalls []ToolCall
 }
 
+// Trajectory is bounded causal context for the event under evaluation.
+// PriorUserRequest is the latest preceding user request.
+// RecentUntrustedContent is the latest tool result after that request and
+// before the current event. Both values remain untrusted evidence.
+type Trajectory struct {
+	PriorUserRequest       string
+	RecentUntrustedContent string
+}
+
+func (t Trajectory) HasContent() bool {
+	return strings.TrimSpace(t.PriorUserRequest) != "" || strings.TrimSpace(t.RecentUntrustedContent) != ""
+}
+
 // ToolCall is one tool invocation within a multi-call assistant message.
 type ToolCall struct {
 	// ToolName is the raw tool identifier observed on the tool call.

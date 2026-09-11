@@ -1,5 +1,7 @@
 # @gram-ai/create-function
 
+## 0.18.2
+
 ## 0.18.1
 
 ### Patch Changes

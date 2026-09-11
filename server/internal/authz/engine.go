@@ -22,6 +22,11 @@ type MembershipFetcher interface {
 
 type EngineOpts struct {
 	DevMode bool
+	// AdmitPrincipalCredential must be configured to accept principal-backed credentials.
+	// Omission disables them rather than falling back to user authorization.
+	AdmitPrincipalCredential PrincipalCredentialAdmitter
+	// AdmitPrincipalCredentialWithDBTX must be configured for atomic credential refresh.
+	AdmitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -29,11 +34,13 @@ type EngineOpts struct {
 type ChallengeLoggingEnabled func(ctx context.Context, organizationID string) (bool, error)
 
 type Engine struct {
-	logger                  *slog.Logger
-	db                      *pgxpool.Pool
-	challengeLoggingEnabled ChallengeLoggingEnabled
-	isDev                   bool
-	membership              MembershipFetcher
+	admitPrincipalCredential         PrincipalCredentialAdmitter
+	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
+	logger                           *slog.Logger
+	db                               *pgxpool.Pool
+	challengeLoggingEnabled          ChallengeLoggingEnabled
+	isDev                            bool
+	membership                       MembershipFetcher
 }
 
 func NewEngine(
@@ -44,18 +51,24 @@ func NewEngine(
 	opts ...EngineOpts,
 ) *Engine {
 	var devMode bool
+	var admitPrincipalCredential PrincipalCredentialAdmitter
+	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
+		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
+		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
 
 	return &Engine{
-		logger:                  authzLogger,
-		db:                      db,
-		challengeLoggingEnabled: challengeLogging,
-		isDev:                   devMode,
-		membership:              membership,
+		admitPrincipalCredential:         admitPrincipalCredential,
+		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
+		logger:                           authzLogger,
+		db:                               db,
+		challengeLoggingEnabled:          challengeLogging,
+		isDev:                            devMode,
+		membership:                       membership,
 	}
 }
 
@@ -81,12 +94,29 @@ func (e *Engine) GetScopeOverrides(ctx context.Context) ([]RoleGrant, bool) {
 }
 
 func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
-	if _, ok := GrantsFromContext(ctx); ok {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
 		return ctx, nil
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
+		switch mode {
+		case contextvalues.APIKeyAuthorizationModeLegacy:
+			return ctx, nil
+		case contextvalues.APIKeyAuthorizationModePrincipal:
+			return e.AdmitPrincipalCredential(ctx)
+		}
+	}
+	if authCtx.APIKeyID != "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	// Future principal-backed transports, including agent MCP sessions, attach
+	// the same immutable credential profile and reuse this admission path.
+	if _, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx); hasCredential {
+		return e.AdmitPrincipalCredential(ctx)
+	}
+
+	if _, ok := GrantsFromContext(ctx); ok {
 		return ctx, nil
 	}
 
@@ -164,18 +194,28 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrNoChecks)
 	}
 
-	grants, ok := GrantsFromContext(ctx)
+	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.EvaluateLoadedGrants(ctx, grants, checks...)
+	return e.evaluateRequired(ctx, authorization, checks...)
 }
 
 // EvaluateLoadedGrants evaluates explicit grants against checks without
 // consulting ShouldEnforce or reading grants from context. Request handlers
 // should use Require so normal request enforcement semantics apply.
 func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
+		return oops.C(oops.CodeForbidden)
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return oops.C(oops.CodeForbidden)
+	}
+	return e.evaluateRequired(ctx, loadedGrantAuthorization(grants), checks...)
+}
+
+func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthorization, checks ...Check) error {
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
 	}
@@ -190,14 +230,14 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return e.mapError(ctx, err)
 		}
 
-		evaluation, err := evaluateGrantCheck(grants, check)
+		evaluation, err := authorization.evaluate(check)
 		if err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequire,
@@ -206,7 +246,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -217,7 +257,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 			switch {
 			case evaluation.Denied:
 				reason = authzrepo.ReasonDenyGrant
-			case len(grants) == 0:
+			case authorization.grantCount() == 0:
 				reason = authzrepo.ReasonNoGrants
 			}
 			challengeLogger{
@@ -227,7 +267,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -243,7 +283,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 		Checks:               checks,
 		Focus:                &checks[0],
 		Matches:              matches,
-		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+		EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -262,7 +302,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrNoChecks)
 	}
 
-	grants, ok := GrantsFromContext(ctx)
+	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
@@ -276,7 +316,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -286,7 +326,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 
 	anyDenied := false
 	for _, check := range checks {
-		evaluation, err := evaluateGrantCheck(grants, check)
+		evaluation, err := authorization.evaluate(check)
 		if err != nil {
 			challengeLogger{
 				Operation:            authzrepo.OperationRequireAny,
@@ -295,7 +335,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -313,7 +353,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 				Checks:               checks,
 				Focus:                &check,
 				Matches:              []grantMatch{{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check}},
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 				FilterCandidateCount: 0,
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -325,7 +365,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 	switch {
 	case anyDenied:
 		reason = authzrepo.ReasonDenyGrant
-	case len(grants) == 0:
+	case authorization.grantCount() == 0:
 		reason = authzrepo.ReasonNoGrants
 	}
 	challengeLogger{
@@ -335,7 +375,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		Checks:               checks,
 		Focus:                &checks[0],
 		Matches:              nil,
-		EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
+		EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
@@ -367,7 +407,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 		return false, e.mapError(ctx, ErrNoChecks)
 	}
 
-	grants, ok := GrantsFromContext(ctx)
+	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
 		return false, e.mapError(ctx, ErrMissingGrants)
 	}
@@ -376,7 +416,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 		if err := validateInput(check); err != nil {
 			return false, e.mapError(ctx, err)
 		}
-		evaluation, err := evaluateGrantCheck(grants, check)
+		evaluation, err := authorization.evaluate(check)
 		if err != nil {
 			return false, e.mapError(ctx, err)
 		}
@@ -404,7 +444,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		return ids, nil
 	}
 
-	grants, ok := GrantsFromContext(ctx)
+	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
 		return nil, e.mapError(ctx, ErrMissingGrants)
 	}
@@ -422,14 +462,14 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				Checks:               checks,
 				Focus:                &focus,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
-		evaluation, err := evaluateGrantCheck(grants, c)
+		evaluation, err := authorization.evaluate(c)
 		if err != nil {
 			focus := c
 			challengeLogger{
@@ -439,8 +479,8 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 				Checks:               checks,
 				Focus:                &focus,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
@@ -463,7 +503,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			reason = authzrepo.ReasonGrantMatched
 		case anyDenied:
 			reason = authzrepo.ReasonDenyGrant
-		case len(grants) == 0:
+		case authorization.grantCount() == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
 		challengeLogger{
@@ -473,9 +513,9 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 			Checks:               checks,
 			Focus:                nil,
 			Matches:              matches,
-			EvaluatedGrantCount:  uint32(len(grants)),  //nolint:gosec // grant count is small
-			FilterCandidateCount: uint32(len(checks)),  //nolint:gosec // candidate count is small
-			FilterAllowedCount:   uint32(len(allowed)), //nolint:gosec // allowed count is small
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
+			FilterAllowedCount:   uint32(len(allowed)),               //nolint:gosec // allowed count is small
 		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	}
 
@@ -508,7 +548,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 		return out, nil
 	}
 
-	grants, ok := GrantsFromContext(ctx)
+	authorization, ok := grantAuthorizationFromContext(ctx)
 	if !ok {
 		return nil, e.mapError(ctx, ErrMissingGrants)
 	}
@@ -527,14 +567,14 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				Checks:               checks,
 				Focus:                &focus,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
 		}
 
-		evaluation, err := evaluateGrantCheck(grants, c)
+		evaluation, err := authorization.evaluate(c)
 		if err != nil {
 			focus := c
 			challengeLogger{
@@ -544,8 +584,8 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 				Checks:               checks,
 				Focus:                &focus,
 				Matches:              nil,
-				EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-				FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+				FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
 				FilterAllowedCount:   0,
 			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			return nil, e.mapError(ctx, err)
@@ -569,7 +609,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			reason = authzrepo.ReasonGrantMatched
 		case anyDenied:
 			reason = authzrepo.ReasonDenyGrant
-		case len(grants) == 0:
+		case authorization.grantCount() == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
 		challengeLogger{
@@ -579,8 +619,8 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 			Checks:               checks,
 			Focus:                nil,
 			Matches:              matches,
-			EvaluatedGrantCount:  uint32(len(grants)), //nolint:gosec // grant count is small
-			FilterCandidateCount: uint32(len(checks)), //nolint:gosec // candidate count is small
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: uint32(len(checks)),                //nolint:gosec // candidate count is small
 			FilterAllowedCount:   uint32(allowedCount),
 		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 	}
@@ -594,13 +634,27 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Never enforce RBAC on API key requests — they have their own scoping.
-	if authCtx.APIKeyID != "" {
-		return false, nil
+	if _, principalCredential := contextvalues.PrincipalCredentialAuthorization(ctx); principalCredential {
+		return true, nil
 	}
 
-	// Scope overrides are checked after the API key exclusion so the toolbar
-	// doesn't interfere with API key auth flows.
+	if mode, hasMode := contextvalues.APIKeyAuthorization(ctx); hasMode {
+		if authCtx.APIKeyID == "" {
+			return false, oops.C(oops.CodeUnauthorized)
+		}
+		switch mode {
+		case contextvalues.APIKeyAuthorizationModeLegacy:
+			return false, nil
+		case contextvalues.APIKeyAuthorizationModePrincipal:
+			return true, nil
+		}
+	}
+	if authCtx.APIKeyID != "" {
+		return false, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Scope overrides are checked after the explicit legacy API-key exclusion so
+	// the toolbar doesn't interfere with API key auth flows.
 	if _, ok := e.GetScopeOverrides(ctx); ok {
 		return true, nil
 	}

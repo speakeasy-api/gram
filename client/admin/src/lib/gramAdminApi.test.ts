@@ -7,6 +7,7 @@ import {
   enableOrganization,
   errorMessage,
   extendTrial,
+  getStripeCustomer,
   getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
@@ -23,6 +24,7 @@ import {
   rearmTrial,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
+  setStripeCustomer,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -216,6 +218,17 @@ describe("organization billing endpoints", () => {
     );
   });
 
+  it("fetches a live Stripe customer preview for the exact organization and ID", async () => {
+    const fetch = stubFetch();
+
+    await getStripeCustomer("org one", "cus_placeholder_1");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/organization.stripeCustomer?organization_id=org+one&stripe_customer_id=cus_placeholder_1",
+    );
+    expect(fetch.mock.calls.at(-1)?.[1]).toMatchObject({ cache: "no-store" });
+  });
+
   it("posts the canonical organization and materialized key when setting a monthly limit", async () => {
     const fetch = stubFetch();
 
@@ -233,6 +246,26 @@ describe("organization billing endpoints", () => {
           organization_id: "org_1",
           key_type: "internal",
           monthly_credits: 750,
+        }),
+      }),
+    );
+  });
+
+  it("posts the initial Stripe customer ID to the guarded organization endpoint", async () => {
+    const fetch = stubFetch();
+
+    await setStripeCustomer({
+      organization_id: "org_1",
+      stripe_customer_id: "cus_placeholder_1",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setStripeCustomer",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          stripe_customer_id: "cus_placeholder_1",
         }),
       }),
     );

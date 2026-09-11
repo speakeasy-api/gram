@@ -19,13 +19,14 @@ import (
 func apiKeyCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(),
 		APIKeyName:           "test-key",
 		APIKeyScopes:         []string{"producer"},
 		ProjectID:            &ti.projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_APIKey_ReadsAnyProjectChat proves a project API key can load a
@@ -102,13 +103,14 @@ func TestLoadChat_ExternalUserMismatchStillBlocked(t *testing.T) {
 func chatSessionTokenCtx(t *testing.T, ti *chatTestInstance, externalUserID string) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(), // restored from the JWT claims
 		APIKeyScopes:         nil,              // chat-session tokens never carry scopes
 		ExternalUserID:       externalUserID,
 		ProjectID:            &ti.projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_ChatSessionTokenStillOwnerMatched is the regression guard for the
@@ -132,6 +134,18 @@ func TestLoadChat_ChatSessionTokenStillOwnerMatched(t *testing.T) {
 	got, err := ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(chatID.String()))
 	require.NoError(t, err)
 	require.Len(t, got.Messages, 2)
+
+	// Delegated API-key authorization must not let the token reach a dashboard
+	// chat owned by a different user in the same project.
+	dashboardChatID := seedChat(t, seedCtx, ti, "different-dashboard-user", "", "dashboard chat")
+	_, err = ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(dashboardChatID.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	// Ownerless legacy records must not become project-wide readable through a
+	// delegated chat-session token either.
+	ownerlessChatID := seedChat(t, seedCtx, ti, "", "", "ownerless chat")
+	_, err = ti.service.LoadChat(chatSessionTokenCtx(t, ti, "external-user-A"), loadPayload(ownerlessChatID.String()))
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 // createProjectInSameOrg adds a second project to ti's organization so a single
@@ -176,13 +190,14 @@ func seedChatInProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID, 
 func apiKeyCtxForProject(t *testing.T, ti *chatTestInstance, projectID uuid.UUID) context.Context {
 	t.Helper()
 	authCtx := &contextvalues.AuthContext{
+		UserID:               "api-key-creator",
 		APIKeyID:             uuid.NewString(),
 		APIKeyName:           "test-key",
 		APIKeyScopes:         []string{"producer"},
 		ProjectID:            &projectID,
 		ActiveOrganizationID: ti.orgID,
 	}
-	return contextvalues.SetAuthContext(t.Context(), authCtx)
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), authCtx)
 }
 
 // TestLoadChat_OrgWideAPIKey_ReadsChatsInAnyProject covers the org-wide key case

@@ -2246,9 +2246,10 @@ func unmarshalKillswitchComingSoonCapabilityResponseBodyToKillswitchesKillswitch
 // type *KillswitchMCPServerResponseBody.
 func unmarshalKillswitchMCPServerResponseBodyToKillswitchesKillswitchMCPServer(v *KillswitchMCPServerResponseBody) *killswitches.KillswitchMCPServer {
 	res := &killswitches.KillswitchMCPServer{
-		ID:        *v.ID,
-		Name:      *v.Name,
-		ProjectID: *v.ProjectID,
+		ID:          *v.ID,
+		Name:        *v.Name,
+		ProjectID:   *v.ProjectID,
+		ProjectName: *v.ProjectName,
 	}
 
 	return res

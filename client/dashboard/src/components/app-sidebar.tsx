@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/Sidebar";
 import { useMemo, useState } from "react";
 
-import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { Button } from "./ui/Button";
 import { HatchRule } from "./hatch-rule";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -25,7 +24,6 @@ import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
-import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
@@ -160,8 +158,6 @@ export function AppSidebar({
     sidebarContent = <McpServerXSidebarNav />;
   } else if (routes.mcp.gateway.active) {
     sidebarContent = <GatewaySidebarNav />;
-  } else if (routes.mcp.builtIn.active) {
-    sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
   } else if (routes.plugins.detail.active) {
@@ -299,7 +295,6 @@ export function AppSidebar({
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
           <TrialStatusCard />
-          <OnboardingResumeButton />
           <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>

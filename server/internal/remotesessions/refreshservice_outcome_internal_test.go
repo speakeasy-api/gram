@@ -125,6 +125,21 @@ func TestRefreshOutcomeForError(t *testing.T) {
 			want: remotesessionmetrics.RefreshOutcomeRejectedUnparsed,
 		},
 		{
+			name: "2xx body carrying a vendor dead-grant code (GitHub)",
+			err:  mustSuccessBodyError(t, http.StatusOK, "200 OK", []byte(`{"error":"bad_refresh_token","error_description":"The refresh token passed is incorrect or expired."}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
+		},
+		{
+			name: "2xx body carrying another code",
+			err:  mustSuccessBodyError(t, http.StatusOK, "200 OK", []byte(`{"error":"invalid_client"}`)),
+			want: remotesessionmetrics.RefreshOutcomeRejected,
+		},
+		{
+			name: "2xx fallback with no status code",
+			err:  newTokenRefreshError("the identity provider returned no access token", nil),
+			want: remotesessionmetrics.RefreshOutcomeInternalError,
+		},
+		{
 			name: "wrapped in context",
 			err:  fmt.Errorf("resolve access token: %w", newTokenRefreshErrorFromHTTP(http.StatusBadRequest, "400 Bad Request", []byte(`{"error":"invalid_grant"}`))),
 			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
@@ -138,4 +153,13 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		}
 		require.Equal(t, tc.want, refreshOutcomeForError(ctx, tc.err), tc.name)
 	}
+}
+
+// mustSuccessBodyError builds the error refreshSessionTokens returns for a 2xx
+// token response whose body carries an OAuth error; the body must parse.
+func mustSuccessBodyError(t *testing.T, statusCode int, status string, body []byte) error {
+	t.Helper()
+	err, ok := newTokenRefreshErrorFromSuccessBody(statusCode, status, body)
+	require.True(t, ok, "body carries no recognizable OAuth error")
+	return err
 }

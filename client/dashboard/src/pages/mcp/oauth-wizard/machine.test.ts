@@ -70,6 +70,7 @@ function happyServices() {
       authorizationEndpoint: `${input.issuer}/authorize`,
       tokenEndpoint: `${input.issuer}/token`,
       authorizationResponseIssParameterSupported: true,
+      backchannelLogoutSupported: false,
       clientIdMetadataDocumentSupported: false,
       discoveryWarnings: [],
       oidc: false,

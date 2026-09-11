@@ -29,6 +29,7 @@ import (
 const (
 	operationCreateMCPAccessRole = "create_mcp_access_role"
 	operationUpdateMCPAccessRole = "update_mcp_access_role"
+	operationAssignMCPAccessRole = "assign_mcp_access_role"
 
 	maxAccessRoleMutationRules       = 100
 	maxAccessRoleMutationNameRunes   = 128
@@ -108,7 +109,10 @@ type AccessRoleMutationBackend interface {
 	GetRoleByIDTx(context.Context, pgx.Tx, string, string) (*accessgen.Role, error)
 	CreateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.CreateRolePayload) (access.RoleCreateResult, access.RoleReconciliation, error)
 	UpdateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.UpdateRolePayload) (access.RoleUpdateResult, access.RoleReconciliation, error)
+	AddMemberRoleTx(context.Context, pgx.Tx, string, string, string, access.RoleAuditActor, access.MemberRoleValidation) (access.MemberRoleAddResult, access.MemberRoleReconciliation, error)
+	CurrentMemberRoleReconciliationTx(context.Context, pgx.Tx, string, string) (access.MemberRoleReconciliation, error)
 	ReconcileRoleIdentity(context.Context, string, string, string, string, bool)
+	ReconcileMemberRoles(context.Context, access.MemberRoleReconciliation)
 }
 
 type normalizedMCPAccessRoleRule struct {
@@ -180,7 +184,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	}
 	normalized := normalizedCreateMCPAccessRole{ProjectID: project.ID.String(), Name: name, Description: description, Rules: rules}
 	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
-		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil})
+		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
@@ -266,7 +270,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
-		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil})
+		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
@@ -561,6 +565,27 @@ func overlappingAccessRoleRules(add, remove []normalizedMCPAccessRoleRule) bool 
 		}
 	}
 	return false
+}
+
+func accessMemberRoleVersion(versionKey []byte, memberID string, roleIDs []string) (string, error) {
+	if len(versionKey) != sha256.Size || strings.TrimSpace(memberID) == "" {
+		return "", ErrAccessRoleMutationInvalid
+	}
+	canonicalRoles := sortedStrings(roleIDs)
+	if canonicalRoles == nil {
+		canonicalRoles = []string{}
+	}
+	payload, err := json.Marshal(struct {
+		MemberID string   `json:"member_id"`
+		RoleIDs  []string `json:"role_ids"`
+	}{MemberID: memberID, RoleIDs: canonicalRoles})
+	if err != nil {
+		return "", fmt.Errorf("encode access member role version: %w", err)
+	}
+	mac := hmac.New(sha256.New, versionKey)
+	_, _ = mac.Write([]byte("platform-mcp-access-member-role-version-v1\x00"))
+	_, _ = mac.Write(payload)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func validAccessRoleVersion(value string) bool {

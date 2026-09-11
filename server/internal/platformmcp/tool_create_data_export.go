@@ -38,7 +38,7 @@ type dataExportMutationService struct {
 // WithDataExportMutations enables creation after the read dependencies have
 // been configured. Secret headers remain dashboard-only.
 func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dashboardURL *url.URL) *PostgresReader {
-	if r != nil && r.db != nil && auditLogger != nil && validDashboardURL(dashboardURL) {
+	if auditLogger != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		r.dataExportMutations = &dataExportMutationService{db: r.db, audit: auditLogger, dashboardURL: &copyURL}
 	}

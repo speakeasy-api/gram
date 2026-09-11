@@ -382,6 +382,7 @@ func optionalFeedbackText(value string) pgtype.Text {
 }
 
 var knownPlatformMCPToolNames = map[string]struct{}{
+	operationAssignMCPAccessRole:            {},
 	"get_platform_context":                  {},
 	"list_projects":                         {},
 	"find_mcp":                              {},
@@ -389,6 +390,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"list_data_exports":                     {},
 	"create_data_export":                    {},
 	"list_recent_tool_calls":                {},
+	"list_organization_events":              {},
 	"search_mcp_catalog":                    {},
 	"inspect_mcp_candidate":                 {},
 	"register_catalog_mcp":                  {},

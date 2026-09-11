@@ -18,6 +18,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -305,8 +306,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
@@ -337,11 +338,18 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 		visibility = authz.ScopeVisibilityInternal
 	}
 
+	// A role may hold scopes its agent members cannot. Agent policy is filtered
+	// against the runtime registry every time it is loaded, so those scopes are
+	// dropped rather than granted; reporting eligibility here lets the role
+	// editor say so instead of leaving the difference invisible.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+
 	return &gen.ScopeDefinition{
 		Slug:           string(input.scope),
 		Description:    input.description,
 		ResourceType:   input.resourceType,
 		Visibility:     visibility,
+		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
 	}
 }

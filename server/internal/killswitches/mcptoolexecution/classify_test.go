@@ -36,6 +36,7 @@ func TestClassifyIdentityCoverage(t *testing.T) {
 		{name: "anonymous", source: testIdentity(t, mcpidentity.KindAnonymous, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAnonymous},
 		{name: "api key", source: testIdentity(t, mcpidentity.KindAPIKey, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAPIKey},
 		{name: "assistant", source: testIdentity(t, mcpidentity.KindAssistant, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAssistant},
+		{name: "agent", source: testIdentity(t, mcpidentity.KindAgent, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAgent},
 		{name: "chat session", source: testIdentity(t, mcpidentity.KindChatSession, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityChatSession},
 		{name: "no provenance", source: nil, result: zero, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
 		{name: "opaque zero value", source: mcpidentity.Identity{}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},

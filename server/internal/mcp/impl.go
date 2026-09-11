@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -54,12 +54,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -71,6 +69,7 @@ import (
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -104,6 +103,7 @@ type Service struct {
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
+	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
 	guardianPolicy            *guardian.Policy
@@ -393,10 +393,11 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
-	return &Service{
+	service := &Service{
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
+		networkIngressTelemetry:   networkingress.NewTelemetry(logger, meterProvider),
 		identityCoverage:          mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		hostedToolsCallCheckpoint: hostedToolsCallCheckpoint,
 		guardianPolicy:            guardianPolicy,
@@ -479,7 +480,8 @@ func NewService(
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
-	}, nil
+	}
+	return service, nil
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -506,6 +508,60 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 // than as a prefix.
 const PublicServerRoute = "/mcp/{mcpSlug}"
 
+// AttachPrivate registers only the slug-scoped routes that may be reached from
+// a private network ingress. Deployment-global callbacks stay on the public
+// listener and resume private flows through their single-use state.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			switch route.Method {
+			case http.MethodDelete:
+				handler = oops.MCPErrHandle(service.logger, service.HandleDeleteServer)
+			case http.MethodGet:
+				handler = oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+					return service.HandleGetServer(w, r, metadataService)
+				})
+			case http.MethodPost:
+				handler = oops.MCPErrHandle(service.logger, service.ServePublic)
+			}
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteInstallScript:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleGetProtectedResource)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.HandleRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.HandleAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.HandleConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.HandleFirstPartyConnect)
+		case netingress.RouteConsentScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentScript)
+		case netingress.RouteConsentToolsScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentToolsScript)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.HandleToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.HandleRevoke)
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private MCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
+	}
+}
+
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
@@ -517,6 +573,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
+	// Public keys for outbound clients. This remains available independently of
+	// management entitlements so registered counterparties can keep verifying
+	// client assertions.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
@@ -570,6 +630,13 @@ func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Reque
 // remote-session handlers without reaching into the unexported manager field.
 func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleClientJSONWebKeySet is the public outbound-client key set endpoint at
+// `GET /.well-known/oauth-client/{id}/jwks.json`. Thin passthrough to the
+// remote-session manager that owns client key publication.
+func (s *Service) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleClientJSONWebKeySet(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleOpenAIAppsChallenge serves the domain-verification token configured
@@ -825,7 +892,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	// Legacy toolset-by-slug path has no mcp_server: hosting configuration
 	// comes entirely from the toolset columns.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil)
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -890,24 +957,28 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
 // callers.
-func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication) error {
+func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication, prepared *preparedMCPRequest) error {
 	ctx := r.Context()
 	var err error
 
 	baseURL := s.BaseURLForRequest(r)
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	bodyBytes, bodyReadErr := io.ReadAll(r.Body)
-	var req rawRequest
-	var bodyDecodeErr error
-	if bodyReadErr == nil {
-		bodyDecodeErr = json.Unmarshal(bodyBytes, &req)
-		if bodyDecodeErr == nil {
-			if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && req.ID.IsSet() {
-				rpcCtx.ID = req.ID
-			}
+	if prepared == nil {
+		var handled bool
+		prepared, handled, err = s.prepareTerminatedMCPRequest(
+			w,
+			r,
+			s.logger,
+			1<<20,
+			mcpversions.SupportedHostedToolset(),
+			mcpmetrics.SurfaceHosting,
+		)
+		if err != nil || handled {
+			return err
 		}
 	}
+	req := prepared.request
+	protocolVersion := prepared.protocolVersion
 
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
@@ -954,7 +1025,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		callerToolSelection = gateToolSelection
 	}
 
-	isHostedToolsCall := bodyReadErr == nil && bodyDecodeErr == nil && req.Method == "tools/call" && cfg.mcpServerID != nil
+	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {
 		if pendingIssuerGate == nil {
 			return nil
@@ -1045,10 +1116,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// Public MCPs are open to everyone — no RBAC enforcement.
 		if !cfg.isPublic {
 			// Ensure grants are loaded — not all auth strategies in authenticateToken
-			// go through auth.Authorize (which calls PrepareContext). This is a no-op
-			// if grants are already in context.
+			// go through auth.Authorize (which calls PrepareContext). Principal
+			// credentials repeat live admission even when grants are already loaded.
 			ctx, err = s.authz.PrepareContext(ctx)
 			if err != nil {
+				var shareable *oops.ShareableError
+				if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
+					return fmt.Errorf("principal credential admission: %w", err)
+				}
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())); err != nil {
@@ -1070,35 +1145,17 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 	}
-
-	// Decode the raw body first to check for batch requests
-	switch {
-	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case bodyReadErr != nil:
-		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").LogError(ctx, s.logger)
+	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeBadRequest, "mcp request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 
-	// Reject batch (array) requests — batch is deprecated in the MCP spec
-	if err := inv.Check("mcp request",
-		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
-	); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").LogError(ctx, s.logger)
-	}
-
-	if bodyDecodeErr != nil {
-		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
-		// JSON of the wrong shape/type stays an invalid request (-32600).
-		decodeCode := oops.CodeBadRequest
-		if !json.Valid(bodyBytes) {
-			decodeCode = oops.CodeParseError
-		}
-		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
-	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			return s.respondMCPError(ctx, w, req.ID, err)
+			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
 	}
@@ -1174,7 +1231,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
-		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
+		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 	}
@@ -1220,7 +1277,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
 			mcpID = rpcCtx.ID
 		}
-		return s.respondMCPError(ctx, w, mcpID, err)
+		// Read back off mcpInputs rather than the local: an initialize
+		// request carries the negotiated answer only there.
+		return writeMCPError(ctx, s.logger, w, mcpID, mcpInputs.protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1261,27 +1320,17 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 			ID:      mcpjsonrpc.ID{Number: 0, String: ""},
 			Code:    oops.MCPCodeForbidden,
 			Message: note,
-			Data:    &oops.MCPErrorData{Code: oops.MCPErrorDataCodeToolCallsPaused},
+			Data: &oops.MCPErrorData{
+				Code:      oops.MCPErrorDataCodeToolCallsPaused,
+				Supported: nil,
+				Requested: "",
+			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
 		return &oops.MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: oops.MCPCodeInternalError, Message: "", Data: nil}
 	default:
 		return errors.New("invalid hosted MCP kill-switch disposition")
 	}
-}
-
-func (s *Service) respondMCPError(ctx context.Context, w http.ResponseWriter, id mcpjsonrpc.ID, cause error) error {
-	bs, err := json.Marshal(oops.NewMCPErrorFromCause(id, cause))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").LogError(ctx, s.logger)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(bs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write MCP error response")
-	}
-	return nil
 }
 
 // checkToolsetSecurity loads the toolset's security variables and checks if the

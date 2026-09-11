@@ -1,5 +1,7 @@
-// Package mockworkos implements the dev-idp's mock-workos mode — a mock
-// WorkOS REST surface backed by the dev-idp's shared SQLite store.
+// Package mockworkos implements the local backend's WorkOS emulator — a
+// WorkOS-shaped REST surface backed by the dev-idp's shared SQLite store.
+// The workos package mounts it at /workos when GRAM_DEVIDP_BACKEND=local,
+// and proxies upstream instead when it is workos.
 //
 // Wire-shape compatibility with the workos-go SDK is preserved so
 // Gram-side's `*workos.Client` can swap api.workos.com for this listener
@@ -16,14 +18,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
-
-// Mode is the discriminator persisted on rows owned by this handler.
-const Mode = "mock-workos"
-
-// Prefix is the URL prefix the dev-idp listener mounts this handler under.
-const Prefix = "/mock-workos"
 
 // passwordlessState holds the in-memory state for a passwordless magic-link
 // session. Ephemeral — only needs to survive long enough for the local-dev
@@ -36,7 +33,13 @@ type passwordlessState struct {
 	expiresAt   time.Time
 }
 
-// Handler serves the mock-workos mode's HTTP routes.
+type magicAuthState struct {
+	email     string
+	userID    uuid.UUID
+	expiresAt time.Time
+}
+
+// Handler serves the WorkOS emulator's HTTP routes.
 type Handler struct {
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -44,14 +47,20 @@ type Handler struct {
 
 	pwlMu       sync.Mutex
 	pwlSessions map[string]*passwordlessState // keyed by session ID
+
+	magicAuthMu sync.Mutex
+	magicAuth   map[string]magicAuthState // keyed by one-time code
 }
 
 func NewHandler(logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"),
-		logger:      logger.With(slog.String("component", "devidp."+Mode)),
+		logger:      logger.With(slog.String("component", "devidp.workos.emulator")),
 		db:          db,
+		pwlMu:       sync.Mutex{},
 		pwlSessions: make(map[string]*passwordlessState),
+		magicAuthMu: sync.Mutex{},
+		magicAuth:   make(map[string]magicAuthState),
 	}
 }
 

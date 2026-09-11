@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -87,6 +88,9 @@ type platformMCPConfig struct {
 	// what a project overview's active-user count measures. Shared with the
 	// telemetry service so both surfaces answer from the same source.
 	SessionCapture platformmcp.FeatureChecker
+	// CanonicalIdentity applies the telemetry service's rollout-aware email fold
+	// to usage attribution. Nil preserves literal identity buckets.
+	CanonicalIdentity platformmcp.CanonicalIdentityGate
 	// SessionPortability gates the session-recall tools (list_my_sessions /
 	// continue_session). Sibling of SessionCapture: capture records sessions,
 	// portability serves them back as redacted handoff digests.
@@ -98,6 +102,15 @@ type platformMCPConfig struct {
 	// RecentToolCalls reads only the bounded Tool Logs summary path.
 	// Nil keeps the tool visible as unavailable rather than returning an empty list.
 	RecentToolCalls platformmcp.RecentToolCallReader
+	// EventFeed reads the org-scoped OpenTelemetry event feed. Nil keeps the
+	// tool visible as unavailable rather than returning an empty list.
+	EventFeed platformmcp.EventFeedReader
+	// LogsEnabled is the same product-feature gate the dashboard Event Feed
+	// uses. Nil, or a false result for the caller's organization, withholds
+	// live organization-event reads.
+	LogsEnabled     platformmcp.FeatureChecker
+	ShadowInventory *access.Service
+	ShadowReview    *mcpapproval.Service
 	LocalFixture    *platformMCPLocalFixtureConfig
 }
 
@@ -336,8 +349,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
-		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL)
+		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -385,6 +401,19 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+// attachShadowInventory keeps the Shadow tools registered on both browser and
+// local-fixture surfaces. Missing dependencies degrade to stable unavailable
+// descriptors, but the capability loss is logged rather than silently hidden.
+func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
+	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budget, config.JWTSigningKey)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
+		return false
+	}
+	reader.WithShadowInventory(shadowInventory)
+	return true
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -686,8 +715,21 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
-		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL)
+		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	if shadowErr != nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
+	} else {
+		platformReader.WithShadowInventory(shadowInventory)
+		shadowDecisionBudget := platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionConnectionLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionOrganizationLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		}
+		platformReader.WithShadowDecisions(platformmcp.NewShadowDecisionService(config.DB, shadowInventory, config.ShadowReview, pluginInventory, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), shadowDecisionBudget))
+	}
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
+		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)

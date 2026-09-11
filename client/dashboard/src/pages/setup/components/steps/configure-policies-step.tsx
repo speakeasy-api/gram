@@ -61,7 +61,6 @@ import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
   onComplete: () => void;
-  onBack: () => void;
 }
 
 const CATEGORY_ICONS: Partial<Record<RuleCategory, LucideIcon>> = {
@@ -277,7 +276,6 @@ function scopeMessageTypesForCategory(
 
 export function ConfigurePoliciesStep({
   onComplete,
-  onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
@@ -370,9 +368,21 @@ export function ConfigurePoliciesStep({
             categoryDefinitions,
             messageTypes: existing.messageTypes,
           })
-        : // The API rejects a category scope it has no recommendation for;
-          // fall back to the legacy list, which it intersects with them.
-          { messageTypes: [...nextCfg.messageTypes] };
+        : categoryDefinitions === undefined
+          ? // Recommendations have not loaded, so there is nothing to compose
+            // with; scope to the selected kinds alone. The legacy list is no
+            // longer accepted on the wire.
+            {
+              detectionScopes: [
+                {
+                  category: cat,
+                  ...narrowScopeToKinds(undefined, [...nextCfg.messageTypes]),
+                },
+              ],
+            }
+          : // Loaded, and the category takes no message scope (session-scoped).
+            // Sending one would fail the whole update, so send none.
+            {};
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -475,9 +485,17 @@ export function ConfigurePoliciesStep({
                       },
                     ],
                   }
-                : // Recommendations have not loaded: fall back to the legacy
-                  // list, which the server intersects with them.
-                  { messageTypes: [...cfg.messageTypes] }),
+                : // Recommendations have not loaded, so there is nothing to
+                  // compose with; scope to the selected kinds alone rather
+                  // than writing the legacy list.
+                  {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...narrowScopeToKinds(undefined, [...cfg.messageTypes]),
+                      },
+                    ],
+                  }),
               action: cfg.action,
               autoName: true,
             },
@@ -570,9 +588,6 @@ export function ConfigurePoliciesStep({
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-12">
         <div className={animationsReady ? "" : "[&_*]:!duration-0"}>

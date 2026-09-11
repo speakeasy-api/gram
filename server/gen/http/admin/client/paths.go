@@ -147,6 +147,16 @@ func GetPaygBillingSummaryAdminPath() string {
 	return "/admin/organization.paygBillingSummary"
 }
 
+// GetStripeCustomerAdminPath returns the URL path to the admin service getStripeCustomer HTTP endpoint.
+func GetStripeCustomerAdminPath() string {
+	return "/admin/organization.stripeCustomer"
+}
+
+// SetStripeCustomerAdminPath returns the URL path to the admin service setStripeCustomer HTTP endpoint.
+func SetStripeCustomerAdminPath() string {
+	return "/admin/organization.setStripeCustomer"
+}
+
 // GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.stripeSubscription"
@@ -165,4 +175,69 @@ func ResumeStripeSubscriptionAdminPath() string {
 // MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
 func MarkEnterpriseTrialConvertedAdminPath() string {
 	return "/admin/trial.convert"
+}
+
+// CreateGlobalIssuerAdminPath returns the URL path to the admin service createGlobalIssuer HTTP endpoint.
+func CreateGlobalIssuerAdminPath() string {
+	return "/admin/remote-session-issuers.createGlobalIssuer"
+}
+
+// GetGlobalIssuerDuplicatePreflightAdminPath returns the URL path to the admin service getGlobalIssuerDuplicatePreflight HTTP endpoint.
+func GetGlobalIssuerDuplicatePreflightAdminPath() string {
+	return "/admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight"
+}
+
+// ListGlobalIssuersAdminPath returns the URL path to the admin service listGlobalIssuers HTTP endpoint.
+func ListGlobalIssuersAdminPath() string {
+	return "/admin/remote-session-issuers.list"
+}
+
+// GetGlobalIssuerAdminPath returns the URL path to the admin service getGlobalIssuer HTTP endpoint.
+func GetGlobalIssuerAdminPath() string {
+	return "/admin/remote-session-issuers.getGlobalIssuer"
+}
+
+// UpdateGlobalIssuerAdminPath returns the URL path to the admin service updateGlobalIssuer HTTP endpoint.
+func UpdateGlobalIssuerAdminPath() string {
+	return "/admin/remote-session-issuers.updateGlobalIssuer"
+}
+
+// DeleteGlobalIssuerAdminPath returns the URL path to the admin service deleteGlobalIssuer HTTP endpoint.
+func DeleteGlobalIssuerAdminPath() string {
+	return "/admin/remote-session-issuers.deleteGlobalIssuer"
+}
+
+// FetchGlobalIssuerMetadataAdminPath returns the URL path to the admin service fetchGlobalIssuerMetadata HTTP endpoint.
+func FetchGlobalIssuerMetadataAdminPath() string {
+	return "/admin/remote-session-issuers.fetchGlobalIssuerMetadata"
+}
+
+// RefreshGlobalIssuerMetadataAdminPath returns the URL path to the admin service refreshGlobalIssuerMetadata HTTP endpoint.
+func RefreshGlobalIssuerMetadataAdminPath() string {
+	return "/admin/remote-session-issuers.refreshGlobalIssuerMetadata"
+}
+
+// ListGlobalIssuerConvergenceCandidatesAdminPath returns the URL path to the admin service listGlobalIssuerConvergenceCandidates HTTP endpoint.
+func ListGlobalIssuerConvergenceCandidatesAdminPath() string {
+	return "/admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates"
+}
+
+// GetGlobalIssuerMigratePreflightAdminPath returns the URL path to the admin service getGlobalIssuerMigratePreflight HTTP endpoint.
+func GetGlobalIssuerMigratePreflightAdminPath() string {
+	return "/admin/remote-session-issuers.getGlobalIssuerMigratePreflight"
+}
+
+// MigrateToGlobalIssuerAdminPath returns the URL path to the admin service migrateToGlobalIssuer HTTP endpoint.
+func MigrateToGlobalIssuerAdminPath() string {
+	return "/admin/remote-session-issuers.migrateToGlobalIssuer"
+}
+
+// UploadPlatformImageAdminPath returns the URL path to the admin service uploadPlatformImage HTTP endpoint.
+func UploadPlatformImageAdminPath() string {
+	return "/admin/assets.uploadImage"
+}
+
+// ServeImageAdminPath returns the URL path to the admin service serveImage HTTP endpoint.
+func ServeImageAdminPath() string {
+	return "/admin/assets.serveImage"
 }

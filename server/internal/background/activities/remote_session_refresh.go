@@ -128,15 +128,21 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled)
 	if err != nil {
 		// The issuer URL and outcome are the ones the upstream-refresh metric
-		// recorded, so these lines join to its series; the user id is what
-		// lets "how many users are affected" be answered, since a client id is
-		// one row per provider connection, not per user.
+		// recorded, so these lines join to its series; the error code is the
+		// one the upstream answered with when its body carried one; the user
+		// id is what lets "how many users are affected" be answered, since a
+		// client id is one row per provider connection, not per user.
 		args := []any{
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		}
 		if failure, ok := errors.AsType[*remotesessions.RefreshError](err); ok {
 			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+		}
+		if tokenErr, ok := errors.AsType[*remotesessions.TokenRefreshError](err); ok {
+			if code := tokenErr.UpstreamCode(); code != "" {
+				args = append(args, attr.SlogOAuthError(code))
+			}
 		}
 		if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {
 			args = append(args, attr.SlogUserID(sess.SubjectUrn.ID))

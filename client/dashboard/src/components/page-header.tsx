@@ -5,14 +5,13 @@ import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
-import { ChevronRight } from "lucide-react";
-import { Link, useLocation, useMatch, useParams } from "react-router";
+import { useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
-import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
 
 function PageHeaderComponent({
@@ -63,7 +62,6 @@ function PageHeaderComponent({
           {children}
         </div>
       )}
-      <OnboardingBanner />
       {/* Inference stopping is felt on whichever page the user was working on,
           so the reason for it rides the header rather than waiting on the
           billing page. Billing renders all of its banners together so payment
@@ -126,47 +124,6 @@ const breadcrumbUrlSubstitutions: Record<string, string> = {
   "/shadow-mcp/requests": "/shadow-mcp",
 };
 
-// One rendered crumb. Pending crumbs (substitution key present, value not yet
-// resolved) show a placeholder so the raw id/slug never flashes before its
-// human label arrives.
-function BreadcrumbCrumb({
-  elem,
-}: {
-  elem: {
-    url: string;
-    display: string;
-    isCurrentPage: boolean;
-    disableLink?: boolean;
-    pending?: boolean;
-  };
-}) {
-  if (elem.pending) {
-    return (
-      <span
-        aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
-      />
-    );
-  }
-  if (elem.isCurrentPage || elem.disableLink) {
-    return (
-      <span
-        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
-      >
-        {elem.display}
-      </span>
-    );
-  }
-  return (
-    <Link
-      to={elem.url}
-      className="text-muted-foreground hover:text-foreground trans hover:underline underline-offset-4"
-    >
-      {elem.display}
-    </Link>
-  );
-}
-
 type PageHeaderBreadcrumbsProps = {
   fullWidth?: boolean;
   className?: string;
@@ -184,12 +141,13 @@ type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
 // The renderer below is kept intact (and every caller keeps mounting
 // <PageHeader.Breadcrumbs>) so flipping this back on is a one-line change.
 // Widened to boolean so the renderer below doesn't type as unreachable.
-// MCP is the exception to the app-wide hiding above. S-853 made it the
-// inventory and nested the add flow, the catalog, and sources underneath it, so
-// those pages sit two and three levels deep with no way back up but browser
-// back. Listed by first path segment; every caller still mounts
+// The exceptions to the app-wide hiding above are the surfaces that nest: MCP
+// (S-853 made it the inventory and put the add flow, the catalog and sources
+// underneath it) and Identities (each person has their own page below the
+// roster). Those pages sit two and three levels deep with no way back up but
+// browser back. Listed by first path segment; every caller still mounts
 // <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
-const BREADCRUMB_PAGE_SLUGS = new Set(["mcp"]);
+const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities"]);
 
 // Whether the current page shows a breadcrumb trail. Shared by the header (to
 // give the trail its own bar) and by the breadcrumbs themselves (to render
@@ -298,13 +256,7 @@ function PageHeaderBreadcrumbsTrail({
 
   // Build full breadcrumb list: {org} > [project >] page segments
   const canAccessOrg = hasAnyScope(["org:read", "org:admin"]);
-  const visibleElements: {
-    url: string;
-    display: string;
-    isCurrentPage: boolean;
-    disableLink?: boolean;
-    pending?: boolean;
-  }[] = [];
+  const visibleElements: BreadcrumbItem[] = [];
 
   if (rootCrumbs) {
     // 1. Org name (always first; only clickable if user has org access)
@@ -340,20 +292,9 @@ function PageHeaderBreadcrumbsTrail({
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
       >
-        <div className="flex items-center gap-2 normal-case">
-          {visibleElements.map((elem, index) => (
-            <React.Fragment key={`${elem.url}-${index}`}>
-              <BreadcrumbCrumb elem={elem} />
-              {index < visibleElements.length - 1 && (
-                <ChevronRight
-                  aria-hidden="true"
-                  className="text-muted-foreground/60 size-3.5 shrink-0"
-                />
-              )}
-            </React.Fragment>
-          ))}
+        <Breadcrumb items={visibleElements}>
           {stage && <ReleaseStageBadge stage={stage} />}
-        </div>
+        </Breadcrumb>
       </PageHeader.Title>
     </div>
   );

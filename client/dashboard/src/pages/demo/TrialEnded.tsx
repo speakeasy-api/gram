@@ -8,6 +8,7 @@ import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useTrialNow } from "@/hooks/useTrialNow";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { BookingCalendarModal } from "./components/booking-calendar/BookingCalendarModal";
@@ -74,10 +75,7 @@ function ExpiredTrialEnded(): JSX.Element {
     if (paygCheckout.error) setChoice(null);
   }, [paygCheckout.error]);
 
-  const handleLogout = async () => {
-    await client.auth.logout();
-    window.location.href = "/login";
-  };
+  const handleLogout = () => logoutToLogin(client);
 
   const handleChoiceChange = (value: string) => {
     const nextChoice = value as TrialEndedChoice;

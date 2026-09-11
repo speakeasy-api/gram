@@ -68,6 +68,15 @@ func (k *Keystore) PrivateKey() *rsa.PrivateKey {
 	return k.private
 }
 
+// PublicKey returns the verification half of the keypair. Used where the
+// dev-idp verifies a token it signed itself -- the mint leg checking the
+// id_token it is handed, and a resource authorization server checking an
+// ID-JAG whose issuer is this same dev-idp -- so those paths do not have to
+// make an HTTP round trip to their own JWKS endpoint.
+func (k *Keystore) PublicKey() *rsa.PublicKey {
+	return k.public
+}
+
 // KID is the JWK key id; it appears in every signed id_token's `kid`
 // header so verifiers can pick the right key from the JWKS response.
 func (k *Keystore) KID() string {

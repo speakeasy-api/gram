@@ -513,7 +513,12 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writ
 
 // WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
 // observation of the same turn to the authoritative native-hook source.
+// Only initial storage emits usage. Promotion preserves the original usage fact.
 func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, write MessageWrite, externalMessageID string) (int64, error) {
+	if write.Params.ProjectID != projectID {
+		return 0, fmt.Errorf("chat message project id does not match writer project")
+	}
+
 	occurredAt := time.Now().UTC()
 	writes := []MessageWrite{write}
 	if err := stampMessageFields(writes, occurredAt); err != nil {
@@ -572,19 +577,21 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
-	writes[0].Params.ID = stored.ID
-	writes[0].Params.Content = stored.Content
-	writes[0].Params.ToolCalls = stored.ToolCalls
-	writes[0].Params.Model = stored.Model
-	writes[0].Params.UserID = stored.UserID
-	writes[0].Params.ExternalUserID = stored.ExternalUserID
-	writes[0].Params.Source = stored.Source
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
-	if err != nil {
-		return 0, err
-	}
-	if err := metering.Enqueue(ctx, tx, readings); err != nil {
-		return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
+	if stored.Inserted {
+		writes[0].Params.ID = stored.ID
+		writes[0].Params.Content = stored.Content
+		writes[0].Params.ToolCalls = stored.ToolCalls
+		writes[0].Params.Model = stored.Model
+		writes[0].Params.UserID = stored.UserID
+		writes[0].Params.ExternalUserID = stored.ExternalUserID
+		writes[0].Params.Source = stored.Source
+		readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
+		if err != nil {
+			return 0, err
+		}
+		if err := metering.Enqueue(ctx, tx, readings); err != nil {
+			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)
@@ -600,6 +607,13 @@ var jsonNULEscape = []byte(`\u` + "0000")
 // WriteExternal inserts imported provider messages idempotently and notifies
 // observers when at least one new row is stored.
 func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite) (int64, error) {
+	return w.WriteExternalWithContentParts(ctx, projectID, writes, nil)
+}
+
+// WriteExternalWithContentParts commits each imported message and its content
+// parts together. Parts are keyed by the parent's explicit message ID. A retry
+// that conflicts with an existing message also skips its parts and metering.
+func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite, parts map[uuid.UUID][]repo.CreateChatContentPartParams) (int64, error) {
 	if len(writes) == 0 {
 		return 0, nil
 	}
@@ -680,6 +694,16 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 				return false, nil
 			} else if err != nil {
 				return false, fmt.Errorf("create external chat message: %w", err)
+			}
+			if attached := parts[param.ID]; len(attached) > 0 {
+				for _, part := range attached {
+					if part.ProjectID != projectID || part.ChatID != param.ChatID || !part.ParentChatMessageID.Valid || part.ParentChatMessageID.UUID != param.ID {
+						return false, fmt.Errorf("external content part does not match its parent message")
+					}
+				}
+				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
+					return false, fmt.Errorf("create external message content parts: %w", err)
+				}
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)

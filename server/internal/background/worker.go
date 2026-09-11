@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -357,6 +358,16 @@ func NewTemporalWorker(
 
 	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
 
+	// Identity capture is best effort: without a policy the sweep stores no identity.
+	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	if opts.GuardianPolicy != nil {
+		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
+			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
+		} else {
+			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+		}
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -408,6 +419,7 @@ func NewTemporalWorker(
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
 		opts.TUMMeterStreamingEnabled,
+		idTokenVerifier,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -497,6 +509,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
 	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
+	temporalWorker.RegisterActivity(activities.RepairOrphanedAPIKeyCreators)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
 	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)

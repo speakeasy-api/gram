@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	accessRepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -190,7 +191,7 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 	}
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
 	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 
@@ -620,6 +621,50 @@ func TestSyncMembershipsFromWorkOS_EmptyResponseRevokesWorkOSRelationships(t *te
 	require.NoError(t, err)
 }
 
+func TestSyncMembershipsFromWorkOS_DoesNotReactivateTombstone(t *testing.T) {
+	t.Parallel()
+
+	const (
+		gramUserID   = "user-stale-membership"
+		workosUserID = "user_01WORKOS_STALE"
+		workosOrgID  = "org_01WORKOS_STALE"
+		linkedOrgID  = "stale-linked-org"
+		membershipID = "membership_01WORKOS_STALE"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: membershipID, UserID: workosUserID, OrganizationID: workosOrgID}},
+		},
+		orgs: map[string]*workos.Organization{},
+	}
+	userInfo := &MockUserInfo{UserID: gramUserID, Email: "stale@example.com"}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	linkedWorkosID := workosOrgID
+	require.NoError(t, inst.createTestUser(ctx, userInfo))
+	require.NoError(t, inst.createTestOrganization(ctx, MockOrganizationEntry{
+		ID: linkedOrgID, Name: "Stale Linked Org", Slug: linkedOrgID, WorkosID: &linkedWorkosID,
+	}, gramUserID))
+
+	queries := orgRepo.New(inst.conn)
+	_, err := queries.MarkWorkOSMembershipDeleted(ctx, orgRepo.MarkWorkOSMembershipDeletedParams{
+		OrganizationID:     linkedOrgID,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_stale_membership_deleted"),
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, inst.identityResolver.SyncMembershipsFromWorkOS(ctx, gramUserID, workosUserID))
+	_, err = queries.GetOrganizationUserRelationship(ctx, orgRepo.GetOrganizationUserRelationshipParams{
+		OrganizationID: linkedOrgID,
+		UserID:         conv.ToPGText(gramUserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
 // TestE2E_Callback_NewUserNoWorkOSOrgs_AssistantsDisposition verifies that a
 // new user with zero orgs and the "assistants" disposition gets auto-provisioned,
 // and that the organization it provisions arms no enterprise trial.
@@ -941,6 +986,10 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 		UserID:         conv.ToPGText(gramUserID),
 	})
 	require.NoError(t, err)
+
+	// WorkOS assigns a new membership identity on a genuine rejoin. Reusing the
+	// removed membership ID would be a stale snapshot and must not reactivate it.
+	fetcher.members[workosUserID][0].ID = "om_03REJOINED"
 
 	// Invalidate cache so the next login re-reads from DB.
 	require.NoError(t, inst.sessionManager.InvalidateUserInfoCache(ctx, gramUserID))

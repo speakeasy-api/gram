@@ -2236,7 +2236,11 @@ SELECT
     m.id AS mcp_server_id,
     m.project_id,
     COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COUNT(*) FILTER (
+      WHERE sibling.id IS NOT NULL
+        AND sibling.deleted IS FALSE
+    )::bigint AS toolset_mcp_count
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -2244,12 +2248,16 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
- AND toolset.project_id = m.project_id
- AND toolset.organization_id = $1
- AND toolset.deleted IS FALSE
+  AND toolset.project_id = m.project_id
+  AND toolset.organization_id = $1
+  AND toolset.deleted IS FALSE
+LEFT JOIN mcp_servers AS sibling
+  ON sibling.project_id = m.project_id
+  AND sibling.toolset_id = m.toolset_id
 WHERE m.id = $2
   AND m.project_id = $3
   AND m.deleted IS FALSE
+GROUP BY m.id, m.project_id, m.slug, toolset.slug
 `
 
 type GetPlatformMCPDiagnosticsTargetParams struct {
@@ -2259,10 +2267,11 @@ type GetPlatformMCPDiagnosticsTargetParams struct {
 }
 
 type GetPlatformMCPDiagnosticsTargetRow struct {
-	McpServerID uuid.UUID
-	ProjectID   uuid.UUID
-	McpSlug     string
-	ToolsetSlug string
+	McpServerID     uuid.UUID
+	ProjectID       uuid.UUID
+	McpSlug         string
+	ToolsetSlug     string
+	ToolsetMcpCount int64
 }
 
 // Resolves one configured MCP to the identities its telemetry is recorded
@@ -2278,6 +2287,7 @@ func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPl
 		&i.ProjectID,
 		&i.McpSlug,
 		&i.ToolsetSlug,
+		&i.ToolsetMcpCount,
 	)
 	return i, err
 }
@@ -3845,14 +3855,6 @@ SELECT EXISTS (
     WHERE target.id = $1
       AND target.organization_id = $2
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 )
 `
 
@@ -3861,11 +3863,10 @@ type IsPlatformMCPCatalogRegistrationTargetEligibleParams struct {
 	OrganizationID string
 }
 
-// Registration is safe for a new organization: the selected project may be
-// empty. It remains unavailable for a project that already owns an active
-// toolset-backed MCP, because that legacy model must not be mixed with the
-// Platform registration lifecycle. Package admission retains its independent
-// organization-level cohort check.
+// Registration may add a separately managed MCP server to any live project in
+// the active organization. Existing toolset-backed servers can coexist because
+// registration identity, component ownership, and active caps are enforced on
+// the Platform registration and its own component rows.
 func (q *Queries) IsPlatformMCPCatalogRegistrationTargetEligible(ctx context.Context, arg IsPlatformMCPCatalogRegistrationTargetEligibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isPlatformMCPCatalogRegistrationTargetEligible, arg.ProjectID, arg.OrganizationID)
 	var exists bool

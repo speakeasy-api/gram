@@ -31,6 +31,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -733,6 +734,14 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return oops.E(oops.CodeUnexpected, err, "delete organization user relationship").LogError(ctx, logger)
 	}
 
+	if err := agentownership.LatchOwnerLossByMembership(
+		ctx, tx, ac.ActiveOrganizationID, payload.UserID,
+		agentownership.OwnerReassignmentReasonMembershipLost,
+		urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ac.Email,
+	); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "latch agents after owner membership loss").LogError(ctx, logger)
+	}
+
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
 		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove user").LogError(ctx, logger)
@@ -1141,13 +1150,14 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
 			}
 			if workos.HasActiveConnection(connections) {
-				nextStepSlug = "directory-sync"
+				// Directory sync lives on the same card as single sign-on.
+				nextStepSlug = "identity-provider"
 			}
 		}
 	case "dsync":
 		// Directory sync may take time to become "linked" after portal setup.
 		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "create-marketplace"
+		nextStepSlug = "anthropic-observability"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
@@ -1691,7 +1701,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	span.AddEvent("invite.callback.invitation_accepted")
 
 	if trialArmed {
-		for _, feature := range productfeatures.EnterpriseTrialBundle {
+		for _, feature := range productfeatures.EnterpriseAccessBundle {
 			s.features.UpdateFeatureCache(ctx, acceptedInvite.OrganizationID, feature, true)
 		}
 	}

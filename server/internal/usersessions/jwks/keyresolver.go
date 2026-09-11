@@ -167,6 +167,26 @@ func (k *KeyResolver) chargeFetch(ctx context.Context, source Source) error {
 // Concurrent callers coalesce: a burst of assertions bearing a freshly
 // rotated kid costs one refresh, not one per request.
 func (k *KeyResolver) VerificationKey(ctx context.Context, source Source, kid string) (*jose.JSONWebKey, error) {
+	return k.verificationKey(ctx, source, func(set jose.JSONWebKeySet) (*jose.JSONWebKey, error) {
+		return selectKey(set, kid)
+	})
+}
+
+// VerificationKeyForAlgorithm is VerificationKey for a caller that knows the
+// assertion's algorithm: among the keys matching kid it picks the one
+// declaring alg, else one declaring nothing whose type fits alg's family,
+// and refuses one declaring another alg (see selectKeyForAlgorithm). The
+// refresh policy is VerificationKey's; a matched kid that cannot carry alg
+// is ErrKeyAlgorithmMismatch and owes no refresh.
+func (k *KeyResolver) VerificationKeyForAlgorithm(ctx context.Context, source Source, kid string, alg jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
+	return k.verificationKey(ctx, source, func(set jose.JSONWebKeySet) (*jose.JSONWebKey, error) {
+		return selectKeyForAlgorithm(set, kid, alg)
+	})
+}
+
+// verificationKey is the resolution and unknown-kid refresh loop behind both
+// selection rules; pick reports ErrKeyNotFound when the set lacks the kid.
+func (k *KeyResolver) verificationKey(ctx context.Context, source Source, pick func(jose.JSONWebKeySet) (*jose.JSONWebKey, error)) (*jose.JSONWebKey, error) {
 	if source.kind == sourceInline {
 		// Inline sets have no upstream to refresh from, so an unknown kid is
 		// terminal by construction and no rate limit applies.
@@ -174,7 +194,7 @@ func (k *KeyResolver) VerificationKey(ctx context.Context, source Source, kid st
 		if err != nil {
 			return nil, err
 		}
-		return selectKey(result.KeySet, kid)
+		return pick(result.KeySet)
 	}
 
 	result, err := k.resolveShared(ctx, source)
@@ -182,7 +202,7 @@ func (k *KeyResolver) VerificationKey(ctx context.Context, source Source, kid st
 		return nil, err
 	}
 
-	key, err := selectKey(result.KeySet, kid)
+	key, err := pick(result.KeySet)
 	if err == nil {
 		return key, nil
 	}
@@ -201,7 +221,7 @@ func (k *KeyResolver) VerificationKey(ctx context.Context, source Source, kid st
 	if err != nil {
 		return nil, err
 	}
-	return selectKey(refreshed.KeySet, kid)
+	return pick(refreshed.KeySet)
 }
 
 // resolveShared runs one cache-honouring resolution for a source, coalescing

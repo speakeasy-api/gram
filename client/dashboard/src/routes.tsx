@@ -33,6 +33,7 @@ import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import AgentsPage from "./pages/agents/Agents";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -45,7 +46,6 @@ import Login from "./pages/login/Login";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
-import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import AddMcpServer, { AddMcpServerRoot } from "./pages/mcp/add/AddMcpServer";
@@ -84,6 +84,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import HeadlessMode from "./pages/org/HeadlessMode";
+import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -121,6 +122,7 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
@@ -140,27 +142,19 @@ import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
-import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
+import {
+  KillswitchesRoot,
+  KillswitchIndexRedirect,
+  KillswitchRecordRedirect,
+} from "./pages/killswitch/KillswitchesRoot";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const Killswitches = React.lazy(() =>
-  import("./pages/killswitch/Killswitches").then((module) => ({
-    default: module.default,
-  })),
-);
-const KillswitchDetail = React.lazy(
-  () => import("./pages/killswitch/KillswitchDetail"),
-);
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupWizard = React.lazy(() =>
-  import("./pages/setup/components/onboarding-wizard").then((module) => ({
-    default: module.SetupWizard,
-  })),
-);
+const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 
 type AppRouteBasic = {
   title: string;
@@ -173,6 +167,11 @@ type AppRouteBasic = {
   subPages?: AppRoutesBasic;
   unauthenticated?: boolean;
   outsideMainLayout?: boolean;
+  // This route only exists to resolve an old URL: its component redirects
+  // elsewhere. Surfaces that enumerate routes as destinations (the command
+  // palette) skip it, so a bookmark keeps working without the dead entry
+  // being offered as somewhere to go.
+  legacyRedirect?: boolean;
   // Release stage badge shown on this route's nav entry. Use sparingly —
   // only for features that are genuinely pre-GA. Page-level badges live on
   // <Page.Section.Title stage="..." /> and must be set separately.
@@ -223,6 +222,7 @@ type RouteEntry = {
       unauthenticated?: boolean;
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
+      legacyRedirect?: boolean;
     }
 );
 
@@ -424,7 +424,7 @@ const ROUTE_STRUCTURE = {
       // the `details` `:toolsetSlug` route and are not swallowed by it. The
       // cost is that a toolset slugged "add" or "sources" becomes unreachable
       // in the dashboard. Nothing reserves those slugs server-side, so this is
-      // the same latent collision the sibling `built-in`, `x` and `gateway`
+      // the same latent collision the sibling `x` and `gateway`
       // segments already carry.
       add: {
         title: "Add MCP Server",
@@ -492,21 +492,6 @@ const ROUTE_STRUCTURE = {
             title: "Source",
             url: ":sourceId",
             component: SourceDetailRoute,
-          },
-        },
-      },
-      builtIn: {
-        title: "Built-in MCP",
-        url: "built-in/:builtInSlug",
-        component: BuiltInMCPDetailPage,
-        subPages: {
-          overview: {
-            title: "Built-in MCP Overview",
-            url: "overview",
-          },
-          tools: {
-            title: "Built-in MCP Tools",
-            url: "tools",
           },
         },
       },
@@ -1195,6 +1180,15 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "terminal",
     component: OrgSkills,
   },
+  // Legacy URL: Platform MCP setup is what headless mode does now, so the old
+  // standalone page redirects there. Kept out of the sidebar, and flagged so
+  // the command palette does not offer it as a destination either.
+  platformMcp: {
+    title: "Platform MCP",
+    url: "platform-mcp",
+    legacyRedirect: true,
+    component: PlatformMCPRedirect,
+  },
   aiIntegrations: {
     title: "AI Integrations",
     url: "ai-integrations",
@@ -1289,18 +1283,21 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  // Killswitches are managed on the identity of the person they restrict, so
+  // this route no longer carries a roster: its index forwards to the people it
+  // would have listed, and the detail record stays where the audit log links
+  // to it.
   killswitch: {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
-    stage: "beta",
     component: KillswitchesRoot,
-    indexComponent: Killswitches,
+    indexComponent: KillswitchIndexRedirect,
     subPages: {
       detail: {
         title: "Killswitch detail",
         url: ":killswitchId",
-        component: KillswitchDetail,
+        component: KillswitchRecordRedirect,
       },
     },
   },
@@ -1424,6 +1421,12 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  agents: {
+    title: "Agents",
+    url: "agent-management",
+    icon: "bot",
+    component: AgentsPage,
+  },
   access: {
     title: "Roles & Permissions",
     url: "access",
@@ -1447,6 +1450,21 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // Role authoring is its own page, not a sheet: a role can carry a dozen
+  // permissions, each with rules of its own, which is more than a sheet can
+  // show without scrolling away the thing being edited. These are siblings of
+  // `access` rather than sub-pages because the access page renders tabs, not
+  // an outlet.
+  createRole: {
+    title: "Create Role",
+    url: "access/roles/create",
+    component: RoleEditorPage,
+  },
+  editRole: {
+    title: "Edit Role",
+    url: "access/roles/:roleId/edit",
+    component: RoleEditorPage,
+  },
   requestAccess: {
     title: "Request Access",
     url: "request-access",
@@ -1460,13 +1478,13 @@ const ORG_ROUTE_STRUCTURE = {
     component: SetupBoard,
     outsideMainLayout: true,
   },
-  // The linear wizard walks one owner through setup step by step; the board at
-  // /setup is the default. SetupViewToggle swaps between the two.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
+  // Each board card opens as its own page at a short slug (setup/idp,
+  // setup/anthropic-observability, ...), with a rail of that card's own steps.
+  setupTask: {
+    title: "Setup task",
+    url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupWizard,
+    component: SetupTaskPage,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

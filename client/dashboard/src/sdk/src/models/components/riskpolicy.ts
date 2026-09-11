@@ -115,7 +115,7 @@ export type RiskPolicy = {
    */
   id: string;
   /**
-   * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.
+   * Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.
    */
   messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
@@ -152,11 +152,11 @@ export type RiskPolicy = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
-   * CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.
+   * Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
    */
   scopeExempt?: string | undefined;
   /**
-   * CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.
+   * Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
    */
   scopeInclude?: string | undefined;
   /**

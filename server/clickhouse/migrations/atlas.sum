@@ -1,4 +1,4 @@
-h1:ww209qeM1HhKJshsY99k2yitIkJNCma4/OqZpT0qqzs=
+h1:9ZRAANoVrMOJj6zsqMy55R0VIu4L700wtsiPnJuyy9Y=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -109,3 +109,6 @@ h1:ww209qeM1HhKJshsY99k2yitIkJNCma4/OqZpT0qqzs=
 20260907095722_bound-weekly-mart-lookback.sql h1:TmbLWJ5IuBpLfvKii3WvD/0GiBvtm2biL42C5D6U0sw=
 20260907100041_normalize-mart-email-identities.sql h1:OwpDu4oE35e+z/0Qsdgx0fUnlvO9mmT+phj9gpD9bsw=
 20260907100751_include-supported-chat-surfaces.sql h1:6pnN3qJzcm3/XYQwrWy6NpI04jDhmQNSdXETwuvRAM0=
+20260908155637_preserve-trace-tool-name.sql h1:6z9m9qCCpkuca8FXPQPKHM6a+7o4zJ7Bv/43AG3PCXA=
+20260909194424_add-inference-hook-surfaces.sql h1:SDenjiEJOlce8TzyLc1MDnhkyvcUmT0GGqqmFb67bCE=
+20260911121618_billing-meter-readings-by-time.sql h1:QkijBm0BsytnBdyhLQnrNifRfVzvLEigW4S8tw/RiU0=

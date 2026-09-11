@@ -2229,7 +2229,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		"sum(log_count) as log_count",
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
-		"any(tool_name) as tool_name",
+		"max(tool_name) as tool_name",
 		"any(tool_source) as tool_source",
 		"any(event_source) as event_source",
 	).
@@ -4038,6 +4038,15 @@ type MCPServerMatcher struct {
 	TargetLabel string
 }
 
+// MetaMCPMatcher maps a gateway endpoint URL suffix to its gateway; host-anchored
+// suffixes are tested before the hosted matcher, bare "/mcp/<slug>" ones after.
+type MetaMCPMatcher struct {
+	URLSuffix    string
+	TargetID     string
+	TargetLabel  string
+	HostAnchored bool
+}
+
 // GetToolUsageSummaryParams defines the parameters for target-aware tool usage.
 type GetToolUsageSummaryParams struct {
 	GramProjectID      string
@@ -4046,9 +4055,11 @@ type GetToolUsageSummaryParams struct {
 	BucketSizeNs       int64
 	HostedMCPMatchers  []HostedMCPMatcher
 	MCPServerMatchers  []MCPServerMatcher
+	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
+	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
 	AccountType        string // Optional filter - filters by account_type (team|personal)
@@ -4066,9 +4077,11 @@ type ListToolUsageTracesParams struct {
 	TimeEnd            int64
 	HostedMCPMatchers  []HostedMCPMatcher
 	MCPServerMatchers  []MCPServerMatcher
+	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
+	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
 	HookSources        []string
 	AccountType        string   // Optional filter - personal = exactly personal; team = not personal (includes unclassified)
@@ -4114,6 +4127,7 @@ type ToolUsageTraceSummary struct {
 	HookStatus        *string `ch:"hook_status"`
 	BlockReason       *string `ch:"block_reason"`
 	AccountType       *string `ch:"account_type"`
+	MetaMCPServerID   string  `ch:"meta_mcp_server_id"`
 }
 
 // GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
@@ -4123,12 +4137,14 @@ type GetToolUsageFilterOptionsParams struct {
 	TimeEnd           int64
 	HostedMCPMatchers []HostedMCPMatcher
 	MCPServerMatchers []MCPServerMatcher
+	MetaMCPMatchers   []MetaMCPMatcher
 }
 
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
 type ToolUsageFilterOptions struct {
 	HostedServers []ToolUsageHostedServerFilterOptionRow
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
+	Gateways      []ToolUsageGatewayFilterOptionRow
 	Users         []ToolUsageUserFilterOptionRow
 }
 
@@ -4161,6 +4177,11 @@ type ToolUsageHostedServerFilterOptionRow struct {
 type ToolUsageShadowServerFilterOptionRow struct {
 	ServerName string `ch:"server_name"`
 	EventCount uint64 `ch:"event_count"`
+}
+
+type ToolUsageGatewayFilterOptionRow struct {
+	MetaMCPServerID string `ch:"gateway_id"`
+	EventCount      uint64 `ch:"event_count"`
 }
 
 type ToolUsageUserFilterOptionRow struct {
@@ -4304,9 +4325,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		BucketSizeNs:       0,
 		HostedMCPMatchers:  arg.HostedMCPMatchers,
 		MCPServerMatchers:  arg.MCPServerMatchers,
+		MetaMCPMatchers:    arg.MetaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
 		HookSources:        nil,
 		AccountType:        "", // filter options enumerate all values, never scoped
@@ -4330,6 +4353,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	eg.Go(func() error {
 		var err error
 		options.ShadowServers, err = q.getToolUsageShadowServerFilterOptions(egCtx, summaryArg)
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		options.Gateways, err = q.getToolUsageGatewayFilterOptions(egCtx, summaryArg)
 		return err
 	})
 	eg.Go(func() error {
@@ -4375,13 +4403,14 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		"hook_status",
 		"block_reason",
 		"account_type",
+		"meta_mcp_server_id",
 	).From("normalized_traces")
 
 	if len(arg.TargetTypes) > 0 {
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
 	}
 
-	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 {
+	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
 		targetFilters := squirrel.Or{}
 		if len(arg.HostedToolsetSlugs) > 0 {
 			targetFilters = append(targetFilters, squirrel.And{
@@ -4393,6 +4422,14 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 			targetFilters = append(targetFilters, squirrel.And{
 				squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
 				squirrel.Eq{"target_id": arg.ShadowServerNames},
+			})
+		}
+		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
+		if len(arg.MetaMCPServerIDs) > 0 {
+			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
+			targetFilters = append(targetFilters, squirrel.And{
+				squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
+				squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
 			})
 		}
 		sb = sb.Where(targetFilters)
@@ -4592,9 +4629,11 @@ func (q *Queries) GetMcpServerActivity(ctx context.Context, arg GetMcpServerActi
 		BucketSizeNs:       0,
 		HostedMCPMatchers:  arg.HostedMCPMatchers,
 		MCPServerMatchers:  arg.MCPServerMatchers,
+		MetaMCPMatchers:    nil,
 		TargetTypes:        []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP},
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
+		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
 		HookSources:        nil,
 		AccountType:        "",
@@ -5003,6 +5042,45 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 }
 
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageGatewayFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		toolUsageGatewayIDExpr+" AS gateway_id",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage gateway filter options source: %w", err)
+	}
+	sb = sb.
+		Where("gateway_id != ''").
+		GroupBy("gateway_id").
+		OrderBy("event_count DESC", "gateway_id ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage gateway filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageGatewayFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageGatewayFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage gateway filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"user_key",
@@ -5064,7 +5142,7 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
 	}
 
-	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 {
+	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
 		targetFilters := squirrel.Or{}
 		if len(arg.HostedToolsetSlugs) > 0 {
 			targetFilters = append(targetFilters, squirrel.And{
@@ -5076,6 +5154,14 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 			targetFilters = append(targetFilters, squirrel.And{
 				squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
 				squirrel.Eq{"target_id": arg.ShadowServerNames},
+			})
+		}
+		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
+		if len(arg.MetaMCPServerIDs) > 0 {
+			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
+			targetFilters = append(targetFilters, squirrel.And{
+				squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
+				squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
 			})
 		}
 		sb = sb.Where(targetFilters)
@@ -5154,6 +5240,56 @@ func toolUsageMCPServerMatchIndexExpr(sourceExpr string) string {
 	return "indexOf(?, " + sourceExpr + ")"
 }
 
+func toolUsageMetaMCPMatcherArrays(matchers []MetaMCPMatcher) (urlSuffixes []string, targetIDs []string, targetLabels []string, anchored []uint8) {
+	urlSuffixes = make([]string, 0, len(matchers))
+	targetIDs = make([]string, 0, len(matchers))
+	targetLabels = make([]string, 0, len(matchers))
+	anchored = make([]uint8, 0, len(matchers))
+	for _, matcher := range matchers {
+		if matcher.URLSuffix == "" || matcher.TargetID == "" {
+			continue
+		}
+		urlSuffixes = append(urlSuffixes, matcher.URLSuffix)
+		targetIDs = append(targetIDs, matcher.TargetID)
+		if matcher.TargetLabel != "" {
+			targetLabels = append(targetLabels, matcher.TargetLabel)
+		} else {
+			targetLabels = append(targetLabels, matcher.TargetID)
+		}
+		if matcher.HostAnchored {
+			anchored = append(anchored, 1)
+		} else {
+			anchored = append(anchored, 0)
+		}
+	}
+	return urlSuffixes, targetIDs, targetLabels, anchored
+}
+
+// Match index and its host-anchored flag; bind the suffix array, then the anchored array.
+func toolUsageMetaMCPMatchColumns(serverURLExpr string) []string {
+	return []string{
+		"arrayFirstIndex(suffix -> endsWith(" + serverURLExpr + ", suffix), ?) AS meta_mcp_match_index",
+		"arrayElement(?, meta_mcp_match_index) AS meta_mcp_match_anchored",
+	}
+}
+
+// Host-anchored gateway matches are tested before the hosted URL match, bare ones after it.
+const (
+	metaMCPAnchoredMatch = "meta_mcp_match_anchored = 1"
+	metaMCPAnyMatch      = "meta_mcp_match_index > 0"
+)
+
+// Appends one gateway branch (binds target_id, then target_label) to the target multiIf lists.
+func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, condition string) {
+	*typeArgs = append(*typeArgs, condition, "'"+ToolUsageTargetTypeMetaMCP+"'")
+	*kindArgs = append(*kindArgs, condition, "'"+toolUsageTargetKindServer+"'")
+	*idArgs = append(*idArgs, condition, "arrayElement(?, meta_mcp_match_index)")
+	*labelArgs = append(*labelArgs, condition, "arrayElement(?, meta_mcp_match_index)")
+}
+
+// The gateway an event belongs to: the target itself, else the gateway that dispatched it.
+const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
+
 // toolUsageTraceRowsFromSummariesCTE builds the normalized_traces CTE from the
 // trace_summaries materialized view (one row per trace) for the common case where no
 // free-text query or arbitrary attribute filters are active. It emits the same output
@@ -5167,7 +5303,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"min(start_time_unix_nano) AS event_time_ns",
 		"sum(log_count) AS g_log_count",
 		"any(gram_urn) AS g_gram_urn",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(tool_source) AS g_tool_source",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
@@ -5185,6 +5321,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"max(hook_status_rank) AS g_hook_status_rank",
 		"max(block_reason) AS g_block_reason",
 		"max(account_type) AS g_account_type",
+		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 	).
 		From("(SELECT *, multiIf(has_block = 1, 3, has_error = 1, 2, has_result = 1, 1, 0) AS hook_status_rank FROM trace_summaries)").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5204,8 +5341,10 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	hasMatchers := len(hostedToolsetSlugs) > 0
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 	hasMCPServerMatchers := len(mcpSourceIDs) > 0
-	if hasMatchers || hasMCPServerMatchers {
+	hasMetaMatchers := len(metaURLSuffixes) > 0
+	if hasMatchers || hasMCPServerMatchers || hasMetaMatchers {
 		columns := []string{"*"}
 		prefixArgs := []any{}
 		if hasMatchers {
@@ -5217,6 +5356,10 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
 		}
+		if hasMetaMatchers {
+			columns = append(columns, toolUsageMetaMCPMatchColumns("g_mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
+		}
 		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), groupedSQL)
 		sourceArgs = prefixArgs
 		sourceArgs = append(sourceArgs, groupedArgs...)
@@ -5227,7 +5370,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	toolName := chMultiIf(isSkillCall, skillLabel, "g_tool_name")
 
 	var targetType, targetKind, targetID, targetLabel string
-	if hasMatchers || hasMCPServerMatchers {
+	if hasMatchers || hasMCPServerMatchers || hasMetaMatchers {
 		targetTypeArgs := []string{
 			"g_event_source != 'hook' AND g_toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
 		}
@@ -5247,12 +5390,18 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 			targetIDArgs = append(targetIDArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatch, "arrayElement(?, mcp_server_match_index)")
 		}
+		if hasMetaMatchers {
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnchoredMatch)
+		}
 		if hasMatchers {
 			hostedMatch := "hosted_match_index > 0"
 			targetTypeArgs = append(targetTypeArgs, hostedMatch, "'"+ToolUsageTargetTypeHostedMCP+"'")
 			targetKindArgs = append(targetKindArgs, hostedMatch, "'"+toolUsageTargetKindServer+"'")
 			targetIDArgs = append(targetIDArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
 			targetLabelArgs = append(targetLabelArgs, hostedMatch, "arrayElement(?, hosted_match_index)")
+		}
+		if hasMetaMatchers {
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnyMatch)
 		}
 		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
@@ -5336,7 +5485,8 @@ SELECT
 	g_http_status_code AS http_status_code,
 	%s AS hook_status,
 	nullIf(g_block_reason, '') AS block_reason,
-	nullIf(g_account_type, '') AS account_type
+	nullIf(g_account_type, '') AS account_type,
+	g_meta_mcp_server_id AS meta_mcp_server_id
 FROM (%s)`,
 		toolName,
 		targetType,
@@ -5350,21 +5500,33 @@ FROM (%s)`,
 		sourceSQL,
 	)
 
-	finalArgs := make([]any, 0, 2+len(sourceArgs))
+	finalArgs := make([]any, 0, 7+len(sourceArgs))
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetTypes)
 	}
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetIDs)
 	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetIDs)
+	}
 	if hasMatchers {
 		finalArgs = append(finalArgs, hostedToolsetSlugs)
+	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetIDs)
 	}
 	if hasMCPServerMatchers {
 		finalArgs = append(finalArgs, mcpTargetLabels)
 	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetLabels)
+	}
 	if hasMatchers {
 		finalArgs = append(finalArgs, hostedToolsetSlugs)
+	}
+	if hasMetaMatchers {
+		finalArgs = append(finalArgs, metaTargetLabels)
 	}
 	finalArgs = append(finalArgs, sourceArgs...)
 
@@ -5402,6 +5564,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"external_user_id",
 		"user_id",
 		"account_type",
+		"meta_mcp_server_id",
 		chAttr("gram.hook.source")+" AS hook_source",
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
@@ -5465,9 +5628,10 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 	sourceSQL := rawSQL
 	sourceArgs := rawArgs
-	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
 		columns := []string{"*"}
 		prefixArgs := []any{}
 		if len(hostedToolsetSlugs) > 0 {
@@ -5478,6 +5642,10 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		if len(mcpSourceIDs) > 0 {
 			columns = append(columns, toolUsageMCPServerMatchIndexExpr("tool_source")+" AS mcp_server_match_index")
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		if len(metaURLSuffixes) > 0 {
+			columns = append(columns, toolUsageMetaMCPMatchColumns("mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
 		}
 		sourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), rawSQL)
 		sourceArgs = prefixArgs
@@ -5505,6 +5673,9 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	)
 	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
 	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	// Spans without a name inherit one from their trace before grouping. Keep
+	// explicit names intact when a trace contains multiple named tool calls.
+	resolvedToolName := chFirstNonEmpty("raw_tool_name", "max(raw_tool_name) OVER (PARTITION BY "+logGroupKind+", "+logGroupValue+")")
 	hasSkillTool := "max(toUInt8(raw_tool_name = 'Skill')) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ") = 1"
 	isSkillCall := "(" + hasSkillTool + " OR " + skillName + " != '')"
 	skillLabel := chFirstNonEmpty(skillName, "''")
@@ -5532,7 +5703,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"tool_source != ''", "tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
 		targetTypeArgs := []string{
 			"event_source != 'hook' AND toolset_slug != ''", "'" + ToolUsageTargetTypeHostedMCP + "'",
 		}
@@ -5552,12 +5723,18 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 			targetIDArgs = append(targetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 			targetLabelArgs = append(targetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 		}
+		if len(metaURLSuffixes) > 0 {
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnchoredMatch)
+		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
 			targetTypeArgs = append(targetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
 			targetKindArgs = append(targetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
 			targetIDArgs = append(targetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
 			targetLabelArgs = append(targetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		if len(metaURLSuffixes) > 0 {
+			appendMetaMCPTargetBranch(&targetTypeArgs, &targetKindArgs, &targetIDArgs, &targetLabelArgs, metaMCPAnyMatch)
 		}
 		targetTypeArgs = append(targetTypeArgs,
 			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
@@ -5606,24 +5783,37 @@ SELECT
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
 	nullIf(block_reason, '') AS block_reason,
-	account_type
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
+	account_type,
+	meta_mcp_server_id
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
-	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
+	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetTypes)
 	}
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetIDs)
 	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
+	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetIDs)
 	}
 	if len(mcpSourceIDs) > 0 {
 		normalizedArgs = append(normalizedArgs, mcpTargetLabels)
 	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetLabels)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		normalizedArgs = append(normalizedArgs, hostedToolsetSlugs)
+	}
+	if len(metaURLSuffixes) > 0 {
+		normalizedArgs = append(normalizedArgs, metaTargetLabels)
 	}
 	normalizedArgs = append(normalizedArgs, sourceArgs...)
 
@@ -5657,7 +5847,8 @@ normalized_traces AS (
 			CAST(NULL AS Nullable(String))
 		) AS hook_status,
 		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason,
-		nullIf(any(account_type), '') AS account_type
+		nullIf(any(account_type), '') AS account_type,
+		max(meta_mcp_server_id) AS meta_mcp_server_id
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
@@ -5691,13 +5882,14 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(tool_source) AS g_tool_source",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 		"max(account_type) AS g_account_type",
+		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5711,7 +5903,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
-		"any(tool_name) AS g_tool_name",
+		"max(tool_name) AS g_tool_name",
 		"any(tool_source) AS g_tool_source",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
@@ -5723,6 +5915,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
 		"max(account_type) AS g_account_type",
+		"max(meta_mcp_server_id) AS g_meta_mcp_server_id",
 	).
 		From("trace_summaries").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -5740,6 +5933,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
+	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
 
 	directSourceSQL := directGroupedSQL
 	directSourceArgs := directGroupedArgs
@@ -5800,7 +5994,8 @@ SELECT
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
 	toUInt8(g_http_status_code >= 400) AS failure,
 	'' AS hook_source,
-	g_account_type AS account_type
+	g_account_type AS account_type,
+	g_meta_mcp_server_id AS meta_mcp_server_id
 FROM (%s)`,
 		directTargetType,
 		toolUsageTargetKindServer,
@@ -5820,7 +6015,7 @@ FROM (%s)`,
 
 	hookSourceSQL := hookGroupedSQL
 	hookSourceArgs := hookGroupedArgs
-	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
 		columns := []string{"*"}
 		prefixArgs := []any{}
 		if len(hostedToolsetSlugs) > 0 {
@@ -5831,6 +6026,10 @@ FROM (%s)`,
 		if len(mcpSourceIDs) > 0 {
 			columns = append(columns, toolUsageMCPServerMatchIndexExpr("g_tool_source")+" AS mcp_server_match_index")
 			prefixArgs = append(prefixArgs, mcpSourceIDs)
+		}
+		if len(metaURLSuffixes) > 0 {
+			columns = append(columns, toolUsageMetaMCPMatchColumns("g_mcp_server_url")...)
+			prefixArgs = append(prefixArgs, metaURLSuffixes, metaAnchored)
 		}
 		hookSourceSQL = fmt.Sprintf("SELECT %s FROM (%s)", strings.Join(columns, ", "), hookGroupedSQL)
 		hookSourceArgs = prefixArgs
@@ -5857,7 +6056,7 @@ FROM (%s)`,
 		"g_tool_source != ''", "g_tool_source",
 		"'Local Tools'",
 	)
-	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 {
+	if len(hostedToolsetSlugs) > 0 || len(mcpSourceIDs) > 0 || len(metaURLSuffixes) > 0 {
 		hookTargetTypeArgs := []string{}
 		hookTargetKindArgs := []string{}
 		hookTargetIDArgs := []string{}
@@ -5869,12 +6068,18 @@ FROM (%s)`,
 			hookTargetIDArgs = append(hookTargetIDArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 			hookTargetLabelArgs = append(hookTargetLabelArgs, mcpServerMatchCondition, "arrayElement(?, mcp_server_match_index)")
 		}
+		if len(metaURLSuffixes) > 0 {
+			appendMetaMCPTargetBranch(&hookTargetTypeArgs, &hookTargetKindArgs, &hookTargetIDArgs, &hookTargetLabelArgs, metaMCPAnchoredMatch)
+		}
 		if len(hostedToolsetSlugs) > 0 {
 			hostedMatchCondition := "hosted_match_index > 0"
 			hookTargetTypeArgs = append(hookTargetTypeArgs, hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'")
 			hookTargetKindArgs = append(hookTargetKindArgs, hostedMatchCondition, "'"+toolUsageTargetKindServer+"'")
 			hookTargetIDArgs = append(hookTargetIDArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
 			hookTargetLabelArgs = append(hookTargetLabelArgs, hostedMatchCondition, "arrayElement(?, hosted_match_index)")
+		}
+		if len(metaURLSuffixes) > 0 {
+			appendMetaMCPTargetBranch(&hookTargetTypeArgs, &hookTargetKindArgs, &hookTargetIDArgs, &hookTargetLabelArgs, metaMCPAnyMatch)
 		}
 		hookTargetTypeArgs = append(hookTargetTypeArgs,
 			"g_skill_name != ''", "'"+ToolUsageTargetTypeSkill+"'",
@@ -5917,7 +6122,8 @@ SELECT
 	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
 	toUInt8(g_has_error = 1) AS failure,
 	g_hook_source AS hook_source,
-	g_account_type AS account_type
+	g_account_type AS account_type,
+	g_meta_mcp_server_id AS meta_mcp_server_id
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	directArgs := make([]any, 0, 3+len(directSourceArgs))
@@ -5926,18 +6132,30 @@ FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookT
 	}
 	directArgs = append(directArgs, directSourceArgs...)
 
-	hookArgs := make([]any, 0, 5+len(hookSourceArgs))
+	hookArgs := make([]any, 0, 7+len(hookSourceArgs))
 	if len(mcpSourceIDs) > 0 {
 		hookArgs = append(hookArgs, mcpTargetTypes, mcpTargetIDs)
 	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetIDs)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		hookArgs = append(hookArgs, hostedToolsetSlugs)
+	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetIDs)
 	}
 	if len(mcpSourceIDs) > 0 {
 		hookArgs = append(hookArgs, mcpTargetLabels)
 	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetLabels)
+	}
 	if len(hostedToolsetSlugs) > 0 {
 		hookArgs = append(hookArgs, hostedToolsetSlugs)
+	}
+	if len(metaURLSuffixes) > 0 {
+		hookArgs = append(hookArgs, metaTargetLabels)
 	}
 	hookArgs = append(hookArgs, hookSourceArgs...)
 
@@ -6179,6 +6397,9 @@ type GetSkillsSummaryParams struct {
 	TimeEnd        int64
 	Filters        []AttributeFilter
 	TypesToInclude []string
+	// Limit bounds returned skill aggregates. Zero preserves the dashboard's
+	// existing all-skills behavior.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the unique-user count through the
 	// identity_map so one employee counts once. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6210,7 +6431,10 @@ func (q *Queries) GetSkillsSummary(ctx context.Context, arg GetSkillsSummaryPara
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, arg.TypesToInclude, orgLit, "trace_summaries.user_email")
 
 	sb = sb.GroupBy("skill_name").
-		OrderBy("use_count DESC")
+		OrderBy("use_count DESC", "skill_name ASC")
+	if arg.Limit > 0 {
+		sb = sb.Limit(uint64(arg.Limit))
+	}
 
 	sb = withCanonicalFoldSettings(sb, orgLit)
 	query, args, err := sb.ToSql()
@@ -6253,6 +6477,12 @@ type GetSkillBreakdownParams struct {
 	TimeStart     int64
 	TimeEnd       int64
 	Filters       []AttributeFilter
+	// SkillNames narrows the breakdown to exact canonical skill names. Empty
+	// preserves the dashboard's existing all-skills behavior.
+	SkillNames []string
+	// Limit bounds returned per-(skill,user) rows. Zero preserves the existing
+	// dashboard cap.
+	Limit int
 	// CanonicalIdentityOrg, when set, folds the email dimension through the
 	// identity_map so one employee reads as one bucket. Empty disables folding.
 	CanonicalIdentityOrg string
@@ -6274,12 +6504,20 @@ func (q *Queries) GetSkillBreakdown(ctx context.Context, arg GetSkillBreakdownPa
 		Where("tool_name = 'Skill'").
 		Where("start_time_unix_nano >= ?", arg.TimeStart).
 		Where("start_time_unix_nano <= ?", arg.TimeEnd).
-		Where("skill_name != ''")
+		Where("skill_name != ''").
+		Where(emailKey + " != ''")
+	if len(arg.SkillNames) > 0 {
+		sb = sb.Where(squirrel.Eq{"skill_name": arg.SkillNames})
+	}
 
 	// Apply attribute filters (user, server) but not type filters — skill type is hardcoded above.
 	sb = applyHookFiltersToBuilderCanonical(sb, arg.Filters, nil, orgLit, "trace_summaries.user_email")
-	sb = sb.GroupBy("skill_name", emailKey).OrderBy("skill_name", "use_count DESC").
-		Limit(10000) // Defensive cap
+	limit := arg.Limit
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
+	sb = sb.GroupBy("skill_name", emailKey).OrderBy("use_count DESC", emailKey+" ASC").
+		Limit(uint64(limit)) // Defensive cap
 	sb = withCanonicalFoldSettings(sb, orgLit)
 
 	query, args, err := sb.ToSql()

@@ -8,7 +8,7 @@ import { PROJECT_GUIDE_ENTRY_PATH } from "@/components/project-guide/GuideEntryR
 import { Button } from "@/components/ui/Button";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { useOnboardingCta } from "@/hooks/useOnboardingCta";
+import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -68,7 +68,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const { visible } = useOrgWelcomeBanner();
   const { hasScope } = useRBAC();
   const { setupStarted, markSetupStarted } = useOrgSetupStarted(orgSlug);
-  const { eligible: canSetUpOrg } = useOnboardingCta();
+  const canSetUpOrg = useCanSetUpOrg();
   const { data: featuresData } = useProductFeatures({
     organizationId: organization.id,
   });
@@ -146,9 +146,9 @@ export function OrgWelcomeBanner(): JSX.Element | null {
           title: setupStarted
             ? "Continue enterprise rollout"
             : "Start enterprise rollout",
-          body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
+          body: "SSO, directory sync, logging, agent platforms, and policies — the board tracks the whole sequence.",
           cta: setupStarted ? "Resume rollout" : "Begin rollout",
-          meta: "8 steps · resumable",
+          meta: "Assignable · resumable",
           to: orgRoutes.setup.href(),
           recommended,
           onClick: markSetupStarted,

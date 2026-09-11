@@ -1,21 +1,16 @@
 import type { IdentityRef } from "@/lib/identity-urn";
-import { withIdentityWindow } from "@/lib/identity-urn";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import * as React from "react";
-import { Link, useLocation } from "react-router";
+import { Link } from "react-router";
 
-/**
- * The single-reference form of `useIdentityHrefBuilder`, carrying the window
- * the reader has open onto the destination.
- */
+/** The single-reference form of `useIdentityHrefBuilder`. */
 function useIdentityHref(
   identifier: IdentityRef | null | undefined,
+  projectSlug?: string,
 ): string | null {
-  const href = useIdentityHrefBuilder()(identifier);
-  const { search } = useLocation();
-  return href ? withIdentityWindow(href, search) : null;
+  return useIdentityHrefBuilder("overview", projectSlug)(identifier);
 }
 
 /**
@@ -60,11 +55,18 @@ export function IdentityLink({
   identifier,
   children,
   className,
+  projectSlug,
   "aria-label": ariaLabel,
 }: {
   identifier: IdentityRef | null | undefined;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Project the destination opens in, for a surface that picks its project
+   * through a filter rather than through the address. See
+   * `useIdentityHrefBuilder`.
+   */
+  projectSlug?: string;
   /**
    * Accessible name, for a link whose visible text is a bare verb. A column of
    * rows each announcing "View" gives a screen reader no way to tell them
@@ -72,7 +74,7 @@ export function IdentityLink({
    */
   "aria-label"?: string;
 }): React.JSX.Element {
-  const href = useIdentityHref(identifier);
+  const href = useIdentityHref(identifier, projectSlug);
 
   if (!href) {
     return <span className={className}>{children}</span>;
