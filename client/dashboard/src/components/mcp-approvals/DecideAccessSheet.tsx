@@ -45,9 +45,12 @@ export type DecideAccessTarget = {
    * The reference namespace being decided on. Defaults to server_url; a
    * stdio_command target carries the redacted command in canonicalServerUrl,
    * has no URL for enforcement grants, and records a decision of record
-   * instead.
+   * instead. A tool_namespace target is a server an LLM proxy saw only by
+   * its namespaced tool names: it is keyed on the synthetic mcp-tool:// URL
+   * (sent as a server_url on the wire) and, like a command, records a
+   * decision without enforcement until its real URL is known.
    */
-  targetKind?: "server_url" | "stdio_command";
+  targetKind?: "server_url" | "stdio_command" | "tool_namespace";
   canonicalServerUrl: string;
   displayName: string;
   approvalRequestId?: string;
@@ -96,8 +99,36 @@ const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   denied: "Denied for use in this project.",
 };
 
-function approveSublabel(stdio: boolean, audienceSelectable: boolean): string {
-  if (stdio) return "Record the approval as the decision of record.";
+/**
+ * The wire kind of a target: the request API knows URLs and commands, and a
+ * tool namespace travels as its synthetic URL.
+ */
+function wireTargetKind(
+  targetKind: DecideAccessTarget["targetKind"],
+): "server_url" | "stdio_command" {
+  return targetKind === "stdio_command" ? "stdio_command" : "server_url";
+}
+
+/** Why a decision on this target is recorded without enforcement. */
+function observeOnlyNote(
+  targetKind: DecideAccessTarget["targetKind"],
+): string | null {
+  switch (targetKind) {
+    case "stdio_command":
+      return "Shared with the requester. This is the decision of record — a command-line server has no URL for blocking policies to enforce against automatically.";
+    case "tool_namespace":
+      return "Shared with the requester. This is the decision of record — the LLM proxy saw this server only as a tool namespace, so there is no URL for blocking policies to enforce against until the LiteLLM MCP gateway resolves it.";
+    case "server_url":
+    case undefined:
+      return null;
+  }
+}
+
+function approveSublabel(
+  observeOnly: boolean,
+  audienceSelectable: boolean,
+): string {
+  if (observeOnly) return "Record the approval as the decision of record.";
   if (audienceSelectable) return "Allow the server for the audience below.";
   return "Unblock the server for everyone in the project.";
 }
@@ -158,12 +189,13 @@ export function DecideAccessSheet({
 
   if (!target) return null;
 
-  const stdio = target.targetKind === "stdio_command";
+  const observeOnly = observeOnlyNote(target.targetKind);
   // Under an allow-by-default policy a narrow approval is inexpressible —
   // approving clears the block for everyone — so the audience picker only
   // appears when a block-by-default policy can scope who passes. A stdio
-  // command has no URL for grants to attach to, so it never shows one.
-  const audienceSelectable = disposition !== "allow_all" && !stdio;
+  // command or an unresolved tool namespace has no URL for grants to attach
+  // to, so it never shows one.
+  const audienceSelectable = disposition !== "allow_all" && !observeOnly;
   const isSubmitting =
     submitting ||
     createRequest.isPending ||
@@ -201,7 +233,7 @@ export function DecideAccessSheet({
           request: {
             gramProject: project.slug,
             createRequestRequestBody: {
-              targetKind: target.targetKind ?? "server_url",
+              targetKind: wireTargetKind(target.targetKind),
               target: target.canonicalServerUrl,
               note: trimmedRationale,
             },
@@ -312,7 +344,7 @@ export function DecideAccessSheet({
                     <Badge.Text>Approve</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {approveSublabel(stdio, audienceSelectable)}
+                    {approveSublabel(observeOnly !== null, audienceSelectable)}
                   </Text>
                 </span>
               </label>
@@ -328,7 +360,7 @@ export function DecideAccessSheet({
                     <Badge.Text>Deny</Badge.Text>
                   </Badge>
                   <Text muted small>
-                    {stdio
+                    {observeOnly
                       ? "Record the denial as the decision of record."
                       : "Block the server for everyone in the project."}
                   </Text>
@@ -336,11 +368,9 @@ export function DecideAccessSheet({
               </label>
             </RadioGroup>
 
-            {stdio && (
+            {observeOnly && (
               <Text muted small>
-                Shared with the requester. This is the decision of record — a
-                command-line server has no URL for blocking policies to enforce
-                against automatically.
+                {observeOnly}
               </Text>
             )}
 
