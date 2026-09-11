@@ -311,11 +311,19 @@ func (q *Queries) GetNetworkIngressByOrganization(ctx context.Context, organizat
 }
 
 const getNetworkIngressForReconcile = `-- name: GetNetworkIngressForReconcile :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted FROM network_ingresses WHERE id = $1
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE id = $1
+  AND organization_id = $2
 `
 
-func (q *Queries) GetNetworkIngressForReconcile(ctx context.Context, id uuid.UUID) (NetworkIngress, error) {
-	row := q.db.QueryRow(ctx, getNetworkIngressForReconcile, id)
+type GetNetworkIngressForReconcileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetNetworkIngressForReconcile(ctx context.Context, arg GetNetworkIngressForReconcileParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, getNetworkIngressForReconcile, arg.ID, arg.OrganizationID)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,
@@ -589,11 +597,20 @@ func (q *Queries) LockNetworkIngressByOrganization(ctx context.Context, organiza
 }
 
 const lockNetworkIngressForReconcile = `-- name: LockNetworkIngressForReconcile :one
-SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted FROM network_ingresses WHERE id = $1 FOR UPDATE
+SELECT id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, created_at, updated_at, deleted_at, deleted
+FROM network_ingresses
+WHERE id = $1
+  AND organization_id = $2
+FOR UPDATE
 `
 
-func (q *Queries) LockNetworkIngressForReconcile(ctx context.Context, id uuid.UUID) (NetworkIngress, error) {
-	row := q.db.QueryRow(ctx, lockNetworkIngressForReconcile, id)
+type LockNetworkIngressForReconcileParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockNetworkIngressForReconcile(ctx context.Context, arg LockNetworkIngressForReconcileParams) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, lockNetworkIngressForReconcile, arg.ID, arg.OrganizationID)
 	var i NetworkIngress
 	err := row.Scan(
 		&i.ID,
@@ -684,7 +701,8 @@ SET
       ELSE NULL
     END
 WHERE id = $4
-  AND updated_at = $5
+  AND organization_id = $5
+  AND updated_at = $6
   AND deleted IS FALSE
 `
 
@@ -693,6 +711,7 @@ type RecordNetworkIngressObservationParams struct {
 	DnsName           pgtype.Text
 	LastError         pgtype.Text
 	ID                uuid.UUID
+	OrganizationID    string
 	ExpectedUpdatedAt pgtype.Timestamptz
 }
 
@@ -703,6 +722,7 @@ func (q *Queries) RecordNetworkIngressObservation(ctx context.Context, arg Recor
 		arg.DnsName,
 		arg.LastError,
 		arg.ID,
+		arg.OrganizationID,
 		arg.ExpectedUpdatedAt,
 	)
 	if err != nil {

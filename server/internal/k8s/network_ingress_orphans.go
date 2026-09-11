@@ -22,17 +22,20 @@ type NetworkIngressOrphan struct {
 
 // FindOrphans inventories provider-owned resources without modifying them.
 func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, known map[string][]NetworkIngressResourceNames) ([]NetworkIngressOrphan, error) {
+	if r == nil || len(r.providers) == 0 {
+		return nil, fmt.Errorf("network ingress orphan inventory has no providers")
+	}
 	var result []NetworkIngressOrphan
 	for provider, wrapped := range r.providers {
 		observed, ok := wrapped.(*observedNetworkIngressProvisioner)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("network ingress provider %q does not support orphan inventory", provider)
 		}
 		finder, ok := observed.provisioner.(interface {
 			FindOrphans(context.Context, []NetworkIngressResourceNames) ([]NetworkIngressOrphan, error)
 		})
 		if !ok {
-			continue
+			return nil, fmt.Errorf("network ingress provider %q does not support orphan inventory", provider)
 		}
 		orphans, err := finder.FindOrphans(ctx, known[provider])
 		if err != nil {
@@ -95,8 +98,9 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 				return nil, fmt.Errorf("network ingress orphan inventory unavailable")
 			}
 			for _, object := range list.Items {
-				owner, err := uuid.Parse(object.GetLabels()[networkIngressIDLabel])
-				if err != nil {
+				ownerLabel := object.GetLabels()[networkIngressIDLabel]
+				owner, err := uuid.Parse(ownerLabel)
+				if err != nil || owner.String() != ownerLabel {
 					owner = uuid.Nil
 				}
 				key := resourceKey{kind: resource.gvr.Resource, namespace: object.GetNamespace(), name: object.GetName()}

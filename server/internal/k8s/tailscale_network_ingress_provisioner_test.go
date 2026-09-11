@@ -143,6 +143,38 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
 }
 
+func TestTailscaleNetworkIngressProxyPolicySeparatesAddressFamilies(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.ClusterCIDRs = []string{"169.254.169.254/32", "10.0.0.0/8", "fd00::/8"}
+
+	policy := provisioner.proxyNetworkPolicy(desired)
+	internetBlocks := make(map[string][]string)
+	for _, rule := range policy.Spec.Egress {
+		for _, peer := range rule.To {
+			if peer.IPBlock != nil && (peer.IPBlock.CIDR == "0.0.0.0/0" || peer.IPBlock.CIDR == "::/0") {
+				internetBlocks[peer.IPBlock.CIDR] = peer.IPBlock.Except
+			}
+		}
+	}
+	require.Equal(t, []string{"169.254.169.254/32", "10.0.0.0/8"}, internetBlocks["0.0.0.0/0"])
+	require.Equal(t, []string{"fd00::/8"}, internetBlocks["::/0"])
+}
+
+func TestEnsureResourceOwnedRequiresCanonicalUUIDLabels(t *testing.T) {
+	t.Parallel()
+	ownerID := "0199aabb-ccdd-7000-8000-001122334455"
+	require.NoError(t, ensureResourceOwned(resourceOwnerLabels(ownerID), ownerID))
+	for _, label := range []string{
+		"0199AABB-CCDD-7000-8000-001122334455",
+		"0199aabbccdd70008000001122334455",
+		"{0199aabb-ccdd-7000-8000-001122334455}",
+	} {
+		require.Error(t, ensureResourceOwned(resourceOwnerLabels(label), ownerID), label)
+	}
+	require.Error(t, ensureResourceOwned(resourceOwnerLabels(ownerID), "0199AABB-CCDD-7000-8000-001122334455"))
+}
+
 func TestTailscaleNetworkIngressProvisionerPreservesDynamicMetadata(t *testing.T) {
 	t.Parallel()
 

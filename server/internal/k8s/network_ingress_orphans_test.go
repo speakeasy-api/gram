@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +14,50 @@ import (
 	"k8s.io/client-go/dynamic/fake"
 	ktesting "k8s.io/client-go/testing"
 )
+
+func TestNetworkIngressRegistryOrphanInventoryFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	empty, err := NewNetworkIngressProvisionerRegistry(nil, nil, nil)
+	require.NoError(t, err)
+	_, err = empty.FindOrphans(t.Context(), nil)
+	require.ErrorContains(t, err, "has no providers")
+
+	withoutInventory, err := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
+		NetworkIngressProviderTailscale: stubNetworkIngressProvisioner{},
+	}, nil, nil)
+	require.NoError(t, err)
+	_, err = withoutInventory.FindOrphans(t.Context(), nil)
+	require.ErrorContains(t, err, "does not support orphan inventory")
+}
+
+func TestNetworkIngressOrphanScanRejectsNonCanonicalOwnerLabel(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	listKinds := map[schema.GroupVersionResource]string{
+		tailnetGVR: "TailnetList", proxyGroupGVR: "ProxyGroupList", proxyGroupPolicyGVR: "ProxyGroupPolicyList",
+		{Group: "", Version: "v1", Resource: "namespaces"}:                       "NamespaceList",
+		{Group: "", Version: "v1", Resource: "services"}:                         "ServiceList",
+		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                  "ServiceAccountList",
+		{Group: "", Version: "v1", Resource: "secrets"}:                          "SecretList",
+		{Group: "apps", Version: "v1", Resource: "deployments"}:                  "DeploymentList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:       "IngressList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}: "NetworkPolicyList",
+	}
+	client := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds)
+	known := tailnetObject(desired)
+	known.SetLabels(map[string]string{
+		managedByLabelKey:     networkIngressManagedBy,
+		networkIngressIDLabel: strings.ReplaceAll(desired.ID.String(), "-", ""),
+	})
+	_, err := client.Resource(tailnetGVR).Create(t.Context(), known, metav1.CreateOptions{})
+	require.NoError(t, err)
+	provisioner.dynamic = client
+
+	orphans, err := provisioner.FindOrphans(t.Context(), []NetworkIngressResourceNames{desired.Resources})
+	require.NoError(t, err)
+	require.Equal(t, []NetworkIngressOrphan{{OwnerID: uuid.Nil, Kind: "tailnets"}}, orphans)
+}
 
 func TestNetworkIngressOrphanScanReportsWithoutDeleting(t *testing.T) {
 	t.Parallel()

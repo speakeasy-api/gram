@@ -65,7 +65,10 @@ func NewExecutor(db *pgxpool.Pool, enc *encryption.Client, registry *k8s.Network
 	return &Executor{db: db, enc: enc, registry: registry, options: options}
 }
 
-func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult, error) {
+func (e *Executor) Reconcile(ctx context.Context, organizationID string, id uuid.UUID) (ReconcileResult, error) {
+	if organizationID == "" || id == uuid.Nil {
+		return ReconcileResult{Requeue: false}, reconcileFailure("invalid_desired_state")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	conn, err := e.db.Acquire(ctx)
@@ -73,7 +76,11 @@ func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
 	queries := repo.New(conn)
-	locked, err := queries.TryAcquireNetworkIngressReconcileLock(ctx, id.String())
+	// Keep the legacy UUID lock key while workflow IDs migrate away from their
+	// queue-qualified form. Old and new workflow executions then remain mutually
+	// exclusive, while every row read and write is independently organization-scoped.
+	lockKey := id.String()
+	locked, err := queries.TryAcquireNetworkIngressReconcileLock(ctx, lockKey)
 	if err != nil {
 		// An interrupted lock query may have acquired its session lock. Never
 		// return an ambiguously locked connection to the pool.
@@ -89,7 +96,7 @@ func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult
 	defer func() {
 		unlockCtx, unlockCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer unlockCancel()
-		released, err := queries.ReleaseNetworkIngressReconcileLock(unlockCtx, id.String())
+		released, err := queries.ReleaseNetworkIngressReconcileLock(unlockCtx, lockKey)
 		if err != nil || !released {
 			o11y.NoLogDefer(func() error { return conn.Hijack().Close(unlockCtx) })
 			return
@@ -97,7 +104,7 @@ func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult
 		conn.Release()
 	}()
 
-	row, err := queries.GetNetworkIngressForReconcile(ctx, id)
+	row, err := queries.GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: organizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ReconcileResult{Requeue: false}, nil
 	}
@@ -128,7 +135,7 @@ func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult
 	var operationErr error
 	if row.Enabled && gateCode == "" {
 		// Reload after the gate: API writes do not wait for this session lock.
-		current, err := queries.GetNetworkIngressForReconcile(ctx, id)
+		current, err := queries.GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: organizationID})
 		if err != nil {
 			return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 		}
@@ -160,7 +167,7 @@ func (e *Executor) Reconcile(ctx context.Context, id uuid.UUID) (ReconcileResult
 
 	// Even a failed or partially successful Apply can have created resources.
 	// Deletion wins before any observation or provider error is returned.
-	current, err := queries.GetNetworkIngressForReconcile(ctx, id)
+	current, err := queries.GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: organizationID})
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
@@ -215,7 +222,7 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	if err := queries.AcquireNetworkIngressOrganizationLock(ctx, row.OrganizationID); err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
-	current, err := queries.LockNetworkIngressForReconcile(ctx, row.ID)
+	current, err := queries.LockNetworkIngressForReconcile(ctx, repo.LockNetworkIngressForReconcileParams{ID: row.ID, OrganizationID: row.OrganizationID})
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
@@ -253,7 +260,7 @@ func (e *Executor) record(ctx context.Context, queries *repo.Queries, row repo.N
 	} else if code != "" {
 		status = "error"
 	}
-	if gateCode != "" {
+	if gateCode != "" && failure == nil {
 		code = gateCode
 		// Observe can describe the previous resources, but cannot confirm a
 		// pending credential/hostname/identity change was applied.
@@ -268,7 +275,7 @@ func (e *Executor) record(ctx context.Context, queries *repo.Queries, row repo.N
 		failure = reconcileFailure(code)
 	}
 	count, err := queries.RecordNetworkIngressObservation(ctx, repo.RecordNetworkIngressObservationParams{
-		ID: row.ID, ExpectedUpdatedAt: row.UpdatedAt, Status: status, DnsName: conv.ToPGTextEmpty(dns), LastError: conv.ToPGTextEmpty(code),
+		ID: row.ID, OrganizationID: row.OrganizationID, ExpectedUpdatedAt: row.UpdatedAt, Status: status, DnsName: conv.ToPGTextEmpty(dns), LastError: conv.ToPGTextEmpty(code),
 	})
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")

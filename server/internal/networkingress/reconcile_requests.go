@@ -36,7 +36,7 @@ func (r *OutboxRequester) Enqueue(ctx context.Context, tx pgx.Tx, organizationID
 	}
 	_, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{
 		Proto: networkingressv1.ReconcileRequested_builder{
-			IngressId: new(ingressID.String()), TemporalTaskQueue: new(r.queue),
+			IngressId: new(ingressID.String()), TemporalTaskQueue: new(r.queue), OrganizationId: new(organizationID),
 		}.Build(),
 		PublicID: uuid.Nil, Attributes: nil,
 	})
@@ -48,5 +48,5 @@ func (r *OutboxRequester) Enqueue(ctx context.Context, tx pgx.Tx, organizationID
 
 // HealthRefresher waits only for an interactive refresh, not for config writes.
 type HealthRefresher interface {
-	RefreshNetworkIngress(context.Context, uuid.UUID) error
+	RefreshNetworkIngress(context.Context, string, uuid.UUID) error
 }

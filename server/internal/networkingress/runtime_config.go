@@ -1,20 +1,19 @@
 package networkingress
 
 import (
+	_ "crypto/sha256"
 	"fmt"
 	"net/netip"
 	"regexp"
 	"strings"
 
+	"github.com/distribution/reference"
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
-var (
-	runtimeQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
-	runtimeImagePattern = regexp.MustCompile(`^[^\s@]+@sha256:[a-f0-9]{64}$`)
-)
+var runtimeQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // RuntimeConfig separates optional lifecycle configuration from permission to
 // apply provider changes. Its zero value disables lifecycle delivery and mutation.
@@ -71,8 +70,10 @@ func (c RuntimeConfig) Validate() error {
 			return fmt.Errorf("private ingress %s must be between 1 and 65535, or zero when unconfigured", port.field)
 		}
 	}
-	if c.AttestorImage != "" && !runtimeImagePattern.MatchString(c.AttestorImage) {
-		return fmt.Errorf("private ingress attestor image must use a sha256 digest")
+	if c.AttestorImage != "" {
+		if err := ValidateAttestorImageReference(c.AttestorImage); err != nil {
+			return err
+		}
 	}
 	for key, value := range c.Tailscale.BackendPodLabels {
 		if len(validation.IsQualifiedName(key)) > 0 || len(validation.IsValidLabelValue(value)) > 0 {
@@ -103,6 +104,23 @@ func (c RuntimeConfig) Validate() error {
 		if _, err := netip.ParsePrefix(cidr); err != nil {
 			return fmt.Errorf("invalid private ingress cluster CIDR")
 		}
+	}
+	return nil
+}
+
+// ValidateAttestorImageReference requires a complete OCI image reference pinned
+// to a valid sha256 digest.
+func ValidateAttestorImageReference(value string) error {
+	parsed, err := reference.Parse(value)
+	if err != nil {
+		return fmt.Errorf("private ingress attestor image must be a valid image reference with a sha256 digest")
+	}
+	if _, ok := parsed.(reference.Named); !ok {
+		return fmt.Errorf("private ingress attestor image must be a valid image reference with a sha256 digest")
+	}
+	digested, ok := parsed.(reference.Digested)
+	if !ok || digested.Digest().Algorithm().String() != "sha256" {
+		return fmt.Errorf("private ingress attestor image must be a valid image reference with a sha256 digest")
 	}
 	return nil
 }

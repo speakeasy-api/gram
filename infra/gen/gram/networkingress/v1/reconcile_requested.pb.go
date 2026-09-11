@@ -27,6 +27,7 @@ type ReconcileRequested struct {
 	state                        protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_IngressId         *string                `protobuf:"bytes,1,opt,name=ingress_id,json=ingressId"`
 	xxx_hidden_TemporalTaskQueue *string                `protobuf:"bytes,2,opt,name=temporal_task_queue,json=temporalTaskQueue"`
+	xxx_hidden_OrganizationId    *string                `protobuf:"bytes,3,opt,name=organization_id,json=organizationId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -78,14 +79,29 @@ func (x *ReconcileRequested) GetTemporalTaskQueue() string {
 	return ""
 }
 
+func (x *ReconcileRequested) GetOrganizationId() string {
+	if x != nil {
+		if x.xxx_hidden_OrganizationId != nil {
+			return *x.xxx_hidden_OrganizationId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *ReconcileRequested) SetIngressId(v string) {
 	x.xxx_hidden_IngressId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
 }
 
 func (x *ReconcileRequested) SetTemporalTaskQueue(v string) {
 	x.xxx_hidden_TemporalTaskQueue = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+}
+
+func (x *ReconcileRequested) SetOrganizationId(v string) {
+	x.xxx_hidden_OrganizationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
 }
 
 func (x *ReconcileRequested) HasIngressId() bool {
@@ -102,6 +118,13 @@ func (x *ReconcileRequested) HasTemporalTaskQueue() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
 }
 
+func (x *ReconcileRequested) HasOrganizationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
 func (x *ReconcileRequested) ClearIngressId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_IngressId = nil
@@ -112,11 +135,17 @@ func (x *ReconcileRequested) ClearTemporalTaskQueue() {
 	x.xxx_hidden_TemporalTaskQueue = nil
 }
 
+func (x *ReconcileRequested) ClearOrganizationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_OrganizationId = nil
+}
+
 type ReconcileRequested_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	IngressId         *string
 	TemporalTaskQueue *string
+	OrganizationId    *string
 }
 
 func (b0 ReconcileRequested_builder) Build() *ReconcileRequested {
@@ -124,12 +153,16 @@ func (b0 ReconcileRequested_builder) Build() *ReconcileRequested {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.IngressId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
 		x.xxx_hidden_IngressId = b.IngressId
 	}
 	if b.TemporalTaskQueue != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
 		x.xxx_hidden_TemporalTaskQueue = b.TemporalTaskQueue
+	}
+	if b.OrganizationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	return m0
 }
@@ -138,11 +171,12 @@ var File_gram_networkingress_v1_reconcile_requested_proto protoreflect.FileDescr
 
 const file_gram_networkingress_v1_reconcile_requested_proto_rawDesc = "" +
 	"\n" +
-	"0gram/networkingress/v1/reconcile_requested.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"o\n" +
+	"0gram/networkingress/v1/reconcile_requested.proto\x12\x16gram.networkingress.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x98\x01\n" +
 	"\x12ReconcileRequested\x12\x1d\n" +
 	"\n" +
 	"ingress_id\x18\x01 \x01(\tR\tingressId\x12.\n" +
-	"\x13temporal_task_queue\x18\x02 \x01(\tR\x11temporalTaskQueue:\n" +
+	"\x13temporal_task_queue\x18\x02 \x01(\tR\x11temporalTaskQueue\x12'\n" +
+	"\x0forganization_id\x18\x03 \x01(\tR\x0eorganizationId:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$BQZOgithub.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1;networkingressv1b\beditionsp\xe9\a"
 
 var file_gram_networkingress_v1_reconcile_requested_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
