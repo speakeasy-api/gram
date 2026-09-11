@@ -322,13 +322,19 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server update").LogError(ctx, logger)
 	}
 
+	// The claim moves with the URL in the same transaction; the probe that
+	// fills it runs after commit. Every save runs it: a client still
+	// recording another resource retries.
+	claimed, err := s.claimProtectedResource(ctx, dbtx, authCtx, updatedServer.ID, existingServer.Url, updatedServer.Url)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "claim protected resource for remote session clients").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	// After the commit so the probe never sits inside the transaction. Every
-	// save runs it: a client still recording another resource retries.
-	s.refreshProtectedResourceDisplay(ctx, logger, authCtx, updatedServer.ID, existingServer.Url, updatedServer.Url)
+	s.refreshProtectedResourceDisplay(ctx, logger, authCtx, updatedServer.ID, updatedServer.Url, claimed)
 
 	return afterView, nil
 }
