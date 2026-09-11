@@ -164,6 +164,11 @@ DECLARE
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
 
+  -- Read-only tool verbs the destructive-command policy exempts. Declared once
+  -- because both of that policy's categories carry the same exemption.
+  ds_readonly_exempt CONSTANT text :=
+    'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))';
+
   excl_fixture CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec01';
   excl_testcard CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec02';
   excl_examplekey CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec03';
@@ -1530,7 +1535,9 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- system-prompt-extraction half of the same category.
     (policy_pi, proj_a, demo_org, 'Acme prompt injection guardrail', 'standard',
      '{prompt_injection}', NULL,
-     '{"detection_scopes": [{"category": "prompt_injection", "scope_include": "kind in [\"tool_response\",\"user_message\"]"}]}'::jsonb, '{}',
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1540,10 +1547,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- (budget_update, reset_query_cache) still falls under the policy.
     (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
      '{cli_destructive,destructive_tool}', NULL,
-     ('{"detection_scopes": [' ||
-      '{"category": "cli_destructive", "scope_include": "kind in [\"tool_request\"]", "scope_exempt": "' || 'tool_calls.size() > 0 && tool_calls.all(t, [\"get_\",\"list_\",\"search_\",\"query_\",\"fetch_\",\"check_\"].exists(v, t.function.matchPrefix(v)))' || '"},' ||
-      '{"category": "destructive_tool", "scope_include": "kind in [\"tool_request\"]", "scope_exempt": "' || 'tool_calls.size() > 0 && tool_calls.all(t, [\"get_\",\"list_\",\"search_\",\"query_\",\"fetch_\",\"check_\"].exists(v, t.function.matchPrefix(v)))' || '"}' ||
-      ']}')::jsonb, '{}',
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'cli_destructive',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt),
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt))), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
@@ -1574,13 +1584,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
      '{presidio}', '{}',
-     '{"detection_scopes": [{"category": "pii", "scope_include": "kind in [\"user_message\"]"}]}'::jsonb, '{}',
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'pii',
+                          'scope_include', 'kind in ["user_message"]'))), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
     (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
      '{prompt_injection}', NULL,
-     '{"detection_scopes": [{"category": "prompt_injection", "scope_include": "kind in [\"tool_request\",\"user_message\"]"}]}'::jsonb, '{}',
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
   -- The same canonical target has two grants, so Platform MCP demonstrates
