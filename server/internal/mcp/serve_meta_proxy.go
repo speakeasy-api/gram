@@ -268,7 +268,7 @@ type memberResponseRecorder struct {
 func newMemberResponseRecorder() *memberResponseRecorder {
 	return &memberResponseRecorder{
 		header:    make(http.Header),
-		status:    http.StatusOK,
+		status:    0, // Remains unset until the upstream answers.
 		body:      bytes.Buffer{},
 		truncated: false,
 	}
@@ -312,7 +312,7 @@ type upstreamHandshake struct {
 }
 
 // handshakeUpstream runs initialize, then notifications/initialized on any minted session; the caller closes any sessionID it reports.
-func (s *Service) handshakeUpstream(ctx context.Context, build memberProxyBuilder, name string) (upstreamHandshake, error) {
+func (s *Service) handshakeUpstream(ctx context.Context, build memberProxyBuilder, member metaMember) (upstreamHandshake, error) {
 	var none upstreamHandshake
 	initID := mcpjsonrpc.StringID("gram-gateway-init")
 	initBody, err := marshalUpstreamRequest(initID, "initialize", map[string]any{
@@ -323,7 +323,7 @@ func (s *Service) handshakeUpstream(ctx context.Context, build memberProxyBuilde
 	if err != nil {
 		return none, fmt.Errorf("marshal upstream initialize: %w", err)
 	}
-	initRec, err := s.upstreamExchange(ctx, build, name, initBody, "")
+	initRec, err := s.upstreamExchange(ctx, build, member.slug, initBody, "")
 	if initRec == nil {
 		return none, err
 	}
@@ -336,7 +336,7 @@ func (s *Service) handshakeUpstream(ctx context.Context, build memberProxyBuilde
 	}
 
 	ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
-	ackRec, aerr := s.upstreamExchange(ctx, build, name, ackBody, hs.sessionID)
+	ackRec, aerr := s.upstreamExchange(ctx, build, member.slug, ackBody, hs.sessionID)
 	if aerr != nil {
 		return hs, aerr
 	}
@@ -350,7 +350,7 @@ func upstreamStatusOK(status int) bool {
 
 // openMemberSession runs the handshake; any session minted by a failed one is closed before returning.
 func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, member metaMember) (*memberSession, error) {
-	hs, err := s.handshakeUpstream(ctx, dial.build, member.slug)
+	hs, err := s.handshakeUpstream(ctx, dial.build, member)
 	if err != nil {
 		closeUpstreamSession(ctx, logger, dial.build, hs.sessionID, memberSessionCloseTimeout, attr.SlogMcpServerID(member.serverID.String()))
 		return nil, err
