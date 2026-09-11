@@ -79,7 +79,7 @@ function renderEditor(editingRole?: Role) {
     <QueryClientProvider client={new QueryClient()}>
       <CreateRoleDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
         editingRole={editingRole}
         presentation="page"
       />
