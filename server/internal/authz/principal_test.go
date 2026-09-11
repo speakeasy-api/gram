@@ -195,6 +195,10 @@ func TestValidatePrincipal(t *testing.T) {
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+rawRoleID))
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
+	// A system principal audits background work; it never holds a grant.
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewSystemPrincipal("issuer-metadata-refresh"))
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+
 	conn.Close()
 	err = ValidatePrincipal(ctx, conn, organizationID, rolePrincipal)
 	require.Error(t, err)

@@ -86,6 +86,9 @@ type RefreshService struct {
 	// identity is restated.
 	idTokens IDTokenVerifier
 
+	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
+	issuerMetadata *IssuerMetadataRefresher
+
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
 }
@@ -105,16 +108,22 @@ func WithRefreshIDTokenVerifier(verifier IDTokenVerifier) RefreshOption {
 	return func(s *RefreshService) { s.idTokens = verifier }
 }
 
+// WithRefreshIssuerMetadataRefresher refreshes the issuer's metadata on use when a session is refreshed.
+func WithRefreshIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) RefreshOption {
+	return func(s *RefreshService) { s.issuerMetadata = refresher }
+}
+
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
-		logger:       logger.With(attr.SlogComponent("remotesessions_refresh")),
-		db:           db,
-		enc:          enc,
-		policy:       policy,
-		locks:        locks,
-		metrics:      remotesessionmetrics.NewRefresh(logger, meterProvider),
-		idTokens:     NoIDTokenVerifier(),
-		restatements: sync.WaitGroup{},
+		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
+		db:             db,
+		enc:            enc,
+		policy:         policy,
+		locks:          locks,
+		metrics:        remotesessionmetrics.NewRefresh(logger, meterProvider),
+		idTokens:       NoIDTokenVerifier(),
+		issuerMetadata: nil,
+		restatements:   sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -193,6 +202,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		s.metrics.Record(ctx, "", trigger, outcome)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
+	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
 	result, postLockIssuerURL, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := conv.Default(postLockIssuerURL, client.IssuerUrl)

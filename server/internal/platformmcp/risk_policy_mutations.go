@@ -391,8 +391,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
 		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil,
 		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
-		// Legacy policy-level scope columns stay NULL; detection_scopes carry scope.
-		MessageTypes: nil, ScopeInclude: pgtype.Text{String: "", Valid: false}, ScopeExempt: pgtype.Text{String: "", Valid: false}, Enabled: input.Enabled, Action: action,
+		Enabled: input.Enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
 		UserMessage: conv.PtrToPGTextEmpty(input.UserMessage), Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
 		Score: pgtype.Float8{Float64: score, Valid: true},
@@ -468,8 +467,8 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
 		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig),
-		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds), MessageTypes: slices.Clone(current.MessageTypes),
-		ScopeInclude: current.ScopeInclude, ScopeExempt: current.ScopeExempt, Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
+		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds),
+		Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
 		UserMessage: current.UserMessage, Prompt: current.Prompt, ModelConfig: slices.Clone(current.ModelConfig), Score: pgtype.Float8{Float64: current.Score, Valid: true},
 	}
 	normalized := make(map[string]any, len(input.Patch))
@@ -791,9 +790,9 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 // narrowed by the legacy message_types column is a different, narrower policy
 // and must not satisfy the create.
 func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams, catalog policycatalog.Catalog) bool {
-	return !legacyMessageTypesNarrow(row.MessageTypes, catalog) && row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
+	return row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
 		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 &&
-		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ScopeInclude == desired.ScopeInclude && row.ScopeExempt == desired.ScopeExempt && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
+		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
 }
 
 func canonicalJSONEqual(a, b []byte) bool {
