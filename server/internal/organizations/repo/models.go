@@ -41,6 +41,7 @@ type OrganizationMetadatum struct {
 	SsoEnabled         pgtype.Bool
 	VerifiedDomains    []string
 	CreationSource     pgtype.Text
+	OnboardingPreset   pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
