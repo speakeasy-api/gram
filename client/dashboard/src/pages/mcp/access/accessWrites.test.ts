@@ -4,7 +4,10 @@ import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectio
 import { buildAccessRows } from "./accessRows";
 import {
   addPrincipalsWrite,
+  allowDestructiveWrite,
   allowWrite,
+  blockDestructiveWrite,
+  narrowingSeed,
   narrowWrite,
   revokeRowWrite,
   revokeScopeWrite,
@@ -428,5 +431,346 @@ describe("a stronger scope cannot outrun a trim", () => {
           written.principalUrn === "user:u1" && written.level === "use",
       ),
     ).toBe(true);
+  });
+});
+
+describe("destructive tools", () => {
+  // The restriction people actually reach for. It has to survive a server that
+  // publishes no catalogue, which is every gateway and every remote server.
+  it("blocks them by annotation rather than by name", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(blockDestructiveWrite(direct, rows[0]!, "Acme Ops").entries).toEqual(
+      [
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: undefined,
+          dispositions: undefined,
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive"],
+        },
+      ],
+    );
+  });
+
+  it("lifts its own block and leaves the grant standing", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(allowDestructiveWrite(direct, rows[0]!).entries).toEqual([
+      { principalUrn: "user:1", level: "use" },
+    ]);
+  });
+});
+
+describe("narrowing a rule this page does not own", () => {
+  // Gateways and remote servers resolve their tools per caller and publish no
+  // catalogue, so a name list has nothing to be resolved against. The
+  // annotation vocabulary is closed, so "only read-only" is written as a block
+  // on the other three — and keeps covering tools added later.
+  it("subtracts by annotation when the choice names no tools", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries.find((e) => e.level === "blocked");
+
+    expect(written?.dispositions).toEqual([
+      "destructive",
+      "idempotent",
+      "open_world",
+    ]);
+    expect(written?.tools).toEqual([]);
+  });
+
+  it("closes the line when the choice is empty", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(direct, person, { tools: [], dispositions: [] }, undefined)
+        .entries,
+    ).toEqual(revokeScopeWrite(direct, person, "use").entries);
+  });
+});
+
+describe("narrowingSeed", () => {
+  // Opening the dialog on a row reading "all tools except destructive tools"
+  // has to show the other three chosen. Seeding from the grant alone showed
+  // nothing chosen, and saving that revoked the line.
+  it("seeds from the grants minus the annotations a block takes away", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: [],
+      dispositions: ["read_only", "idempotent", "open_world"],
+    });
+  });
+
+  it("keeps a rule's own tool names", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("choosing every annotation", () => {
+  // Four dispositions is "all tools" said the long way. Storing it as four
+  // selectors would drop the tools that carry no annotation at all.
+  it("writes an unnarrowed rule rather than four selectors", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        {
+          tools: [],
+          dispositions: [
+            "read_only",
+            "destructive",
+            "idempotent",
+            "open_world",
+          ],
+        },
+        undefined,
+      ).entries,
+    ).toEqual([
+      { principalUrn: "user:1", level: "use", tools: [], dispositions: [] },
+    ]);
+  });
+});
+
+describe("narrowingSeed against a catalogue", () => {
+  // The common path, and the one the dialog opens on for a toolset-backed
+  // server: the seed is what the row reaches once every block is applied.
+  it("seeds the tools left after a block trims the catalogue", () => {
+    const { rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, catalog)).toEqual({
+      tools: ["search", "fetch"],
+      dispositions: [],
+    });
+  });
+
+  it("drops the names its own block takes away when there is no catalogue", () => {
+    const { rows } = state([
+      entry({
+        principalUrn: "user:1",
+        level: "use",
+        tools: ["search", "delete"],
+      }),
+      entry({ principalUrn: "user:1", level: "blocked", tools: ["delete"] }),
+    ]);
+
+    expect(narrowingSeed(rows[0]!, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("an annotation choice is stored as a block", () => {
+  // A dispositions grant reaches only the tools carrying one of its
+  // annotations, so writing one would drop every tool annotated with nothing
+  // at all. The block leaves those alone.
+  it("blocks the complement even when the row's own rule is the only grant", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        { tools: [], dispositions: ["read_only"] },
+        undefined,
+      ).entries,
+    ).toEqual([
+      { principalUrn: "user:1", level: "use" },
+      {
+        principalUrn: "user:1",
+        level: "blocked",
+        tools: [],
+        dispositions: ["destructive", "idempotent", "open_world"],
+      },
+    ]);
+  });
+});
+
+describe("subtracting by name without a catalogue", () => {
+  // An empty catalogue makes the complement unknowable. Computing it anyway
+  // gave an empty block, which read as "block nothing" and fell through to an
+  // allow — lifting the block that was the only thing restricting the row.
+  it("leaves the standing block alone rather than widening to every tool", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({ principalUrn: "user:1", level: "blocked", tools: ["delete"] }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: ["search"], dispositions: [] },
+      undefined,
+    ).entries;
+
+    expect(written).toContainEqual(
+      expect.objectContaining({ level: "blocked", tools: ["delete"] }),
+    );
+    expect(
+      written.some((e) => e.level === "use" && (e.tools ?? []).length === 0),
+    ).toBe(false);
+  });
+});
+
+describe("seeding a row whose grant lives on another rule", () => {
+  // An organization-wide rule can be narrowed to names too. Seeding from the
+  // row's own rule alone left nothing chosen, and saving that revoked the
+  // inherited access on this server.
+  it("seeds the names an inherited rule grants", () => {
+    const { rows } = state([
+      role({ level: "use", tools: ["search"], memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use", tools: [] }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(narrowingSeed(person, undefined)).toEqual({
+      tools: ["search"],
+      dispositions: [],
+    });
+  });
+});
+
+describe("a tool choice cannot lift an annotation block", () => {
+  // The choice says nothing about annotations, so lifting a block naming them
+  // would hand back every tool it was subtracting.
+  it("keeps a standing destructive block when the choice names tools", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+
+    expect(
+      narrowWrite(
+        direct,
+        rows[0]!,
+        { tools: ["search"], dispositions: [] },
+        catalog,
+      ).entries,
+    ).toContainEqual(
+      expect.objectContaining({
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    );
+  });
+});
+
+describe("a name write never replaces an annotation rule", () => {
+  // The subtraction is stored at the block level, so writing it replaces the
+  // block already there. Converting an annotation block into the names it
+  // covers today would stop it covering the ones added tomorrow.
+  it("keeps an annotation block when the choice takes away exactly what it does", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    // Everything the catalogue leaves once destructive is taken away.
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: ["search", "fetch"], dispositions: [] },
+      catalog,
+    ).entries;
+
+    expect(written).toContainEqual(
+      expect.objectContaining({
+        level: "blocked",
+        dispositions: ["destructive"],
+      }),
+    );
+    expect(
+      written.some((e) => e.level === "blocked" && (e.tools ?? []).length > 0),
+    ).toBe(false);
+  });
+
+  it("leaves an annotation grant alone when there is no catalogue", () => {
+    const { direct, rows } = state([
+      role({ level: "use", tools: ["search"], memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "use",
+        dispositions: ["read_only"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(
+        direct,
+        person,
+        { tools: ["search"], dispositions: [] },
+        undefined,
+      ).entries,
+    ).toContainEqual(
+      expect.objectContaining({ level: "use", dispositions: ["read_only"] }),
+    );
   });
 });
