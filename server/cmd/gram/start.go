@@ -471,6 +471,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
 		},
+		&cli.DurationFlag{
+			Name:    "remote-session-recheck-interval",
+			Usage:   "How long an idle remote session with no refresh token goes between keepalive re-checks of its stored credential (0 uses the built-in 24h default)",
+			EnvVars: []string{"GRAM_REMOTE_SESSION_RECHECK_INTERVAL"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -1219,11 +1224,14 @@ func newStartCommand() *cli.Command {
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 					ValidationTimeout: 0,
 					AutoVerifyWait:    0,
+					RecheckInterval:   c.Duration("remote-session-recheck-interval"),
 				},
 			)
 			if err != nil {
 				return fmt.Errorf("initialize MCP service: %w", err)
 			}
+			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
+			mcpService.StartRemoteSessionRecheck(ctx)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))

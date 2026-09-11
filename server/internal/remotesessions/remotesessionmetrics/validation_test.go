@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Pins the instrument name, its two attribute keys, and that one Record is one count.
+// Pins the instrument name, its three attribute keys, and that one Record is one count.
 func TestValidationRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	t.Parallel()
 
@@ -20,7 +20,7 @@ func TestValidationRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	m := NewValidation(testenv.NewLogger(t), provider)
-	m.Record(t.Context(), "https://idp.example.com/tenant-a", "rejected_by_member")
+	m.Record(t.Context(), "https://idp.example.com/tenant-a", ValidationTriggerVerify, "rejected_by_member")
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
@@ -31,6 +31,7 @@ func TestValidationRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	require.Equal(t, "gram.remote_session.validation", got.Name)
 	metricdatatest.AssertHasAttributes(t, got,
 		attr.OAuthIssuer("https://idp.example.com/tenant-a"),
+		attr.OAuthValidationTrigger(ValidationTriggerVerify),
 		attr.Outcome("rejected_by_member"),
 	)
 
@@ -48,9 +49,9 @@ func TestValidationRecord_SeparatesOutcomes(t *testing.T) {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	m := NewValidation(testenv.NewLogger(t), provider)
-	m.Record(t.Context(), "https://idp.example.com", "valid")
-	m.Record(t.Context(), "https://idp.example.com", "valid")
-	m.Record(t.Context(), "https://idp.example.com", "unknown")
+	m.Record(t.Context(), "https://idp.example.com", ValidationTriggerConnect, "valid")
+	m.Record(t.Context(), "https://idp.example.com", ValidationTriggerConnect, "valid")
+	m.Record(t.Context(), "https://idp.example.com", ValidationTriggerKeepalive, "unknown")
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
@@ -71,8 +72,8 @@ func TestValidationRecord_NilSafe(t *testing.T) {
 	t.Parallel()
 
 	var m *Validation
-	m.Record(t.Context(), "https://idp.example.com", "valid")
+	m.Record(t.Context(), "https://idp.example.com", ValidationTriggerConnect, "valid")
 
 	empty := &Validation{probes: nil}
-	empty.Record(t.Context(), "https://idp.example.com", "valid")
+	empty.Record(t.Context(), "https://idp.example.com", ValidationTriggerVerify, "valid")
 }
