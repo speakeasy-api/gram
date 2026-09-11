@@ -1,0 +1,18 @@
+server/internal/risk/repo/queries.sql.go
+  h_e404c1a6a54184 260,796,2168,2254,2754,2863,2917,2973,3534,3588,3726,5636
+server/migrations/20260911144453_drop_legacy_policy_scope_columns.sql
+  h_e404c1a6a54184 1-2
+server/migrations/atlas.sum
+  h_e404c1a6a54184 1,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6da06f1e48845b78f44e6f78a28436f2dcd0bad8",
+  "prompts": {},
+  "humans": {
+    "h_e404c1a6a54184": {
+      "author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
