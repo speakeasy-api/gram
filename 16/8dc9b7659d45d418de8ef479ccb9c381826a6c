@@ -1,0 +1,25 @@
+server/internal/background/activities/risk_analysis/batch_finding_publish.go
+  s_bc88c4a5107e0e::t_b12b8d1d18c837 87
+server/internal/scanners/customruleanalyzer/handler.go
+  s_bc88c4a5107e0e::t_51d764b8997915 103
+server/internal/scanners/promptinjection/handler.go
+  s_bc88c4a5107e0e::t_aeaf2ac6e0f5f7 105
+server/internal/scanners/promptpolicy/handler.go
+  s_bc88c4a5107e0e::t_345e0dcdeb1e6b 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "168dc9b7659d45d418de8ef479ccb9c381826a6c",
+  "prompts": {},
+  "sessions": {
+    "s_bc88c4a5107e0e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "424c8a56-d717-4c34-b10d-45a5b9be1175",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
