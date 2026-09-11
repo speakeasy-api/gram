@@ -14,9 +14,7 @@ func TestConsentScriptVerificationPolling(t *testing.T) {
 	t.Parallel()
 
 	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node is required to exercise the consent script")
-	}
+	require.NoError(t, err, "node is required to exercise the consent script")
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, "-e", `
