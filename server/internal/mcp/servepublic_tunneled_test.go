@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -36,6 +37,17 @@ import (
 // fakeTunnelGateway emulates the tunnel gateway's forward listener fronting a
 // customer MCP backend: it enforces exact-target semantics, reports the agent
 // session it served, and captures forwarded headers for assertions.
+// requestID echoes the JSON-RPC id of a request body, as a real backend does; 1 when it carries none.
+func requestID(body string) string {
+	var req struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil || len(req.ID) == 0 {
+		return "1"
+	}
+	return string(req.ID)
+}
+
 type fakeTunnelGateway struct {
 	t              *testing.T
 	agentSessionID string
@@ -131,7 +143,7 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"fake-tunnel-backend","version":"1.0.0"}}}`)
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"fake-tunnel-backend","version":"1.0.0"}}}`)
 			return
 		}
 		if g.backendSessionID != "" && r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
@@ -144,7 +156,7 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`)
+		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"tools":[]}}`)
 		return
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

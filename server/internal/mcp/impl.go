@@ -77,8 +77,10 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -179,6 +181,10 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
+	// validationMetrics counts the consent page's live validation probes.
+	validationMetrics *remotesessionmetrics.Validation
+	// validationLimiter paces verifies per consent challenge; nil without Redis.
+	validationLimiter *ratelimit.Limiter
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
 	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
@@ -476,6 +482,8 @@ func NewService(
 		identityValidator:  mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
+		validationMetrics:  remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:  newValidationLimiter(redisClient, meterProvider),
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
