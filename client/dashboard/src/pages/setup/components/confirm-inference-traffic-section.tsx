@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { ExternalLink } from "lucide-react";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { SessionAuditRevoke } from "./session-audit-revoke";
 import { StepSection } from "./step-section";
 import {
   sourceLabel,
@@ -128,6 +129,7 @@ export function ConfirmInferenceTrafficSection({
           isError={query.isError}
           onRetry={() => void query.refetch()}
         />
+        {hasEvents ? <SessionAuditRevoke /> : null}
       </div>
     </StepSection>
   );

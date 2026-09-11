@@ -16,6 +16,17 @@ const mocks = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   detections: { data: undefined as undefined | { detections: unknown[] } },
+  access: {
+    available: true,
+    holdsRole: false,
+    canReadSessions: true,
+    scimManaged: false,
+    roleExists: true,
+    isPending: false,
+    grant: vi.fn(),
+    ensureRole: vi.fn(),
+    revoke: vi.fn(),
+  },
   burst: vi.fn(),
   onScreen: true,
 }));
@@ -25,6 +36,16 @@ vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
 }));
 vi.mock("@gram/client/react-query/aiDetections.js", () => ({
   useAiDetections: () => mocks.detections,
+}));
+vi.mock("./session-audit-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session-audit-access")>()),
+  useSessionAuditAccess: () => mocks.access,
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+}));
+vi.mock("react-router", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 
 // Sections stay mounted while hidden, so the celebration has to know whether
@@ -66,6 +87,8 @@ beforeEach(() => {
   mocks.detections.data = undefined;
   mocks.burst.mockReset();
   mocks.onScreen = true;
+  Object.assign(mocks.access, { holdsRole: false, scimManaged: false });
+  mocks.access.revoke.mockReset();
 });
 
 describe("ConfirmTrafficSection", () => {
@@ -266,5 +289,47 @@ describe("ConfirmTrafficSection detected clients", () => {
     render(<ConfirmTrafficSection index={3} description="Run a tool." />);
 
     expect(screen.queryByText("Open one of these clients:")).toBeNull();
+  });
+});
+
+describe("ConfirmTrafficSection session audit hand-back", () => {
+  const card = () => (
+    <ConfirmTrafficSection
+      index={3}
+      description="Run a tool."
+      matchesSource={isOtherPlatformSource}
+    />
+  );
+
+  it("waits for confirmed traffic before asking for the permission back", () => {
+    mocks.access.holdsRole = true;
+
+    render(card());
+
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+  });
+
+  it("offers the hand-back once traffic is confirmed", () => {
+    mocks.access.holdsRole = true;
+    const view = render(card());
+
+    poll("codex");
+    view.rerender(card());
+
+    expect(screen.getByText(/still a Session Auditor/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing to an admin who never took the role", () => {
+    const view = render(card());
+
+    poll("codex");
+    view.rerender(card());
+
+    expect(screen.getByText("Confirmed")).toBeTruthy();
+    expect(screen.queryByText(/still a Session Auditor/)).toBeNull();
   });
 });
