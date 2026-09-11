@@ -33,18 +33,30 @@ func TestUnavailableDistributionAdmissionIsIncompleteAndBounded(t *testing.T) {
 }
 
 type stubDistributionAdmissionReader struct {
-	plugin DistributionAdmission
-	target DistributionAdmission
+	plugin             DistributionAdmission
+	target             DistributionAdmission
+	pluginCalls        *int
+	targetCalls        *int
+	notApplicableCalls *int
 }
 
 func (s stubDistributionAdmissionReader) ForPlugin(_ context.Context, _ string, _, _ uuid.UUID) DistributionAdmission {
+	if s.pluginCalls != nil {
+		*s.pluginCalls++
+	}
 	return s.plugin
 }
 
 func (s stubDistributionAdmissionReader) ForTarget(_ context.Context, _ string, _ uuid.UUID, _ string) DistributionAdmission {
+	if s.targetCalls != nil {
+		*s.targetCalls++
+	}
 	return s.target
 }
 
 func (s stubDistributionAdmissionReader) NotApplicable(_ context.Context, _ string, _ uuid.UUID) DistributionAdmission {
+	if s.notApplicableCalls != nil {
+		*s.notApplicableCalls++
+	}
 	return DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
 }

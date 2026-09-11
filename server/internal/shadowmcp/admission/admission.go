@@ -201,7 +201,7 @@ func CountMissingAudience(principals []string) MissingAudienceCounts {
 			switch parsed.Type {
 			case urn.PrincipalTypeRole:
 				result.Roles++
-			case urn.PrincipalTypeUser:
+			case urn.PrincipalTypeUser, urn.PrincipalTypeEmail:
 				result.Users++
 			default:
 			}

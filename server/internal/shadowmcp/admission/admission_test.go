@@ -83,6 +83,14 @@ func TestCountMissingAudienceDeduplicatesCanonicalAliases(t *testing.T) {
 	require.Equal(t, MissingAudienceCounts{Everyone: 1, Roles: 1, Groups: 0, Attributes: 0, Users: 0}, counts)
 }
 
+func TestCountMissingAudienceCountsLegacyEmailAsUser(t *testing.T) {
+	t.Parallel()
+
+	counts := CountMissingAudience([]string{"email:member@example.test"})
+
+	require.Equal(t, MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 1}, counts)
+}
+
 func TestEvaluateRequiresApprovalAfterDenial(t *testing.T) {
 	t.Parallel()
 

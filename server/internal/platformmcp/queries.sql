@@ -1920,13 +1920,14 @@ WHERE registration.organization_id = @organization_id
   AND registration.mcp_server_id = @mcp_server_id
 ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST;
 
--- name: ListDirectRemoteAdmissionAudiencesForTarget :many
--- Return every live plugin audience for one in-scope direct-remote target. The
--- stored URL can carry a safe query, while Shadow inventory and approvals key
--- on the query-free base URL, so the predicate compares that exact base form.
-SELECT
-    plugin.id AS plugin_id,
-    assignment.principal_urn
+-- name: ListDirectRemoteAdmissionTargetCandidates :many
+-- Return live registered direct-remote targets for exact canonical matching in
+-- Go. Dashboard URL edits can preserve noncanonical spelling that SQL must not
+-- reinterpret. Normal projects are capped at five registrations; 101 is a
+-- fail-closed corruption guard rather than an application pagination boundary.
+SELECT DISTINCT
+    server.id AS mcp_server_id,
+    remote.url AS remote_url
 FROM platform_mcp_catalog_registrations AS registration
 JOIN mcp_servers AS server
   ON server.id = registration.mcp_server_id
@@ -1944,14 +1945,13 @@ JOIN plugins AS plugin
  AND plugin.organization_id = registration.organization_id
  AND plugin.project_id = registration.project_id
  AND plugin.deleted IS FALSE
-LEFT JOIN plugin_assignments AS assignment
-  ON assignment.plugin_id = plugin.id
- AND assignment.organization_id = registration.organization_id
 WHERE registration.organization_id = @organization_id
   AND registration.project_id = @project_id
   AND registration.catalog_provider = 'direct-remote-url-v1'
-  AND split_part(remote.url, '?', 1) IN (@target_base_url, @target_base_url || '/')
-ORDER BY plugin.id, assignment.principal_urn NULLS FIRST;
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY server.id
+LIMIT 101;
 
 -- name: ListDirectRemoteAdmissionMCPServersForRemote :many
 -- A remote URL edit affects every provenance-bound MCP server currently backed
