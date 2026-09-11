@@ -2828,6 +2828,18 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- traffic on /oauth/callback drops to zero and they can be re-issued.
   legacy_callback_url boolean NOT NULL DEFAULT FALSE,
 
+  -- RFC 9728 display members of the one protected resource this client was
+  -- registered for, read from that resource's metadata document. The issuer
+  -- row keeps only authorization-server (RFC 8414) data; a shared issuer must
+  -- not carry one resource's name or legal links. resource_identifier is the
+  -- document's resource value the other four were read for, so a later probe
+  -- of another resource never overwrites them. All NULL until captured.
+  resource_identifier TEXT,
+  resource_name TEXT,
+  resource_documentation TEXT,
+  resource_policy_uri TEXT,
+  resource_tos_uri TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
