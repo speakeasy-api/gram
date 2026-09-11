@@ -5399,6 +5399,208 @@ func EncodeResolveChallengeError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
+// EncodeListIdentityAccessResponse returns an encoder for responses returned
+// by the access listIdentityAccess endpoint.
+func EncodeListIdentityAccessResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.ListIdentityAccessResult)
+		enc := encoder(ctx, w)
+		body := NewListIdentityAccessResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListIdentityAccessRequest returns a decoder for requests sent to the
+// access listIdentityAccess endpoint.
+func DecodeListIdentityAccessRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListIdentityAccessPayload, error) {
+	return func(r *http.Request) (*access.ListIdentityAccessPayload, error) {
+		var payload *access.ListIdentityAccessPayload
+		var (
+			userID       string
+			sessionToken *string
+			err          error
+		)
+		userID = r.URL.Query().Get("user_id")
+		if userID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "query string"))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListIdentityAccessPayload(userID, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListIdentityAccessError returns an encoder for errors returned by the
+// listIdentityAccess access endpoint.
+func EncodeListIdentityAccessError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListIdentityAccessGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAccessRoleToRoleResponseBody builds a value of type *RoleResponseBody
 // from a value of type *access.Role.
 func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
@@ -5945,6 +6147,36 @@ func marshalAccessChallengeResolutionToChallengeResolutionResponseBody(v *access
 		RoleSlug:       v.RoleSlug,
 		ResolvedBy:     v.ResolvedBy,
 		CreatedAt:      v.CreatedAt,
+	}
+
+	return res
+}
+
+// marshalAccessAccessibleMCPServerToAccessibleMCPServerResponseBody builds a
+// value of type *AccessibleMCPServerResponseBody from a value of type
+// *access.AccessibleMCPServer.
+func marshalAccessAccessibleMCPServerToAccessibleMCPServerResponseBody(v *access.AccessibleMCPServer) *AccessibleMCPServerResponseBody {
+	res := &AccessibleMCPServerResponseBody{
+		ID:          v.ID,
+		Name:        v.Name,
+		Slug:        v.Slug,
+		ProjectID:   v.ProjectID,
+		ProjectSlug: v.ProjectSlug,
+	}
+
+	return res
+}
+
+// marshalAccessAccessibleSkillToAccessibleSkillResponseBody builds a value of
+// type *AccessibleSkillResponseBody from a value of type
+// *access.AccessibleSkill.
+func marshalAccessAccessibleSkillToAccessibleSkillResponseBody(v *access.AccessibleSkill) *AccessibleSkillResponseBody {
+	res := &AccessibleSkillResponseBody{
+		ID:          v.ID,
+		Name:        v.Name,
+		DisplayName: v.DisplayName,
+		ProjectID:   v.ProjectID,
+		ProjectSlug: v.ProjectSlug,
 	}
 
 	return res

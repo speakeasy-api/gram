@@ -1218,3 +1218,23 @@ func BuildResolveChallengePayload(accessResolveChallengeBody string, accessResol
 
 	return v, nil
 }
+
+// BuildListIdentityAccessPayload builds the payload for the access
+// listIdentityAccess endpoint from CLI flags.
+func BuildListIdentityAccessPayload(accessListIdentityAccessUserID string, accessListIdentityAccessSessionToken string) (*access.ListIdentityAccessPayload, error) {
+	var userID string
+	{
+		userID = accessListIdentityAccessUserID
+	}
+	var sessionToken *string
+	{
+		if accessListIdentityAccessSessionToken != "" {
+			sessionToken = &accessListIdentityAccessSessionToken
+		}
+	}
+	v := &access.ListIdentityAccessPayload{}
+	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
