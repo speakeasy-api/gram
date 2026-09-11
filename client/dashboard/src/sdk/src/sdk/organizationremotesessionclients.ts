@@ -12,6 +12,7 @@ import { organizationRemoteSessionClientsGetDeletePreflight } from "../funcs/org
 import { organizationRemoteSessionClientsList } from "../funcs/organizationRemoteSessionClientsList.js";
 import { organizationRemoteSessionClientsListMcpServers } from "../funcs/organizationRemoteSessionClientsListMcpServers.js";
 import { organizationRemoteSessionClientsRemoveFromMcpServer } from "../funcs/organizationRemoteSessionClientsRemoveFromMcpServer.js";
+import { organizationRemoteSessionClientsRotate } from "../funcs/organizationRemoteSessionClientsRotate.js";
 import { organizationRemoteSessionClientsUpdate } from "../funcs/organizationRemoteSessionClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListOrganizationMcpServersResult } from "../models/components/listorganizationmcpserversresult.js";
@@ -58,6 +59,10 @@ import {
   RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
   RemoveOrganizationRemoteSessionClientFromMcpServerSecurity,
 } from "../models/operations/removeorganizationremotesessionclientfrommcpserver.js";
+import {
+  RotateOrganizationRemoteSessionClientRequest,
+  RotateOrganizationRemoteSessionClientSecurity,
+} from "../models/operations/rotateorganizationremotesessionclient.js";
 import {
   UpdateOrganizationRemoteSessionClientRequest,
   UpdateOrganizationRemoteSessionClientSecurity,
@@ -260,6 +265,25 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationRemoteSessionClientsRemoveFromMcpServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateClient organizationRemoteSessionClients
+   *
+   * @remarks
+   * Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The client must be dynamically registered (registration_endpoint set) or its issuer must publish a registration_endpoint. Requires org:admin.
+   */
+  async rotate(
+    request: RotateOrganizationRemoteSessionClientRequest,
+    security?: RotateOrganizationRemoteSessionClientSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionClient> {
+    return unwrapAsync(organizationRemoteSessionClientsRotate(
       this,
       request,
       security,

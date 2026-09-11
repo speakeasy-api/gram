@@ -23,7 +23,10 @@ import {
   buildUserSessionResourceSlug,
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  proxyRegisterUpstreamClient,
+  registrationProvenance,
+} from "@/lib/proxyRegisterUpstreamClient";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
@@ -379,6 +382,10 @@ export function AttachRemoteIdentityProviderSheet({
           clientId: string;
           clientSecret?: string;
           tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+          // Set for DCR so the server records where the client was
+          // registered and can re-register it in place once the issuer
+          // expires it.
+          provenance?: ReturnType<typeof registrationProvenance>;
         };
         if (clientType === "dcr") {
           const registered = await proxyRegisterUpstreamClient(authedFetch, {
@@ -407,6 +414,7 @@ export function AttachRemoteIdentityProviderSheet({
             // selection) as undefined so the API sees an omitted value.
             tokenEndpointAuthMethod:
               narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
+            provenance: registrationProvenance(registered),
           };
         } else {
           clientCredentials = {
@@ -428,6 +436,7 @@ export function AttachRemoteIdentityProviderSheet({
             tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
             scope: parsedScopes.length > 0 ? parsedScopes : undefined,
             audience: trimmedAudience || undefined,
+            ...clientCredentials.provenance,
           },
         });
       }

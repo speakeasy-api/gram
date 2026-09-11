@@ -7,9 +7,9 @@ package remotesessionmetrics
 // line can be joined to its metric series.
 //
 // Success and failure outcomes are kept apart from each other along the axis
-// a monitor cares about: whose fault it is. invalid_grant, rejected, and
-// rejected_unparsed are configuration or credential problems an operator can
-// act on; upstream_error, rate_limited, and unreachable are the upstream
+// a monitor cares about: whose fault it is. invalid_grant, invalid_client,
+// rejected, and rejected_unparsed are configuration or credential problems an
+// operator can act on; upstream_error, rate_limited, and unreachable are the upstream
 // having a bad minute; internal_error is a Gram bug; canceled is the caller
 // going away.
 type RefreshOutcome string
@@ -34,7 +34,7 @@ const (
 
 	// RefreshOutcomeNoGrant: no upstream call was made because the session
 	// holds no refresh grant, the grant was already cleared by an earlier
-	// invalid_grant, or the grant is past its own expiry.
+	// invalid_grant or invalid_client, or the grant is past its own expiry.
 	RefreshOutcomeNoGrant RefreshOutcome = "no_grant"
 
 	// RefreshOutcomeInvalidGrant: the upstream definitively rejected the grant
@@ -45,10 +45,18 @@ const (
 	// Gram did, not the response class.
 	RefreshOutcomeInvalidGrant RefreshOutcome = "invalid_grant"
 
+	// RefreshOutcomeInvalidClient: the upstream answered RFC 6749 §5.2
+	// invalid_client, so the issuer no longer recognizes the client_id or its
+	// credentials. The grant was cleared, as it can never be redeemed by a
+	// client the issuer has forgotten, and the client row was marked so the
+	// next remote login re-registers it when it has a registration endpoint on
+	// file. Recorded on any HTTP status for the same reason as invalid_grant.
+	RefreshOutcomeInvalidClient RefreshOutcome = "invalid_client"
+
 	// RefreshOutcomeRejected: a non-5xx response whose body parsed to an RFC
-	// 6749 §5.2 code other than invalid_grant, such as invalid_client or
-	// unauthorized_client. Operator-actionable configuration errors; the grant
-	// is kept.
+	// 6749 §5.2 code other than invalid_grant or invalid_client, such as
+	// unauthorized_client or invalid_scope. Operator-actionable configuration
+	// errors; the grant is kept.
 	RefreshOutcomeRejected RefreshOutcome = "rejected"
 
 	// RefreshOutcomeRejectedUnparsed: a non-5xx response whose body carried no
@@ -57,14 +65,15 @@ const (
 	// the oautherr package does not yet recognize.
 	RefreshOutcomeRejectedUnparsed RefreshOutcome = "rejected_unparsed"
 
-	// RefreshOutcomeUpstreamError: a 5xx that did not carry invalid_grant. A
+	// RefreshOutcomeUpstreamError: a 5xx that carried neither invalid_grant
+	// nor invalid_client. A
 	// parsed server_error or temporarily_unavailable body lands here too, as
 	// the signal is the same either way: the upstream, not Gram's
 	// configuration, is at fault.
 	RefreshOutcomeUpstreamError RefreshOutcome = "upstream_error"
 
 	// RefreshOutcomeRateLimited: the upstream returned HTTP 429 without
-	// invalid_grant. The scheduled sweep stops contacting that provider for
+	// invalid_grant or invalid_client. The scheduled sweep stops contacting that provider for
 	// the rest of its pass.
 	RefreshOutcomeRateLimited RefreshOutcome = "rate_limited"
 

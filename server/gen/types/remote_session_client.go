@@ -32,6 +32,14 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt    string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string

@@ -36,13 +36,25 @@ export type CreateOrganizationRemoteSessionClientForm = {
    */
   clientId: string;
   /**
+   * When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+   */
+  clientIdIssuedAt?: Date | undefined;
+  /**
    * Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
    */
   clientSecret?: string | undefined;
   /**
+   * When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+   */
+  clientSecretExpiresAt?: Date | undefined;
+  /**
    * Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
    */
   projectId?: string | undefined;
+  /**
+   * The RFC 7591 registration endpoint the client was dynamically registered at, as returned by the issuer's discovery document. Set only when the credentials came from /oauth/proxy-register; Gram may re-register the client at this endpoint once the issuer reports the registration expired. Omit for credentials obtained out-of-band.
+   */
+  registrationEndpoint?: string | undefined;
   /**
    * The owning remote_session_issuer id; must belong to the caller's organization.
    */
@@ -69,8 +81,11 @@ export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthMethod$ou
 export type CreateOrganizationRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   client_id: string;
+  client_id_issued_at?: string | undefined;
   client_secret?: string | undefined;
+  client_secret_expires_at?: string | undefined;
   project_id?: string | undefined;
+  registration_endpoint?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
@@ -85,8 +100,15 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
     z.object({
       audience: z.optional(z.string()),
       clientId: z.string(),
+      clientIdIssuedAt: z.optional(
+        z.pipe(z.date(), z.transform(v => v.toISOString())),
+      ),
       clientSecret: z.optional(z.string()),
+      clientSecretExpiresAt: z.optional(
+        z.pipe(z.date(), z.transform(v => v.toISOString())),
+      ),
       projectId: z.optional(z.string()),
+      registrationEndpoint: z.optional(z.string()),
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),
       tokenEndpointAuthMethod: z.optional(
@@ -96,8 +118,11 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
     z.transform((v) => {
       return remap$(v, {
         clientId: "client_id",
+        clientIdIssuedAt: "client_id_issued_at",
         clientSecret: "client_secret",
+        clientSecretExpiresAt: "client_secret_expires_at",
         projectId: "project_id",
+        registrationEndpoint: "registration_endpoint",
         remoteSessionIssuerId: "remote_session_issuer_id",
         tokenEndpointAuthMethod: "token_endpoint_auth_method",
       });

@@ -10,7 +10,11 @@ import type { Gram } from "@gram/client";
 import { fromPromise } from "xstate";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  proxyRegisterUpstreamClient,
+  registrationProvenance,
+  type RegistrationProvenance,
+} from "@/lib/proxyRegisterUpstreamClient";
 
 import {
   authServerOrigin,
@@ -64,6 +68,10 @@ export type ProvisionUserSessionInput = {
   clientId: string;
   clientSecret: string;
   audience: string;
+  // Present when registerClient obtained the credentials, so the server
+  // records where and can re-register them in place once the issuer expires
+  // them. Absent for credentials the operator typed in.
+  registration?: RegistrationProvenance;
 };
 
 export type RegisterClientInput = {
@@ -80,6 +88,7 @@ export type RegisterClientOutput = {
   clientId: string;
   clientSecret: string;
   tokenAuthMethod: string | null;
+  registration: RegistrationProvenance;
 };
 
 export type AuthedFetch = (
@@ -240,6 +249,7 @@ export function createWizardServices(
               input.tokenAuthMethod,
             ),
             audience: input.audience || undefined,
+            ...input.registration,
           },
         },
         ...opts,
@@ -293,6 +303,7 @@ export function createWizardServices(
         clientId: result.clientId,
         clientSecret: result.clientSecret,
         tokenAuthMethod: result.tokenEndpointAuthMethod,
+        registration: registrationProvenance(result),
       };
     },
   );

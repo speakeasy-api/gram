@@ -293,6 +293,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 			Scope:                   []string{"tools:read"},
 			Audience:                pgtype.Text{String: "", Valid: false},
 			LegacyCallbackUrl:       false,
+			RegistrationEndpoint:    pgtype.Text{String: "", Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("create local fixture client: %w", err)

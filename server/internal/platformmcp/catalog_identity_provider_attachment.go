@@ -367,6 +367,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 		Scope:                   append([]string(nil), scopes...),
 		Audience:                pgtype.Text{},
 		LegacyCallbackUrl:       false,
+		RegistrationEndpoint:    conv.ToPGText(registered.RegistrationEndpoint),
 	})
 	if err != nil {
 		return false, fmt.Errorf("create identity-provider client: %w", err)

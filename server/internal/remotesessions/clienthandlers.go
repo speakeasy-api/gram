@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -185,6 +187,11 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
+	provenance, err := parseRegistrationProvenance(ctx, logger, payload.RegistrationEndpoint, payload.ClientIDIssuedAt, payload.ClientSecretExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
 	var secretCiphertext pgtype.Text
 	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
 		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
@@ -202,7 +209,12 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	if _, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
+	issuer, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
+	if err != nil {
+		return nil, err
+	}
+	provenance.registrationEndpoint, err = validateRegistrationEndpointForIssuer(ctx, logger, provenance.registrationEndpoint, issuer)
+	if err != nil {
 		return nil, err
 	}
 
@@ -212,12 +224,13 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		RemoteSessionIssuerID:   issuerID,
 		ClientID:                clientID,
 		ClientSecretEncrypted:   secretCiphertext,
-		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ClientIDIssuedAt:        provenance.clientIDIssuedAt,
+		ClientSecretExpiresAt:   provenance.clientSecretExpiresAt,
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		Scope:                   payload.Scope,
 		Audience:                conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:       false,
+		RegistrationEndpoint:    provenance.registrationEndpoint,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -921,4 +934,86 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
+}
+
+// registrationProvenance is what a create form says about where its
+// credentials came from: the endpoint they were dynamically registered at and
+// the issuance and expiry stamps the issuer reported. Absent stamps fall back
+// to the time of the call and to no expiry, matching credentials pasted in
+// out-of-band.
+type registrationProvenance struct {
+	registrationEndpoint  pgtype.Text
+	clientIDIssuedAt      pgtype.Timestamptz
+	clientSecretExpiresAt pgtype.Timestamptz
+}
+
+// parseRegistrationProvenance validates the optional provenance fields of a
+// create form. A later rotation posts a registration to the endpoint and
+// adopts the secret that comes back, so it must be HTTPS, with the RFC 8252
+// loopback exception for local development; the stamps must be RFC 3339.
+func parseRegistrationProvenance(ctx context.Context, logger *slog.Logger, registrationEndpoint, clientIDIssuedAt, clientSecretExpiresAt *string) (registrationProvenance, error) {
+	out := registrationProvenance{
+		registrationEndpoint:  pgtype.Text{String: "", Valid: false},
+		clientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+		clientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+	}
+	if endpoint := strings.TrimSpace(conv.PtrValOr(registrationEndpoint, "")); endpoint != "" {
+		parsed, err := url.Parse(endpoint)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && !cimd.IsLoopbackRedirectURI(parsed)) {
+			return out, oops.E(oops.CodeBadRequest, err, "registration_endpoint must be an absolute https URL").LogError(ctx, logger)
+		}
+		out.registrationEndpoint = conv.ToPGText(parsed.String())
+	}
+	if clientIDIssuedAt != nil {
+		issuedAt, err := time.Parse(time.RFC3339, *clientIDIssuedAt)
+		if err != nil {
+			return out, oops.E(oops.CodeBadRequest, err, "client_id_issued_at must be an RFC 3339 timestamp").LogError(ctx, logger)
+		}
+		out.clientIDIssuedAt = conv.ToPGTimestamptz(issuedAt.UTC())
+	}
+	if clientSecretExpiresAt != nil {
+		expiresAt, err := time.Parse(time.RFC3339, *clientSecretExpiresAt)
+		if err != nil {
+			return out, oops.E(oops.CodeBadRequest, err, "client_secret_expires_at must be an RFC 3339 timestamp").LogError(ctx, logger)
+		}
+		out.clientSecretExpiresAt = conv.ToPGTimestamptz(expiresAt.UTC())
+	}
+	return out, nil
+}
+
+// validateRegistrationEndpointForIssuer ties a create form's registration
+// endpoint to the issuer the client is being created under, returning the
+// endpoint to record. A later rotation posts a registration to this endpoint
+// under the system principal and adopts whatever credentials come back, so the
+// caller must not be able to name an endpoint the issuer does not own. An
+// endpoint the issuer publishes must be matched exactly. When the issuer
+// publishes none, an endpoint on the issuer's origin is recorded and any other
+// is dropped rather than refused: providers do register on sibling hosts, and
+// a client created without provenance simply never rotates automatically.
+func validateRegistrationEndpointForIssuer(ctx context.Context, logger *slog.Logger, endpoint pgtype.Text, issuer repo.RemoteSessionIssuer) (pgtype.Text, error) {
+	none := pgtype.Text{String: "", Valid: false}
+	if !endpoint.Valid {
+		return none, nil
+	}
+	if published := strings.TrimSpace(issuer.RegistrationEndpoint.String); published != "" {
+		if strings.TrimRight(endpoint.String, "/") != strings.TrimRight(published, "/") {
+			return none, oops.E(oops.CodeBadRequest, nil, "registration_endpoint must match the issuer's registration endpoint").LogWarn(ctx, logger)
+		}
+		return endpoint, nil
+	}
+	issuerURL, err := url.Parse(issuer.Issuer)
+	if err != nil {
+		return none, oops.E(oops.CodeBadRequest, err, "issuer URL is not parseable").LogWarn(ctx, logger)
+	}
+	endpointURL, err := url.Parse(endpoint.String)
+	if err != nil {
+		return none, oops.E(oops.CodeBadRequest, err, "registration_endpoint must be an absolute https URL").LogWarn(ctx, logger)
+	}
+	if endpointURL.Scheme != issuerURL.Scheme || endpointURL.Host != issuerURL.Host {
+		logger.WarnContext(ctx, "registration_endpoint is not on the issuer's origin and the issuer publishes none; recording the client without registration provenance",
+			attr.SlogOAuthIssuer(issuer.Issuer),
+		)
+		return none, nil
+	}
+	return endpoint, nil
 }

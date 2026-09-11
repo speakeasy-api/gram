@@ -366,6 +366,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionClientsList.ts: {}
   src/funcs/organizationRemoteSessionClientsListMcpServers.ts: {}
   src/funcs/organizationRemoteSessionClientsRemoveFromMcpServer.ts: {}
+  src/funcs/organizationRemoteSessionClientsRotate.ts: {}
   src/funcs/organizationRemoteSessionClientsUpdate.ts: {}
   src/funcs/organizationRemoteSessionIssuersCreate.ts: {}
   src/funcs/organizationRemoteSessionIssuersDelete.ts: {}
@@ -2235,6 +2236,7 @@ trackedFiles:
   src/models/operations/rotateapikey.ts: {}
   src/models/operations/rotatelitellminstancekey.ts: {}
   src/models/operations/rotatenetworkingresscredentials.ts: {}
+  src/models/operations/rotateorganizationremotesessionclient.ts: {}
   src/models/operations/rotatetunneledmcpserverkey.ts: {}
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
@@ -3117,6 +3119,7 @@ trackedFiles:
   src/react-query/rootMcpServers.ts: {}
   src/react-query/rotateLiteLLMInstanceKey.ts: {}
   src/react-query/rotateNetworkIngressCredentials.ts: {}
+  src/react-query/rotateOrganizationRemoteSessionClient.ts: {}
   src/react-query/rotateTunneledMcpServerKey.ts: {}
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
@@ -9820,6 +9823,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  rotateOrganizationRemoteSessionClient:
+    speakeasy-default-rotate-organization-remote-session-client:
+      requestBody:
+        application/json: {"id": "ad49b1eb-41f8-4b32-b0a3-f2ae2afb004f"}
+      responses:
+        "200":
+          application/json: {"client_id": "<id>", "client_id_issued_at": "2025-06-25T12:31:35.056Z", "created_at": "2026-11-18T14:04:19.428Z", "id": "ce0bff6f-5196-479b-ab10-00238fa08dc2", "organization_id": "<id>", "project_id": "<id>", "remote_session_issuer_id": "8c2736ca-c6b3-4ec6-92a2-c66dac1ca330", "updated_at": "2026-11-09T13:06:45.286Z", "user_session_issuer_ids": ["b3a97ca2-d19c-4214-8c85-26045f467b06", "3e16be52-08c8-46d8-8549-cd1ed4965381", "6ab6ea7e-238f-4627-b3db-5041c7709546"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   rotateTunneledMcpServerKey:
     speakeasy-default-rotate-tunneled-mcp-server-key:
       requestBody:

@@ -54,6 +54,10 @@ type Client struct {
 	// detachClientKeySet endpoint.
 	DetachClientKeySetDoer goahttp.Doer
 
+	// RotateClient Doer is the HTTP client used to make requests to the
+	// rotateClient endpoint.
+	RotateClientDoer goahttp.Doer
+
 	// DeleteClient Doer is the HTTP client used to make requests to the
 	// deleteClient endpoint.
 	DeleteClientDoer goahttp.Doer
@@ -92,6 +96,7 @@ func NewClient(
 		UpdateClientDoer:              doer,
 		AttachClientKeySetDoer:        doer,
 		DetachClientKeySetDoer:        doer,
+		RotateClientDoer:              doer,
 		DeleteClientDoer:              doer,
 		RemoveClientFromMcpServerDoer: doer,
 		RestoreResponseBody:           restoreBody,
@@ -313,6 +318,30 @@ func (c *Client) DetachClientKeySet() goa.Endpoint {
 		resp, err := c.DetachClientKeySetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "detachClientKeySet", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RotateClient returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionClients service rotateClient server.
+func (c *Client) RotateClient() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateClientRequest(c.encoder)
+		decodeResponse = DecodeRotateClientResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateClientRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateClientDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionClients", "rotateClient", err)
 		}
 		return decodeResponse(resp)
 	}

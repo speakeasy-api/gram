@@ -33,11 +33,23 @@ type ProxyRegisterRequest struct {
 	TokenEndpointAuthMethod *string `json:"token_endpoint_auth_method,omitempty"`
 }
 
+// ProxyRegisterResponse is what a dynamic registration produced. The wire form
+// carries the issuer's issuance and expiry stamps as RFC 3339 strings so the
+// dashboard can hand them back on the create call; the timestamp fields are
+// the same values for server-side callers that persist the client directly.
 type ProxyRegisterResponse struct {
 	ClientID                string             `json:"client_id"`
 	ClientSecret            string             `json:"client_secret,omitempty"`
+	ClientIDIssuedAt        pgtype.Timestamptz `json:"-"`
 	ClientSecretExpiresAt   pgtype.Timestamptz `json:"-"`
 	TokenEndpointAuthMethod string             `json:"token_endpoint_auth_method,omitempty"`
+	// RegistrationEndpoint is the endpoint the client was registered at, echoed
+	// so the caller records the provenance without trusting its own input.
+	RegistrationEndpoint string `json:"registration_endpoint"`
+	// ClientIDIssuedAtRFC3339 and ClientSecretExpiresAtRFC3339 are the wire
+	// renderings of the timestamp fields; empty when the issuer reported none.
+	ClientIDIssuedAtRFC3339      string `json:"client_id_issued_at,omitempty"`
+	ClientSecretExpiresAtRFC3339 string `json:"client_secret_expires_at,omitempty"`
 }
 
 // DynamicClientRegistrationError classifies a refusal from the upstream
@@ -157,15 +169,31 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	if dcrResp.ClientID == "" {
 		return ProxyRegisterResponse{}, errors.New("DCR response missing client_id")
 	}
+	// RFC 7591 §3.2.1: client_secret_expires_at of 0 means the secret does not
+	// expire, and an absent client_id_issued_at means the issuer did not say.
 	clientSecretExpiresAt := pgtype.Timestamptz{}
+	clientSecretExpiresAtRFC3339 := ""
 	if dcrResp.ClientSecretExpiresAt > 0 {
-		clientSecretExpiresAt = conv.ToPGTimestamptz(time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC())
+		expiresAt := time.Unix(dcrResp.ClientSecretExpiresAt, 0).UTC()
+		clientSecretExpiresAt = conv.ToPGTimestamptz(expiresAt)
+		clientSecretExpiresAtRFC3339 = expiresAt.Format(time.RFC3339)
+	}
+	clientIDIssuedAt := pgtype.Timestamptz{}
+	clientIDIssuedAtRFC3339 := ""
+	if dcrResp.ClientIDIssuedAt > 0 {
+		issuedAt := time.Unix(dcrResp.ClientIDIssuedAt, 0).UTC()
+		clientIDIssuedAt = conv.ToPGTimestamptz(issuedAt)
+		clientIDIssuedAtRFC3339 = issuedAt.Format(time.RFC3339)
 	}
 	return ProxyRegisterResponse{
-		ClientID:                dcrResp.ClientID,
-		ClientSecret:            dcrResp.ClientSecret,
-		ClientSecretExpiresAt:   clientSecretExpiresAt,
-		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
+		ClientID:                     dcrResp.ClientID,
+		ClientSecret:                 dcrResp.ClientSecret,
+		ClientIDIssuedAt:             clientIDIssuedAt,
+		ClientSecretExpiresAt:        clientSecretExpiresAt,
+		TokenEndpointAuthMethod:      dcrResp.TokenEndpointAuthMethod,
+		RegistrationEndpoint:         endpoint.String(),
+		ClientIDIssuedAtRFC3339:      clientIDIssuedAtRFC3339,
+		ClientSecretExpiresAtRFC3339: clientSecretExpiresAtRFC3339,
 	}, nil
 }
 

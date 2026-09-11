@@ -37,6 +37,18 @@ type CreateRemoteSessionClientRequestBody struct {
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at,
+	// as returned by the issuer's discovery document. Set only when the
+	// credentials came from /oauth/proxy-register; Gram may re-register the client
+	// at this endpoint once the issuer reports the registration expired. Omit for
+	// credentials obtained out-of-band.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 }
 
 // CreateCimdRequestBody is the type of the "remoteSessionClients" service
@@ -128,6 +140,14 @@ type CreateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -169,6 +189,14 @@ type CreateCimdResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -211,6 +239,14 @@ type UpdateRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -253,6 +289,14 @@ type AttachUserSessionIssuerResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -295,6 +339,14 @@ type DetachUserSessionIssuerResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -336,6 +388,14 @@ type AttachKeySetResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -377,6 +437,14 @@ type DetachKeySetResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -427,6 +495,14 @@ type GetRemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -2392,6 +2468,14 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// The RFC 7591 registration endpoint the client was dynamically registered at.
+	// Null for credentials obtained out-of-band; such a client is never
+	// re-registered automatically.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful rotation.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -2421,6 +2505,8 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2456,6 +2542,8 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2492,6 +2580,8 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2528,6 +2618,8 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2564,6 +2656,8 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2599,6 +2693,8 @@ func NewAttachKeySetResponseBody(res *types.RemoteSessionClient) *AttachKeySetRe
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2634,6 +2730,8 @@ func NewDetachKeySetResponseBody(res *types.RemoteSessionClient) *DetachKeySetRe
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -2692,6 +2790,8 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		RegistrationEndpoint:    res.RegistrationEndpoint,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -4234,6 +4334,9 @@ func NewCreateRemoteSessionClientPayload(body *CreateRemoteSessionClientRequestB
 		ClientSecret:            body.ClientSecret,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		Audience:                body.Audience,
+		RegistrationEndpoint:    body.RegistrationEndpoint,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 	}
 	if body.UserSessionIssuerIds != nil {
 		v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
@@ -4428,6 +4531,15 @@ func ValidateCreateRemoteSessionClientRequestBody(body *CreateRemoteSessionClien
 		if utf8.RuneCountInString(*body.Audience) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
 		}
+	}
+	if body.RegistrationEndpoint != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.registration_endpoint", *body.RegistrationEndpoint, goa.FormatURI))
+	}
+	if body.ClientIDIssuedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
+	}
+	if body.ClientSecretExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_secret_expires_at", *body.ClientSecretExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

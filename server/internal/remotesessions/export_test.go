@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -47,3 +49,7 @@ func (r *IssuerMetadataRefresher) Refresh(ctx context.Context, candidate IssuerM
 	}
 	return r.refresh(ctx, existing)
 }
+
+// ClientRotationLeaseKey exposes the rotation lease key so a test can hold
+// the lease and drive the waiting side of a concurrent rotation.
+func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLeaseKey(clientID) }

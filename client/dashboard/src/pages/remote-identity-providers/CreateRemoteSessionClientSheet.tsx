@@ -17,7 +17,10 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  proxyRegisterUpstreamClient,
+  registrationProvenance,
+} from "@/lib/proxyRegisterUpstreamClient";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
@@ -188,6 +191,9 @@ export function CreateRemoteSessionClientSheet({
         clientId: string;
         clientSecret?: string;
         tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+        // Set for DCR so the server records where the client was registered
+        // and can re-register it in place once the issuer expires it.
+        provenance?: ReturnType<typeof registrationProvenance>;
       };
       let unsupportedDcrAuthMethod: string | null = null;
       if (clientType === "dcr") {
@@ -208,6 +214,7 @@ export function CreateRemoteSessionClientSheet({
           clientSecret: registered.clientSecret || undefined,
           tokenEndpointAuthMethod:
             narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
+          provenance: registrationProvenance(registered),
         };
       } else {
         credentials = {
@@ -226,6 +233,7 @@ export function CreateRemoteSessionClientSheet({
           tokenEndpointAuthMethod: credentials.tokenEndpointAuthMethod,
           scope: parsedScopes.length > 0 ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
+          ...credentials.provenance,
         },
       });
 

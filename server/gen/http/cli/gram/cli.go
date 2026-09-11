@@ -159,7 +159,7 @@ func UsageCommands() []string {
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
-		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|delete-client|remove-client-from-mcp-server)",
+		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
@@ -2340,6 +2340,11 @@ func ParseEndpoint(
 		organizationRemoteSessionClientsDetachClientKeySetIDFlag           = organizationRemoteSessionClientsDetachClientKeySetFlags.String("id", "REQUIRED", "")
 		organizationRemoteSessionClientsDetachClientKeySetSessionTokenFlag = organizationRemoteSessionClientsDetachClientKeySetFlags.String("session-token", "", "")
 		organizationRemoteSessionClientsDetachClientKeySetApikeyTokenFlag  = organizationRemoteSessionClientsDetachClientKeySetFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionClientsRotateClientFlags            = flag.NewFlagSet("rotate-client", flag.ExitOnError)
+		organizationRemoteSessionClientsRotateClientBodyFlag         = organizationRemoteSessionClientsRotateClientFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionClientsRotateClientSessionTokenFlag = organizationRemoteSessionClientsRotateClientFlags.String("session-token", "", "")
+		organizationRemoteSessionClientsRotateClientApikeyTokenFlag  = organizationRemoteSessionClientsRotateClientFlags.String("apikey-token", "", "")
 
 		organizationRemoteSessionClientsDeleteClientFlags            = flag.NewFlagSet("delete-client", flag.ExitOnError)
 		organizationRemoteSessionClientsDeleteClientIDFlag           = organizationRemoteSessionClientsDeleteClientFlags.String("id", "REQUIRED", "")
@@ -4671,6 +4676,7 @@ func ParseEndpoint(
 	organizationRemoteSessionClientsUpdateClientFlags.Usage = organizationRemoteSessionClientsUpdateClientUsage
 	organizationRemoteSessionClientsAttachClientKeySetFlags.Usage = organizationRemoteSessionClientsAttachClientKeySetUsage
 	organizationRemoteSessionClientsDetachClientKeySetFlags.Usage = organizationRemoteSessionClientsDetachClientKeySetUsage
+	organizationRemoteSessionClientsRotateClientFlags.Usage = organizationRemoteSessionClientsRotateClientUsage
 	organizationRemoteSessionClientsDeleteClientFlags.Usage = organizationRemoteSessionClientsDeleteClientUsage
 	organizationRemoteSessionClientsRemoveClientFromMcpServerFlags.Usage = organizationRemoteSessionClientsRemoveClientFromMcpServerUsage
 
@@ -6664,6 +6670,9 @@ func ParseEndpoint(
 
 			case "detach-client-key-set":
 				epf = organizationRemoteSessionClientsDetachClientKeySetFlags
+
+			case "rotate-client":
+				epf = organizationRemoteSessionClientsRotateClientFlags
 
 			case "delete-client":
 				epf = organizationRemoteSessionClientsDeleteClientFlags
@@ -9204,6 +9213,9 @@ func ParseEndpoint(
 			case "detach-client-key-set":
 				endpoint = c.DetachClientKeySet()
 				data, err = organizationremotesessionclientsc.BuildDetachClientKeySetPayload(*organizationRemoteSessionClientsDetachClientKeySetIDFlag, *organizationRemoteSessionClientsDetachClientKeySetSessionTokenFlag, *organizationRemoteSessionClientsDetachClientKeySetApikeyTokenFlag)
+			case "rotate-client":
+				endpoint = c.RotateClient()
+				data, err = organizationremotesessionclientsc.BuildRotateClientPayload(*organizationRemoteSessionClientsRotateClientBodyFlag, *organizationRemoteSessionClientsRotateClientSessionTokenFlag, *organizationRemoteSessionClientsRotateClientApikeyTokenFlag)
 			case "delete-client":
 				endpoint = c.DeleteClient()
 				data, err = organizationremotesessionclientsc.BuildDeleteClientPayload(*organizationRemoteSessionClientsDeleteClientIDFlag, *organizationRemoteSessionClientsDeleteClientSessionTokenFlag, *organizationRemoteSessionClientsDeleteClientApikeyTokenFlag)
@@ -19869,6 +19881,7 @@ func organizationRemoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-client: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    attach-client-key-set: Attach an organization JSON Web Key Set to a remote_session_client in the caller's organization, opting it into signing private_key_jwt assertions. Requires org:admin and the customer_managed_encryption_keys entitlement.`)
 	fmt.Fprintln(os.Stderr, `    detach-client-key-set: Detach the JSON Web Key Set from a remote_session_client in the caller's organization. Refused while the client declares token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached. Requires org:admin and the customer_managed_encryption_keys entitlement.`)
+	fmt.Fprintln(os.Stderr, `    rotate-client: Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The client must be dynamically registered (registration_endpoint set) or its issuer must publish a registration_endpoint. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-client: Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    remove-client-from-mcp-server: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -19986,7 +19999,7 @@ func organizationRemoteSessionClientsCreateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_endpoint\": \"https://example.com/foo\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsCreateCimdClientUsage() {
@@ -20077,6 +20090,28 @@ func organizationRemoteSessionClientsDetachClientKeySetUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients detach-client-key-set --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+func organizationRemoteSessionClientsRotateClientUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-clients rotate-client", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The client must be dynamically registered (registration_endpoint set) or its issuer must publish a registration_endpoint. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients rotate-client --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
 func organizationRemoteSessionClientsDeleteClientUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-clients delete-client", os.Args[0])
@@ -20162,7 +20197,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"registration_endpoint\": \"https://example.com/foo\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsCreateCimdUsage() {

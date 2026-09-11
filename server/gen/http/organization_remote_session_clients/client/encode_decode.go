@@ -2206,6 +2206,245 @@ func DecodeDetachClientKeySetResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildRotateClientRequest instantiates a HTTP request object with method and
+// path set to call the "organizationRemoteSessionClients" service
+// "rotateClient" endpoint
+func (c *Client) BuildRotateClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RotateClientOrganizationRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionClients", "rotateClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRotateClientRequest returns an encoder for requests sent to the
+// organizationRemoteSessionClients rotateClient server.
+func EncodeRotateClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionclients.RotateClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionClients", "rotateClient", "*organizationremotesessionclients.RotateClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewRotateClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionClients", "rotateClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRotateClientResponse returns a decoder for responses returned by the
+// organizationRemoteSessionClients rotateClient endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeRotateClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRotateClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RotateClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			res := NewRotateClientRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RotateClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RotateClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RotateClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RotateClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RotateClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RotateClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RotateClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RotateClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+				}
+				err = ValidateRotateClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+				}
+				return nil, NewRotateClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RotateClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+				}
+				err = ValidateRotateClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+				}
+				return nil, NewRotateClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "rotateClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RotateClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			err = ValidateRotateClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionClients", "rotateClient", err)
+			}
+			return nil, NewRotateClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionClients", "rotateClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteClientRequest instantiates a HTTP request object with method and
 // path set to call the "organizationRemoteSessionClients" service
 // "deleteClient" endpoint
@@ -2685,6 +2924,8 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		RegistrationEndpoint:    v.RegistrationEndpoint,
+		UpstreamRejectedAt:      v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,
