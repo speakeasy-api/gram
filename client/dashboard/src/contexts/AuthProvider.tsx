@@ -19,6 +19,10 @@ import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
+import {
+  capturePreservedStorage,
+  setPreservedStorageImpersonating,
+} from "@/lib/logout-storage";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
@@ -119,6 +123,20 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isPlatformAdminRef.current = session?.user.isAdmin ?? false;
+
+  // Snapshot theme/favorites only for a normal session. Impersonation and
+  // support access must not refresh it, or logout would restore the
+  // customer org's keys instead of the admin's. The flag is set during
+  // render so child effects (favorites, theme) cannot capture first.
+  const isImpersonating =
+    Boolean(session?.impersonatorEmail) ||
+    Boolean(session?.organizationOverride);
+  setPreservedStorageImpersonating(isImpersonating);
+  useEffect(() => {
+    if (session?.session && !isImpersonating) {
+      capturePreservedStorage();
+    }
+  }, [session?.session, isImpersonating]);
 
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading

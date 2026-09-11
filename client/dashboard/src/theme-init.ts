@@ -30,7 +30,8 @@ const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
           }
         }
       }
-      window.name = "";
+      // Leave window.name in place. Impersonation is a new document and
+      // still needs this snapshot when that session logs out.
     }
   } catch {
     // Backup unreadable — continue with whatever localStorage still has.

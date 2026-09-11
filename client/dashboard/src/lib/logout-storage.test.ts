@@ -10,10 +10,13 @@ import {
 import {
   LOGOUT_PRESERVE_WINDOW_NAME_PREFIX,
   capturePreservedStorage,
+  capturePreservedStorageIfSafe,
   clearLegacyUserStorage,
   clearStorageForLogout,
+  resetPreservedStorageCapture,
   restorePreservedStorage,
   restorePreservedStorageBackup,
+  setPreservedStorageImpersonating,
 } from "./logout-storage";
 
 function createStorage(): Storage {
@@ -59,6 +62,8 @@ describe("clearStorageForLogout", () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     window.name = "";
+    setPreservedStorageImpersonating(false);
+    resetPreservedStorageCapture();
     capturePreservedStorage();
   });
 
@@ -234,7 +239,9 @@ describe("clearStorageForLogout", () => {
       '["<PROJECT_ID>"]',
     );
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
-    expect(window.name).toBe("");
+    expect(window.name.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)).toBe(
+      true,
+    );
   });
 
   it("ignores non-preserved keys smuggled in the window.name backup", () => {
@@ -249,7 +256,6 @@ describe("clearStorageForLogout", () => {
       "dark",
     );
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
-    expect(window.name).toBe("");
   });
 
   it("does not overwrite an unrelated window.name", () => {
@@ -259,5 +265,102 @@ describe("clearStorageForLogout", () => {
     capturePreservedStorage();
 
     expect(window.name).toBe("other-tab-state");
+  });
+
+  // Platform admins snapshot in their own org. Impersonation must not replace
+  // that snapshot with the customer org's theme or favorites.
+  it("does not refresh the snapshot while impersonating", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ADMIN_ORG_ID>",
+      '["<ADMIN_PROJECT_ID>"]',
+    );
+    capturePreservedStorage();
+
+    setPreservedStorageImpersonating(true);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    expect(capturePreservedStorageIfSafe()).toEqual([
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+      ["gram:org-favorites:<ADMIN_ORG_ID>", '["<ADMIN_PROJECT_ID>"]'],
+    ]);
+
+    window.localStorage.clear();
+    clearStorageForLogout(capturePreservedStorageIfSafe());
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<ADMIN_ORG_ID>"),
+    ).toBe('["<ADMIN_PROJECT_ID>"]');
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("refreshes the snapshot on a normal admin session", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    capturePreservedStorage();
+
+    setPreservedStorageImpersonating(false);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+
+    expect(capturePreservedStorageIfSafe()).toEqual([
+      [PREFERRED_THEME_STORAGE_KEY, "light"],
+    ]);
+  });
+
+  it("restores the pre-impersonation snapshot after a new-document load", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ADMIN_ORG_ID>",
+      '["<ADMIN_PROJECT_ID>"]',
+    );
+    capturePreservedStorage();
+
+    // Support-session start is a full navigation: heap is gone, backup remains.
+    window.localStorage.clear();
+    resetPreservedStorageCapture();
+    restorePreservedStorageBackup();
+    setPreservedStorageImpersonating(true);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    window.localStorage.clear();
+    clearStorageForLogout(capturePreservedStorageIfSafe());
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<ADMIN_ORG_ID>"),
+    ).toBe('["<ADMIN_PROJECT_ID>"]');
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
+  it("does not live-capture impersonated storage when no snapshot exists", () => {
+    setPreservedStorageImpersonating(true);
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    clearStorageForLogout();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
   });
 });

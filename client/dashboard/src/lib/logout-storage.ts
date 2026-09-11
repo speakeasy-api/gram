@@ -13,7 +13,8 @@ const LEGACY_USER_STORAGE_KEYS = [
 // Survives Clear-Site-Data and the /login navigation that follows logout.
 // localStorage and sessionStorage are both emptied by that header; window.name
 // is not. theme-init.ts reads the same prefix before first paint — keep them
-// in lockstep. Cleared as soon as the entries are written back.
+// in lockstep. Left in place after restore so a later impersonation document
+// can still recover the admin snapshot; a safe capture overwrites it.
 export const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
 
 function shouldPreserveLocalStorageKey(key: string) {
@@ -64,6 +65,20 @@ export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
 // cannot find the per-request WeakMap entry (cloned Request identity) and
 // when logout times out after Clear-Site-Data has already emptied the store.
 let lastCaptured: PreservedStorage = [];
+
+// WorkOS impersonation and org support sessions must not refresh the
+// snapshot: that would replace the platform admin's own theme/favorites
+// with whatever the impersonated org wrote. Auth writes this before logout.
+let sessionIsImpersonating = false;
+
+export function setPreservedStorageImpersonating(value: boolean): void {
+  sessionIsImpersonating = value;
+}
+
+/** Drop the in-memory snapshot the way a full navigation would. Tests only. */
+export function resetPreservedStorageCapture(): void {
+  lastCaptured = [];
+}
 
 function persistPreservedStorageBackup(preserved: PreservedStorage): void {
   if (typeof window === "undefined") return;
@@ -117,15 +132,16 @@ function readPreservedStorageBackup(): PreservedStorage {
 }
 
 /**
- * Writes a captured snapshot back into localStorage and drops the
- * navigation-surviving backup so a later site in this tab cannot read it.
+ * Writes a captured snapshot back into localStorage. The window.name backup
+ * stays until a later *safe* capture replaces it — impersonation loads in a
+ * new document and must still be able to restore the admin's prefs on exit.
  */
 export function restorePreservedStorageBackup(): void {
   const preserved = readPreservedStorageBackup();
   if (preserved.length === 0) return;
 
   restorePreservedStorage(preserved);
-  persistPreservedStorageBackup([]);
+  lastCaptured = preserved;
 }
 
 function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
@@ -135,6 +151,22 @@ function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
   const backup = readPreservedStorageBackup();
   if (backup.length > 0) return backup;
 
+  // An impersonated session's current store is not the admin's prefs.
+  if (sessionIsImpersonating) return [];
+  return capturePreservedStorage();
+}
+
+/**
+ * Snapshot theme and favorites only for a normal (non-impersonation) session.
+ * While impersonating, returns the last safe snapshot without reading
+ * localStorage, so a customer org's keys cannot replace the admin's.
+ */
+export function capturePreservedStorageIfSafe(): PreservedStorage {
+  if (sessionIsImpersonating) {
+    return lastCaptured.length > 0
+      ? lastCaptured
+      : readPreservedStorageBackup();
+  }
   return capturePreservedStorage();
 }
 

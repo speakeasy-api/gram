@@ -51,7 +51,10 @@ import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
-import { restorePreservedStorageBackup } from "./lib/logout-storage";
+import {
+  capturePreservedStorageIfSafe,
+  restorePreservedStorageBackup,
+} from "./lib/logout-storage";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
@@ -87,6 +90,7 @@ export default function App(): JSX.Element {
     root.classList.remove(theme === "dark" ? "light" : "dark");
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
+    capturePreservedStorageIfSafe();
 
     setTheme(theme);
   };
