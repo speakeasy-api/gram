@@ -896,8 +896,13 @@ type ShadowMCPInventoryServer struct {
 	CanonicalServerURL string
 	ServerSlug         string
 	URLHost            string
-	// What the row identifies: a server URL observed or requested, or a local
-	// stdio command known only through its review. Absent means server_url.
+	// What the row identifies: a server URL observed or requested, a local stdio
+	// command known only through its review, or a tool namespace — an MCP server
+	// an LLM proxy saw only by the <server> segment of its namespaced tool names
+	// (mcp__<server>__<tool>), carried as the synthetic identity
+	// mcp-tool://<server>. Tool-namespace rows have usage but no resolved server
+	// identity; review decisions on them are recorded without writing enforcement,
+	// like stdio commands. Absent means server_url.
 	TargetKind       *string
 	ServerName       *string
 	FirstSeen        string
@@ -906,6 +911,10 @@ type ShadowMCPInventoryServer struct {
 	ObservedUseCount int
 	UserCount        int
 	TopUsers         []string
+	// Hook sources (claude-code, cursor, litellm, ...) that observed this server,
+	// sorted and de-duplicated. Empty when the server is known only from a review
+	// request.
+	Sources []string
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass

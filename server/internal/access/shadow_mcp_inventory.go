@@ -58,6 +58,12 @@ const (
 
 	shadowMCPTargetKindServerURL    = "server_url"
 	shadowMCPTargetKindStdioCommand = "stdio_command"
+	// shadowMCPTargetKindToolNamespace marks a row keyed on a synthetic
+	// mcp-tool://<server> identity (shadowmcp.ToolNamespaceURL): an MCP
+	// server an LLM proxy saw only by the <server> segment of its namespaced
+	// tool names. The row has usage like any URL row but no resolved server
+	// identity, so decisions on it are observe-only, as for stdio commands.
+	shadowMCPTargetKindToolNamespace = "tool_namespace"
 
 	shadowMCPAccessStateAllowed    = "allowed"
 	shadowMCPAccessStateRestricted = "restricted"
@@ -242,7 +248,7 @@ func (s *Service) ReadShadowMCPInventory(ctx context.Context, input ShadowMCPInv
 		servers = append(servers, buildShadowMCPRequestOnlyServer(request, policyState))
 	}
 	for _, row := range inventoryRows {
-		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindServerURL))
+		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindForURL(row.CanonicalServerURL)))
 	}
 
 	return &gen.ListShadowMCPInventoryResult{
@@ -319,7 +325,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 	// actually faces.
 	rowState := policyState.forURL(request.TargetKey)
 	if request.TargetKind == shadowMCPTargetKindServerURL {
-		targetKind = shadowMCPTargetKindServerURL
+		targetKind = shadowMCPTargetKindForURL(request.TargetKey)
 		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
 		urlHost = inventoryURL.URLHost
 	} else {
@@ -344,14 +350,6 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		(request.Status == shadowMCPInventoryBypassStatusApproved || request.Status == shadowMCPInventoryBypassStatusDenied) {
 		rowState.Summary.Decision = conv.PtrEmpty(request.Status)
 	}
-	// Decisions on stdio targets are recorded without writing enforcement —
-	// the grant writer only acts on server_url targets — so whatever the
-	// posture, no mechanism carries the decision. Coverage must say so
-	// rather than let "partial" claim a delivery that does not exist.
-	if request.TargetKind != shadowMCPTargetKindServerURL {
-		rowState.Summary.DecisionCoverage = shadowMCPAccessCoverageNone
-	}
-
 	row := telemetryrepo.ShadowMCPInventoryURLRow{
 		CanonicalServerURL: request.TargetKey,
 		URLHost:            urlHost,
@@ -370,6 +368,7 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 		CallCount:          0,
 		UserCount:          0,
 		TopUsers:           []string{},
+		Sources:            []string{},
 	}
 	return buildShadowMCPInventoryServer(row, usage, rowState, targetKind)
 }
@@ -417,7 +416,19 @@ func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input Shadow
 	if strings.TrimSpace(input.TargetKey) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "target key is required").LogError(ctx, s.logger)
 	}
-	if input.TargetKind != shadowMCPTargetKindServerURL && input.TargetKind != shadowMCPTargetKindStdioCommand {
+	switch input.TargetKind {
+	case shadowMCPTargetKindServerURL, shadowMCPTargetKindStdioCommand:
+	case shadowMCPTargetKindToolNamespace:
+		// A tool-namespace row is a URL-keyed row wearing a synthetic scheme:
+		// it lives in the same inventory table and review namespace as
+		// server URLs, so a caller echoing the kind the listing reported is
+		// served through the server_url path. The kind is recomputed from
+		// the key on the way out, so the row still reads as tool_namespace.
+		if !shadowmcp.IsToolNamespaceURL(input.TargetKey) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "target key is not a tool namespace identity").LogError(ctx, s.logger)
+		}
+		input.TargetKind = shadowMCPTargetKindServerURL
+	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported target kind").LogError(ctx, s.logger)
 	}
 	if err := s.requireProjectInOrganization(ctx, input.OrganizationID, input.ProjectID); err != nil {
@@ -452,7 +463,7 @@ func (s *Service) ReadShadowMCPInventoryTarget(ctx context.Context, input Shadow
 				return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 			}
 			usageByURL := shadowMCPInventoryUsageByURL(usageRows)
-			return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[input.TargetKey], policyState.forURL(input.TargetKey), shadowMCPTargetKindServerURL), nil
+			return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[input.TargetKey], policyState.forURL(input.TargetKey), shadowMCPTargetKindForURL(input.TargetKey)), nil
 		}
 	}
 
@@ -737,7 +748,7 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 				row.URLHost = invURL.URLHost
 			}
 		}
-		servers = append(servers, buildShadowMCPInventoryServer(row, usage, policyState.forURL(usage.CanonicalServerURL), shadowMCPTargetKindServerURL))
+		servers = append(servers, buildShadowMCPInventoryServer(row, usage, policyState.forURL(usage.CanonicalServerURL), shadowMCPTargetKindForURL(usage.CanonicalServerURL)))
 	}
 
 	return &gen.ListShadowMCPInventoryResult{
@@ -770,8 +781,15 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// A tool-namespace identity names no reachable server, so no grant keyed
+	// on it could ever match traffic: the decision is recorded against the
+	// pending requests and nothing else, the way stdio decisions are. Writing
+	// grants anyway would let the row claim an enforcement that does not
+	// exist.
+	observeOnly := shadowmcp.IsToolNamespaceURL(inventoryURL.CanonicalURL)
+
 	var policyAudiences map[string][]urn.Principal
-	if decision == shadowMCPInventoryDecisionAllow {
+	if decision == shadowMCPInventoryDecisionAllow && !observeOnly {
 		blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, dbtx, projectID)
 		if err != nil {
 			return nil, err
@@ -1550,7 +1568,27 @@ func shadowMCPInventoryBypassDimensions(raw []byte) (map[string]string, error) {
 	return dimensions, nil
 }
 
+// shadowMCPTargetKindForURL classifies an inventory key that canonicalized
+// as a URL: the synthetic mcp-tool://<server> identity is a tool namespace,
+// everything else is a server URL. Stdio commands never reach this — they
+// are known from their review's target kind, not from their key.
+func shadowMCPTargetKindForURL(canonicalURL string) string {
+	if shadowmcp.IsToolNamespaceURL(canonicalURL) {
+		return shadowMCPTargetKindToolNamespace
+	}
+	return shadowMCPTargetKindServerURL
+}
+
 func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, usage telemetryrepo.ShadowMCPInventoryUsageRow, rowState shadowMCPInventoryRowState, targetKind string) *gen.ShadowMCPInventoryServer {
+	// Decisions on stdio and tool-namespace targets are recorded without
+	// writing enforcement — the grant writer only acts on resolved server
+	// URLs — so whatever the posture, no mechanism carries the decision.
+	// Coverage must say so rather than let "partial" claim a delivery that
+	// does not exist.
+	if targetKind != shadowMCPTargetKindServerURL && rowState.Summary != nil {
+		rowState.Summary.DecisionCoverage = shadowMCPAccessCoverageNone
+	}
+
 	var serverName *string
 	serverNameValue := row.ServerNameOverride
 	if serverNameValue == "" {
@@ -1566,6 +1604,10 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 	if topUsers == nil {
 		topUsers = []string{}
 	}
+	sources := usage.Sources
+	if sources == nil {
+		sources = []string{}
+	}
 
 	return &gen.ShadowMCPInventoryServer{
 		CanonicalServerURL: row.CanonicalServerURL,
@@ -1579,6 +1621,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
 		UserCount:          shadowMCPInventoryCount(usage.UserCount),
 		TopUsers:           topUsers,
+		Sources:            sources,
 		Access:             rowState.Access,
 		AccessSummary:      rowState.Summary,
 		RequestCount:       rowState.RequestCount,
