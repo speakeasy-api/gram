@@ -31,7 +31,7 @@ export const SESSION_AUDITOR_ROLE_NAME = "Session Auditor";
  */
 export const SESSION_AUDITOR_ROLE_SLUG = "org-session-auditor";
 
-export const SESSION_AUDITOR_ROLE_DESCRIPTION =
+const SESSION_AUDITOR_ROLE_DESCRIPTION =
   "Reads other members' agent sessions. Created during setup so an admin can confirm traffic arrives; remove yourself once it has.";
 
 export interface SessionAuditAccess {

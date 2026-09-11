@@ -30,7 +30,7 @@ export function RemoveSessionAuditAccessButton({
 }
 
 /** Where a directory-synced admin goes to take the role back off themselves. */
-export function ScimRemovalGuidance(): JSX.Element {
+function ScimRemovalGuidance(): JSX.Element {
   const orgRoutes = useOrgRoutes();
 
   return (
