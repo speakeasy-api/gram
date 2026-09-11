@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
@@ -86,16 +85,6 @@ func ValidateCustomRuleIDs(ids []string) error {
 		if !customRuleIDFormat.MatchString(id) {
 			return fmt.Errorf("custom rule id %q must match custom.[a-z0-9_]+", id)
 		}
-	}
-	return nil
-}
-
-func ValidateMessageTypes(messageTypes []string) error {
-	for _, messageType := range messageTypes {
-		if message.IsTypeValid(messageType) {
-			continue
-		}
-		return fmt.Errorf("message_type %q must be one of: %s", messageType, strings.Join(message.AllTypes(), ", "))
 	}
 	return nil
 }

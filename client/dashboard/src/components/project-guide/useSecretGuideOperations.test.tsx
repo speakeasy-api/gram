@@ -244,7 +244,12 @@ describe("useSecretGuideOperations", () => {
           audienceType: "everyone",
           autoName: true,
           enabled: true,
-          messageTypes: ["tool_request", "tool_response"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
           policyType: "standard",
           sources: ["gitleaks"],
         },
