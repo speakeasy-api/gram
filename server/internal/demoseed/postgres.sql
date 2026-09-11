@@ -1570,7 +1570,10 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
     (policy_cr, proj_a, demo_org, 'Acme agent guardrails', 'standard',
-     '{}', NULL, '{}'::jsonb,
+     '{}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'custom',
+                          'scope_include', 'kind in ["tool_request"]'))),
      '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
@@ -1584,9 +1587,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
      '{presidio}', '{}',
-     jsonb_build_object('detection_scopes', jsonb_build_array(
-       jsonb_build_object('category', 'pii',
-                          'scope_include', 'kind in ["user_message"]'))), '{}',
+     -- presidio emits five categories; the legacy list narrowed the whole
+     -- policy, so every one of them carries the scope. Its own findings
+     -- (pii.topic_boundary_violation) classify as off_policy, not pii.
+     (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
+        jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.

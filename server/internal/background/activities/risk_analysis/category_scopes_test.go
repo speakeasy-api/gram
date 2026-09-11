@@ -80,7 +80,7 @@ func masksFor(t *testing.T, specified []DetectionScopeConfig, messages []batchMe
 	require.NoError(t, err)
 	compiled, err := CompileDetectionScopes(eng, specified)
 	require.NoError(t, err)
-	return NewCategoryScopes(CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}, mustRecommendedSet(t), compiled, nil).Masks(t.Context(), messages)
+	return NewCategoryScopes(mustRecommendedSet(t), compiled, nil).Masks(t.Context(), messages)
 }
 
 func mergeOne(masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scanners.Finding {
@@ -233,19 +233,13 @@ func TestRecommendedCategoryScopesSubset(t *testing.T) {
 func TestSubsetWithoutCategoryMasksScansEverything(t *testing.T) {
 	t.Parallel()
 
-	eng, err := celenv.New()
-	require.NoError(t, err)
-	policy, err := CompileScope(eng, `kind == "user_message"`, "")
-	require.NoError(t, err)
-
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
 	contents := messageContents(messages)
-	// No recommendation and no specified scope: the only mask is the policy
-	// one, which Subset does not prefilter on.
-	masks := NewCategoryScopes(policy, RecommendedSet{scopes: nil}, nil, nil).Masks(t.Context(), messages)
+	// No recommendation and no specified scope, so there is no mask at all.
+	masks := NewCategoryScopes(RecommendedSet{scopes: nil}, nil, nil).Masks(t.Context(), messages)
 
 	subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
-	require.Equal(t, []int{0, 1}, indices, "no category mask for presidio: policy-scope-out messages still reach the scanner")
+	require.Equal(t, []int{0, 1}, indices, "no category mask for presidio: every message reaches the scanner")
 	require.Len(t, subMessages, 2)
 	require.Equal(t, contents, subContents)
 	require.Equal(t, 0, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -314,13 +308,9 @@ func TestDetectionScopesConfig(t *testing.T) {
 func TestCategoryScopesPolicyScopeStillApplies(t *testing.T) {
 	t.Parallel()
 
-	eng, err := celenv.New()
-	require.NoError(t, err)
-	policy, err := CompileScope(eng, `kind == "user_message"`, "")
-	require.NoError(t, err)
-
 	messages := []batchMessage{msg(message.Assistant), msg(message.User)}
-	masks := NewCategoryScopes(policy, mustRecommendedSet(t), nil, nil).Masks(t.Context(), messages)
+	masks := NewCategoryScopes(mustRecommendedSet(t), nil, nil).Masks(t.Context(), messages)
+	// The secrets recommendation exempts assistant messages.
 	require.False(t, masks.InScope(0, categories.CategorySecrets))
 	require.True(t, masks.InScope(1, categories.CategorySecrets))
 }

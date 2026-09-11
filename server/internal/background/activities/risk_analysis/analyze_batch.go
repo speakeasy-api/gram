@@ -274,9 +274,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		if err != nil {
 			return nil, fmt.Errorf("compile detection scopes: %w", err)
 		}
-		// No policy-level scope survives; detection scopes are the only surface.
-		policyScope := CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}
-		categoryScopes := NewCategoryScopes(policyScope, a.recommended, specified, a.metrics)
+		categoryScopes := NewCategoryScopes(a.recommended, specified, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {

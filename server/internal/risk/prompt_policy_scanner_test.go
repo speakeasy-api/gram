@@ -25,9 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// fakePromptJudge is a stub promptpolicy.Evaluator that returns a fixed verdict and
-// records how many times it was invoked, so tests can assert the scanner only
-// calls the judge for messages whose type the policy applies to.
+// fakePromptJudge is a stub promptpolicy.Evaluator that returns a fixed verdict
+// and records how many times it was invoked, so tests can assert when the
+// scanner reaches the judge.
 type fakePromptJudge struct {
 	verdict *promptpolicy.Verdict
 	err     error
@@ -66,12 +66,12 @@ func matchedJudgeVerdict(confidence float64, rationale string) *promptpolicy.Ver
 	}
 }
 
-func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, messageTypes []string) {
+func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string) {
 	t.Helper()
-	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, name, prompt, messageTypes, nil)
+	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, name, prompt, nil)
 }
 
-func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, messageTypes []string, modelConfig []byte) {
+func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, modelConfig []byte) {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
@@ -115,7 +115,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(0.9, "destructive delete")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
@@ -138,7 +138,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server", []string{message.ToolRequest})
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
@@ -163,7 +163,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", nil)
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
@@ -182,7 +182,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: nil}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
@@ -199,7 +199,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
@@ -219,7 +219,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	failClosed := false
 	modelConfig, err := json.Marshal(map[string]any{"fail_open": failClosed})
 	require.NoError(t, err)
-	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest}, modelConfig)
+	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", modelConfig)
 
 	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)

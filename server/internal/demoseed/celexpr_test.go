@@ -24,7 +24,7 @@ func TestSeedCELCompiles(t *testing.T) {
 	require.NoError(t, err)
 
 	matches := seedCELExpr.FindAllStringSubmatch(postgresSQL, -1)
-	require.Len(t, matches, 9, "CEL literal count changed; add the new expression here or fix seedCELExpr so it is discovered")
+	require.Len(t, matches, 10, "CEL literal count changed; add the new expression here or fix seedCELExpr so it is discovered")
 
 	for _, m := range matches {
 		_, err := eng.Compile(m[1])

@@ -333,9 +333,6 @@ describe("hasBlockingSecretsPolicy", () => {
     ).toBe(false);
   });
 
-  // The scanner intersects the legacy list with the category scope, so a list
-  // missing one of the guide's kinds leaves the policy narrower than the guide's.
-
   it("rejects a secrets scope carrying an exemption", () => {
     expect(
       hasBlockingSecretsPolicy([
