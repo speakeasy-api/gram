@@ -84,6 +84,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Surface:           "",
 	}, findings, "prompt policy")
 	if err != nil {
 		err = fmt.Errorf("publish prompt policy findings: %w", err)
