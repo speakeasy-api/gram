@@ -76,8 +76,9 @@ describe("SettingsTab", () => {
       ),
     ).toEqual([
       "Display",
+      // Upstream headers are the Identity panel's Advanced disclosure now,
+      // not a section of their own.
       "Identity",
-      "Advanced Headers",
       "Server URL",
       "Sessions",
       "Tool Filtering",

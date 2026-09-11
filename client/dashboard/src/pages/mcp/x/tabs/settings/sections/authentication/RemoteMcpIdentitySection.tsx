@@ -18,7 +18,7 @@ import {
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, Loader2 } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -26,6 +26,12 @@ import {
   FooterSaveButton,
   SettingsSection,
 } from "@/components/detail/settings-section";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { HeadersSection } from "../HeadersSection";
 import { AgentIdentityRow } from "./AgentIdentityRow";
 import { useAgentCredentialDraft } from "./useAgentCredentialDraft";
 import { AuthRow } from "./AuthRow";
@@ -398,6 +404,32 @@ export function RemoteMcpIdentitySectionBody({
               />
             </AuthRow>
           ) : null}
+
+          <Collapsible>
+            <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
+              <ChevronDown
+                aria-hidden="true"
+                className="size-4 transition-transform group-data-[state=open]:rotate-180"
+              />
+              <Text small className="font-medium">
+                Advanced
+              </Text>
+              <Text muted small>
+                Upstream headers sent with every request.
+              </Text>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-6 pt-2 pb-6">
+              <HeadersSection
+                remoteMcpServerId={remoteMcpServerId}
+                context={{ kind: "mcp-server" }}
+                identityManagement={{
+                  userSessionIssuerId: target.userSessionIssuerId ?? undefined,
+                  resourceId: target.resourceId,
+                }}
+                variant="embedded"
+              />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {identityResolved && selectedMode !== "none" ? (

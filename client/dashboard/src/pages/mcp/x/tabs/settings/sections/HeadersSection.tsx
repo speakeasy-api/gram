@@ -241,10 +241,17 @@ export function HeadersSection({
   remoteMcpServerId,
   context,
   identityManagement,
+  variant = "section",
 }: {
   remoteMcpServerId: string;
   context: HeadersSectionContext;
   identityManagement?: { userSessionIssuerId?: string; resourceId: string };
+  /**
+   * "embedded" drops the card chrome and heading: on an MCP server's Settings
+   * tab these rows live inside the Identity panel's Advanced disclosure, which
+   * supplies both.
+   */
+  variant?: "section" | "embedded";
 }): JSX.Element {
   const routes = useRoutes();
 
@@ -462,14 +469,20 @@ export function HeadersSection({
   const mutationError =
     createHeader.error ?? updateHeader.error ?? deleteHeader.error;
 
+  const embedded = variant === "embedded";
+
   return (
-    <div className="border p-6">
-      <Text variant="subheading" className="mb-1">
-        Advanced Headers
-      </Text>
-      <Text muted small className="mb-4">
-        Headers sent to the remote MCP URL.
-      </Text>
+    <div className={embedded ? undefined : "border p-6"}>
+      {embedded ? null : (
+        <>
+          <Text variant="subheading" className="mb-1">
+            Advanced Headers
+          </Text>
+          <Text muted small className="mb-4">
+            Headers sent to the remote MCP URL.
+          </Text>
+        </>
+      )}
       <Stack gap={4}>
         {sharedByOthers && isMcpServerContext ? (
           <Alert variant="warning" dismissible={false}>

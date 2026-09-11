@@ -8,7 +8,6 @@ import {
 } from "./sections/authentication/AuthenticationSection";
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
-import { HeadersSection } from "./sections/HeadersSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
@@ -61,15 +60,9 @@ export function SettingsTab({
           title="Display"
           description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
         />
+        {/* Upstream headers live inside Identity's Advanced disclosure now —
+            they are governed by the identity choice, not a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} />
-        <HeadersSection
-          remoteMcpServerId={remoteMcpServerId}
-          context={{ kind: "mcp-server" }}
-          identityManagement={{
-            userSessionIssuerId: mcpServer.userSessionIssuerId,
-            resourceId: mcpServer.id,
-          }}
-        />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
