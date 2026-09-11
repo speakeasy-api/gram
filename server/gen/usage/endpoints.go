@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
 	GetPeriodUsage            goa.Endpoint
+	GetMeterUsage             goa.Endpoint
 	GetTokensUnderManagement  goa.Endpoint
 	SetBillingMetadata        goa.Endpoint
 	GetBillingEmail           goa.Endpoint
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		GetPeriodUsage:            NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		GetMeterUsage:             NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
 		GetTokensUnderManagement:  NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
 		SetBillingMetadata:        NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
 		GetBillingEmail:           NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
@@ -63,6 +65,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "usage" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
+	e.GetMeterUsage = m(e.GetMeterUsage)
 	e.GetTokensUnderManagement = m(e.GetTokensUnderManagement)
 	e.SetBillingMetadata = m(e.SetBillingMetadata)
 	e.GetBillingEmail = m(e.GetBillingEmail)
@@ -101,6 +104,29 @@ func NewGetPeriodUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.GetPeriodUsage(ctx, p)
+	}
+}
+
+// NewGetMeterUsageEndpoint returns an endpoint function that calls the method
+// "getMeterUsage" of service "usage".
+func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMeterUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMeterUsage(ctx, p)
 	}
 }
 

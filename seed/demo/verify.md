@@ -254,6 +254,19 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 
+18. **Billing meter usage** — select a custom trailing 14-day window. Storage
+    shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
+    and risk content shows all six scanners. Department breakdown includes
+    missing attribution and a remainder. Chart series and table totals sum to
+    the headline exactly, including after weekly/monthly and cumulative toggles.
+    Hide/show a legend series and drill into a day without losing the selected
+    family. Switch to adjustments: signed positive/negative activity is separate
+    from ordinary usage, whose total does not change. A historical empty range
+    shows “No meter readings recorded,” not legacy telemetry usage. Invoice/
+    contract estimates remain in their separate section. Compare the API totals
+    with `billing_meter_readings_by_time FINAL` per reading kind: the nine
+    duplicate deliveries must not increase usage. Run the seed twice and repeat.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

@@ -65,6 +65,25 @@ type GetPeriodUsageResponseBody struct {
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 }
 
+// GetMeterUsageResponseBody is the type of the "usage" service "getMeterUsage"
+// endpoint HTTP response body.
+type GetMeterUsageResponseBody struct {
+	Family      string                        `form:"family" json:"family" xml:"family"`
+	ReadingKind string                        `form:"reading_kind" json:"reading_kind" xml:"reading_kind"`
+	Window      *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles     []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
+	Unit              string                          `form:"unit" json:"unit" xml:"unit"`
+	MeasurementMethod string                          `form:"measurement_method" json:"measurement_method" xml:"measurement_method"`
+	// Exact signed integer period total as a decimal string
+	Total string `form:"total" json:"total" xml:"total"`
+	// Dense clipped UTC daily buckets
+	Buckets   []*MeterUsageBucketResponseBody  `form:"buckets" json:"buckets" xml:"buckets"`
+	Breakdown *MeterUsageBreakdownResponseBody `form:"breakdown" json:"breakdown" xml:"breakdown"`
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+}
+
 // GetTokensUnderManagementResponseBody is the type of the "usage" service
 // "getTokensUnderManagement" endpoint HTTP response body.
 type GetTokensUnderManagementResponseBody struct {
@@ -416,6 +435,188 @@ type GetPeriodUsageUnexpectedResponseBody struct {
 // GetPeriodUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetPeriodUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnauthorizedResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unauthorized" error.
+type GetMeterUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageForbiddenResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "forbidden" error.
+type GetMeterUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageBadRequestResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "bad_request" error.
+type GetMeterUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageNotFoundResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "not_found" error.
+type GetMeterUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageConflictResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "conflict" error.
+type GetMeterUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnsupportedMediaResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetMeterUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageInvalidResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "invalid" error.
+type GetMeterUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageInvariantViolationResponseBody is the type of the "usage"
+// service "getMeterUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMeterUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageUnexpectedResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unexpected" error.
+type GetMeterUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMeterUsageGatewayErrorResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "gateway_error" error.
+type GetMeterUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3407,6 +3608,47 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// MeterUsageWindowResponseBody is used to define fields on response body types.
+type MeterUsageWindowResponseBody struct {
+	// Inclusive UTC window boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive UTC window boundary
+	To string `form:"to" json:"to" xml:"to"`
+}
+
+// MeterUsageBucketResponseBody is used to define fields on response body types.
+type MeterUsageBucketResponseBody struct {
+	// Inclusive bucket boundary
+	From string `form:"from" json:"from" xml:"from"`
+	// Exclusive bucket boundary
+	To string `form:"to" json:"to" xml:"to"`
+	// Exact signed integer quantity as a decimal string
+	Total string `form:"total" json:"total" xml:"total"`
+}
+
+// MeterUsageBreakdownResponseBody is used to define fields on response body
+// types.
+type MeterUsageBreakdownResponseBody struct {
+	// Selected family-compatible breakdown dimension
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// At most six selected facet series plus a remainder
+	Series []*MeterUsageSeriesResponseBody `form:"series" json:"series" xml:"series"`
+}
+
+// MeterUsageSeriesResponseBody is used to define fields on response body types.
+type MeterUsageSeriesResponseBody struct {
+	// Identity kind for this series
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Canonical identity for value series; null for unset and remainder
+	Key *string `json:"key"`
+	// Display label, never chart identity
+	Label string `form:"label" json:"label" xml:"label"`
+	// Exact signed integer series total as a decimal string
+	Total string `form:"total" json:"total" xml:"total"`
+	// Exact signed integer values aligned one-for-one with buckets
+	Values []string `form:"values" json:"values" xml:"values"`
+}
+
 // TUMPeriodResponseBody is used to define fields on response body types.
 type TUMPeriodResponseBody struct {
 	// Start of the billing cycle
@@ -3476,6 +3718,50 @@ func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageRespon
 		Credits:                  res.Credits,
 		IncludedCredits:          res.IncludedCredits,
 		HasActiveSubscription:    res.HasActiveSubscription,
+	}
+	return body
+}
+
+// NewGetMeterUsageResponseBody builds the HTTP response body from the result
+// of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageResponseBody(res *usage.MeterUsageResponse) *GetMeterUsageResponseBody {
+	body := &GetMeterUsageResponseBody{
+		Family:            res.Family,
+		ReadingKind:       res.ReadingKind,
+		Unit:              res.Unit,
+		MeasurementMethod: res.MeasurementMethod,
+		Total:             res.Total,
+		QueriedAt:         res.QueriedAt,
+	}
+	if res.Window != nil {
+		body.Window = marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody(res.Window)
+	}
+	if res.BillingCycles != nil {
+		body.BillingCycles = make([]*MeterUsageWindowResponseBody, len(res.BillingCycles))
+		for i, val := range res.BillingCycles {
+			if val == nil {
+				body.BillingCycles[i] = nil
+				continue
+			}
+			body.BillingCycles[i] = marshalUsageMeterUsageWindowToMeterUsageWindowResponseBody(val)
+		}
+	} else {
+		body.BillingCycles = []*MeterUsageWindowResponseBody{}
+	}
+	if res.Buckets != nil {
+		body.Buckets = make([]*MeterUsageBucketResponseBody, len(res.Buckets))
+		for i, val := range res.Buckets {
+			if val == nil {
+				body.Buckets[i] = nil
+				continue
+			}
+			body.Buckets[i] = marshalUsageMeterUsageBucketToMeterUsageBucketResponseBody(val)
+		}
+	} else {
+		body.Buckets = []*MeterUsageBucketResponseBody{}
+	}
+	if res.Breakdown != nil {
+		body.Breakdown = marshalUsageMeterUsageBreakdownToMeterUsageBreakdownResponseBody(res.Breakdown)
 	}
 	return body
 }
@@ -3792,6 +4078,146 @@ func NewGetPeriodUsageUnexpectedResponseBody(res *goa.ServiceError) *GetPeriodUs
 // the result of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetPeriodUsageGatewayErrorResponseBody {
 	body := &GetPeriodUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageUnauthorizedResponseBody(res *goa.ServiceError) *GetMeterUsageUnauthorizedResponseBody {
+	body := &GetMeterUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageForbiddenResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageForbiddenResponseBody(res *goa.ServiceError) *GetMeterUsageForbiddenResponseBody {
+	body := &GetMeterUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageBadRequestResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageBadRequestResponseBody(res *goa.ServiceError) *GetMeterUsageBadRequestResponseBody {
+	body := &GetMeterUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageNotFoundResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageNotFoundResponseBody(res *goa.ServiceError) *GetMeterUsageNotFoundResponseBody {
+	body := &GetMeterUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageConflictResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageConflictResponseBody(res *goa.ServiceError) *GetMeterUsageConflictResponseBody {
+	body := &GetMeterUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMeterUsageUnsupportedMediaResponseBody {
+	body := &GetMeterUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageInvalidResponseBody builds the HTTP response body from the
+// result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageInvalidResponseBody(res *goa.ServiceError) *GetMeterUsageInvalidResponseBody {
+	body := &GetMeterUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageInvariantViolationResponseBody(res *goa.ServiceError) *GetMeterUsageInvariantViolationResponseBody {
+	body := &GetMeterUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageUnexpectedResponseBody(res *goa.ServiceError) *GetMeterUsageUnexpectedResponseBody {
+	body := &GetMeterUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMeterUsageGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getMeterUsage" endpoint of the "usage" service.
+func NewGetMeterUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetMeterUsageGatewayErrorResponseBody {
+	body := &GetMeterUsageGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6142,6 +6568,20 @@ func NewCreateTopUpCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *Crea
 // payload.
 func NewGetPeriodUsagePayload(sessionToken *string) *usage.GetPeriodUsagePayload {
 	v := &usage.GetPeriodUsagePayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetMeterUsagePayload builds a usage service getMeterUsage endpoint
+// payload.
+func NewGetMeterUsagePayload(family string, from *string, to *string, breakdown *string, readingKind string, sessionToken *string) *usage.GetMeterUsagePayload {
+	v := &usage.GetMeterUsagePayload{}
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.Breakdown = breakdown
+	v.ReadingKind = readingKind
 	v.SessionToken = sessionToken
 
 	return v

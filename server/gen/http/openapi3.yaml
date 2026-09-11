@@ -66929,6 +66929,131 @@ paths:
             x-speakeasy-name-override: getInferenceSpendCaps
             x-speakeasy-react-hook:
                 name: getInferenceSpendCaps
+    /rpc/usage.getMeterUsage:
+        get:
+            description: Get meter-ledger usage for an organization over a maximum of three calendar months
+            operationId: getMeterUsage
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: family
+                  required: true
+                  schema:
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                    type: string
+                - allowEmptyValue: true
+                  description: Inclusive UTC reporting boundary. Must be paired with to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive UTC reporting boundary. Must be paired with to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Family-compatible reporting facet
+                  in: query
+                  name: breakdown
+                  schema:
+                    description: Family-compatible reporting facet
+                    type: string
+                - allowEmptyValue: true
+                  description: Select ordinary usage or separate signed adjustments
+                  in: query
+                  name: reading_kind
+                  schema:
+                    default: usage
+                    description: Select ordinary usage or separate signed adjustments
+                    enum:
+                        - usage
+                        - adjustment
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MeterUsageResponse'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getMeterUsage usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getMeterUsage
+            x-speakeasy-react-hook:
+                name: getMeterUsage
     /rpc/usage.getPaygBillingSummary:
         get:
             description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
@@ -84453,6 +84578,156 @@ components:
                 - network_access_mode
                 - created_at
                 - updated_at
+        MeterUsageBreakdown:
+            type: object
+            properties:
+                dimension:
+                    type: string
+                    description: Selected family-compatible breakdown dimension
+                    enum:
+                        - total
+                        - project
+                        - model
+                        - provider
+                        - billing_mode
+                        - assistant
+                        - billing_user
+                        - division
+                        - department
+                        - job_title
+                        - employee_type
+                        - cost_center
+                        - directory_group_set
+                        - direction
+                        - mcp_server
+                        - server_type
+                        - scanner
+                        - policy
+                        - judge_model
+                        - judge_provider
+                        - tool_name
+                series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageSeries'
+                    description: At most six selected facet series plus a remainder
+            required:
+                - dimension
+                - series
+        MeterUsageBucket:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive bucket boundary
+                    format: date-time
+                to:
+                    type: string
+                    description: Exclusive bucket boundary
+                    format: date-time
+                total:
+                    type: string
+                    description: Exact signed integer quantity as a decimal string
+            required:
+                - from
+                - to
+                - total
+        MeterUsageResponse:
+            type: object
+            properties:
+                billing_cycles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageWindow'
+                    description: Trailing twelve billing-cycle date windows
+                breakdown:
+                    $ref: '#/components/schemas/MeterUsageBreakdown'
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/MeterUsageBucket'
+                    description: Dense clipped UTC daily buckets
+                family:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - mcp_bandwidth
+                        - risk_content_scans
+                measurement_method:
+                    type: string
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp, not an ingestion watermark
+                    format: date-time
+                reading_kind:
+                    type: string
+                    enum:
+                        - usage
+                        - adjustment
+                total:
+                    type: string
+                    description: Exact signed integer period total as a decimal string
+                unit:
+                    type: string
+                    enum:
+                        - stokens
+                        - bytes
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            required:
+                - family
+                - reading_kind
+                - window
+                - billing_cycles
+                - unit
+                - measurement_method
+                - total
+                - buckets
+                - breakdown
+                - queried_at
+        MeterUsageSeries:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Canonical identity for value series; null for unset and remainder
+                kind:
+                    type: string
+                    description: Identity kind for this series
+                    enum:
+                        - value
+                        - unset
+                        - remainder
+                label:
+                    type: string
+                    description: Display label, never chart identity
+                total:
+                    type: string
+                    description: Exact signed integer series total as a decimal string
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: Exact signed integer values aligned one-for-one with buckets
+            required:
+                - kind
+                - label
+                - total
+                - values
+        MeterUsageWindow:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Inclusive UTC window boundary
+                    format: date-time
+                to:
+                    type: string
+                    description: Exclusive UTC window boundary
+                    format: date-time
+            required:
+                - from
+                - to
         MigrateIssuerRequestBody:
             type: object
             properties:

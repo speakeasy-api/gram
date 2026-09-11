@@ -667,6 +667,7 @@ trackedFiles:
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
   src/funcs/usageGetInferenceSpendCaps.ts: {}
+  src/funcs/usageGetMeterUsage.ts: {}
   src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
@@ -1244,6 +1245,11 @@ trackedFiles:
   src/models/components/metamcpmember.ts: {}
   src/models/components/metamcpmemberusage.ts: {}
   src/models/components/metamcpserver.ts: {}
+  src/models/components/meterusagebreakdown.ts: {}
+  src/models/components/meterusagebucket.ts: {}
+  src/models/components/meterusageresponse.ts: {}
+  src/models/components/meterusageseries.ts: {}
+  src/models/components/meterusagewindow.ts: {}
   src/models/components/migrateissuerrequestbody.ts: {}
   src/models/components/migrateorganizationremotesessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
@@ -1926,6 +1932,7 @@ trackedFiles:
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getmetamcpserverusage.ts: {}
+  src/models/operations/getmeterusage.ts: {}
   src/models/operations/getnetworkingress.ts: {}
   src/models/operations/getnetworkingressdeleteimpact.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
@@ -2657,6 +2664,8 @@ trackedFiles:
   src/react-query/getMetaMcpServer.ts: {}
   src/react-query/getMetaMcpServerUsage.core.ts: {}
   src/react-query/getMetaMcpServerUsage.ts: {}
+  src/react-query/getMeterUsage.core.ts: {}
+  src/react-query/getMeterUsage.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
@@ -6147,6 +6156,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getMeterUsage:
+    speakeasy-default-get-meter-usage:
+      parameters:
+        query:
+          family: "mcp_bandwidth"
+          reading_kind: "usage"
+      responses:
+        "200":
+          application/json: {"billing_cycles": [{"from": "2024-10-14T00:52:41.567Z", "to": "2025-01-31T16:10:28.190Z"}], "breakdown": {"dimension": "policy", "series": []}, "buckets": [{"from": "2026-05-17T05:41:42.504Z", "to": "2026-01-24T07:40:53.020Z", "total": "<value>"}], "family": "agent_session_storage", "measurement_method": "<value>", "queried_at": "2024-11-20T01:39:03.119Z", "reading_kind": "adjustment", "total": "<value>", "unit": "bytes", "window": {"from": "2024-09-15T11:34:59.195Z", "to": "2024-05-25T19:55:29.985Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getNetworkIngress:
     speakeasy-default-get-network-ingress:
       responses:

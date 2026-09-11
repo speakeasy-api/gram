@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   subscription: vi.fn(),
   periodUsage: vi.fn(),
-  paygBillingSummary: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
 }));
@@ -106,20 +105,6 @@ vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => mocks.periodUsage() as { data: undefined },
 }));
-// The estimate composes the generated query pieces itself (the cache is keyed
-// on the cycle anchor); the build spy records which tiers mount the read. The
-// query function itself stays unreachable here — the mocked subscription
-// carries no period anchor, so the estimate never enables the fetch.
-vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
-  buildGetPaygBillingSummaryQuery: (...args: unknown[]) => {
-    mocks.paygBillingSummary(...args);
-    return {
-      queryKey: ["payg-billing-summary"],
-      queryFn: () => Promise.reject(new Error("not fetched in page tests")),
-    };
-  },
-  queryKeyGetPaygBillingSummary: () => ["payg-billing-summary"],
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -141,15 +126,11 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
     isError: false,
   }),
 }));
-// The estimate slot is rendered through so the page test can see which tier
-// hands the PAYG invoice estimate to the shared usage section.
-vi.mock("@/components/billing/tum-section", () => ({
-  TumUsageSection: ({ estimate }: { estimate?: ReactNode }) => (
-    <div>
-      tum usage
-      {estimate}
-    </div>
-  ),
+vi.mock("@/components/billing/billing-position-section", () => ({
+  BillingPositionSection: () => <div>billing position</div>,
+}));
+vi.mock("@/components/billing/meter-usage-section", () => ({
+  MeterUsageSection: () => <div>meter usage</div>,
 }));
 vi.mock("@/components/billing/tum-admin-section", () => ({
   TumAdminSection: () => <div>tum admin</div>,
@@ -203,7 +184,7 @@ const inferenceCapsSection = () =>
 const paymentSection = () =>
   screen.queryByRole("heading", { name: /^payment$/i });
 
-const tumUsageSection = () => screen.queryByText("tum usage");
+const meterUsageSection = () => screen.queryByText("meter usage");
 
 const polarUsageSection = () =>
   screen.queryByText(/summary of your organization's usage this period/i);
@@ -310,7 +291,7 @@ describe("Billing", () => {
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
     expect(cta()).not.toBeNull();
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
     expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
@@ -326,7 +307,7 @@ describe("Billing", () => {
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
     expect(cta()).toBeNull();
   });
 
@@ -433,27 +414,21 @@ describe("Billing", () => {
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
   });
 
-  // Pay as you go bills on tokens under management through Stripe, so it gets
-  // the shared TUM usage view with the invoice estimate at its head. The Polar
-  // usage meters describe a period it isn't billed on — two disagreeing totals
-  // on one billing page is worse than one.
-  it("puts the shared TUM usage view with the estimate on the payg view", () => {
+  it("separates the billing position from meter usage on the payg view", () => {
     mocks.productTier.mockReturnValue("payg");
     mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(tumUsageSection()).not.toBeNull();
+    expect(meterUsageSection()).not.toBeNull();
+    expect(screen.getByText("billing position")).toBeTruthy();
     expect(polarUsageSection()).toBeNull();
     expect(mocks.periodUsage).not.toHaveBeenCalled();
-    // The estimate is mounted inside the usage section — its own gate decides
-    // whether the request fires.
-    expect(mocks.paygBillingSummary).toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
@@ -464,24 +439,19 @@ describe("Billing", () => {
       renderBilling();
 
       expect(polarUsageSection()).not.toBeNull();
-      expect(tumUsageSection()).toBeNull();
       expect(mocks.periodUsage).toHaveBeenCalled();
-      expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+      expect(meterUsageSection()).toBeNull();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
     },
   );
 
-  // Enterprise contracts bill on tokens under management through the TUM view,
-  // which owns its own figures — the PAYG estimate and Polar meters never
-  // mount there, so neither request can fire.
-  it("keeps the enterprise view on the TUM figures", () => {
+  it("keeps the enterprise view on meter usage without Polar usage", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
-    expect(tumUsageSection()).not.toBeNull();
     expect(polarUsageSection()).toBeNull();
-    expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+    expect(meterUsageSection()).not.toBeNull();
   });
 
   it("shows no checkout CTA once the trial has ended", () => {

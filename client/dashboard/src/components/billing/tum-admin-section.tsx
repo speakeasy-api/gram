@@ -64,7 +64,7 @@ export const TumAdminSection = (): JSX.Element => {
 
   return (
     <Page.Section>
-      {/* Secondary section below TumUsageSection: suppress the area eyebrow. */}
+      {/* Secondary platform-only contract section: suppress the area eyebrow. */}
       <Page.Section.Title area="">
         TUM Contract (PLATFORM ADMIN VIEW ONLY)
       </Page.Section.Title>

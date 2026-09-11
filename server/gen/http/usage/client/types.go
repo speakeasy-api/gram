@@ -65,6 +65,25 @@ type GetPeriodUsageResponseBody struct {
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 }
 
+// GetMeterUsageResponseBody is the type of the "usage" service "getMeterUsage"
+// endpoint HTTP response body.
+type GetMeterUsageResponseBody struct {
+	Family      *string                       `form:"family,omitempty" json:"family,omitempty" xml:"family,omitempty"`
+	ReadingKind *string                       `form:"reading_kind,omitempty" json:"reading_kind,omitempty" xml:"reading_kind,omitempty"`
+	Window      *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+	// Trailing twelve billing-cycle date windows
+	BillingCycles     []*MeterUsageWindowResponseBody `form:"billing_cycles,omitempty" json:"billing_cycles,omitempty" xml:"billing_cycles,omitempty"`
+	Unit              *string                         `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
+	MeasurementMethod *string                         `form:"measurement_method,omitempty" json:"measurement_method,omitempty" xml:"measurement_method,omitempty"`
+	// Exact signed integer period total as a decimal string
+	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Dense clipped UTC daily buckets
+	Buckets   []*MeterUsageBucketResponseBody  `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
+	Breakdown *MeterUsageBreakdownResponseBody `form:"breakdown,omitempty" json:"breakdown,omitempty" xml:"breakdown,omitempty"`
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
+}
+
 // GetTokensUnderManagementResponseBody is the type of the "usage" service
 // "getTokensUnderManagement" endpoint HTTP response body.
 type GetTokensUnderManagementResponseBody struct {
@@ -412,6 +431,188 @@ type GetPeriodUsageUnexpectedResponseBody struct {
 // GetPeriodUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetPeriodUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageUnauthorizedResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unauthorized" error.
+type GetMeterUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageForbiddenResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "forbidden" error.
+type GetMeterUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageBadRequestResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "bad_request" error.
+type GetMeterUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageNotFoundResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "not_found" error.
+type GetMeterUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageConflictResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "conflict" error.
+type GetMeterUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageUnsupportedMediaResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetMeterUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageInvalidResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "invalid" error.
+type GetMeterUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageInvariantViolationResponseBody is the type of the "usage"
+// service "getMeterUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMeterUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageUnexpectedResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "unexpected" error.
+type GetMeterUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMeterUsageGatewayErrorResponseBody is the type of the "usage" service
+// "getMeterUsage" endpoint HTTP response body for the "gateway_error" error.
+type GetMeterUsageGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3403,6 +3604,47 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// MeterUsageWindowResponseBody is used to define fields on response body types.
+type MeterUsageWindowResponseBody struct {
+	// Inclusive UTC window boundary
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Exclusive UTC window boundary
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+}
+
+// MeterUsageBucketResponseBody is used to define fields on response body types.
+type MeterUsageBucketResponseBody struct {
+	// Inclusive bucket boundary
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// Exclusive bucket boundary
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Exact signed integer quantity as a decimal string
+	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+}
+
+// MeterUsageBreakdownResponseBody is used to define fields on response body
+// types.
+type MeterUsageBreakdownResponseBody struct {
+	// Selected family-compatible breakdown dimension
+	Dimension *string `form:"dimension,omitempty" json:"dimension,omitempty" xml:"dimension,omitempty"`
+	// At most six selected facet series plus a remainder
+	Series []*MeterUsageSeriesResponseBody `form:"series,omitempty" json:"series,omitempty" xml:"series,omitempty"`
+}
+
+// MeterUsageSeriesResponseBody is used to define fields on response body types.
+type MeterUsageSeriesResponseBody struct {
+	// Identity kind for this series
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Canonical identity for value series; null for unset and remainder
+	Key *string `json:"key"`
+	// Display label, never chart identity
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Exact signed integer series total as a decimal string
+	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
+	// Exact signed integer values aligned one-for-one with buckets
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+}
+
 // TUMPeriodResponseBody is used to define fields on response body types.
 type TUMPeriodResponseBody struct {
 	// Start of the billing cycle
@@ -3646,6 +3888,189 @@ func NewGetPeriodUsageUnexpected(body *GetPeriodUsageUnexpectedResponseBody) *go
 // NewGetPeriodUsageGatewayError builds a usage service getPeriodUsage endpoint
 // gateway_error error.
 func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageMeterUsageResponseOK builds a "usage" service
+// "getMeterUsage" endpoint result from a HTTP "OK" response.
+func NewGetMeterUsageMeterUsageResponseOK(body *GetMeterUsageResponseBody) *usage.MeterUsageResponse {
+	v := &usage.MeterUsageResponse{
+		Family:            *body.Family,
+		ReadingKind:       *body.ReadingKind,
+		Unit:              *body.Unit,
+		MeasurementMethod: *body.MeasurementMethod,
+		Total:             *body.Total,
+		QueriedAt:         *body.QueriedAt,
+	}
+	v.Window = unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow(body.Window)
+	v.BillingCycles = make([]*usage.MeterUsageWindow, len(body.BillingCycles))
+	for i, val := range body.BillingCycles {
+		if val == nil {
+			v.BillingCycles[i] = nil
+			continue
+		}
+		v.BillingCycles[i] = unmarshalMeterUsageWindowResponseBodyToUsageMeterUsageWindow(val)
+	}
+	v.Buckets = make([]*usage.MeterUsageBucket, len(body.Buckets))
+	for i, val := range body.Buckets {
+		if val == nil {
+			v.Buckets[i] = nil
+			continue
+		}
+		v.Buckets[i] = unmarshalMeterUsageBucketResponseBodyToUsageMeterUsageBucket(val)
+	}
+	v.Breakdown = unmarshalMeterUsageBreakdownResponseBodyToUsageMeterUsageBreakdown(body.Breakdown)
+
+	return v
+}
+
+// NewGetMeterUsageUnauthorized builds a usage service getMeterUsage endpoint
+// unauthorized error.
+func NewGetMeterUsageUnauthorized(body *GetMeterUsageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageForbidden builds a usage service getMeterUsage endpoint
+// forbidden error.
+func NewGetMeterUsageForbidden(body *GetMeterUsageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageBadRequest builds a usage service getMeterUsage endpoint
+// bad_request error.
+func NewGetMeterUsageBadRequest(body *GetMeterUsageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageNotFound builds a usage service getMeterUsage endpoint
+// not_found error.
+func NewGetMeterUsageNotFound(body *GetMeterUsageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageConflict builds a usage service getMeterUsage endpoint
+// conflict error.
+func NewGetMeterUsageConflict(body *GetMeterUsageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageUnsupportedMedia builds a usage service getMeterUsage
+// endpoint unsupported_media error.
+func NewGetMeterUsageUnsupportedMedia(body *GetMeterUsageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageInvalid builds a usage service getMeterUsage endpoint
+// invalid error.
+func NewGetMeterUsageInvalid(body *GetMeterUsageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageInvariantViolation builds a usage service getMeterUsage
+// endpoint invariant_violation error.
+func NewGetMeterUsageInvariantViolation(body *GetMeterUsageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageUnexpected builds a usage service getMeterUsage endpoint
+// unexpected error.
+func NewGetMeterUsageUnexpected(body *GetMeterUsageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMeterUsageGatewayError builds a usage service getMeterUsage endpoint
+// gateway_error error.
+func NewGetMeterUsageGatewayError(body *GetMeterUsageGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6259,6 +6684,84 @@ func ValidateGetPeriodUsageResponseBody(body *GetPeriodUsageResponseBody) (err e
 	return
 }
 
+// ValidateGetMeterUsageResponseBody runs the validations defined on
+// GetMeterUsageResponseBody
+func ValidateGetMeterUsageResponseBody(body *GetMeterUsageResponseBody) (err error) {
+	if body.Family == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("family", "body"))
+	}
+	if body.ReadingKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reading_kind", "body"))
+	}
+	if body.Window == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
+	}
+	if body.BillingCycles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycles", "body"))
+	}
+	if body.Unit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unit", "body"))
+	}
+	if body.MeasurementMethod == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measurement_method", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.Buckets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("buckets", "body"))
+	}
+	if body.Breakdown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("breakdown", "body"))
+	}
+	if body.QueriedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("queried_at", "body"))
+	}
+	if body.Family != nil {
+		if !(*body.Family == "agent_session_storage" || *body.Family == "mcp_bandwidth" || *body.Family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.family", *body.Family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+	}
+	if body.ReadingKind != nil {
+		if !(*body.ReadingKind == "usage" || *body.ReadingKind == "adjustment") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reading_kind", *body.ReadingKind, []any{"usage", "adjustment"}))
+		}
+	}
+	if body.Window != nil {
+		if err2 := ValidateMeterUsageWindowResponseBody(body.Window); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.BillingCycles {
+		if e != nil {
+			if err2 := ValidateMeterUsageWindowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Unit != nil {
+		if !(*body.Unit == "stokens" || *body.Unit == "bytes") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unit", *body.Unit, []any{"stokens", "bytes"}))
+		}
+	}
+	for _, e := range body.Buckets {
+		if e != nil {
+			if err2 := ValidateMeterUsageBucketResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Breakdown != nil {
+		if err2 := ValidateMeterUsageBreakdownResponseBody(body.Breakdown); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.QueriedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.queried_at", *body.QueriedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateGetTokensUnderManagementResponseBody runs the validations defined on
 // GetTokensUnderManagementResponseBody
 func ValidateGetTokensUnderManagementResponseBody(body *GetTokensUnderManagementResponseBody) (err error) {
@@ -6797,6 +7300,246 @@ func ValidateGetPeriodUsageUnexpectedResponseBody(body *GetPeriodUsageUnexpected
 // ValidateGetPeriodUsageGatewayErrorResponseBody runs the validations defined
 // on getPeriodUsage_gateway_error_response_body
 func ValidateGetPeriodUsageGatewayErrorResponseBody(body *GetPeriodUsageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageUnauthorizedResponseBody runs the validations defined
+// on getMeterUsage_unauthorized_response_body
+func ValidateGetMeterUsageUnauthorizedResponseBody(body *GetMeterUsageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageForbiddenResponseBody runs the validations defined on
+// getMeterUsage_forbidden_response_body
+func ValidateGetMeterUsageForbiddenResponseBody(body *GetMeterUsageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageBadRequestResponseBody runs the validations defined on
+// getMeterUsage_bad_request_response_body
+func ValidateGetMeterUsageBadRequestResponseBody(body *GetMeterUsageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageNotFoundResponseBody runs the validations defined on
+// getMeterUsage_not_found_response_body
+func ValidateGetMeterUsageNotFoundResponseBody(body *GetMeterUsageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageConflictResponseBody runs the validations defined on
+// getMeterUsage_conflict_response_body
+func ValidateGetMeterUsageConflictResponseBody(body *GetMeterUsageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageUnsupportedMediaResponseBody runs the validations
+// defined on getMeterUsage_unsupported_media_response_body
+func ValidateGetMeterUsageUnsupportedMediaResponseBody(body *GetMeterUsageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageInvalidResponseBody runs the validations defined on
+// getMeterUsage_invalid_response_body
+func ValidateGetMeterUsageInvalidResponseBody(body *GetMeterUsageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageInvariantViolationResponseBody runs the validations
+// defined on getMeterUsage_invariant_violation_response_body
+func ValidateGetMeterUsageInvariantViolationResponseBody(body *GetMeterUsageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageUnexpectedResponseBody runs the validations defined on
+// getMeterUsage_unexpected_response_body
+func ValidateGetMeterUsageUnexpectedResponseBody(body *GetMeterUsageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMeterUsageGatewayErrorResponseBody runs the validations defined
+// on getMeterUsage_gateway_error_response_body
+func ValidateGetMeterUsageGatewayErrorResponseBody(body *GetMeterUsageGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10666,6 +11409,92 @@ func ValidateCreateTopUpCheckoutGatewayErrorResponseBody(body *CreateTopUpChecko
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMeterUsageWindowResponseBody runs the validations defined on
+// MeterUsageWindowResponseBody
+func ValidateMeterUsageWindowResponseBody(body *MeterUsageWindowResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMeterUsageBucketResponseBody runs the validations defined on
+// MeterUsageBucketResponseBody
+func ValidateMeterUsageBucketResponseBody(body *MeterUsageBucketResponseBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMeterUsageBreakdownResponseBody runs the validations defined on
+// MeterUsageBreakdownResponseBody
+func ValidateMeterUsageBreakdownResponseBody(body *MeterUsageBreakdownResponseBody) (err error) {
+	if body.Dimension == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension", "body"))
+	}
+	if body.Series == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("series", "body"))
+	}
+	if body.Dimension != nil {
+		if !(*body.Dimension == "total" || *body.Dimension == "project" || *body.Dimension == "model" || *body.Dimension == "provider" || *body.Dimension == "billing_mode" || *body.Dimension == "assistant" || *body.Dimension == "billing_user" || *body.Dimension == "division" || *body.Dimension == "department" || *body.Dimension == "job_title" || *body.Dimension == "employee_type" || *body.Dimension == "cost_center" || *body.Dimension == "directory_group_set" || *body.Dimension == "direction" || *body.Dimension == "mcp_server" || *body.Dimension == "server_type" || *body.Dimension == "scanner" || *body.Dimension == "policy" || *body.Dimension == "judge_model" || *body.Dimension == "judge_provider" || *body.Dimension == "tool_name") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", *body.Dimension, []any{"total", "project", "model", "provider", "billing_mode", "assistant", "billing_user", "division", "department", "job_title", "employee_type", "cost_center", "directory_group_set", "direction", "mcp_server", "server_type", "scanner", "policy", "judge_model", "judge_provider", "tool_name"}))
+		}
+	}
+	for _, e := range body.Series {
+		if e != nil {
+			if err2 := ValidateMeterUsageSeriesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMeterUsageSeriesResponseBody runs the validations defined on
+// MeterUsageSeriesResponseBody
+func ValidateMeterUsageSeriesResponseBody(body *MeterUsageSeriesResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Total == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total", "body"))
+	}
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "value" || *body.Kind == "unset" || *body.Kind == "remainder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"value", "unset", "remainder"}))
+		}
 	}
 	return
 }

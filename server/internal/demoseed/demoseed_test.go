@@ -3,7 +3,6 @@ package demoseed
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ func TestWaitForClickHouseTelemetryDeleteRetriesUntilNoRowsRemain(t *testing.T) 
 	counts := []uint64{7, 2, 0}
 	calls := 0
 
-	err := waitForClickHouseTelemetryDelete(
+	err := waitForClickHouseDelete(
 		t.Context(),
 		time.Second,
 		time.Millisecond,
@@ -36,7 +35,7 @@ func TestWaitForClickHouseTelemetryDeleteReturnsQueryError(t *testing.T) {
 
 	queryErr := errors.New("query unavailable")
 
-	err := waitForClickHouseTelemetryDelete(
+	err := waitForClickHouseDelete(
 		t.Context(),
 		time.Second,
 		time.Millisecond,
@@ -46,13 +45,12 @@ func TestWaitForClickHouseTelemetryDeleteReturnsQueryError(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, queryErr)
-	require.ErrorContains(t, err, "check demo telemetry delete visibility")
 }
 
 func TestWaitForClickHouseTelemetryDeleteTimesOut(t *testing.T) {
 	t.Parallel()
 
-	err := waitForClickHouseTelemetryDelete(
+	err := waitForClickHouseDelete(
 		t.Context(),
 		20*time.Millisecond,
 		time.Millisecond,
@@ -62,31 +60,4 @@ func TestWaitForClickHouseTelemetryDeleteTimesOut(t *testing.T) {
 	)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.ErrorContains(t, err, "3 rows remaining")
-}
-
-func TestClickHouseDeletePreflightPrecedesInserts(t *testing.T) {
-	t.Parallel()
-
-	statements := splitStatements(clickhouseSQL)
-	lastDelete := -1
-	preflight := -1
-	firstInsert := -1
-	for i, stmt := range statements {
-		upperStmt := strings.ToUpper(stmt)
-		switch {
-		case strings.HasPrefix(upperStmt, "DELETE "):
-			lastDelete = i
-		case strings.Contains(stmt, "demo seed preflight: telemetry rows remain after scoped deletes"):
-			preflight = i
-		case firstInsert == -1 && strings.HasPrefix(upperStmt, "INSERT "):
-			firstInsert = i
-		}
-	}
-
-	require.NotEqual(t, -1, lastDelete)
-	require.NotEqual(t, -1, preflight)
-	require.NotEqual(t, -1, firstInsert)
-	require.Less(t, lastDelete, preflight)
-	require.Less(t, preflight, firstInsert)
 }

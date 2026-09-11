@@ -1278,6 +1278,22 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions frozen at acceptance.',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
+    assistant_id String MATERIALIZED attributes['assistant_id'] COMMENT 'Frozen reporting attribute for assistant identity.',
+    billing_mode LowCardinality(String) MATERIALIZED attributes['billing_mode'] COMMENT 'Frozen reporting attribute for billing mode.',
+    billing_user_cost_center_name LowCardinality(String) MATERIALIZED attributes['billing_user_cost_center_name'] COMMENT 'Frozen reporting attribute for billing-user cost center.',
+    billing_user_department_name LowCardinality(String) MATERIALIZED attributes['billing_user_department_name'] COMMENT 'Frozen reporting attribute for billing-user department.',
+    billing_user_directory_groups LowCardinality(String) MATERIALIZED attributes['billing_user_directory_groups'] COMMENT 'Frozen JSON directory-group set for reporting.',
+    billing_user_division_name LowCardinality(String) MATERIALIZED attributes['billing_user_division_name'] COMMENT 'Frozen reporting attribute for billing-user division.',
+    billing_user_employee_type LowCardinality(String) MATERIALIZED attributes['billing_user_employee_type'] COMMENT 'Frozen reporting attribute for billing-user employee type.',
+    billing_user_id String MATERIALIZED attributes['billing_user_id'] COMMENT 'Frozen reporting identity of the billing user.',
+    billing_user_job_title LowCardinality(String) MATERIALIZED attributes['billing_user_job_title'] COMMENT 'Frozen reporting attribute for billing-user job title.',
+    mcp_server_id String MATERIALIZED attributes['mcp_server_id'] COMMENT 'Frozen reporting identity of the MCP server.',
+    mcp_server_slug String MATERIALIZED attributes['mcp_server_slug'] COMMENT 'Frozen reporting label for the MCP server.',
+    mcp_server_type LowCardinality(String) MATERIALIZED attributes['mcp_server_type'] COMMENT 'Frozen reporting namespace for the MCP server.',
+    model LowCardinality(String) MATERIALIZED attributes['model'] COMMENT 'Frozen reporting attribute for the model.',
+    provider LowCardinality(String) MATERIALIZED attributes['provider'] COMMENT 'Frozen reporting attribute for the provider.',
+    risk_policy_id String MATERIALIZED attributes['risk_policy_id'] COMMENT 'Frozen reporting attribute for risk-policy identity.',
+    tool_name LowCardinality(String) MATERIALIZED attributes['tool_name'] COMMENT 'Frozen reporting attribute for tool name.',
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
     CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
     CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
@@ -1287,6 +1303,222 @@ PRIMARY KEY (organization_id, meter_id, occurred_at)
 ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
 COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
+
+-- Complete UTC days are rebuilt hourly from the deduplicated ledger. Each
+-- reading is expanded into every retained family facet before aggregation so
+-- the stored family total remains independent from every breakdown.
+CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source AS
+SELECT
+    organization_id,
+    family,
+    reading_kind,
+    facet_identity.1 AS facet,
+    toDate(occurred_at, 'UTC') AS day,
+    facet_identity.2 AS series_kind,
+    facet_identity.3 AS series_key,
+    max(facet_identity.4) AS label,
+    unit,
+    measurement_method,
+    sum(toInt128(value)) AS quantity,
+    count() AS reading_count,
+    toUInt8(0) AS is_publication,
+    toDateTime64(0, 9, 'UTC') AS published_before,
+    toDateTime64(0, 9, 'UTC') AS snapshot_at
+FROM
+(
+    SELECT
+        organization_id,
+        reading_kind,
+        occurred_at,
+        unit,
+        measurement_method,
+        value,
+        multiIf(
+            meter_id = 'gram.agent_session.storage', 'agent_session_storage',
+            meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'), 'mcp_bandwidth',
+            'risk_content_scans'
+        ) AS family,
+        arrayJoin(
+            multiIf(
+                meter_id = 'gram.agent_session.storage',
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple('model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('billing_mode', if(billing_mode = '', 'unset', 'value'), billing_mode, if(billing_mode = '', '(unset)', billing_mode)),
+                    tuple('assistant', if(assistant_id = '', 'unset', 'value'), assistant_id, if(assistant_id = '', '(unset)', assistant_id)),
+                    tuple('billing_user', if(billing_user_id = '', 'unset', 'value'), billing_user_id, if(billing_user_id = '', '(unset)', billing_user_id)),
+                    tuple('division', if(billing_user_division_name = '', 'unset', 'value'), billing_user_division_name, if(billing_user_division_name = '', '(unset)', billing_user_division_name)),
+                    tuple('department', if(billing_user_department_name = '', 'unset', 'value'), billing_user_department_name, if(billing_user_department_name = '', '(unset)', billing_user_department_name)),
+                    tuple('job_title', if(billing_user_job_title = '', 'unset', 'value'), billing_user_job_title, if(billing_user_job_title = '', '(unset)', billing_user_job_title)),
+                    tuple('employee_type', if(billing_user_employee_type = '', 'unset', 'value'), billing_user_employee_type, if(billing_user_employee_type = '', '(unset)', billing_user_employee_type)),
+                    tuple('cost_center', if(billing_user_cost_center_name = '', 'unset', 'value'), billing_user_cost_center_name, if(billing_user_cost_center_name = '', '(unset)', billing_user_cost_center_name)),
+                    tuple(
+                        'directory_group_set',
+                        if(
+                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
+                            'unset',
+                            'value'
+                        ),
+                        if(
+                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
+                            '',
+                            toJSONString(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)'))))
+                        ),
+                        if(
+                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
+                            '(unset)',
+                            arrayStringConcat(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)'))), ', ')
+                        )
+                    )
+                ],
+                meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'),
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'direction',
+                        'value',
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'ingress', 'egress'),
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'Ingress', 'Egress')
+                    ),
+                    tuple(
+                        'mcp_server',
+                        if(mcp_server_type = '' OR mcp_server_id = '', 'unset', 'value'),
+                        if(mcp_server_type = '' OR mcp_server_id = '', '', concat(mcp_server_type, ':', mcp_server_id)),
+                        if(
+                            mcp_server_type = '' OR mcp_server_id = '',
+                            '(unset)',
+                            if(mcp_server_slug = '', concat(mcp_server_type, ':', mcp_server_id), mcp_server_slug)
+                        )
+                    ),
+                    tuple('server_type', if(mcp_server_type = '', 'unset', 'value'), mcp_server_type, if(mcp_server_type = '', '(unset)', mcp_server_type))
+                ],
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'scanner',
+                        'value',
+                        meter_id,
+                        multiIf(
+                            meter_id = 'gram.risk.scan.gitleaks', 'Gitleaks',
+                            meter_id = 'gram.risk.scan.presidio', 'Presidio',
+                            meter_id = 'gram.risk.scan.prompt_injection', 'Prompt injection',
+                            meter_id = 'gram.risk.scan.prompt_policy', 'Prompt policy',
+                            meter_id = 'gram.risk.scan.custom_rules', 'Custom rules',
+                            'CLI destructive'
+                        )
+                    ),
+                    tuple('policy', if(risk_policy_id = '', 'unset', 'value'), risk_policy_id, if(risk_policy_id = '', '(unset)', risk_policy_id)),
+                    tuple('judge_model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('judge_provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('tool_name', if(tool_name = '', 'unset', 'value'), tool_name, if(tool_name = '', '(unset)', tool_name))
+                ]
+            )
+        ) AS facet_identity
+    FROM billing_meter_readings_by_time FINAL
+    WHERE
+        meter_id IN (
+            'gram.agent_session.storage',
+            'gram.mcp.bandwidth.ingress',
+            'gram.mcp.bandwidth.egress',
+            'gram.risk.scan.gitleaks',
+            'gram.risk.scan.presidio',
+            'gram.risk.scan.prompt_injection',
+            'gram.risk.scan.prompt_policy',
+            'gram.risk.scan.custom_rules',
+            'gram.risk.scan.cli_destructive'
+        )
+        AND occurred_at < toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC')
+)
+GROUP BY
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    day,
+    series_kind,
+    series_key,
+    unit,
+    measurement_method
+SETTINGS
+    do_not_merge_across_partitions_select_final = 1,
+    max_threads = 2,
+    max_final_threads = 2,
+    max_block_size = 4096,
+    max_memory_usage = 402653184,
+    max_bytes_before_external_group_by = 134217728,
+    max_bytes_ratio_before_external_group_by = 0.5;
+
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
+    organization_id String,
+    family LowCardinality(String),
+    reading_kind LowCardinality(String),
+    facet LowCardinality(String),
+    day Date,
+    series_kind LowCardinality(String),
+    series_key String,
+    label String,
+    unit LowCardinality(String),
+    measurement_method LowCardinality(String),
+    quantity Int128,
+    reading_count UInt64,
+    is_publication UInt8 COMMENT '0 for quantities, 1 for ready coverage',
+    published_before DateTime64(9, 'UTC'),
+    snapshot_at DateTime64(9, 'UTC')
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(day)
+ORDER BY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    day,
+    series_kind,
+    series_key,
+    unit,
+    measurement_method
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Daily meter family and facet marginals with atomic publication metadata';
+
+-- A non-append refresh atomically replaces the target with one generation.
+-- The global marker is emitted even when the source has no business rows.
+CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summary_refresh
+REFRESH AFTER 1 HOUR
+TO billing_meter_daily_summaries
+DEFINER = gram SQL SECURITY DEFINER AS
+WITH
+    toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC') AS cutoff,
+    now64(9, 'UTC') AS refreshed_at
+SELECT *
+FROM billing_meter_daily_summary_source
+UNION ALL
+SELECT
+    '' AS organization_id,
+    '' AS family,
+    '' AS reading_kind,
+    '' AS facet,
+    toDate(cutoff) AS day,
+    '' AS series_kind,
+    '' AS series_key,
+    '' AS label,
+    '' AS unit,
+    '' AS measurement_method,
+    toInt128(0) AS quantity,
+    toUInt64(0) AS reading_count,
+    toUInt8(1) AS is_publication,
+    cutoff AS published_before,
+    refreshed_at AS snapshot_at
+SETTINGS
+    max_threads = 2,
+    max_final_threads = 2,
+    max_block_size = 4096,
+    max_memory_usage = 402653184,
+    max_bytes_before_external_group_by = 134217728,
+    max_bytes_ratio_before_external_group_by = 0.5;
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity

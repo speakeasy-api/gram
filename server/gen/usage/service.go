@@ -18,6 +18,9 @@ import (
 type Service interface {
 	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
+	// Get meter-ledger usage for an organization over a maximum of three calendar
+	// months
+	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *MeterUsageResponse, err error)
 	// Get tokens under management for the active billing cycle alongside the
 	// contracted terms
 	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
@@ -79,7 +82,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [18]string{"getPeriodUsage", "getMeterUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -136,6 +139,22 @@ type GetInferenceSpendCapsPayload struct {
 	SessionToken *string
 }
 
+// GetMeterUsagePayload is the payload type of the usage service getMeterUsage
+// method.
+type GetMeterUsagePayload struct {
+	SessionToken *string
+	Family       string
+	// Inclusive UTC reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC reporting boundary. Must be paired with from and no later than
+	// three calendar months after from, clamped to the target month's last day.
+	To *string
+	// Family-compatible reporting facet
+	Breakdown *string
+	// Select ordinary usage or separate signed adjustments
+	ReadingKind string
+}
+
 // GetPaygBillingSummaryPayload is the payload type of the usage service
 // getPaygBillingSummary method.
 type GetPaygBillingSummaryPayload struct {
@@ -169,6 +188,61 @@ type InferenceSpendCap struct {
 	MonthlyCredits int
 	// Whether the platform-managed key is disabled
 	Disabled bool
+}
+
+type MeterUsageBreakdown struct {
+	// Selected family-compatible breakdown dimension
+	Dimension string
+	// At most six selected facet series plus a remainder
+	Series []*MeterUsageSeries
+}
+
+type MeterUsageBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact signed integer quantity as a decimal string
+	Total string
+}
+
+// MeterUsageResponse is the result type of the usage service getMeterUsage
+// method.
+type MeterUsageResponse struct {
+	Family      string
+	ReadingKind string
+	Window      *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles     []*MeterUsageWindow
+	Unit              string
+	MeasurementMethod string
+	// Exact signed integer period total as a decimal string
+	Total string
+	// Dense clipped UTC daily buckets
+	Buckets   []*MeterUsageBucket
+	Breakdown *MeterUsageBreakdown
+	// Retrieval timestamp, not an ingestion watermark
+	QueriedAt string
+}
+
+type MeterUsageSeries struct {
+	// Identity kind for this series
+	Kind string
+	// Canonical identity for value series; null for unset and remainder
+	Key *string `json:"key"`
+	// Display label, never chart identity
+	Label string
+	// Exact signed integer series total as a decimal string
+	Total string
+	// Exact signed integer values aligned one-for-one with buckets
+	Values []string
+}
+
+type MeterUsageWindow struct {
+	// Inclusive UTC window boundary
+	From string
+	// Exclusive UTC window boundary
+	To string
 }
 
 // PaygBillingSummary is the result type of the usage service
