@@ -1045,7 +1045,14 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
 
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, redisClient, serverURL, auditLogger)
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("build kms signing client factory: %w", err)
+			}
+			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, redisClient, serverURL, auditLogger, clientAssertionSigner)
 			if err != nil {
 				return err
 			}
@@ -1525,11 +1532,6 @@ func newStartCommand() *cli.Command {
 			// share one identity: they then agree on which impersonation targets are
 			// refused, and probe for Gram's own service account once between them
 			// rather than once each.
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
-			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("build kms signing client factory: %w", err)
-			}
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
@@ -1554,7 +1556,7 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher)), productFeatures)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
@@ -1825,53 +1827,54 @@ func newStartCommand() *cli.Command {
 					piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-						GuardianPolicy:            guardianPolicy,
-						DB:                        db,
-						EncryptionClient:          encryptionClient,
-						FeatureProvider:           featureFlags,
-						AssetStorage:              assetStorage,
-						SlackClient:               slackClient,
-						ChatMessageWriter:         chatWriter,
-						ChatClient:                chatClient,
-						OpenRouter:                openRouter,
-						OpenRouterSpend:           openRouter,
-						K8sClient:                 k8sClient,
-						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
-						ExpectedARecords:          customDomainARecords,
-						GitHubEvidenceToken:       c.String("github-evidence-token"),
-						SiteURL:                   siteURL,
-						BillingTracker:            billingTracker,
-						BillingRepository:         billingRepo,
-						StripeClient:              stripeClient,
-						TUMMeterStreamingEnabled:  c.Bool(stripeTUMMeterStreamingFlagName),
-						RedisClient:               redisClient,
-						PosthogClient:             posthogClient,
-						FunctionsDeployer:         functionsOrchestrator,
-						FunctionsVersion:          runnerVersion,
-						RagService:                ragService,
-						MCPRegistryClient:         mcpRegistryClient,
-						TelemetryLogger:           telemLogger,
-						ClickhouseConn:            chDB,
-						TelemetryRepo:             telemetryrepo.New(chDB),
-						TriggersApp:               triggerApp,
-						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
-						IssuerMetadataRefresher:   issuerMetadataRefresher,
-						EmailService:              emailService,
-						AssistantsCore:            assistantsCore,
-						TemporalEnv:               temporalEnv,
-						PIIScanner:                piiScanner,
-						PIScanner:                 piScanner,
-						CustomRuleScanner:         customRulesScanner,
-						BuiltinPresets:            builtinPresets,
-						ShadowMCPClient:           shadowMCPClient,
-						AuditLogger:               auditLogger,
-						WorkOSClient:              backgroundWorkOSClient,
-						ProductFeatures:           productFeatures,
-						PluginPublisher:           pluginPublisher,
-						Publishers:                publishers,
-						TrialEmailsService:        trialEmailsService,
-						RiskFingerprinter:         riskFingerprinter,
-						DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
+						GuardianPolicy:               guardianPolicy,
+						DB:                           db,
+						EncryptionClient:             encryptionClient,
+						FeatureProvider:              featureFlags,
+						AssetStorage:                 assetStorage,
+						SlackClient:                  slackClient,
+						ChatMessageWriter:            chatWriter,
+						ChatClient:                   chatClient,
+						OpenRouter:                   openRouter,
+						OpenRouterSpend:              openRouter,
+						K8sClient:                    k8sClient,
+						ExpectedTargetCNAME:          c.String("custom-domain-cname"),
+						ExpectedARecords:             customDomainARecords,
+						GitHubEvidenceToken:          c.String("github-evidence-token"),
+						SiteURL:                      siteURL,
+						BillingTracker:               billingTracker,
+						BillingRepository:            billingRepo,
+						StripeClient:                 stripeClient,
+						TUMMeterStreamingEnabled:     c.Bool(stripeTUMMeterStreamingFlagName),
+						RedisClient:                  redisClient,
+						PosthogClient:                posthogClient,
+						FunctionsDeployer:            functionsOrchestrator,
+						FunctionsVersion:             runnerVersion,
+						RagService:                   ragService,
+						MCPRegistryClient:            mcpRegistryClient,
+						TelemetryLogger:              telemLogger,
+						ClickhouseConn:               chDB,
+						TelemetryRepo:                telemetryrepo.New(chDB),
+						TriggersApp:                  triggerApp,
+						CacheAdapter:                 cache.NewRedisCacheAdapter(redisClient),
+						IssuerMetadataRefresher:      issuerMetadataRefresher,
+						RemoteSessionAssertionSigner: clientAssertionSigner,
+						EmailService:                 emailService,
+						AssistantsCore:               assistantsCore,
+						TemporalEnv:                  temporalEnv,
+						PIIScanner:                   piiScanner,
+						PIScanner:                    piScanner,
+						CustomRuleScanner:            customRulesScanner,
+						BuiltinPresets:               builtinPresets,
+						ShadowMCPClient:              shadowMCPClient,
+						AuditLogger:                  auditLogger,
+						WorkOSClient:                 backgroundWorkOSClient,
+						ProductFeatures:              productFeatures,
+						PluginPublisher:              pluginPublisher,
+						Publishers:                   publishers,
+						TrialEmailsService:           trialEmailsService,
+						RiskFingerprinter:            riskFingerprinter,
+						DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 					})
 					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
 					if err != nil {

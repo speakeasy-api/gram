@@ -59,15 +59,22 @@ export function parseScopes(raw: string): string[] {
     .filter((scope) => scope.length > 0);
 }
 
+// DCR callers leave private_key_jwt disabled because a newly registered client
+// cannot already have Gram's JWKS attached. Existing-client settings opt in
+// after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
+  allowPrivateKeyJwt = false,
 ): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
   if (
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
-    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None ||
+    (allowPrivateKeyJwt &&
+      value ===
+        CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt)
   ) {
     return value;
   }

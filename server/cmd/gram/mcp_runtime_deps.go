@@ -29,7 +29,7 @@ type mcpRemoteSessionDependencies struct {
 
 // Both listener processes must use identical identity verification and private
 // authority checks when resuming the OAuth flows that cross their boundary.
-func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, redisClient *redis.Client, serverURL *url.URL, auditLogger *audit.Logger) (*mcpRemoteSessionDependencies, error) {
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, redisClient *redis.Client, serverURL *url.URL, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
@@ -45,6 +45,7 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 		remotesessions.WithIDTokenVerifier(verifier),
 		remotesessions.WithIssuerMetadataRefresher(refresher),
 		remotesessions.WithSessionEnricher(enricher),
-		remotesessions.WithRegistrationAuditLogger(auditLogger))
+		remotesessions.WithRegistrationAuditLogger(auditLogger),
+		remotesessions.WithTokenEndpointAssertionSigner(assertionSigner))
 	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges}, nil
 }

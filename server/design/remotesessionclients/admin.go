@@ -94,6 +94,7 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 	// than repeating the values: AIM-156 adds private_key_jwt to this enum, and
 	// a second copy is a second place to forget.
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})

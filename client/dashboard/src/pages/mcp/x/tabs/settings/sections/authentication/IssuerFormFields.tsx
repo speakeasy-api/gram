@@ -248,11 +248,13 @@ export function EndpointsFields({
 export function TokenEndpointAuthMethodField({
   value,
   onChange,
+  allowPrivateKeyJwt = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
+  allowPrivateKeyJwt?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -288,6 +290,17 @@ export function TokenEndpointAuthMethodField({
           >
             none
           </SelectItem>
+          {(allowPrivateKeyJwt ||
+            value ===
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
+            <SelectItem
+              value={
+                CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+              }
+            >
+              private_key_jwt
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
     </Stack>

@@ -3,6 +3,8 @@ package gcpkms
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
+	"path/filepath"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -35,4 +37,25 @@ func TestLocalSigningClient_HonoursCanceledContext(t *testing.T) {
 	digest := sha256.Sum256([]byte(ProbePayload))
 	_, err = client.AsymmetricSign(ctx, testResourceName, jose.RS256, digest[:])
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestPersistentLocalSigningClient_ReusesKeyAcrossClients(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "local-kms.pem")
+	first, err := NewPersistentLocalSigningClient(jose.RS256, path)
+	require.NoError(t, err)
+	second, err := NewPersistentLocalSigningClient(jose.RS256, path)
+	require.NoError(t, err)
+
+	firstPublic, err := first.GetPublicKey(t.Context(), testResourceName)
+	require.NoError(t, err)
+	secondPublic, err := second.GetPublicKey(t.Context(), testResourceName)
+	require.NoError(t, err)
+
+	firstDER, err := x509.MarshalPKIXPublicKey(firstPublic.Key)
+	require.NoError(t, err)
+	secondDER, err := x509.MarshalPKIXPublicKey(secondPublic.Key)
+	require.NoError(t, err)
+	require.Equal(t, firstDER, secondDER)
 }

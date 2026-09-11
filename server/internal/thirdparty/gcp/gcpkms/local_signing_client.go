@@ -9,7 +9,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 
 	jose "github.com/go-jose/go-jose/v4"
 )
@@ -20,15 +24,14 @@ const rsaLocalKeyBits = 2048
 
 var _ SigningClient = (*LocalSigningClient)(nil)
 
-// LocalSigningClient is an in-process SigningClient backed by a key pair generated at
-// construction, for use where no GCP network path exists: CI, and local
-// development without KMS access.
+// LocalSigningClient is an in-process SigningClient backed by a private key, for
+// use where no GCP network path exists: CI, and local development without KMS
+// access.
 //
 // It is a faithful stand-in for the transport rather than a shortcut around it.
 // Signatures come back in the provider's own encodings — PKCS#1 v1.5 for RSA,
 // ASN.1 DER for ECDSA — so callers exercise the same parsing, conversion and
-// verification code they would against real KMS. The private key is ephemeral
-// and never leaves the process.
+// verification code they would against real KMS.
 type LocalSigningClient struct {
 	alg jose.SignatureAlgorithm
 	key crypto.Signer
@@ -54,6 +57,93 @@ func NewLocalSigningClient(alg jose.SignatureAlgorithm) (*LocalSigningClient, er
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, alg)
 	}
+}
+
+// NewPersistentLocalSigningClient loads a local signing key from path, creating
+// it with mode 0600 when absent. The atomic link makes concurrent server and
+// worker startups converge on one key without replacing a key another process
+// has already loaded.
+func NewPersistentLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
+	client, err := readLocalSigningClient(alg, path)
+	if err == nil {
+		return client, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+
+	client, err = NewLocalSigningClient(alg)
+	if err != nil {
+		return nil, err
+	}
+
+	der, err := x509.MarshalPKCS8PrivateKey(client.key)
+	if err != nil {
+		return nil, fmt.Errorf("marshal persistent local %s key: %w", alg, err)
+	}
+	doc := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Headers: nil, Bytes: der})
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create persistent local key directory: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".local-kms-*.tmp")
+	if err != nil {
+		return nil, fmt.Errorf("create persistent local key temporary file: %w", err)
+	}
+	tmpName := tmp.Name()
+	removeTemp := func() error {
+		return errors.Join(tmp.Close(), os.Remove(tmpName))
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		return nil, errors.Join(fmt.Errorf("secure persistent local key temporary file: %w", err), removeTemp())
+	}
+	if _, err := tmp.Write(doc); err != nil {
+		return nil, errors.Join(fmt.Errorf("write persistent local key temporary file: %w", err), removeTemp())
+	}
+	if err := tmp.Sync(); err != nil {
+		return nil, errors.Join(fmt.Errorf("sync persistent local key temporary file: %w", err), removeTemp())
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, errors.Join(fmt.Errorf("close persistent local key temporary file: %w", err), os.Remove(tmpName))
+	}
+
+	if err := os.Link(tmpName, path); err != nil {
+		removeErr := os.Remove(tmpName)
+		if errors.Is(err, fs.ErrExist) {
+			client, readErr := readLocalSigningClient(alg, path)
+			return client, errors.Join(readErr, removeErr)
+		}
+		return nil, errors.Join(fmt.Errorf("publish persistent local key: %w", err), removeErr)
+	}
+	if err := os.Remove(tmpName); err != nil {
+		return nil, fmt.Errorf("remove persistent local key temporary file: %w", err)
+	}
+
+	return client, nil
+}
+
+func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
+	doc, err := os.ReadFile(path) //nolint:gosec // path is an application-selected local-development cache file, not request input.
+	if err != nil {
+		return nil, fmt.Errorf("read persistent local %s key: %w", alg, err)
+	}
+	block, rest := pem.Decode(doc)
+	if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
+		return nil, fmt.Errorf("decode persistent local %s key: expected one PKCS#8 PEM block", alg)
+	}
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse persistent local %s key: %w", alg, err)
+	}
+	signer, ok := key.(crypto.Signer)
+	if !ok {
+		return nil, fmt.Errorf("parse persistent local %s key: %T is not a signer", alg, key)
+	}
+	if err := checkKeyMatchesAlgorithm(PublicKey{Algorithm: alg, Key: signer.Public()}); err != nil {
+		return nil, fmt.Errorf("validate persistent local %s key: %w", alg, err)
+	}
+	return &LocalSigningClient{alg: alg, key: signer}, nil
 }
 
 // GetPublicKey returns the generated key pair's public half and the algorithm
