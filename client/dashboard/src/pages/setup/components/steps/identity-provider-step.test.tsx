@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderStep } from "./identity-provider-step";
+import { ConnectIdpStep } from "./connect-idp-step";
+import { DirectorySyncStep } from "./directory-sync-step";
 
 const onboardingStatus = vi.hoisted(() => ({
   current: {
@@ -32,6 +34,48 @@ beforeEach(() => {
 });
 
 describe("IdentityProviderStep", () => {
+  it.each([
+    {
+      Component: ConnectIdpStep,
+      intent: "sso",
+      task: "connect-idp",
+      button: "Connect",
+    },
+    {
+      Component: DirectorySyncStep,
+      intent: "dsync",
+      task: "directory-sync",
+      button: "Connect directory",
+    },
+  ])(
+    "preserves the $task origin through the portal callback",
+    ({ Component, intent, task, button }) => {
+      render(
+        <Component
+          onComplete={vi.fn<() => void>()}
+          onSkip={vi.fn<() => void>()}
+          onBack={vi.fn<() => void>()}
+        />,
+      );
+      if (intent === "sso")
+        fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      expect(portal.mutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: {
+            generateWorkOSAdminPortalLinkRequestBody: expect.objectContaining({
+              intent,
+              successUrl: expect.stringContaining(
+                `/v1/setup/callback?intent=${intent}&task=${task}`,
+              ),
+              returnUrl: window.location.href,
+            }),
+          },
+        }),
+        expect.anything(),
+      );
+    },
+  );
   it("offers SSO and directory sync in one card and continues regardless", () => {
     const onComplete = vi.fn();
     render(<IdentityProviderStep onComplete={() => void onComplete()} />);

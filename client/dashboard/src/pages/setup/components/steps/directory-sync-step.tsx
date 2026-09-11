@@ -36,7 +36,7 @@ export function DirectorySyncStep({
         request: {
           generateWorkOSAdminPortalLinkRequestBody: {
             intent: "dsync",
-            successUrl: `${getServerURL()}/v1/setup/callback?intent=dsync`,
+            successUrl: `${getServerURL()}/v1/setup/callback?intent=dsync&task=directory-sync`,
             returnUrl: window.location.href,
           },
         },

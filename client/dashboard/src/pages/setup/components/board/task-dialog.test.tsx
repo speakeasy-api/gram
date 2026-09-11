@@ -11,6 +11,10 @@ import { useOrgRoutes } from "@/routes";
 import { Suspense } from "react";
 import { TaskDialog } from "./task-dialog";
 import { ONBOARDING_TASKS, type OnboardingTaskId } from "./tasks";
+import { StepSupportButton } from "../step-container";
+import { showPylonChat } from "@/lib/pylon";
+
+vi.mock("@/lib/pylon", () => ({ showPylonChat: vi.fn() }));
 
 vi.mock("../../SetupTaskPage", () => ({
   default: () => <p>Standalone guided page</p>,
@@ -24,6 +28,7 @@ vi.mock("./task-step", () => ({
     <div>
       <p>Inline task content</p>
       <button onClick={onComplete}>Finish</button>
+      <StepSupportButton />
     </div>
   ),
 }));
@@ -109,6 +114,42 @@ describe("guided setup from the board dialog", () => {
     expect(onSetStatus).not.toHaveBeenCalled();
   });
 
+  it.each([true, false])(
+    "opens support for a verified task with status permission %s without a mutation",
+    (canSetStatus) => {
+      vi.mocked(showPylonChat).mockClear();
+      const onSetStatus = vi
+        .fn<() => Promise<boolean>>()
+        .mockResolvedValue(false);
+      render(
+        <MemoryRouter>
+          <TaskDialog
+            task={{
+              id: "create-marketplace",
+              suggestedOwner: "Admin",
+              title: "Create marketplace",
+              description: "Publish",
+              blockedBy: [],
+              status: "done",
+              verified: true,
+              hidden: false,
+            }}
+            canAssign
+            canSetStatus={canSetStatus}
+            isPending={false}
+            error={null}
+            onClose={vi.fn<() => void>()}
+            onSetStatus={onSetStatus}
+            onAssign={vi.fn<() => void>()}
+          />
+        </MemoryRouter>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Get support" }));
+      expect(showPylonChat).toHaveBeenCalledOnce();
+      expect(onSetStatus).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps the dialog open on a failed write and has no reminder action", async () => {
     const onClose = vi.fn<() => void>();
     const onSetStatus = vi
@@ -143,6 +184,46 @@ describe("guided setup from the board dialog", () => {
     expect(screen.getByRole("alert").textContent).toBe("Save failed");
     expect(screen.queryByText(/remind/i)).toBeNull();
   });
+  it.each([true, false])(
+    "keeps the support status write for unverified tasks (saved: %s)",
+    async (saved) => {
+      vi.mocked(showPylonChat).mockClear();
+      const onSetStatus = vi
+        .fn<() => Promise<boolean>>()
+        .mockResolvedValue(saved);
+      render(
+        <MemoryRouter>
+          <TaskDialog
+            task={{
+              id: "instrument-agents",
+              suggestedOwner: "Admin",
+              title: "Task",
+              description: "Setup",
+              blockedBy: [],
+              status: "todo",
+              verified: false,
+              hidden: false,
+            }}
+            canAssign
+            canSetStatus
+            isPending={false}
+            error={null}
+            onClose={vi.fn<() => void>()}
+            onSetStatus={onSetStatus}
+            onAssign={vi.fn<() => void>()}
+          />
+        </MemoryRouter>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Get support" }));
+      await waitFor(() =>
+        expect(onSetStatus).toHaveBeenCalledWith(
+          "instrument-agents",
+          "awaiting_support",
+        ),
+      );
+      expect(showPylonChat).toHaveBeenCalledTimes(saved ? 1 : 0);
+    },
+  );
   it("retains the standalone guided page in the actual route definition", async () => {
     render(
       <MemoryRouter>

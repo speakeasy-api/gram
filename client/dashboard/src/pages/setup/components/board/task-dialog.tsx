@@ -130,6 +130,7 @@ export function TaskDialog({
             )}
             <StepSupportProvider
               onSupport={() => {
+                if (task.verified) return showPylonChat();
                 void onSetStatus(task.id, "awaiting_support").then((saved) => {
                   if (saved) showPylonChat();
                 });

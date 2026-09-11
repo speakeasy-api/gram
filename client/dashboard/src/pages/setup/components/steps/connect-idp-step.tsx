@@ -90,7 +90,7 @@ export function ConnectIdpStep({
         request: {
           generateWorkOSAdminPortalLinkRequestBody: {
             intent: "sso",
-            successUrl: `${getServerURL()}/v1/setup/callback?intent=sso`,
+            successUrl: `${getServerURL()}/v1/setup/callback?intent=sso&task=connect-idp`,
             returnUrl: window.location.href,
             // NOTE: intent_options.sso.provider_type is intentionally omitted.
             // WorkOS currently only accepts "GoogleSAML" here and 422s on every

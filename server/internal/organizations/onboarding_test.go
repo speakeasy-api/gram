@@ -17,6 +17,55 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := orgrepo.New(ti.conn)
+	for _, row := range []orgrepo.UpsertOrganizationSetupTaskParams{
+		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "identity-provider", Status: "in_progress", AssigneeUserID: conv.ToPGText(ac.UserID)},
+		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "anthropic-observability", Status: "todo", HiddenAt: conv.ToPGTimestamptz(time.Now())},
+		{OrganizationID: ac.ActiveOrganizationID, TaskKey: "platform-mcp", Status: "awaiting_support"},
+	} {
+		_, err := queries.UpsertOrganizationSetupTask(ctx, row)
+		require.NoError(t, err)
+	}
+	before, err := queries.ListOrganizationSetupTasks(ctx, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	config, err := organizations.LoadOnboardingConfiguration(ctx, ti.conn, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Nil(t, config.Preset)
+	var visible []string
+	for _, task := range config.Tasks {
+		if !task.Hidden {
+			visible = append(visible, task.Key)
+		}
+	}
+	require.ElementsMatch(t, []string{"identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
+	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Tasks, len(visible))
+	for _, key := range visible {
+		require.NotNil(t, setupTask(listed.Tasks, key))
+	}
+	after, err := queries.ListOrganizationSetupTasks(ctx, ac.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	for _, preset := range config.Presets {
+		_, err := organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, preset.VisibleTaskKeys, &preset.Key, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+		require.NoError(t, err)
+		listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+		require.NoError(t, err)
+		var keys []string
+		for _, task := range listed.Tasks {
+			keys = append(keys, task.Key)
+		}
+		require.ElementsMatch(t, preset.VisibleTaskKeys, keys)
+		require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "presets must not duplicate the split identity tasks")
+	}
+}
+
 func TestOnboardingPreservesRawProgressAndAssignment(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsServiceWithEmail(t)
