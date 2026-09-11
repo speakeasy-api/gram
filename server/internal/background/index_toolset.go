@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,8 +19,10 @@ import (
 )
 
 type IndexToolsetParams struct {
-	ProjectID   uuid.UUID
-	ToolsetSlug types.Slug
+	ProjectID             uuid.UUID
+	ToolsetSlug           types.Slug
+	IndexRevision         string
+	PermanentFailureCount int
 }
 
 type IndexToolsetClient struct {
@@ -35,18 +38,21 @@ func ExecuteIndexToolset(
 		return nil, ErrTemporalUnavailable
 	}
 
-	id := fmt.Sprintf(
-		"v1:index-toolset:%s:%s",
-		params.ProjectID,
-		params.ToolsetSlug,
-	)
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                       id,
+		ID:                       indexToolsetWorkflowID(params),
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:       2 * time.Minute,
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}, IndexToolsetWorkflow, params)
+}
+
+func indexToolsetWorkflowID(params IndexToolsetParams) string {
+	return fmt.Sprintf(
+		"v2:index-toolset:%s:%s:%s",
+		params.ProjectID,
+		params.ToolsetSlug,
+		params.IndexRevision,
+	)
 }
 
 func IndexToolsetWorkflow(
@@ -62,12 +68,76 @@ func IndexToolsetWorkflow(
 		},
 	})
 
-	return workflow.ExecuteActivity(
-		ctx,
-		a.GenerateToolsetEmbeddings,
-		activities.GenerateToolsetEmbeddingsInput{
-			ProjectID:   params.ProjectID,
-			ToolsetSlug: params.ToolsetSlug,
-		},
-	).Get(ctx, nil)
+	for {
+		err := workflow.ExecuteActivity(
+			ctx,
+			a.GenerateToolsetEmbeddings,
+			activities.GenerateToolsetEmbeddingsInput{
+				ProjectID:   params.ProjectID,
+				ToolsetSlug: params.ToolsetSlug,
+			},
+		).Get(ctx, nil)
+		if err == nil {
+			return nil
+		}
+
+		var applicationErr *temporal.ApplicationError
+		if !errors.As(err, &applicationErr) || applicationErr.Type() != activities.GenerateToolsetEmbeddingsPermanentErrorType {
+			return err
+		}
+
+		params.PermanentFailureCount++
+		if params.PermanentFailureCount >= indexToolsetPermanentFailureLimit {
+			return fmt.Errorf(
+				"toolset indexing stopped after %d permanent provider failures: %w",
+				params.PermanentFailureCount,
+				err,
+			)
+		}
+
+		retryDelay := indexToolsetPermanentRetryDelay(params)
+		workflow.GetLogger(ctx).Warn(
+			"toolset indexing blocked by a permanent provider response; cooling down",
+			"retry_delay", retryDelay,
+			"permanent_failure_count", params.PermanentFailureCount,
+		)
+		if err := workflow.Sleep(ctx, retryDelay); err != nil {
+			return err
+		}
+	}
+}
+
+const (
+	indexToolsetPermanentRetryInitial = time.Hour
+	indexToolsetPermanentRetryMaximum = 24 * time.Hour
+	indexToolsetPermanentFailureLimit = 10
+)
+
+func indexToolsetPermanentRetryDelay(params IndexToolsetParams) time.Duration {
+	exponent := max(params.PermanentFailureCount-1, 0)
+	if exponent > 5 {
+		exponent = 5
+	}
+
+	delay := indexToolsetPermanentRetryInitial * time.Duration(1<<exponent)
+	if delay >= indexToolsetPermanentRetryMaximum {
+		return indexToolsetPermanentRetryMaximum
+	}
+
+	// A stable local hash supplies deterministic positive jitter without using
+	// randomness in workflow code. It spreads retries for a failed provider.
+	hash := int64(1469598103934665603)
+	for _, b := range []byte(fmt.Sprintf("%s:%s:%d", params.ProjectID, params.ToolsetSlug, params.PermanentFailureCount)) {
+		hash ^= int64(b)
+		hash *= 1099511628211
+	}
+	jitter := hash % int64(delay/5)
+	if jitter < 0 {
+		jitter = -jitter
+	}
+	delay += time.Duration(jitter)
+	if delay > indexToolsetPermanentRetryMaximum {
+		return indexToolsetPermanentRetryMaximum
+	}
+	return delay
 }

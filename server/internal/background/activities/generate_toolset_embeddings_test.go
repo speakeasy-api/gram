@@ -23,7 +23,7 @@ func TestNewGenerateToolsetEmbeddingsError_PermanentProviderErrorIsNonRetryable(
 	var applicationErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &applicationErr)
 	require.True(t, applicationErr.NonRetryable())
-	require.Equal(t, generateToolsetEmbeddingsPermanentErrorType, applicationErr.Type())
+	require.Equal(t, GenerateToolsetEmbeddingsPermanentErrorType, applicationErr.Type())
 	require.ErrorIs(t, err, openrouter.ErrBadRequest)
 }
 

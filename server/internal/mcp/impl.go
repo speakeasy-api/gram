@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -141,7 +140,6 @@ type Service struct {
 	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger             *tm.Logger
 	vectorToolStore         *rag.ToolsetVectorStore
-	temporal                *temporal.Environment
 	assistantTokens         *assistanttokens.Manager
 	sessions                *sessions.Manager
 	identityResolver        IdentityResolver
@@ -354,7 +352,6 @@ func NewService(
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
-	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
@@ -434,7 +431,6 @@ func NewService(
 		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:            telemLogger,
 		vectorToolStore:        vectorToolStore,
-		temporal:               temporal,
 		assistantTokens:        assistantTokens,
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
@@ -1592,10 +1588,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1782,7 +1778,6 @@ func (s *Service) HandleToolsList(
 		s.posthog,
 		&s.toolsetCache,
 		s.vectorToolStore,
-		s.temporal,
 		s.shadowMCPClient,
 		s.platformExtras,
 		s.sessionClientInfo,
@@ -1859,7 +1854,6 @@ func (s *Service) HandleToolsCall(
 		&s.toolsetCache,
 		s.telemLogger,
 		s.vectorToolStore,
-		s.temporal,
 		s.mcpMetadataRepo,
 		s.auditLogger,
 		s.platformExtras,

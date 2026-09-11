@@ -146,6 +146,7 @@ type Activities struct {
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
 	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
+	listToolsetsForIndexing         *activities.ListToolsetsForIndexing
 	dispatchTrigger                 *activities.DispatchTrigger
 	processScheduledTrigger         *activities.ProcessScheduledTrigger
 	markTriggerFired                *activities.MarkTriggerFired
@@ -425,6 +426,7 @@ func NewActivities(
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		listToolsetsForIndexing:         activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
 		markTriggerFired:                activities.NewMarkTriggerFired(triggerApp),
@@ -760,6 +762,10 @@ func (a *Activities) ValidateDeployment(ctx context.Context, projectID uuid.UUID
 
 func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activities.GenerateToolsetEmbeddingsInput) error {
 	return a.generateToolsetEmbeddings.Do(ctx, input)
+}
+
+func (a *Activities) ListToolsetsForIndexing(ctx context.Context, input activities.ListToolsetsForIndexingInput) ([]activities.ToolsetIndexTarget, error) {
+	return a.listToolsetsForIndexing.Do(ctx, input)
 }
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {

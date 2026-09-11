@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-const generateToolsetEmbeddingsPermanentErrorType = "GenerateToolsetEmbeddingsPermanent"
+const GenerateToolsetEmbeddingsPermanentErrorType = "GenerateToolsetEmbeddingsPermanent"
 
 type GenerateToolsetEmbeddings struct {
 	logger     *slog.Logger
@@ -84,7 +84,7 @@ func newGenerateToolsetEmbeddingsError(err error) error {
 	if openrouter.IsPermanentError(err) {
 		return temporal.NewNonRetryableApplicationError(
 			wrapped.Error(),
-			generateToolsetEmbeddingsPermanentErrorType,
+			GenerateToolsetEmbeddingsPermanentErrorType,
 			wrapped,
 		)
 	}
