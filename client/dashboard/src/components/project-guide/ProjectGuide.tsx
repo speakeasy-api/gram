@@ -58,7 +58,21 @@ import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router";
-import { ChevronLeft, Home } from "lucide-react";
+import {
+  Sparkles,
+  ChevronLeft,
+  Home,
+  Eye,
+  EyeOff,
+  Globe,
+  ShieldCheck,
+  ShieldX,
+} from "lucide-react";
+import {
+  ClaudeCodeIcon,
+  CodexIcon,
+  CursorIcon,
+} from "@/components/agent-providers/AgentProviderIcon";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
@@ -449,6 +463,8 @@ function primaryActionFor(
       };
     case "preparing":
       return { label: "Preparing the next step…", disabled: true };
+    case "confirming":
+      return { label: "Server setup complete", disabled: true };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
         return {
@@ -609,11 +625,6 @@ function ProjectGuideStepContent({
   );
 }
 
-const MCP_CATALOG_PHASES = [
-  "Read the server's tool list",
-  "Install it into this project",
-] as const;
-
 const SECRET_POLICY_PHASES = [
   "Enable the Secrets category",
   "Scope user prompts",
@@ -681,29 +692,6 @@ function SecretPolicyPhases({
     <ProjectGuidePhaseChecklist
       labels={SECRET_POLICY_PHASES}
       statuses={statuses}
-    />
-  );
-}
-
-function McpCatalogPhases({
-  displayState,
-  operationProgress,
-  hasError,
-}: {
-  displayState: ProjectGuideDisplayState;
-  operationProgress: number | null;
-  hasError: boolean;
-}): JSX.Element {
-  return (
-    <ProjectGuidePhaseChecklist
-      labels={MCP_CATALOG_PHASES}
-      statuses={phaseStatuses(
-        MCP_CATALOG_PHASES,
-        displayState,
-        operationProgress,
-        hasError,
-        [0, 0.5],
-      )}
     />
   );
 }
@@ -984,8 +972,6 @@ function McpStepBody({
 
 function McpCatalogSelection({
   displayState,
-  operationProgress,
-  error,
   operations,
   onMcpServerSelected,
 }: {
@@ -1044,11 +1030,6 @@ function McpCatalogSelection({
           );
         })}
       </div>
-      <McpCatalogPhases
-        displayState={displayState}
-        operationProgress={operationProgress}
-        hasError={Boolean(error) || operations.catalogError}
-      />
     </div>
   );
 }
@@ -1359,13 +1340,12 @@ function JourneyChoice({
     <button
       type="button"
       onClick={onSelect}
-      aria-label={journey.title}
+      aria-label={`${journey.headline}: ${journey.title}`}
       aria-controls={controlsId}
       aria-expanded="false"
       className="flex h-full w-full flex-col text-left"
     >
-      <JourneyGraphic journey={journey} status={status} />
-      <span className="border-border bg-background flex flex-col gap-2 border-t px-10 py-8 transition-all hover:bg-card hover:shadow-inner">
+      <span className="border-border bg-background flex flex-col gap-2 border-b px-10 py-8">
         <span className="flex items-center gap-2.5">
           {journey.steps.map((step, index) => (
             <span
@@ -1385,31 +1365,37 @@ function JourneyChoice({
           ))}
           <span className="text-eyebrow text-disabled">{progressLabel}</span>
         </span>
-        <span className="text-xl leading-tight">{journey.title}</span>
-        <span className="text-muted-foreground text-sm leading-relaxed max-w-lg">
+        <span className="text-display-xs leading-tight">
+          {journey.headline}
+        </span>
+        <span className="font-mono text-sm" style={{ color: fixture.accent }}>
+          {journey.title}
+        </span>
+        <span className="text-muted-foreground max-w-lg text-sm leading-relaxed">
           {journey.win}
         </span>
-        <span className="flex items-center gap-3 pt-1">
-          <span className="font-mono text-sm">
-            {isComplete
-              ? "Review"
-              : isInProgress
-                ? "Resume the run"
-                : "Open the journey"}
-          </span>
-          <span
-            className="h-px flex-1"
-            style={{ backgroundColor: fixture.accent }}
-          />
-          <span className="text-disabled font-mono text-xs">
-            {journey.steps.length} steps · ~4 min
-          </span>
-          <span className="font-mono text-sm" style={{ color: fixture.accent }}>
-            →
-          </span>
-        </span>
-        <span className="sr-only">{statusLabel}</span>
       </span>
+      <JourneyGraphic journey={journey} status={status} />
+      <span className="border-border bg-background flex items-center gap-3 border-t px-10 py-6 transition-colors hover:bg-card">
+        <span className="font-mono text-sm">
+          {isComplete
+            ? "Review"
+            : isInProgress
+              ? "Resume the run"
+              : "Open the journey"}
+        </span>
+        <span
+          className="h-px flex-1"
+          style={{ backgroundColor: fixture.accent }}
+        />
+        <span className="text-disabled font-mono text-xs">
+          {journey.steps.length} steps · ~4 min
+        </span>
+        <span className="font-mono text-sm" style={{ color: fixture.accent }}>
+          →
+        </span>
+      </span>
+      <span className="sr-only">{statusLabel}</span>
     </button>
   );
 }
@@ -1422,15 +1408,15 @@ function JourneyGraphic({
   status: JourneyStatus;
 }): JSX.Element {
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
-  const reducedMotion = useReducedMotion();
   const isMcp = journey.id === "third-party-mcp";
-  const plates = isMcp
+  const plates: JourneyGraphicPlateData[] = isMcp
     ? [
         {
           zone: "Your client",
           name: "claude code · cursor · codex",
           on: "connected",
           off: "not connected",
+          icon: "agents",
         },
         {
           zone: "Your endpoint",
@@ -1438,12 +1424,14 @@ function JourneyGraphic({
           nameOff: "no endpoint yet",
           on: "verified",
           off: "not installed",
+          icon: "gateway",
         },
         {
           zone: "Upstream",
           name: "linear · vendor server",
           on: "27 tools",
           off: "not picked",
+          icon: "server",
         },
       ]
     : [
@@ -1453,6 +1441,7 @@ function JourneyGraphic({
           nameOff: "claude code · cursor",
           on: "streaming",
           off: "no plugin",
+          icon: "agents",
         },
         {
           zone: "Secrets policy",
@@ -1460,16 +1449,19 @@ function JourneyGraphic({
           nameOff: "no policy yet",
           on: "enforcing",
           off: "off",
+          icon: "policy",
         },
         {
           zone: "Model provider",
           name: "anthropic · openai",
           on: "unsafe prompt not received",
           off: "unproven",
+          icon: "provider",
         },
       ];
   const active = status !== "not-started" && status !== "unreadable";
-  const animated = !reducedMotion && status === "not-started";
+  const reducedMotion = useReducedMotion();
+  const animated = !reducedMotion;
 
   return (
     <span
@@ -1518,6 +1510,7 @@ type JourneyGraphicPlateData = {
   nameOff?: string;
   on: string;
   off: string;
+  icon: "agents" | "gateway" | "policy" | "provider" | "server";
 };
 
 const graphicLiveOpacity = [0, 0, 0, 0, 1, 1, 0, 0, 0];
@@ -1525,9 +1518,61 @@ const graphicOffOpacity = [1, 1, 0, 0, 0, 0, 0, 0, 1];
 const graphicLoopTimes = [0, 0.46, 0.52, 0.94, 0.99];
 const graphicTextLoopTimes = [0, 0.4, 0.46, 0.52, 0.58, 0.9, 0.94, 0.96, 1];
 const graphicStateTransition = {
-  duration: 0.16,
+  duration: 0,
   ease: [0.2, 0.7, 0.3, 1] as const,
 };
+
+function JourneyGraphicIcon({
+  icon,
+  active = false,
+}: {
+  icon: JourneyGraphicPlateData["icon"];
+  active?: boolean;
+}): JSX.Element {
+  if (icon === "agents") {
+    return (
+      <span
+        aria-hidden="true"
+        className="flex shrink-0 items-center -space-x-1.5"
+      >
+        {[
+          { name: "Claude Code", Icon: ClaudeCodeIcon },
+          { name: "Cursor", Icon: CursorIcon },
+          { name: "Codex", Icon: CodexIcon },
+        ].map(({ name, Icon: AgentIcon }) => (
+          <span
+            key={name}
+            className="border-border bg-background flex size-8 items-center justify-center rounded-full border"
+          >
+            <AgentIcon className="size-4" />
+          </span>
+        ))}
+      </span>
+    );
+  }
+
+  const GraphicIcon =
+    icon === "gateway"
+      ? active
+        ? ShieldCheck
+        : ShieldX
+      : icon === "policy"
+        ? active
+          ? Eye
+          : EyeOff
+        : icon === "provider"
+          ? Sparkles
+          : Globe;
+
+  return (
+    <span
+      aria-hidden="true"
+      className="flex size-5 shrink-0 items-center justify-center"
+    >
+      <GraphicIcon className="text-muted-foreground size-4" strokeWidth={1.5} />
+    </span>
+  );
+}
 
 function JourneyGraphicPlate({
   accent,
@@ -1611,14 +1656,58 @@ function JourneyGraphicPlate({
           }}
         />
       )}
-      <span className="flex items-center gap-3">
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-eyebrow text-muted-foreground">
+      <span
+        className={cn(
+          plate.icon === "agents"
+            ? "flex items-center gap-3"
+            : "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1",
+        )}
+      >
+        <span
+          className={cn(
+            plate.icon !== "agents" && "col-start-1 row-start-2",
+            "shrink-0",
+          )}
+        >
+          {plate.icon === "policy" || plate.icon === "gateway" ? (
+            <span aria-hidden="true" className="grid shrink-0">
+              <motion.span
+                initial={false}
+                animate={offOpacity}
+                transition={offTransition}
+                className="col-start-1 row-start-1"
+              >
+                <JourneyGraphicIcon icon={plate.icon} active={false} />
+              </motion.span>
+              <motion.span
+                initial={false}
+                animate={liveOpacity}
+                transition={liveTransition}
+                className="col-start-1 row-start-1"
+              >
+                <JourneyGraphicIcon icon={plate.icon} active />
+              </motion.span>
+            </span>
+          ) : (
+            <JourneyGraphicIcon icon={plate.icon} />
+          )}
+        </span>
+        <span
+          className={
+            plate.icon === "agents"
+              ? "flex min-w-0 flex-1 flex-col gap-1"
+              : "contents"
+          }
+        >
+          <span
+            className={`text-eyebrow text-muted-foreground ${plate.icon !== "agents" ? "col-span-2 col-start-1 row-start-1" : ""}`}
+          >
             {plate.zone}
           </span>
           <span
             className={cn(
               "relative grid min-w-0 text-sm",
+              plate.icon !== "agents" && "col-start-2 row-start-2",
               isCenter && "text-xl",
             )}
           >
@@ -1640,7 +1729,9 @@ function JourneyGraphicPlate({
             </motion.span>
           </span>
         </span>
-        <span className="text-eyebrow relative mt-0 mb-auto grid min-w-0 flex-[0_1_35%] text-right">
+        <span
+          className={`text-eyebrow relative mt-0 mb-auto grid min-w-0 text-right ${plate.icon === "agents" ? "flex-[0_1_35%]" : "col-span-2 col-start-1 row-start-3 mt-1"}`}
+        >
           <motion.span
             initial={false}
             animate={offOpacity}
