@@ -51,6 +51,7 @@ import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
+import { restorePreservedStorageBackup } from "./lib/logout-storage";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
@@ -60,6 +61,11 @@ import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+
+// Logout may have navigated here after Clear-Site-Data emptied localStorage.
+// theme-init.ts already restores when it can; this covers the module path
+// (tests, and any load that skipped the classic script).
+restorePreservedStorageBackup();
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint

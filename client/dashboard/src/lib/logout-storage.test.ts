@@ -2,12 +2,18 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { PREFERRED_THEME_STORAGE_KEY } from "./local-storage-keys";
 import {
+  PRESERVED_LOCAL_STORAGE_KEYS,
+  PRESERVED_LOCAL_STORAGE_PREFIXES,
+  PREFERRED_THEME_STORAGE_KEY,
+} from "./local-storage-keys";
+import {
+  LOGOUT_PRESERVE_WINDOW_NAME_PREFIX,
   capturePreservedStorage,
   clearLegacyUserStorage,
   clearStorageForLogout,
   restorePreservedStorage,
+  restorePreservedStorageBackup,
 } from "./logout-storage";
 
 function createStorage(): Storage {
@@ -52,6 +58,13 @@ describe("clearStorageForLogout", () => {
     });
     window.localStorage.clear();
     window.sessionStorage.clear();
+    window.name = "";
+    capturePreservedStorage();
+  });
+
+  it("keeps theme and favorites on the logout preserve lists", () => {
+    expect(PRESERVED_LOCAL_STORAGE_KEYS).toContain(PREFERRED_THEME_STORAGE_KEY);
+    expect(PRESERVED_LOCAL_STORAGE_PREFIXES).toContain("gram:org-favorites:");
   });
 
   it("preserves theme and favorites while clearing user-scoped local storage", () => {
@@ -170,5 +183,81 @@ describe("clearStorageForLogout", () => {
     expect(() =>
       restorePreservedStorage([[PREFERRED_THEME_STORAGE_KEY, "dark"]]),
     ).not.toThrow();
+  });
+
+  // Impersonation exit and "switch account" call logout, then navigate to
+  // /login. The response hook may never run (timeout, or the Request identity
+  // used as the WeakMap key does not match). The capture taken before the
+  // request is what has to refill the emptied store.
+  it("restores from the last capture when logout is given no snapshot", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("preferredProject", "project-slug");
+
+    capturePreservedStorage();
+    window.localStorage.clear();
+
+    clearStorageForLogout();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
+  it("survives a post-wipe navigation via the window.name backup", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("preferredProject", "project-slug");
+
+    capturePreservedStorage();
+    expect(window.name.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)).toBe(
+      true,
+    );
+
+    window.localStorage.clear();
+    restorePreservedStorageBackup();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+    expect(window.name).toBe("");
+  });
+
+  it("ignores non-preserved keys smuggled in the window.name backup", () => {
+    window.name = `${LOGOUT_PRESERVE_WINDOW_NAME_PREFIX}${JSON.stringify([
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+      ["pylon_user_email", "user@example.com"],
+    ])}`;
+
+    restorePreservedStorageBackup();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
+    expect(window.name).toBe("");
+  });
+
+  it("does not overwrite an unrelated window.name", () => {
+    window.name = "other-tab-state";
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+
+    capturePreservedStorage();
+
+    expect(window.name).toBe("other-tab-state");
   });
 });

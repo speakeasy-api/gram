@@ -44,7 +44,10 @@ export const SdkProvider = ({
     // hook below runs, so anything meant to outlive the session has to be read
     // off localStorage before the request is sent. Keyed by request so
     // overlapping logouts — a double-clicked menu item — each restore their own
-    // snapshot rather than racing over one slot.
+    // snapshot rather than racing over one slot. capturePreservedStorage also
+    // writes a window.name backup: impersonation exit / switch-account can
+    // time out and navigate to /login after Clear-Site-Data has already
+    // emptied the store, and this WeakMap does not survive that navigation.
     const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
 
     const httpClient = new HTTPClient({

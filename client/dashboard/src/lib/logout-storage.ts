@@ -1,21 +1,24 @@
 import {
-  PREFERRED_THEME_STORAGE_KEY,
-  PROJECT_FAVORITES_STORAGE_PREFIX,
+  PRESERVED_LOCAL_STORAGE_KEYS,
+  PRESERVED_LOCAL_STORAGE_PREFIXES,
 } from "@/lib/local-storage-keys";
 
-const PRESERVED_LOCAL_STORAGE_KEYS = new Set([PREFERRED_THEME_STORAGE_KEY]);
-// Favorites hold only opaque project UUIDs keyed by org id — nothing
-// dereferenceable without an authenticated session — so they survive logout.
-const PRESERVED_LOCAL_STORAGE_PREFIXES = [PROJECT_FAVORITES_STORAGE_PREFIX];
+const PRESERVED_KEY_SET = new Set<string>(PRESERVED_LOCAL_STORAGE_KEYS);
 
 const LEGACY_USER_STORAGE_KEYS = [
   "pylon_user_email",
   "pylon_user_display_name",
 ];
 
+// Survives Clear-Site-Data and the /login navigation that follows logout.
+// localStorage and sessionStorage are both emptied by that header; window.name
+// is not. theme-init.ts reads the same prefix before first paint — keep them
+// in lockstep. Cleared as soon as the entries are written back.
+export const LOGOUT_PRESERVE_WINDOW_NAME_PREFIX = "gram:logout-preserve:";
+
 function shouldPreserveLocalStorageKey(key: string) {
   return (
-    PRESERVED_LOCAL_STORAGE_KEYS.has(key) ||
+    PRESERVED_KEY_SET.has(key) ||
     PRESERVED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
 }
@@ -57,6 +60,84 @@ export function clearLegacyUserStorage(): void {
 /** localStorage entries that outlive a logout, as key/value pairs. */
 export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
 
+// Last snapshot taken in this document. Used when the logout response hook
+// cannot find the per-request WeakMap entry (cloned Request identity) and
+// when logout times out after Clear-Site-Data has already emptied the store.
+let lastCaptured: PreservedStorage = [];
+
+function persistPreservedStorageBackup(preserved: PreservedStorage): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    const current = window.name;
+    if (
+      current !== "" &&
+      !current.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)
+    ) {
+      return;
+    }
+    window.name =
+      preserved.length === 0
+        ? ""
+        : `${LOGOUT_PRESERVE_WINDOW_NAME_PREFIX}${JSON.stringify(preserved)}`;
+  } catch {
+    // window.name unavailable — same-document restore still works.
+  }
+}
+
+function readPreservedStorageBackup(): PreservedStorage {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.name;
+    if (!raw.startsWith(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX)) return [];
+
+    const parsed: unknown = JSON.parse(
+      raw.slice(LOGOUT_PRESERVE_WINDOW_NAME_PREFIX.length),
+    );
+    if (!Array.isArray(parsed)) return [];
+
+    const preserved: Array<readonly [string, string]> = [];
+    for (const entry of parsed) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        typeof entry[0] !== "string" ||
+        typeof entry[1] !== "string" ||
+        !shouldPreserveLocalStorageKey(entry[0])
+      ) {
+        continue;
+      }
+      preserved.push([entry[0], entry[1]]);
+    }
+    return preserved;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Writes a captured snapshot back into localStorage and drops the
+ * navigation-surviving backup so a later site in this tab cannot read it.
+ */
+export function restorePreservedStorageBackup(): void {
+  const preserved = readPreservedStorageBackup();
+  if (preserved.length === 0) return;
+
+  restorePreservedStorage(preserved);
+  persistPreservedStorageBackup([]);
+}
+
+function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
+  if (preserved && preserved.length > 0) return preserved;
+  if (lastCaptured.length > 0) return lastCaptured;
+
+  const backup = readPreservedStorageBackup();
+  if (backup.length > 0) return backup;
+
+  return capturePreservedStorage();
+}
+
 /**
  * Reads the localStorage entries that survive logout.
  *
@@ -66,6 +147,10 @@ export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
  * to preserve by the time a response handler runs. Capturing before the request
  * goes out and handing the result to `clearStorageForLogout` is what keeps the
  * theme and favorites across a logout.
+ *
+ * The snapshot is also written to `window.name` so it still exists if logout
+ * times out and the page navigates to /login after the browser has already
+ * applied Clear-Site-Data — the WeakMap in SdkProvider does not survive that.
  */
 export function capturePreservedStorage(): PreservedStorage {
   if (typeof window === "undefined") return [];
@@ -88,6 +173,8 @@ export function capturePreservedStorage(): PreservedStorage {
     // Storage blocked — nothing persisted, nothing to preserve.
   }
 
+  lastCaptured = preserved;
+  persistPreservedStorageBackup(preserved);
   return preserved;
 }
 
@@ -97,6 +184,7 @@ export function restorePreservedStorage(preserved: PreservedStorage): void {
   try {
     const local = window.localStorage;
     for (const [key, value] of preserved) {
+      if (!shouldPreserveLocalStorageKey(key)) continue;
       local.setItem(key, value);
     }
   } catch {
@@ -112,10 +200,10 @@ export function restorePreservedStorage(preserved: PreservedStorage): void {
  * remaining copy of those entries. Callers clearing an intact store omit it and
  * the entries are read from storage directly.
  */
-export function clearStorageForLogout(
-  preserved: PreservedStorage = capturePreservedStorage(),
-): void {
+export function clearStorageForLogout(preserved?: PreservedStorage): void {
   if (typeof window === "undefined") return;
+
+  const toRestore = snapshotForRestore(preserved);
 
   try {
     window.localStorage.clear();
@@ -123,7 +211,9 @@ export function clearStorageForLogout(
     // Storage blocked — nothing persisted, nothing to clear.
   }
 
-  restorePreservedStorage(preserved);
+  restorePreservedStorage(toRestore);
+  lastCaptured = toRestore;
+  persistPreservedStorageBackup(toRestore);
 
   try {
     window.sessionStorage.clear();
