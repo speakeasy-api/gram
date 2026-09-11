@@ -1,0 +1,18 @@
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 95-101
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 1924-1929
+server/internal/platformmcp/shadow_distribution_read_integration_test.go
+  h_9630b74bdac540 19,65-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "520e25001f032c3aa470a38f4217994808b9c38b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
