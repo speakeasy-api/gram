@@ -862,16 +862,22 @@ function CatalogServerIdentity({
 }) {
   const credential = useAgentCredentialFields();
   const authorizationValue = credential.authorizationValue;
+  // releaseState is rebuilt every render; its updater is not, so depend on the
+  // updater alone or this re-runs on every parent render.
+  const { updateServerConfig } = releaseState;
 
   // The credential form owns the value; the workflow config carries it to the
   // install RPC.
   useEffect(() => {
     if (config.agentAuthorization !== authorizationValue) {
-      releaseState.updateServerConfig(index, {
-        agentAuthorization: authorizationValue,
-      });
+      updateServerConfig(index, { agentAuthorization: authorizationValue });
     }
-  }, [authorizationValue, config.agentAuthorization, index, releaseState]);
+  }, [
+    authorizationValue,
+    config.agentAuthorization,
+    index,
+    updateServerConfig,
+  ]);
 
   return (
     <div className="space-y-2">

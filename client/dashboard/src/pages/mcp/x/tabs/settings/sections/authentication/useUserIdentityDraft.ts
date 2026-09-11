@@ -10,7 +10,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
 
@@ -284,13 +284,14 @@ export function useUserIdentityDraft({
         !!selectedIssuer.registrationEndpoint?.trim());
   const manualNeeded = !existingClient && (forceManual || !automaticAvailable);
 
-  // Reset the client choice whenever the provider changes: a client belongs to
-  // exactly one provider.
-  useEffect(() => {
+  // A client belongs to exactly one provider, so choosing a provider clears
+  // the client choice and any outcome from the previous one.
+  const selectProvider = (id: string | null): void => {
+    setProviderPick(id);
     setClientPick(null);
     setForceManual(false);
     setLocalStatus({ kind: "idle" });
-  }, [selectedProviderId]);
+  };
 
   const commit = useMutation({
     mutationFn: async () => {
@@ -381,17 +382,16 @@ export function useUserIdentityDraft({
   });
 
   const { mutate: runCommit, isPending } = commit;
-  useEffect(() => {
-    if (isPending) setLocalStatus({ kind: "pending" });
-  }, [isPending]);
 
   // Any explicit pick is a change worth saving; an untouched configured server
   // has nothing to commit.
   const touched = providerPick !== null || clientPick !== null || forceManual;
-  const status: UserIdentityStatus =
-    localStatus.kind === "idle" && configured && !touched
-      ? { kind: "done", label: "Linked" }
-      : localStatus;
+  let status: UserIdentityStatus = localStatus;
+  if (isPending) {
+    status = { kind: "pending" };
+  } else if (localStatus.kind === "idle" && configured && !touched) {
+    status = { kind: "done", label: "Linked" };
+  }
 
   const canSave =
     !!selected &&
@@ -412,14 +412,17 @@ export function useUserIdentityDraft({
   return {
     providerGroups,
     selected,
-    selectProvider: setProviderPick,
+    selectProvider,
     providerUnreachable,
     providerLoading: prm.status === "loading",
 
     clientOptions,
     clientsLoading,
     existingClient,
-    selectClient: setClientPick,
+    selectClient: (id: string | null): void => {
+      setClientPick(id);
+      setLocalStatus({ kind: "idle" });
+    },
     /** Label for the registration picker's trigger. */
     clientLabel: existingClient
       ? existingClient.name

@@ -254,12 +254,12 @@ export function RemoteMcpIdentitySectionBody({
         footerHint = "Save registers this server with the provider.";
         break;
     }
-  } else if (selectedMode === "agent") {
-    footerHint = agentDraft.canSave
-      ? "Unsaved changes. New connections pick them up after save."
-      : "Saved. New connections use this identity.";
+  } else if (agentDraft.canSave) {
+    footerHint = "Unsaved changes. New connections pick them up after save.";
+  } else if (authorizationHeader) {
+    footerHint = "Saved. New connections use this identity.";
   } else {
-    footerHint = "No credential is sent upstream.";
+    footerHint = `Enter a credential to send to ${upstreamName}.`;
   }
 
   return (
@@ -393,16 +393,16 @@ export function RemoteMcpIdentitySectionBody({
             </AuthRow>
           ) : null}
 
-          {identityResolved && selectedMode === "none" ? (
-            <AuthRow
-              label="No identity"
-              hint="Speakeasy sends no Authorization credential. Configure pass-through or static headers under Advanced."
-            >
-              <NoIdentityNotice
+          {identityResolved &&
+          selectedMode === "none" &&
+          (passThroughAuthorization ||
+            noneProbeStatus === "authentication-required") ? (
+            <div className="px-6 py-5">
+              <NoIdentityWarning
                 passThroughAuthorization={!!passThroughAuthorization}
                 probeStatus={noneProbeStatus}
               />
-            </AuthRow>
+            </div>
           ) : null}
 
           <Collapsible>
@@ -495,13 +495,13 @@ export function RemoteMcpIdentitySectionBody({
   );
 }
 
-function NoIdentityNotice({
+function NoIdentityWarning({
   passThroughAuthorization,
   probeStatus,
 }: {
   passThroughAuthorization: boolean;
   probeStatus: ReturnType<typeof useRemoteMcpAuthenticationProbe>;
-}): JSX.Element {
+}): JSX.Element | null {
   if (passThroughAuthorization) {
     return (
       <Alert variant="info" dismissible={false}>
@@ -519,10 +519,5 @@ function NoIdentityNotice({
       </Alert>
     );
   }
-  return (
-    <Text muted small>
-      Requests to the upstream server will not include an Authorization
-      credential.
-    </Text>
-  );
+  return null;
 }

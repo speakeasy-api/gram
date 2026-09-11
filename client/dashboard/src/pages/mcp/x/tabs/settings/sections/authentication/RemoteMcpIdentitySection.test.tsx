@@ -267,8 +267,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
 
     // One provider, one registration choice — no issuer, DCR or CIMD wording.
-    const row = screen.getByText("Identity provider").closest("div");
-    expect(row).not.toBeNull();
     expect(screen.getByLabelText("Identity provider")).toBeDefined();
     expect(screen.getByLabelText("Registration")).toBeDefined();
     expect(screen.getByText("Auto-Configure")).toBeDefined();
