@@ -1199,8 +1199,10 @@ function RecommendedScopesPanel({
       .filter((category) =>
         selectedCategories.has(category.key as RuleCategory),
       )
-      .filter((category) => hasDisplayableRecommendedScope(category));
-  }, [categoriesQuery.data?.categories, selectedCategories]);
+      .filter((category) =>
+        hasDisplayableScope(category, scopeOverrides.get(category.key)),
+      );
+  }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1736,9 +1738,13 @@ function RecommendedScopeCodeLine({
   );
 }
 
-function hasDisplayableRecommendedScope(
+// A category with an empty recommendation (e.g. custom rules) still gets a
+// row when the policy carries its own scope for it.
+function hasDisplayableScope(
   category: RiskCategoryDefinition,
+  override: ScopeOverride | undefined,
 ): boolean {
+  if (override !== undefined) return true;
   if (!category.recommendedScopeApplicable) return true;
   return (
     category.recommendedScopeInclude.trim() !== "" ||
