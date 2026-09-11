@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -290,6 +291,9 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project for risk policy bypass approval").LogError(ctx, s.logger)
+	}
 	q := repo.New(dbtx)
 	current, err := q.GetRiskPolicyBypassRequest(ctx, repo.GetRiskPolicyBypassRequestParams{
 		ID:        requestID,
@@ -470,6 +474,9 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project for risk policy bypass revocation").LogError(ctx, s.logger)
+	}
 	q := repo.New(dbtx)
 	current, err := q.GetRiskPolicyBypassRequest(ctx, repo.GetRiskPolicyBypassRequestParams{
 		ID:        requestID,

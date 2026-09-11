@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -885,6 +886,54 @@ func TestService_ResolveShadowMCPInventoryRequest_ApprovesURLAndResolvesPendingR
 	require.Equal(t, "approved", shadowMCPInventoryBypassRequestStatus(t, ctx, ti, projectID, secondRequestID))
 	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policyOne.ID.String(), "https://mcp.example.com/mcp"))
 	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, shadowMCPInventoryBypassGrantPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policyTwo.ID.String(), "https://mcp.example.com/mcp"))
+}
+
+func TestService_ResolveShadowMCPInventoryRequest_WaitsForShadowAdmissionLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Locked Shadow MCP policy",
+		Action:         "block",
+	})
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), authz.AllUsersPrincipal())
+	createShadowMCPInventoryBypassRequest(t, ctx, ti, shadowMCPInventoryBypassRequestInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		PolicyID:       policy.ID.String(),
+		ServerURL:      "https://mcp.example.com/locked",
+		RequesterID:    "user_locked",
+		RequesterEmail: "locked@example.com",
+		RequestedAt:    time.Now(),
+	})
+
+	lockTx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
+	type resolution struct {
+		result *gen.ShadowMCPInventoryURLState
+		err    error
+	}
+	completed := make(chan resolution, 1)
+	go func() {
+		result, resolveErr := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
+			ProjectID: projectID,
+			ServerURL: "https://mcp.example.com/locked",
+			Decision:  "allow",
+			PolicyIds: []string{policy.ID.String()},
+		})
+		completed <- resolution{result: result, err: resolveErr}
+	}()
+	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, lockTx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
+	got := <-completed
+	require.NoError(t, got.err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, got.result.Access)
 }
 
 func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingRequests(t *testing.T) {

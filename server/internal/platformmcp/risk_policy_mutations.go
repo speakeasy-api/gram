@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -161,6 +162,9 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskPolicy, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy create: %w", err)
+		}
 		if err := riskrepo.New(tx).LockRiskPolicyMutations(ctx, project.ID.String()); err != nil {
 			return nil, fmt.Errorf("lock risk policy create convergence: %w", err)
 		}
@@ -233,6 +237,9 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		Operation: operationUpdateRiskPolicy, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
+		}
 		current, err := riskrepo.New(tx).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, riskPolicyNotFound()
@@ -245,7 +252,7 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 			return nil, err
 		}
 		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) (policycore.Policy, error) {
-			state, err := riskPolicyVersionState(ctx, tx, locked, true)
+			state, err := riskPolicyVersionState(ctx, tx, locked)
 			if err != nil {
 				return policycore.Policy{}, riskMutationUnavailableWithCause(err)
 			}
@@ -802,7 +809,7 @@ func canonicalJSONEqual(a, b []byte) bool {
 }
 
 func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string, matched bool) (CreateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return CreateRiskPolicyReceiptResult{}, err
 	}
@@ -818,7 +825,7 @@ func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db 
 }
 
 func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string) (UpdateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return UpdateRiskPolicyReceiptResult{}, err
 	}

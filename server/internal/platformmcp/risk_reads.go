@@ -150,7 +150,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 			if err != nil {
 				return riskPolicySnapshot{}, "", fmt.Errorf("load risk policy detail snapshot: %w", err)
 			}
-			state, err := riskPolicyVersionState(ctx, tx, policy, false)
+			state, err := riskPolicyVersionState(ctx, tx, policy)
 			if err != nil {
 				return riskPolicySnapshot{}, "", err
 			}

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,7 +40,7 @@ func (s *Service) ReviewShadowMCPPolicyURLEdit(
 
 	// The same lock decision-time enforcement and the policy replay take, so
 	// a concurrent decision never interleaves into a silent contradiction.
-	if err := repo.New(tx).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
+	if err := shadowadmission.LockProject(ctx, tx, projectID); err != nil {
 		return review, fmt.Errorf("lock project enforcement state for url edit review: %w", err)
 	}
 
@@ -124,6 +125,9 @@ func (s *Service) SupersedeShadowMCPDecisions(
 	actor urn.Principal,
 	actorDisplayName *string,
 ) error {
+	if err := shadowadmission.LockProject(ctx, tx, projectID); err != nil {
+		return fmt.Errorf("lock project enforcement state for decision supersession: %w", err)
+	}
 	queries := repo.New(tx)
 	for _, conflict := range conflicts {
 		if err := queries.SetApprovalRequestStatus(ctx, repo.SetApprovalRequestStatusParams{
