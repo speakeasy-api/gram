@@ -108,7 +108,13 @@ export function ConnectIdpStep({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error(
+              "Unable to open the WorkOS portal. Allow popups and try again.",
+            );
+          }
         },
       },
     );
