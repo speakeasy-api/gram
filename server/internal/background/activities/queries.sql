@@ -834,83 +834,6 @@ WHERE d.organization_id = ANY($1::text[])
     ORDER BY organization_id, created_at DESC
   );
 
--- name: FetchPendingOutboxIDs :many
--- Fetch the next batch of outbox row IDs (across all organizations) that the
--- Svix relay has not finished processing. A row is "pending" when no relay
--- tracking row exists OR a tracking row exists with processed_at IS NULL and
--- not dead-lettered. Returns only IDs to keep the activity payload small —
--- workflows pass IDs to RelayBatch which re-queries the full rows.
-SELECT o.id, o.organization_id, om.svix_app_id, om.webhooks_enabled
-FROM outbox o
-LEFT JOIN organization_metadata om ON o.organization_id = om.id
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE r.outbox_id IS NULL OR (r.processed_at IS NULL AND r.dead_lettered IS FALSE AND (r.retry_after IS NULL OR r.retry_after <= clock_timestamp()))
-ORDER BY o.id ASC
-LIMIT @batch_size;
-
--- name: FetchOutboxRowsByIDs :many
--- Hydrate a set of outbox IDs back into full rows along with their current
--- relay attempt count. Intended to be called inside the relay activity after
--- the workflow has handed it a batch of IDs.
-SELECT
-    o.id,
-    o.public_id,
-    o.organization_id,
-    o.event_type,
-    o.payload,
-    COALESCE(r.attempts, 0)::int AS attempts
-FROM outbox o
-LEFT JOIN outbox_relays r ON r.outbox_id = o.id
-WHERE o.id = ANY(@ids::bigint[])
-ORDER BY o.id ASC;
-
--- name: MarkOutboxRelayProcessed :exec
--- Marks a relay as successfully delivered to Svix.
-INSERT INTO outbox_relays (outbox_id, processed_at, svix_message_id, attempts, last_error)
-VALUES (@outbox_id, clock_timestamp(), @svix_message_id, 1, NULL)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    processed_at = clock_timestamp(),
-    svix_message_id = EXCLUDED.svix_message_id,
-    attempts = outbox_relays.attempts + 1,
-    last_error = NULL,
-    updated_at = clock_timestamp();
-
--- name: MarkOutboxRelayFailed :exec
--- Records a failed delivery attempt; the row remains pending for retry.
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, retry_after)
-VALUES (@outbox_id, 1, @last_error, @retry_after)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    retry_after = EXCLUDED.retry_after,
-    updated_at = clock_timestamp();
-
--- name: GCProcessedOutboxRows :execrows
--- Hard-deletes terminal outbox rows older than @cutoff. Terminal means the
--- relay row is processed, noop, or dead-lettered. The cascade FK removes the
--- outbox_relays row automatically. Batched via LIMIT to bound lock time.
-DELETE FROM outbox
-WHERE id IN (
-  SELECT o.id
-  FROM outbox o
-  JOIN outbox_relays r ON r.outbox_id = o.id
-  WHERE o.created_at < @cutoff
-    AND (r.processed_at IS NOT NULL OR r.noop = TRUE OR r.dead_lettered = TRUE)
-  ORDER BY o.id ASC
-  LIMIT @batch_size
-);
-
--- name: MarkOutboxRelayDeadLettered :exec
--- Permanently parks a row after exceeding the retry budget. The pending
--- partial index excludes dead_lettered rows so they will not be re-fetched.
-INSERT INTO outbox_relays (outbox_id, attempts, last_error, dead_lettered)
-VALUES (@outbox_id, 1, @last_error, TRUE)
-ON CONFLICT (outbox_id) DO UPDATE SET
-    attempts = outbox_relays.attempts + 1,
-    last_error = EXCLUDED.last_error,
-    dead_lettered = TRUE,
-    updated_at = clock_timestamp();
-
 -- name: ClaimPublishOutboxBatch :many
 -- Leases a batch of publishable rows to this drainer. The lease plus SKIP
 -- LOCKED is what makes concurrent drains safe: two workers claim disjoint sets
@@ -1109,3 +1032,51 @@ WHERE NOT EXISTS (
       AND dd.email_lower = uao.email_lower
 )
 ORDER BY organization_id, email_lower;
+
+-- name: ListTenantDimensionOrganizations :many
+-- Full reporting projection for ClickHouse organizations that own at least
+-- one project. The caller runs this and ListTenantDimensionProjects in one
+-- repeatable-read transaction so both generations come from one source
+-- snapshot.
+SELECT
+    om.id,
+    om.slug,
+    om.gram_account_type AS account_type,
+    om.workos_id,
+    om.workos_updated_at,
+    om.webhooks_enabled,
+    om.scim_enabled,
+    om.sso_enabled,
+    om.whitelisted,
+    om.free_trial_started_at,
+    om.free_trial_ends_at,
+    t.tier AS trial_tier,
+    t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
+    t.created_at AS trial_created_at,
+    t.updated_at AS trial_updated_at,
+    om.created_at,
+    om.updated_at,
+    om.disabled_at
+FROM organization_metadata om
+LEFT JOIN trials t ON t.organization_id = om.id
+WHERE EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.organization_id = om.id
+)
+ORDER BY om.id;
+
+-- name: ListTenantDimensionProjects :many
+-- Includes soft-deleted projects so retained ClickHouse facts keep their
+-- human-readable dimension and reports can choose lifecycle semantics.
+SELECT
+    id,
+    organization_id,
+    slug,
+    created_at,
+    updated_at,
+    deleted_at
+FROM projects
+ORDER BY organization_id, id;

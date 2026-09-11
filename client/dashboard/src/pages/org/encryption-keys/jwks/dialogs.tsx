@@ -7,6 +7,7 @@ import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
 import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useActivateJsonWebKeyMutation } from "@gram/client/react-query/activateJsonWebKey";
+import { useJsonWebKeySetDeletePreflight } from "@gram/client/react-query/jsonWebKeySetDeletePreflight.js";
 import { useDeleteJsonWebKeySetMutation } from "@gram/client/react-query/deleteJsonWebKeySet";
 import {
   buildGetJsonWebKeySetQuery,
@@ -90,6 +91,12 @@ export function KeyActionDialog({
 // DeleteSetDialog confirms and performs a set delete. Deleting withdraws every
 // key in the set at once, so the copy treats it as decommissioning a trust
 // anchor rather than removing a record.
+//
+// The preflight is loaded before the administrator confirms, because deleteSet
+// refuses outright while any live remote_session_client still signs with the
+// set. Discovering that only after confirming a dialog this alarming is a bad
+// trade: the refusal is knowable up front, so the dialog names the blocking
+// clients and disables the button rather than letting the request fail.
 export function DeleteSetDialog({
   set,
   onClose,
@@ -100,6 +107,16 @@ export function DeleteSetDialog({
   onDeleted: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  // isFetching, not isPending: a reopened dialog has cached preflight data, so
+  // isPending is false while the refetch is still in flight and Delete would be
+  // confirmable against whatever the last open saw.
+  const {
+    data: preflight,
+    isFetching: preflightPending,
+    isError: preflightFailed,
+  } = useJsonWebKeySetDeletePreflight({ id: set.id }, undefined, {
+    throwOnError: false,
+  });
   const deleteMutation = useDeleteJsonWebKeySetMutation({
     onSuccess: async () => {
       await invalidateSet(queryClient);
@@ -108,6 +125,13 @@ export function DeleteSetDialog({
       onDeleted();
     },
   });
+
+  const blockingCount = preflight?.clientCount ?? 0;
+  // A failed preflight leaves this false, so the delete is still attempted and
+  // the server's own refusal stops it. Better that the authoritative check
+  // answers than that an advisory read's error blocks a legitimate delete. The
+  // summary below says so rather than claiming nothing references the set.
+  const blocked = blockingCount > 0;
 
   return (
     <ConfirmDialog
@@ -119,6 +143,19 @@ export function DeleteSetDialog({
       description="Every key in this set is withdrawn immediately and tokens signed with any of them stop verifying. Anything that trusts this set, such as an identity provider or MCP server verifying against its JWKS, will start rejecting those tokens. This cannot be undone; the keys themselves stay in your KMS."
       confirmLabel="Delete key set"
       isPending={deleteMutation.isPending}
+      confirmDisabled={blocked}
+      impact={{
+        summary: blocked
+          ? blockingCount === 1
+            ? "1 remote session client still signs with this set. Detach it there before deleting."
+            : `${blockingCount} remote session clients still sign with this set. Detach it from each before deleting.`
+          : preflightFailed
+            ? "Could not check which remote session clients reference this set. Deleting is still refused by the server if any do."
+            : "No remote session clients reference this set.",
+        mcpServerNames: preflight?.clientIds,
+        namesLabel: "Clients signing with this set:",
+        isLoading: preflightPending,
+      }}
       error={
         deleteMutation.error
           ? errorMessage(

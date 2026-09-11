@@ -18,12 +18,12 @@ func (ClaudeCodeMetric) SessionID(point MetricDataPoint) (string, string, error)
 }
 
 func (ClaudeCodeMetric) ExternalUserID(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.account_id")
+	key, value := getOneMetricPointAttr(point, vendorUserAccountIDKey)
 	return key, value, nil
 }
 
 func (ClaudeCodeMetric) ExternalUserEmail(point MetricDataPoint) (string, string, error) {
-	key, value := getOneMetricPointAttr(point, "user.email")
+	key, value := getOneMetricPointAttr(point, userEmailKey)
 	return key, value, nil
 }
 

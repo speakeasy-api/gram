@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
@@ -61,15 +63,38 @@ func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyTyp
 }
 
 type fakeBillingOperations struct {
-	organizationID string
-	cancel         *bool
-	actor          usage.BillingActor
-	subscription   *usage.StripeSubscription
+	mu              sync.Mutex
+	organizationID  string
+	cancel          *bool
+	actor           usage.BillingActor
+	subscription    *usage.StripeSubscription
+	customer        *stripeclient.CustomerDetails
+	customerErr     error
+	customerLookups []string
 }
 
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
 	f.organizationID = organizationID
 	return &usage.PaygBillingSummary{PeriodStart: "2026-08-01T00:00:00Z", PeriodEnd: "2026-09-01T00:00:00Z", TumTokens: 42, TumUnitPriceUsd: "0.1", TumCostUsd: "4.2", OtherInferenceSpendUsd: "1.0", EstimatedTotalUsd: "5.2"}, nil
+}
+
+func (f *fakeBillingOperations) GetStripeCustomer(_ context.Context, customerID string) (*stripeclient.CustomerDetails, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.customerLookups = append(f.customerLookups, customerID)
+	if f.customerErr != nil {
+		return nil, f.customerErr
+	}
+	if f.customer != nil {
+		return f.customer, nil
+	}
+	return &stripeclient.CustomerDetails{ID: customerID, Name: "", Email: "", Description: "", LiveMode: false}, nil
+}
+
+func (f *fakeBillingOperations) customerLookupCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.customerLookups)
 }
 
 func (f *fakeBillingOperations) GetStripeSubscriptionForOrganization(_ context.Context, organizationID string) (*usage.StripeSubscription, error) {
@@ -121,7 +146,7 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
 		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true},
-		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: nil, DisableCausesClassified: false},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"admin_lock"}, DisableCausesClassified: true},
 	}, result)
 }
 

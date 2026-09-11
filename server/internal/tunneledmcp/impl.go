@@ -21,6 +21,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/tunneled_mcp/server"
+
 	gen "github.com/speakeasy-api/gram/server/gen/tunneled_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -330,8 +331,17 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	// With every field tri-state, an empty form would otherwise still run the
 	// transaction, churn updated_at, and log a no-op audit event.
-	if payload.Name == nil && payload.AllowPublic == nil && payload.ResourceIdentifier == nil {
+	if payload.Name == nil && payload.AllowPublic == nil && payload.ResourceIdentifier == nil &&
+		payload.PublicRequestRatePerSecond == nil && payload.PublicRequestBurst == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no fields to update").LogWarn(ctx, logger)
+	}
+
+	// The design bounds the limits too, but that validation is generated into
+	// the HTTP decoder only; repeating it keeps an in-process caller honest and
+	// turns a CHECK violation into a 400 before the transaction opens. 0 is
+	// the clear sentinel and sits below the column minimum on purpose.
+	if err := validatePublicRateLimits(payload); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
 
 	// Tri-state: omitted leaves the stored value, empty string clears it.
@@ -367,16 +377,21 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
-		ID:                 serverID,
-		ProjectID:          *authCtx.ProjectID,
-		Name:               name,
-		AllowPublic:        conv.PtrToPGBool(payload.AllowPublic),
-		ResourceIdentifier: resourceIdentifier,
+		ID:                         serverID,
+		ProjectID:                  *authCtx.ProjectID,
+		Name:                       name,
+		AllowPublic:                conv.PtrToPGBool(payload.AllowPublic),
+		ResourceIdentifier:         resourceIdentifier,
+		PublicRequestRatePerSecond: optionalPGInt4(payload.PublicRequestRatePerSecond),
+		PublicRequestBurst:         optionalPGInt4(payload.PublicRequestBurst),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "tunneled mcp server name already in use").LogWarn(ctx, logger)
+		}
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.CheckViolation {
+			return nil, oops.E(oops.CodeBadRequest, err, "public rate limits out of range").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update tunneled mcp server").LogError(ctx, logger)
 	}

@@ -62,17 +62,17 @@ const (
 	// the summaries cover agent surfaces only, and claude-code:usage
 	// duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
-	// sessionOpencodeUsageRowPredicate matches opencode's per-turn usage rows.
-	// opencode reports tokens and cost on its unified-ingest assistant.responded
-	// rows, under the canonical gen_ai.usage.* keys the generic fallback branches
-	// already read. It has no OTEL stream and the unified-ingest path stamps no
-	// gram_urn, so provenance anchors on hook_source. The AfterAgentResponse
-	// event guard keeps a session's other opencode rows (thoughts, usage.reported,
-	// tool calls, lifecycle) from double-counting as usage turns; cost is part of
-	// the guard so a cost-only turn still counts. Mirrors is_opencode_usage_row in
-	// the MVs (server/clickhouse/schema.sql).
-	sessionOpencodeUsageRowPredicate = "(" +
-		"hook_source = 'opencode' AND " +
+	// sessionHookTurnUsageRowPredicate matches opencode's and openclaw's
+	// per-turn usage rows. Both report tokens and cost on their unified-ingest
+	// assistant.responded rows, under the canonical gen_ai.usage.* keys the
+	// generic fallback branches already read. Neither has an OTEL stream and the
+	// unified-ingest path stamps no gram_urn, so provenance anchors on
+	// hook_source. The AfterAgentResponse event guard keeps a session's other
+	// rows (thoughts, usage.reported, tool calls, lifecycle) from double-counting
+	// as usage turns; cost is part of the guard so a cost-only turn still counts.
+	// Mirrors is_hook_turn_usage_row in the MVs (server/clickhouse/schema.sql).
+	sessionHookTurnUsageRowPredicate = "(" +
+		"hook_source IN ('opencode', 'openclaw') AND " +
 		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
@@ -83,11 +83,12 @@ const (
 		"gram_urn = 'litellm:otel:traces' AND " +
 		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
 		")"
-	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode completed
-	// tool-call hook rows (they have no OTEL stream). The hook.event guard excludes
-	// the PreToolUse companion row; provider names are not tool calls.
+	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode/openclaw
+	// completed tool-call hook rows (they have no OTEL stream). The hook.event
+	// guard excludes the PreToolUse companion row; provider names are not tool
+	// calls.
 	sessionAgentToolCallPredicate = "(" +
-		"hook_source IN ('codex', 'cursor', 'opencode') AND " +
+		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw') AND " +
 		"toString(attributes.gram.tool.name) != '' AND " +
 		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
 		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
@@ -114,11 +115,11 @@ const (
 	// usage rows, and opencode assistant.responded rows. This is the sumIf guard
 	// for every token/cost measure, keeping session totals aligned with the
 	// aggregate.
-	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
+	sessionUsageMeasureFilter = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + ")"
 	// sessionSourceRowPredicate admits every row class the session list derives
 	// from, matching the aggregate MV's WHERE clause so the two views cover the
 	// same sessions.
-	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
+	sessionSourceRowPredicate = "(" + sessionClaudeAPIRequestPredicate + " OR " + sessionClaudeToolResultPredicate + " OR " + sessionCodexAPIRequestPredicate + " OR " + sessionAgentUsageRowPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 
 	// Token/cost measures are source-aware: Claude api_request rows carry usage
 	// on flat attributes (input_tokens, cost_usd, …), Codex response.completed
@@ -179,7 +180,7 @@ const (
 		"toString(attributes.prompt.id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id), " +
 		sessionLiteLLMUsageRowPredicate + " AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id), " +
-		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionOpencodeUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
+		"(" + sessionCodexAPIRequestPredicate + " OR " + sessionHookTurnUsageRowPredicate + " OR " + sessionLiteLLMUsageRowPredicate + "), toString(id), " +
 		"toString(attributes.gen_ai.response.id))"
 	sessionMessageCountExpr = "uniqExactIf(" + sessionMessageIDExpr + ", " + sessionMessageIDExpr + " != '')"
 )

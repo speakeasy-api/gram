@@ -43,7 +43,11 @@ import {
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientContext,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -62,6 +66,7 @@ type UIMessagePart = UIMessage["parts"][number];
 import {
   ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -955,13 +960,17 @@ const ElementsProviderWithoutHistory = ({
   );
 };
 
-const queryClient = new QueryClient();
+const standaloneQueryClient = new QueryClient();
 
 export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
+  // Share a host app's QueryClient so content rendered inside this provider
+  // (the dashboard mounts it around the page outlet) stays in one cache with
+  // the rest of the app. Standalone embeds get their own.
+  const hostQueryClient = useContext(QueryClientContext);
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>
       <ConnectionStatusProvider>
         <ToolApprovalProvider>
           <MarkdownLinkProvider

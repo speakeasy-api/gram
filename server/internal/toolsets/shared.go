@@ -366,10 +366,16 @@ func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool exte
 		}
 	}
 
+	inputSchema := json.RawMessage(tool.Schema)
+	if tool.Type == "proxy" {
+		inputSchema = nil // A server-level placeholder is not upstream tool metadata.
+	}
+
 	// Note: The ToolName field is "proxy" for proxy tools. Actual external tool names
 	// are resolved at runtime when the tool is called (e.g., "notion--search" -> ToolName="search").
 	plan := &gateway.ExternalMCPToolCallPlan{
 		RemoteURL:         tool.RemoteUrl,
+		InputSchema:       inputSchema,
 		TransportType:     tool.TransportType,
 		ToolName:          toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
 		Slug:              tool.Slug,

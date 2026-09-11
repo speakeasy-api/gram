@@ -5,13 +5,13 @@ import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
-import { Link, useLocation, useMatch, useParams } from "react-router";
+import { useLocation, useMatch, useParams } from "react-router";
 import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
-import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
+import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
 import { WorkspaceSwitcher } from "./workspace-switcher.tsx";
 
 function PageHeaderComponent({
@@ -26,6 +26,7 @@ function PageHeaderComponent({
   // banner there would hide a paused organization from the page it was working
   // on.
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
+  const showBreadcrumbs = useShowBreadcrumbs();
 
   return (
     <>
@@ -42,7 +43,7 @@ function PageHeaderComponent({
               occupy, rather than in the sidebar. The collapse control moved to
               the sidebar header alongside the logo. */}
           <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
-          {children}
+          {!showBreadcrumbs && children}
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <InsightsDockShortcutHint />
             <CommandPaletteTrigger />
@@ -52,7 +53,15 @@ function PageHeaderComponent({
       {/* Crosshatch rule (marketing-site idiom) divides header from content and
           continues the sidebar header's own rule across the pane boundary. */}
       <HatchRule />
-      <OnboardingBanner />
+      {/* The trail gets its own bar rather than sharing the header row: the
+          switcher names where you are and the trail names how you got there,
+          and on one line the two read as a single path. px-8 matches
+          Page.Body so the crumbs line up with the content edge. */}
+      {showBreadcrumbs && (
+        <div className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5">
+          {children}
+        </div>
+      )}
       {/* Inference stopping is felt on whichever page the user was working on,
           so the reason for it rides the header rather than waiting on the
           billing page. Billing renders all of its banners together so payment
@@ -88,11 +97,17 @@ function PageHeaderTitle({
 //     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
-  "platform-mcp": "Platform MCP",
   "shadow-mcp": "Shadow MCP",
   sdks: "SDKs",
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",
+  // Segments of the unified MCP add flow (S-853).
+  add: "Add Server",
+  "from-existing-source": "From Existing Source",
+  openapi: "OpenAPI",
+  remote: "Remote MCP",
+  tunneled: "Tunneled MCP",
+  unproxied: "Unproxied MCP",
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
@@ -109,47 +124,6 @@ const breadcrumbUrlSubstitutions: Record<string, string> = {
   "/shadow-mcp/requests": "/shadow-mcp",
 };
 
-// One rendered crumb. Pending crumbs (substitution key present, value not yet
-// resolved) show a placeholder so the raw id/slug never flashes before its
-// human label arrives.
-function BreadcrumbCrumb({
-  elem,
-}: {
-  elem: {
-    url: string;
-    display: string;
-    isCurrentPage: boolean;
-    disableLink?: boolean;
-    pending?: boolean;
-  };
-}) {
-  if (elem.pending) {
-    return (
-      <span
-        aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
-      />
-    );
-  }
-  if (elem.isCurrentPage || elem.disableLink) {
-    return (
-      <span
-        className={elem.isCurrentPage ? undefined : "text-muted-foreground"}
-      >
-        {elem.display}
-      </span>
-    );
-  }
-  return (
-    <Link
-      to={elem.url}
-      className="text-muted-foreground hover:text-foreground trans"
-    >
-      {elem.display}
-    </Link>
-  );
-}
-
 type PageHeaderBreadcrumbsProps = {
   fullWidth?: boolean;
   className?: string;
@@ -158,15 +132,43 @@ type PageHeaderBreadcrumbsProps = {
   stage?: ReleaseStage;
 };
 
+type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
+  /** Prepend the org and project crumbs. Default: true. */
+  rootCrumbs?: boolean;
+};
+
 // Breadcrumbs are hidden: the header now carries the project switcher instead.
 // The renderer below is kept intact (and every caller keeps mounting
 // <PageHeader.Breadcrumbs>) so flipping this back on is a one-line change.
 // Widened to boolean so the renderer below doesn't type as unreachable.
-const SHOW_BREADCRUMBS = false as boolean;
+// The exceptions to the app-wide hiding above are the surfaces that nest: MCP
+// (S-853 made it the inventory and put the add flow, the catalog and sources
+// underneath it) and Identities (each person has their own page below the
+// roster). Those pages sit two and three levels deep with no way back up but
+// browser back. Listed by first path segment; every caller still mounts
+// <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
+const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities"]);
+
+// Whether the current page shows a breadcrumb trail. Shared by the header (to
+// give the trail its own bar) and by the breadcrumbs themselves (to render
+// nothing elsewhere), so the two can't disagree.
+function useShowBreadcrumbs(): boolean {
+  const { pathname } = useLocation();
+  // Anchored to the fixed /:orgSlug/projects/:projectSlug/:page shape, mirroring
+  // useNavArea, so an org or project slugged "projects" can't shift which
+  // segment is read as the page.
+  const projectPage = pathname.match(
+    /^\/[^/]+\/projects\/[^/]+\/([^/?#]+)/,
+  )?.[1];
+  return !!projectPage && BREADCRUMB_PAGE_SLUGS.has(projectPage);
+}
 
 function PageHeaderBreadcrumbs(props: PageHeaderBreadcrumbsProps) {
-  if (!SHOW_BREADCRUMBS) return null;
-  return <PageHeaderBreadcrumbsTrail {...props} />;
+  const show = useShowBreadcrumbs();
+  if (!show) return null;
+  // The org and project already have a home in the header's project switcher,
+  // so the trail starts at the page itself rather than repeating them.
+  return <PageHeaderBreadcrumbsTrail {...props} rootCrumbs={false} />;
 }
 
 function PageHeaderBreadcrumbsTrail({
@@ -175,7 +177,8 @@ function PageHeaderBreadcrumbsTrail({
   substitutions = {}, // Any segment and how it should be displayed, for example toolset slug -> toolset name
   skipSegments = [], // Segments to skip/hide from breadcrumbs
   stage,
-}: PageHeaderBreadcrumbsProps) {
+  rootCrumbs = true,
+}: PageHeaderBreadcrumbsTrailProps) {
   const params = useParams();
   const { orgSlug, projectSlug } = useSlugs();
   const organization = useOrganization();
@@ -253,36 +256,32 @@ function PageHeaderBreadcrumbsTrail({
 
   // Build full breadcrumb list: {org} > [project >] page segments
   const canAccessOrg = hasAnyScope(["org:read", "org:admin"]);
-  const visibleElements: {
-    url: string;
-    display: string;
-    isCurrentPage: boolean;
-    disableLink?: boolean;
-    pending?: boolean;
-  }[] = [];
+  const visibleElements: BreadcrumbItem[] = [];
 
-  // 1. Org name (always first; only clickable if user has org access)
-  visibleElements.push({
-    url: `/${orgSlug}`,
-    display: organization.name || orgSlug || "Home",
-    isCurrentPage: false,
-    disableLink: !canAccessOrg,
-  });
-
-  // 2. Project name (only for project-level pages)
-  if (projectSlug) {
-    visibleElements.push({
-      url: `/${orgSlug}/projects/${projectSlug}`,
-      display: project.name || projectSlug || "Project",
-      isCurrentPage: pageElements.length === 0,
-    });
-  } else if (pageElements.length === 0) {
-    // Org root page — show "Home" as the current page
+  if (rootCrumbs) {
+    // 1. Org name (always first; only clickable if user has org access)
     visibleElements.push({
       url: `/${orgSlug}`,
-      display: "Home",
-      isCurrentPage: true,
+      display: organization.name || orgSlug || "Home",
+      isCurrentPage: false,
+      disableLink: !canAccessOrg,
     });
+
+    // 2. Project name (only for project-level pages)
+    if (projectSlug) {
+      visibleElements.push({
+        url: `/${orgSlug}/projects/${projectSlug}`,
+        display: project.name || projectSlug || "Project",
+        isCurrentPage: pageElements.length === 0,
+      });
+    } else if (pageElements.length === 0) {
+      // Org root page — show "Home" as the current page
+      visibleElements.push({
+        url: `/${orgSlug}`,
+        display: "Home",
+        isCurrentPage: true,
+      });
+    }
   }
 
   // 3. Page segments
@@ -293,17 +292,9 @@ function PageHeaderBreadcrumbsTrail({
       <PageHeader.Title
         className={cn(fullWidth ? "max-w-full" : "", className)}
       >
-        <div className="flex items-center gap-2 normal-case">
-          {visibleElements.map((elem, index) => (
-            <React.Fragment key={`${elem.url}-${index}`}>
-              <BreadcrumbCrumb elem={elem} />
-              {index < visibleElements.length - 1 && (
-                <span className="text-muted-foreground"> / </span>
-              )}
-            </React.Fragment>
-          ))}
+        <Breadcrumb items={visibleElements}>
           {stage && <ReleaseStageBadge stage={stage} />}
-        </div>
+        </Breadcrumb>
       </PageHeader.Title>
     </div>
   );

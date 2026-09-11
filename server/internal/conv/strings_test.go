@@ -47,3 +47,11 @@ func TestTruncateDetail_NegativeBoundDoesNotPanic(t *testing.T) {
 		require.Contains(t, got, "truncated")
 	})
 }
+
+func TestStripNUL(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "plain text", conv.StripNUL("plain text"))
+	require.Equal(t, "ab", conv.StripNUL("a\x00b\x00"))
+	require.Empty(t, conv.StripNUL("\x00"))
+}

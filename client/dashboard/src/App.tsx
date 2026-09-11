@@ -1,5 +1,16 @@
 import "./App.css";
 import NotFound from "@/pages/not-found/NotFound";
+import {
+  RedirectToAddFunction,
+  RedirectToAddOpenAPI,
+  RedirectToAddRemoteMcp,
+  RedirectToAddTunneledMcp,
+  RedirectToAddUnproxiedMcp,
+  RedirectToCatalog,
+  RedirectToCatalogDetail,
+  RedirectToSourceDetail,
+  RedirectToSources,
+} from "@/pages/mcp/add/LegacyRedirects";
 
 import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
@@ -47,7 +58,7 @@ import { BlockPage } from "./pages/blocks/BlockDetail";
 import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
-import TalkToUs from "./pages/demo/TalkToUs";
+import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
@@ -232,7 +243,10 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
-    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
+    // The killswitch addresses only forward to the identity they belong to,
+    // so recording one would file a redirect under the reader's recent pages
+    // instead of the page they actually ended up on.
+    if (orgRoutes.killswitch.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -308,7 +322,10 @@ const RouteProvider = () => {
       Object.entries(orgRoutes).filter(
         ([key, route]) =>
           (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          (key !== "killswitch" || killswitchAccess.canAccess),
+          // Killswitch routes only redirect to identity access.
+          key !== "killswitch" &&
+          // Parameterized routes have no destination without an id.
+          !route.url.includes(":"),
       ),
     );
     const orgActions = routesToNavActions(
@@ -329,7 +346,6 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
-    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
@@ -366,8 +382,8 @@ const RouteProvider = () => {
         {/* Outside the app layout because it is a full-page gate, but behind
             LoginCheck: an expired trial still has a session, and a logged-out
             visitor has no trial to talk about. */}
-        <Route path="/talk-to-us" element={<LoginCheck />}>
-          <Route index element={<TalkToUs />} />
+        <Route path="/trial-ended" element={<LoginCheck />}>
+          <Route index element={<TrialEnded />} />
         </Route>
         <Route
           path="/shadow-mcp/request"
@@ -393,6 +409,7 @@ const RouteProvider = () => {
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            {legacyMcpRedirects}
             <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
@@ -450,11 +467,37 @@ const routesToNavActions = (
         !route.unauthenticated &&
         !route.outsideMainLayout &&
         Boolean(route.component) &&
-        Boolean(route.title),
+        Boolean(route.title) &&
+        !route.legacyRedirect,
     )
     .map(([key, route]) =>
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
+
+// S-853 moved Sources and the catalog under /mcp. These keep the old top-level
+// URLs resolving. They live here rather than in the route structure so they
+// stay out of the sidebar, breadcrumbs, and the command palette.
+const legacyMcpRedirects = (
+  <>
+    <Route path="sources">
+      <Route index element={<RedirectToSources />} />
+      <Route path="add-openapi" element={<RedirectToAddOpenAPI />} />
+      <Route path="add-function" element={<RedirectToAddFunction />} />
+      <Route path="add-from-catalog" element={<RedirectToCatalog />} />
+      <Route path="add-remote-mcp" element={<RedirectToAddRemoteMcp />} />
+      <Route path="add-tunneled-mcp" element={<RedirectToAddTunneledMcp />} />
+      <Route path="add-unproxied-mcp" element={<RedirectToAddUnproxiedMcp />} />
+      <Route
+        path=":sourceKind/:sourceSlug"
+        element={<RedirectToSourceDetail />}
+      />
+    </Route>
+    <Route path="catalog">
+      <Route index element={<RedirectToCatalog />} />
+      <Route path=":serverSpecifier" element={<RedirectToCatalogDetail />} />
+    </Route>
+  </>
+);
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes

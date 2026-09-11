@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/OpenRouterTeam/go-sdk/models/sdkerrors"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -182,6 +183,70 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 	default:
 		return &HTTPError{StatusCode: status, Err: nil}
 	}
+}
+
+func classifySDKError(ctx context.Context, err error) error {
+	status, ok := sdkErrorStatus(err)
+	if !ok {
+		return err
+	}
+	header := http.Header{}
+	if apiErr, found := errors.AsType[*sdkerrors.APIError](err); found && apiErr.RawResponse != nil {
+		header = apiErr.RawResponse.Header
+	}
+	return classifyHTTPError(ctx, status, header, []byte(err.Error()))
+}
+
+func sdkErrorStatus(err error) (int, bool) {
+	if _, ok := errors.AsType[*sdkerrors.BadRequestResponseError](err); ok {
+		return http.StatusBadRequest, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.UnauthorizedResponseError](err); ok {
+		return http.StatusUnauthorized, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.PaymentRequiredResponseError](err); ok {
+		return http.StatusPaymentRequired, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ForbiddenResponseError](err); ok {
+		return http.StatusForbidden, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.NotFoundResponseError](err); ok {
+		return http.StatusNotFound, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.RequestTimeoutResponseError](err); ok {
+		return http.StatusRequestTimeout, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ConflictResponseError](err); ok {
+		return http.StatusConflict, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.PayloadTooLargeResponseError](err); ok {
+		return http.StatusRequestEntityTooLarge, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.UnprocessableEntityResponseError](err); ok {
+		return http.StatusUnprocessableEntity, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.TooManyRequestsResponseError](err); ok {
+		return http.StatusTooManyRequests, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.InternalServerResponseError](err); ok {
+		return http.StatusInternalServerError, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.BadGatewayResponseError](err); ok {
+		return http.StatusBadGateway, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ServiceUnavailableResponseError](err); ok {
+		return http.StatusServiceUnavailable, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.EdgeNetworkTimeoutResponseError](err); ok {
+		return 524, true
+	}
+	if _, ok := errors.AsType[*sdkerrors.ProviderOverloadedResponseError](err); ok {
+		return 529, true
+	}
+	if apiErr, ok := errors.AsType[*sdkerrors.APIError](err); ok && apiErr.StatusCode >= http.StatusBadRequest {
+		return apiErr.StatusCode, true
+	}
+	return 0, false
 }
 
 // historyCorruptionBodyMarkers are fragments inference providers emit when

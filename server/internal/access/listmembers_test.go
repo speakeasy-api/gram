@@ -6,7 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestService_ListMembers(t *testing.T) {
@@ -106,4 +108,60 @@ func TestService_ListMembers_UsesDatabaseOnly(t *testing.T) {
 	require.Len(t, result.Members, 1)
 	require.Equal(t, authCtx.UserID, result.Members[0].ID)
 	require.Empty(t, result.Members[0].RoleIds)
+}
+
+func TestService_ListMembers_AllowsActiveProjectReader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+	})
+
+	result, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Members, 1)
+	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+}
+
+func TestService_ListMembers_RejectsUnrelatedProjectReader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, "unrelated-project"),
+	})
+
+	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+}
+
+func TestService_ListMembers_RejectsProjectFromAnotherActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	clone := *authCtx
+	clone.ActiveOrganizationID = "members-test-other-org"
+	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
+	ctx = contextvalues.SetAuthContext(ctx, &clone)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String()),
+	})
+
+	_, err := ti.service.ListMembers(ctx, &gen.ListMembersPayload{})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeNotFound, shareableErr.Code)
 }

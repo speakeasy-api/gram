@@ -385,6 +385,12 @@ var _ = Service("access", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("from", String, "Inclusive start of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -400,6 +406,8 @@ var _ = Service("access", func() {
 			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
 			Param("user_keys")
+			Param("from")
+			Param("to")
 			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -430,6 +438,150 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-name-override", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
+	})
+
+	Method("listAIDetections", func() {
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("category", String, "Filter to detection targets of one category.", func() {
+				Enum("harness", "local_model")
+			})
+			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetections")
+			Param("category")
+			Param("directory_group_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
+	Method("listEmployeeAIDetections", func() {
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("user_email", String, "Canonical enrolled-employee email to list detections for.", func() {
+				Format(FormatEmail)
+				MaxLength(320)
+			})
+			Required("user_email")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listEmployeeAIDetections")
+			Param("user_email")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
+	})
+
+	Method("listResourceAudience", func() {
+		Description("List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to describe.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to describe.")
+			Required("resource_kind", "resource_id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listResourceAudience")
+			Param("resource_kind")
+			Param("resource_id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResourceAudience"}`)
+	})
+
+	Method("setResourceAudience", func() {
+		Description("Replace the rules that name one resource. Organization-wide rules are left untouched.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetResourceAudienceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setResourceAudience")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetResourceAudience", "type": "mutation"}`)
+	})
+
+	Method("listAudienceOptions", func() {
+		Description("List the principals that can be given access: everyone, roles, and people.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListAudienceOptionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAudienceOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
 	})
 
 	Method("requestAccess", func() {
@@ -476,6 +628,12 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
+			Attribute("from", String, "Inclusive start of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -501,6 +659,8 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()
@@ -600,7 +760,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -626,7 +786,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -640,13 +800,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer")
 		})
 	})
 
@@ -684,12 +844,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat")
+		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat", "agent")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
@@ -726,6 +886,84 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
 })
 
+// One principal's standing on a single resource. `level` is the access it has,
+// or one of the "blocked_" levels when a rule takes access away; `applies_to`
+// says whether the rule names this resource or covers every resource of its
+// kind.
+var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to")
+
+	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "directory_group", "directory_attribute", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+	Attribute("level", String, "Access this principal has on the resource, or the access a rule takes away.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
+		Enum("resource", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
+	Required("entries", "version")
+	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
+})
+
+var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
+	Required("principal_urn", "level")
+
+	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
+	Attribute("level", String, "Access to give the principal on this resource. The \"blocked_\" levels take access away, one scope each and nothing else: \"blocked\" removes connect, \"blocked_view\" removes view, \"blocked_manage\" removes manage. Taking a principal off a resource entirely means writing all three.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
+	Required("resource_kind", "resource_id", "entries", "expected_version")
+
+	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
+		Enum("mcp")
+	})
+	Attribute("resource_id", String, "The resource being changed.")
+	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+	Attribute("expected_version", String, "The version this edit was based on, from the last read. The save is refused if the rules changed since.")
+})
+
+var AudienceOptionModel = Type("AudienceOption", func() {
+	Required("principal_urn", "kind", "display_name")
+
+	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+})
+
+var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
+	Required("options")
+	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
+})
+
 var MemberModel = Type("AccessMember", func() {
 	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
 
@@ -739,6 +977,11 @@ var MemberModel = Type("AccessMember", func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
 	})
+	// Directory profile, from the org's synced identity provider. Every field
+	// is absent when no directory is connected, when the member has no profile
+	// in it, or when the provider does not report that attribute.
+	Attribute("department", String, "Department name as reported by the identity provider.")
+	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
@@ -869,6 +1112,38 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var AIDetectionModel = Type("AIDetection", func() {
+	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
+	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "local_model")
+	})
+	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this target.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected anywhere in the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
+	Required("detections")
+	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+})
+
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
 	Description("The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.")
 
@@ -970,7 +1245,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1030,7 +1305,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1118,7 +1393,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")

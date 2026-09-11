@@ -13,6 +13,18 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:create",
+  "agent:delete",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
+  "agent:owner_loss",
+  "agent:reassign",
+  "agent:rename",
+  "agent:resume",
+  "agent:revoke",
+  "agent:suspend",
+  "agent:transfer",
   "ai_integration:delete",
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
@@ -40,9 +52,15 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "data_export_route:create",
+  "data_export_route:delete",
+  "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
+  "device_agent_ai_scan_target:create",
+  "device_agent_ai_scan_target:delete",
+  "device_agent_ai_scan_target:update",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -93,6 +111,10 @@ export const AUDIT_ACTIONS = [
   "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "network_ingress:create",
+  "network_ingress:update",
+  "network_ingress:rotate_credentials",
+  "network_ingress:delete",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
@@ -108,13 +130,16 @@ export const AUDIT_ACTIONS = [
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
   "organization:product_feature_enabled",
+  "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
-  "otel_forwarding:delete",
-  "otel_forwarding:upsert",
+  "otel_destination:create",
+  "otel_destination:delete",
+  "otel_destination:update",
+  "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
@@ -122,6 +147,7 @@ export const AUDIT_ACTIONS = [
   "plugin:assignments_set",
   "plugin:create",
   "plugin:delete",
+  "plugin:marketplace_settings_update",
   "plugin:publish",
   "plugin:server_add",
   "plugin:server_remove",
@@ -136,9 +162,11 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:create",
   "remote-mcp:delete",
   "remote-mcp:update",
+  "remote-session-client:attach-json-web-key-set",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
+  "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:revoke-sessions",
@@ -194,6 +222,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:update",
+  "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
   "trigger-instance:create",
   "trigger-instance:delete",
@@ -251,6 +280,31 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+
+    case "agent:create":
+      return "created agent";
+    case "agent:delete":
+      return "deleted agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
+    case "agent:owner_loss":
+      return "recorded owner loss for agent";
+    case "agent:reassign":
+      return "reassigned agent";
+    case "agent:rename":
+      return "renamed agent";
+    case "agent:resume":
+      return "resumed agent";
+    case "agent:revoke":
+      return "revoked agent";
+    case "agent:suspend":
+      return "suspended agent";
+    case "agent:transfer":
+      return "transferred agent";
 
     case "ai_integration:upsert":
       return "configured AI integration";
@@ -340,6 +394,22 @@ export function staticActionPhrase(action: AuditAction): string {
     case "custom_domains:delete":
       return "removed custom domain";
 
+    case "data_export_route:create":
+      return "created data export route";
+    case "data_export_route:update":
+      return "updated data export route";
+    case "data_export_route:delete":
+      return "deleted data export route";
+
+    case "network_ingress:create":
+      return "created private network ingress";
+    case "network_ingress:update":
+      return "updated private network ingress";
+    case "network_ingress:rotate_credentials":
+      return "rotated private network ingress credentials";
+    case "network_ingress:delete":
+      return "deleted private network ingress";
+
     case "deployments:create":
       return "created deployment";
     case "deployments:evolve":
@@ -347,6 +417,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "deployments:redeploy":
       return "redeployed deployment";
 
+    case "device_agent_ai_scan_target:create":
+      return "added AI scan target";
+    case "device_agent_ai_scan_target:update":
+      return "updated AI scan target";
+    case "device_agent_ai_scan_target:delete":
+      return "removed AI scan target";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":
@@ -464,6 +540,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled a product feature for";
     case "organization:product_feature_disabled":
       return "disabled a product feature for";
+    case "organization:setup_task_updated":
+      return "updated setup task for";
 
     case "organization_invitation:create":
       return "invited";
@@ -472,11 +550,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization_invitation:update_role":
       return "changed invite role for";
 
-    case "otel_forwarding:upsert":
-      return "updated OpenTelemetry forwarding configuration";
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
+    case "otel_destination:create":
+      return "created OpenTelemetry destination";
+    case "otel_destination:update":
+      return "updated OpenTelemetry destination";
+    case "otel_destination:delete":
+      return "deleted OpenTelemetry destination";
 
+    case "platform-mcp-diagnostics:attribution_read":
+      return "read usage attribution for";
     case "platform-mcp-diagnostics:user_status_read":
       return "read a user's status on";
 
@@ -503,6 +585,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin access";
     case "plugin:publish":
       return "published plugins";
+    case "plugin:marketplace_settings_update":
+      return "updated marketplace settings for";
 
     case "project:create":
       return "created project";
@@ -538,6 +622,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a user session issuer to";
     case "remote-session-client:detach-user-session-issuer":
       return "detached a user session issuer from";
+    case "remote-session-client:attach-json-web-key-set":
+      return "attached a JSON Web Key Set to";
+    case "remote-session-client:detach-json-web-key-set":
+      return "detached a JSON Web Key Set from";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -644,6 +732,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected an external OAuth server to";
     case "toolset:detach_external_oauth":
       return "disconnected an external OAuth server from";
+    case "toolset:update_external_oauth_issuer":
+      return "updated the external OAuth issuer for";
     case "toolset:attach_oauth_proxy":
       return "attached an OAuth proxy to";
     case "toolset:update_oauth_proxy":

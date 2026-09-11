@@ -53,6 +53,17 @@ SET
         WHEN sqlc.narg('resource_identifier')::text IS NULL THEN resource_identifier
         ELSE NULLIF(sqlc.narg('resource_identifier')::text, '')
     END,
+    -- Public admission limit, tri-state per column: NULL leaves the stored
+    -- value, 0 clears to NULL (deployment default), any other value is stored.
+    -- Bounds are enforced by the column CHECK constraints.
+    public_request_rate_per_second = CASE
+        WHEN sqlc.narg('public_request_rate_per_second')::int IS NULL THEN public_request_rate_per_second
+        ELSE NULLIF(sqlc.narg('public_request_rate_per_second')::int, 0)
+    END,
+    public_request_burst = CASE
+        WHEN sqlc.narg('public_request_burst')::int IS NULL THEN public_request_burst
+        ELSE NULLIF(sqlc.narg('public_request_burst')::int, 0)
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;

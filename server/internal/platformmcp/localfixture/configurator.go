@@ -271,7 +271,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	client, err := queries.GetLocalFixtureOrganizationRemoteSessionClient(ctx, remotesessionsrepo.GetLocalFixtureOrganizationRemoteSessionClientParams{OrganizationID: conv.ToPGText(request.OrganizationID), RemoteSessionIssuerID: issuerID})
@@ -322,7 +322,7 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client attachment: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	if err := requireNoCompetingFixtureBinding(ctx, queries, request, issuerID, clientID); err != nil {
@@ -341,7 +341,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 	bound, err := queries.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             request.ProjectID,
 		UserSessionIssuerID:   request.UserSessionIssuerID,
-		OrganizationID:        conv.ToPGText(request.OrganizationID),
+		OrganizationID:        request.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:            2,

@@ -71,3 +71,8 @@ func DedupeNonEmpty(values []string) []string {
 
 	return out
 }
+
+// StripNUL removes NUL bytes, which Postgres cannot store in text or jsonb.
+func StripNUL(s string) string {
+	return strings.ReplaceAll(s, "\x00", "")
+}

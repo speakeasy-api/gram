@@ -80,6 +80,14 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedHostedToolset())
 	payload.protocolVersion.InEffect = negotiated
 
+	// The error wrapper reads its own holder after the handler returns, and it
+	// was populated before the body was parsed, so it still carries the
+	// provisional value. Republishing keeps an error escaping after this point
+	// encoded on the revision that was actually negotiated.
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = negotiated
+	}
+
 	// Recording requested and negotiated separately keeps a downgrade — a
 	// client asking for a revision outside the supported set — visible rather
 	// than collapsed.

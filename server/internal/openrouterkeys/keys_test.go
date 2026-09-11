@@ -506,25 +506,15 @@ func TestAdminMutationDeadlineIncludesDurableBegin(t *testing.T) {
 	ctx, ti := newTestServiceWithAdminMutationTimeout(t, 50*time.Millisecond)
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-begin-deadline", "chat", "sk-or-admin-begin-deadline")
-	requested := make(chan struct{})
-	release := make(chan struct{})
-	ti.coordinator.begin = func(context.Context, openrouterkeys.AdminReconciliationScope) error {
-		close(requested)
-		<-release
+	ti.coordinator.begin = func(beginCtx context.Context, _ openrouterkeys.AdminReconciliationScope) error {
+		// Simulate a successful durable Begin response arriving after its deadline.
+		<-beginCtx.Done()
+		require.ErrorIs(t, beginCtx.Err(), context.DeadlineExceeded)
+		require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"))
 		return nil
 	}
-	done := make(chan error, 1)
-	go func() {
-		_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-		done <- err
-	}()
-	<-requested
-	require.Never(t, func() bool {
-		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
-	}, 75*time.Millisecond, 10*time.Millisecond)
-	close(release)
 
-	err := <-done
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeUnavailable)
 	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "a late Begin response must not receive a fresh mutation deadline")
 	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
@@ -553,9 +543,20 @@ func TestAdminLocalHardTimeoutCannotCommitAfterCrashGuardBecomesEligible(t *test
 	unlocked, err := queries.ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(params))
 	require.NoError(t, err)
 	require.True(t, unlocked)
-	require.Never(t, func() bool {
-		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
-	}, 100*time.Millisecond, 10*time.Millisecond, "timed-out mutation must never commit later")
+	// Keep database checks on the test goroutine so none outlive its context.
+	observation := time.NewTimer(100 * time.Millisecond)
+	defer observation.Stop()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+observe:
+	for {
+		require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "timed-out mutation must never commit later")
+		select {
+		case <-observation.C:
+			break observe
+		case <-poll.C:
+		}
+	}
 	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 	after, err := executor.CaptureCursor(ctx, scope)
 	require.NoError(t, err)
@@ -1222,30 +1223,26 @@ func TestAdminMutationTimeoutDoesNotCancelLaterCompletion(t *testing.T) {
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-timeout-later", "chat", "sk-or-admin-timeout-later")
 	reconcile := ti.coordinator.complete
-	laterDone := make(chan error, 1)
+	// Cancel only after the mutation reaches the completion boundary, so database
+	// setup/commit cannot race a short caller deadline under race instrumentation.
+	waitCtx, cancel := context.WithCancel(adminCtx)
+	defer cancel()
+	completionStarted := false
 	ti.coordinator.complete = func(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.Greater(t, time.Until(deadline), time.Second, "completion gets a cleanup deadline independent of the caller")
-		go func() {
-			timer := time.NewTimer(75 * time.Millisecond)
-			defer timer.Stop()
-			<-timer.C
-			laterDone <- reconcile(context.Background(), scope)
-		}()
+		completionStarted = true
+		cancel()
+		require.ErrorIs(t, waitCtx.Err(), context.Canceled)
+		require.NoError(t, ctx.Err(), "completion context survives caller cancellation")
+		require.NoError(t, reconcile(ctx, scope), "later completion survives the caller's canceled wait")
 		return context.DeadlineExceeded
 	}
-
-	waitCtx, cancel := context.WithTimeout(adminCtx, 20*time.Millisecond)
-	defer cancel()
 	_, err := ti.service.DisableKey(waitCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeUnavailable)
-	select {
-	case err := <-laterDone:
-		require.NoError(t, err)
-	case <-time.After(5 * time.Second):
-		t.Fatal("later reconciliation did not complete")
-	}
+	require.True(t, completionStarted)
+	require.ErrorIs(t, waitCtx.Err(), context.Canceled)
 	require.Equal(t, []string{"admin_lock"}, readDisableCauses(t, ctx, ti, orgID, "chat"))
 	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 }

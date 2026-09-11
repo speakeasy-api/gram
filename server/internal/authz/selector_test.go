@@ -239,6 +239,27 @@ func TestResourceKindForScope_skillScopes(t *testing.T) {
 	require.Equal(t, ResourceKindSkill, ResourceKindForScope(ScopeSkillBlockedWrite))
 }
 
+func TestResourceKindForScope_agentScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer} {
+		require.Equal(t, ResourceKindAgent, ResourceKindForScope(scope))
+	}
+}
+
+func TestValidateSelector_agentRequiresAgentResourceKind(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateSelector(ScopeAgentRead, Selector{
+		SelectorKeyResourceKind: ResourceKindAgent,
+		SelectorKeyResourceID:   "0196cbd1-9328-74e7-b7bb-6e5357565573",
+	}))
+	require.ErrorContains(t, ValidateSelector(ScopeAgentWrite, Selector{
+		SelectorKeyResourceKind: ResourceKindProject,
+		SelectorKeyResourceID:   "0196cbd1-9328-74e7-b7bb-6e5357565573",
+	}), `requires resource_kind="agent"`)
+}
+
 func TestValidateSelector_skillRequiresSkillResourceKind(t *testing.T) {
 	t.Parallel()
 

@@ -415,7 +415,7 @@ func (s *ManagementService) state(ctx context.Context, authCtx *contextvalues.Au
 			repairAction = "contact_support"
 		}
 	case registrationComplete && readiness != nil:
-		actions := repairActions(readiness.State)
+		actions := setupRepairActions(setupCategoryFromReadiness(*readiness), readiness.State)
 		if len(actions) > 0 {
 			repairAction = actions[0].Kind
 		}

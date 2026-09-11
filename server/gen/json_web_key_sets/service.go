@@ -34,10 +34,17 @@ type Service interface {
 	ListSets(context.Context, *ListSetsPayload) (res *ListJSONWebKeySetsResult, err error)
 	// Get a JSON Web Key Set by ID. Requires org:read.
 	GetSet(context.Context, *GetSetPayload) (res *JSONWebKeySet, err error)
+	// Authoritative impact summary for deleting a JSON Web Key Set: the
+	// remote_session_clients still referencing it. deleteSet returns a conflict
+	// for exactly the sets this reports a non-zero client_count for. Requires
+	// org:read.
+	GetSetDeletePreflight(context.Context, *GetSetDeletePreflightPayload) (res *JSONWebKeySetDeletePreflight, err error)
 	// Soft-delete a JSON Web Key Set by ID, withdrawing every key still published
-	// in it in the same operation. Requires org:admin. Tokens signed with the
-	// set's keys stop verifying, so treat this as decommissioning the set's whole
-	// trust anchor rather than tidying up.
+	// in it in the same operation. Refused with a conflict while any live
+	// remote_session_client still references the set — detach it there first; see
+	// getDeletePreflight. Requires org:admin. Tokens signed with the set's keys
+	// stop verifying, so treat this as decommissioning the set's whole trust
+	// anchor rather than tidying up.
 	DeleteSet(context.Context, *DeleteSetPayload) (err error)
 	// List a JSON Web Key Set's published keys, newest first. Revoked keys drop
 	// out of the default listing; pass include_revoked to see the set's full
@@ -86,7 +93,7 @@ const ServiceName = "jsonWebKeySets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createSet", "updateSet", "listSets", "getSet", "deleteSet", "listKeys", "publishKey", "activateKey", "retireKey", "revokeKey"}
+var MethodNames = [11]string{"createSet", "updateSet", "listSets", "getSet", "getSetDeletePreflight", "deleteSet", "listKeys", "publishKey", "activateKey", "retireKey", "revokeKey"}
 
 // ActivateKeyPayload is the payload type of the jsonWebKeySets service
 // activateKey method.
@@ -112,6 +119,14 @@ type CreateSetPayload struct {
 // method.
 type DeleteSetPayload struct {
 	// The ID of the key set to delete.
+	ID           string
+	SessionToken *string
+}
+
+// GetSetDeletePreflightPayload is the payload type of the jsonWebKeySets
+// service getSetDeletePreflight method.
+type GetSetDeletePreflightPayload struct {
+	// The ID of the key set to summarize.
 	ID           string
 	SessionToken *string
 }
@@ -177,6 +192,17 @@ type JSONWebKeySet struct {
 	CreatedAt string
 	// When the key set was last updated.
 	UpdatedAt string
+}
+
+// JSONWebKeySetDeletePreflight is the result type of the jsonWebKeySets
+// service getSetDeletePreflight method.
+type JSONWebKeySetDeletePreflight struct {
+	// Number of live remote_session_clients referencing this set. Deleting the set
+	// is refused while this is non-zero.
+	ClientCount int
+	// The client_id values of the referencing remote_session_clients, oldest
+	// first. Truncated when client_count exceeds the listing cap.
+	ClientIds []string
 }
 
 // ListJSONWebKeySetsResult is the result type of the jsonWebKeySets service

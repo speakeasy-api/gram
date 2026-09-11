@@ -79,6 +79,18 @@ export function buildUpdateIssuerForm(
     ...(state.tunneledMcpServerId === undefined
       ? {}
       : { tunneledMcpServerId: state.tunneledMcpServerId.trim() }),
+    // Endpoints verbatim ("" clears a dropped URL); null seeded = keep stored.
+    userinfoEndpoint: fromDiscovery?.userinfoEndpoint,
+    introspectionEndpoint: fromDiscovery?.introspectionEndpoint,
+    introspectionEndpointAuthMethodsSupported:
+      fromDiscovery?.introspectionEndpointAuthMethodsSupported ?? undefined,
+    idTokenSigningAlgValuesSupported:
+      fromDiscovery?.idTokenSigningAlgValuesSupported ?? undefined,
+    claimsSupported: fromDiscovery?.claimsSupported ?? undefined,
+    backchannelLogoutSupported:
+      fromDiscovery?.backchannelLogoutSupported ?? undefined,
+    authorizationResponseIssParameterSupported:
+      fromDiscovery?.authorizationResponseIssParameterSupported ?? undefined,
   };
 }
 
@@ -149,5 +161,17 @@ export function buildCreateIssuerForm(
     opPolicyUri: fromDiscovery?.opPolicyUri || undefined,
     opTosUri: fromDiscovery?.opTosUri || undefined,
     tunneledMcpServerId: state.tunneledMcpServerId?.trim() || undefined,
+    // Discovery-only capabilities; omitted (NULL) unless discovery ran.
+    userinfoEndpoint: fromDiscovery?.userinfoEndpoint || undefined,
+    introspectionEndpoint: fromDiscovery?.introspectionEndpoint || undefined,
+    introspectionEndpointAuthMethodsSupported:
+      fromDiscovery?.introspectionEndpointAuthMethodsSupported ?? undefined,
+    idTokenSigningAlgValuesSupported:
+      fromDiscovery?.idTokenSigningAlgValuesSupported ?? undefined,
+    claimsSupported: fromDiscovery?.claimsSupported ?? undefined,
+    backchannelLogoutSupported:
+      fromDiscovery?.backchannelLogoutSupported ?? undefined,
+    authorizationResponseIssParameterSupported:
+      fromDiscovery?.authorizationResponseIssParameterSupported ?? undefined,
   };
 }

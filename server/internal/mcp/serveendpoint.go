@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -26,12 +29,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
@@ -45,6 +52,7 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	if err != nil {
 		return err
 	}
+	attributeMCPBandwidthServer(ctx, mcpServer, metaServer, slug)
 
 	if metaServer != nil {
 		// Meta-backed endpoints are served only on the canonical /mcp
@@ -64,6 +72,24 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	}
 
 	return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, slug, mcpRouteBase)
+}
+
+func attributeMCPBandwidthServer(ctx context.Context, mcpServer *mcpserversrepo.McpServer, metaServer *metamcprepo.MetaMcpServer, serverSlug string) {
+	if mcpServer != nil && mcpServer.Slug.Valid && mcpServer.Slug.String != "" {
+		serverSlug = mcpServer.Slug.String
+	}
+	switch {
+	case metaServer != nil:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeMeta, metaServer.ID.String(), serverSlug)
+	case mcpServer == nil:
+		return
+	case mcpServer.RemoteMcpServerID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeRemote, mcpServer.ID.String(), serverSlug)
+	case mcpServer.TunneledMcpServerID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeTunneled, mcpServer.ID.String(), serverSlug)
+	case mcpServer.ToolsetID.Valid:
+		metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeHosted, mcpServer.ID.String(), serverSlug)
+	}
 }
 
 // enforceCustomDomainLockdown 403s a public-host MCP request when the owning
@@ -93,11 +119,19 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 }
 
 // customDomainLockdownApplies reports whether a platform-origin request must
-// be kept away from runtime-like MCP surfaces. Requests already carrying a
-// custom-domain context passed through the ingress allowlist and are never
-// locked down here.
+// be kept away from runtime-like MCP surfaces. Once project ownership is known,
+// it also attributes an active bandwidth exchange; calls from non-runtime
+// surfaces are no-ops. Requests already carrying a custom-domain context passed
+// through the ingress allowlist and are never locked down here.
 func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (bool, error) {
-	if customdomains.FromContext(ctx) != nil {
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		// The private ingress has already established its own network admission,
+		// workload identity, organization, namespace, and Host authority. A custom
+		// domain's public-edge IP allowlist does not govern this separate surface.
+		return false, nil
+	}
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+		metering.AttributeMCPBandwidth(ctx, domainCtx.OrganizationID, projectID)
 		return false, nil
 	}
 
@@ -108,6 +142,7 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 	case err != nil:
 		return false, oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
 	}
+	metering.AttributeMCPBandwidth(ctx, project.OrganizationID, projectID)
 
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
 	switch {
@@ -140,6 +175,23 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
+	var prepared *preparedMCPRequest
+	if mcpServer.ToolsetID.Valid {
+		var handled bool
+		var err error
+		prepared, handled, err = s.prepareTerminatedMCPRequest(
+			w,
+			r,
+			logger,
+			1<<20,
+			mcpversions.SupportedHostedToolset(),
+			mcpmetrics.SurfaceHosting,
+		)
+		if err != nil || handled {
+			return err
+		}
+	}
+
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
@@ -147,7 +199,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// Gate on owner consent before dispatch so ungated callers are never
 	// challenged for a server that will not serve them.
 	if isTunneledPublic(mcpServer) {
-		if err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
+		if _, err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
 			return err
 		}
 		issuerGated = false
@@ -230,7 +282,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -307,7 +359,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		if entry.Resource == "" {
 			nullResources++
 		}
-		if strings.TrimRight(entry.Resource, "/") == want {
+		if grantRoutesToUpstream(entry.Resource, want, false) {
 			found++
 			match = entry.Token
 		}
@@ -341,16 +393,26 @@ func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issu
 		return ""
 	}
 	entry, ok := tokens[issuerID.UUID]
-	switch {
-	case !ok:
-		return ""
-	case entry.Resource == "":
-		return entry.Token
-	case want != "" && strings.TrimRight(entry.Resource, "/") == want:
-		return entry.Token
-	default:
+	if !ok || !grantRoutesToUpstream(entry.Resource, want, true) {
 		return ""
 	}
+	return entry.Token
+}
+
+// grantRoutesToUpstream is the per-grant half of credential routing, shared
+// by the runtime selectors above and the consent page so the two cannot
+// drift: a remote backend needs the grant to name its URL; a tunneled
+// backend also accepts an unqualified grant.
+func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
+	if tunneled && resource == "" {
+		return true
+	}
+	// Whole-string trim, the same normalization the grant's resource was
+	// recorded with (resolveUpstreamResource, resolveMetaMemberResource), so
+	// stored grants and live upstreams compare under one rule. An encoded
+	// slash is untouched and stays a distinct audience.
+	want := strings.TrimRight(upstream, "/")
+	return want != "" && strings.TrimRight(resource, "/") == want
 }
 
 // tunneledBackendIssuer yields the identity routeUpstreamToken routes a
@@ -396,21 +458,73 @@ func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, to
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
-// the /mcp and /x/mcp slug handlers and the .well-known routes: it scopes
-// the lookup to the request's customdomains.Context, loads the
-// mcp_endpoint by (slug, custom domain), then loads the linked mcp_server.
-// Disabled servers and missing rows both surface as 404 to avoid leaking
-// existence to unauthenticated callers. logger should already carry the
-// slug attribute.
+// the /mcp and /x/mcp slug handlers and the .well-known routes. Public and
+// custom-domain requests use the ordinary context-derived namespace. Private
+// requests re-load their live ingress authority and supply its pinned namespace,
+// organization, and surface explicitly to the centralized resolver.
 //
-// Returns CodeNotFound when no row matches. Callers that want to fall
-// back to a legacy lookup (e.g. /mcp's existing toolsets path) should
-// check for oops.CodeNotFound and proceed accordingly.
-//
-// Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
-// for the existing /mcp and /x/mcp call sites.
+// A private namespace miss or policy mismatch is always authoritative and never
+// permits legacy toolset fallback. Transient ingress lookup failures return 503;
+// stale, deleted, disabled, or mismatched authority remains externally 404 while
+// being warning-logged. logger should already carry the slug attribute.
 func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
-	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePrivateNetwork {
+		return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
+	}
+
+	started := time.Now()
+	record := func(result, reason string) {
+		s.networkIngressTelemetry.Record(ctx, networkingress.OperationResolution, result, reason, "unknown", time.Since(started))
+	}
+	authority, err := networkingress.LoadRequestAuthority(ctx, s.db)
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		record(networkingress.ResultError, networkingress.ReasonAuthorityUnavailable)
+		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "private network ingress authority is unavailable").LogError(ctx, logger)
+	}
+	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonAuthorityRejected)
+		logger.WarnContext(ctx, "private network ingress authority rejected", attr.SlogError(err))
+		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	namespaceKind, err := privateEndpointNamespace(authority.NamespaceKind)
+	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonNamespaceRejected)
+		logger.WarnContext(ctx, "private network ingress namespace rejected", attr.SlogError(err))
+		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	result, err := mcpendpoints.Resolve(ctx, s.db, logger, mcpendpoints.ResolutionInput{
+		Slug:                 slug,
+		NamespaceKind:        namespaceKind,
+		CustomDomainID:       authority.CustomDomainID,
+		ExpectedOrganization: authority.OrganizationID,
+		Surface:              networkaccess.SurfacePrivate,
+	})
+	if err != nil {
+		record(networkingress.ResultError, networkingress.ReasonDependencyFailed)
+		return nil, nil, nil, fmt.Errorf("resolve private MCP endpoint: %w", err)
+	}
+	if !result.Found {
+		record(networkingress.ResultDenied, networkingress.ReasonEndpointNotFound)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+	}
+	if !result.Allowed {
+		record(networkingress.ResultDenied, networkingress.ReasonPolicyDenied)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+	}
+	record(networkingress.ResultAllowed, networkingress.ReasonNone)
+	return result.Endpoint, result.Server, result.MetaServer, nil
+}
+
+func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
+	switch kind {
+	case networkingress.NamespacePlatform:
+		return mcpendpoints.NamespacePlatform, nil
+	case networkingress.NamespaceCustomDomain:
+		return mcpendpoints.NamespaceCustomDomain, nil
+	default:
+		return "", fmt.Errorf("unsupported private endpoint namespace %q", kind)
+	}
 }
 
 // LoadResolvedMcpEndpointBySlug resolves a slug to a *ResolvedMcpEndpoint
@@ -748,7 +862,8 @@ func (s *Service) prepareProxyBackendContext(
 // in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
 // which stamps the principal but does not load grants, so without this they
 // hit that failure (AGE-2672). PrepareContext runs after identity auth has
-// stamped the auth context, and is a no-op for callers RBAC never enforces.
+// stamped the auth context. Principal credentials repeat live admission even
+// when grants are already loaded or organization RBAC is disabled.
 //
 // Public servers bypass server-level RBAC by design; unknown visibility
 // fails closed.
@@ -763,6 +878,10 @@ func (s *Service) authorizeProxyBackendAccess(
 		var prepErr error
 		ctx, prepErr = s.authz.PrepareContext(ctx)
 		if prepErr != nil {
+			var shareable *oops.ShareableError
+			if errors.As(prepErr, &shareable) && shareable.Code != oops.CodeUnexpected {
+				return nil, fmt.Errorf("principal credential admission: %w", prepErr)
+			}
 			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 

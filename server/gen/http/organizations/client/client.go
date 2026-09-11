@@ -72,6 +72,14 @@ type Client struct {
 	// to the generateWorkOSAdminPortalLink endpoint.
 	GenerateWorkOSAdminPortalLinkDoer goahttp.Doer
 
+	// ListSetupTasks Doer is the HTTP client used to make requests to the
+	// listSetupTasks endpoint.
+	ListSetupTasksDoer goahttp.Doer
+
+	// UpdateSetupTask Doer is the HTTP client used to make requests to the
+	// updateSetupTask endpoint.
+	UpdateSetupTaskDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -107,6 +115,8 @@ func NewClient(
 		VerifyOnboardingHooksSetupDoer:         doer,
 		SendEnterpriseAdminOnboardingEmailDoer: doer,
 		GenerateWorkOSAdminPortalLinkDoer:      doer,
+		ListSetupTasksDoer:                     doer,
+		UpdateSetupTaskDoer:                    doer,
 		RestoreResponseBody:                    restoreBody,
 		scheme:                                 scheme,
 		host:                                   host,
@@ -447,6 +457,54 @@ func (c *Client) GenerateWorkOSAdminPortalLink() goa.Endpoint {
 		resp, err := c.GenerateWorkOSAdminPortalLinkDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "generateWorkOSAdminPortalLink", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSetupTasks returns an endpoint that makes HTTP requests to the
+// organizations service listSetupTasks server.
+func (c *Client) ListSetupTasks() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSetupTasksRequest(c.encoder)
+		decodeResponse = DecodeListSetupTasksResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSetupTasksRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSetupTasksDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "listSetupTasks", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSetupTask returns an endpoint that makes HTTP requests to the
+// organizations service updateSetupTask server.
+func (c *Client) UpdateSetupTask() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSetupTaskRequest(c.encoder)
+		decodeResponse = DecodeUpdateSetupTaskResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSetupTaskRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSetupTaskDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "updateSetupTask", err)
 		}
 		return decodeResponse(resp)
 	}

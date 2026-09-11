@@ -720,11 +720,6 @@ components:
         - raw_sha256
         - content
   securitySchemes:
-    admin_auth_header_Authorization:
-      type: apiKey
-      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
-      name: Authorization
-      in: header
     apikey_header_Authorization:
       type: apiKey
       description: key based auth.
@@ -760,6 +755,8 @@ tags:
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+  - name: agents
+    description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
   - name: assets
@@ -772,8 +769,6 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories
@@ -784,6 +779,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: dataExports
+    description: Manage project-scoped data export destinations and routes.
   - name: deployments
     description: Manages deployments of tools from upstream sources.
   - name: deviceIntegrations
@@ -828,12 +825,12 @@ tags:
     description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: networkIngress
+    description: Manage an organization's private network ingress desired state.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
-  - name: otelForwarding
-    description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
   - name: adminAssets
@@ -902,10 +899,12 @@ tags:
     description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
-  - name: userSessionIssuers
-    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
   - name: userSessionIssuersCimdClients
     description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+  - name: userSessionIssuers
+    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: organizationUserSessionIssuers
+    description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

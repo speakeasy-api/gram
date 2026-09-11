@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -68,6 +69,11 @@ type trialDemotionOpenRouter interface {
 }
 
 func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTrialArgs) error {
+	// A scheduled demotion has no request behind it, so mark the surface
+	// rather than leaving the audit row indistinguishable from one whose
+	// surface we failed to classify.
+	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceSystem))
+
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin trial demotion: %w", err)
@@ -123,7 +129,8 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	for _, keyType := range openrouter.AllKeyTypes {
 		change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, dbtx, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
 		if err != nil {
-			return fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
+			demotionErr := fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
+			return demotionErr
 		}
 		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
 		if change.KeyAccessChanged {

@@ -170,9 +170,29 @@ func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpd
 	{
 		err = json.Unmarshal([]byte(tunneledMcpUpdateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"public_request_burst\": 1,\n      \"public_request_rate_per_second\": 1,\n      \"resource_identifier\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.PublicRequestRatePerSecond != nil {
+			if *body.PublicRequestRatePerSecond < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.public_request_rate_per_second", *body.PublicRequestRatePerSecond, 0, true))
+			}
+		}
+		if body.PublicRequestRatePerSecond != nil {
+			if *body.PublicRequestRatePerSecond > 100000 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.public_request_rate_per_second", *body.PublicRequestRatePerSecond, 100000, false))
+			}
+		}
+		if body.PublicRequestBurst != nil {
+			if *body.PublicRequestBurst < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.public_request_burst", *body.PublicRequestBurst, 0, true))
+			}
+		}
+		if body.PublicRequestBurst != nil {
+			if *body.PublicRequestBurst > 1e+06 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.public_request_burst", *body.PublicRequestBurst, 1e+06, false))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -196,10 +216,12 @@ func BuildUpdateServerPayload(tunneledMcpUpdateServerBody string, tunneledMcpUpd
 		}
 	}
 	v := &tunneledmcp.UpdateServerPayload{
-		ID:                 body.ID,
-		Name:               body.Name,
-		AllowPublic:        body.AllowPublic,
-		ResourceIdentifier: body.ResourceIdentifier,
+		ID:                         body.ID,
+		Name:                       body.Name,
+		AllowPublic:                body.AllowPublic,
+		ResourceIdentifier:         body.ResourceIdentifier,
+		PublicRequestRatePerSecond: body.PublicRequestRatePerSecond,
+		PublicRequestBurst:         body.PublicRequestBurst,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

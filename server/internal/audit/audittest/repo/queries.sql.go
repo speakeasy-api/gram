@@ -12,6 +12,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const backdateAuditLog = `-- name: BackdateAuditLog :exec
+UPDATE audit_logs
+SET created_at = $1
+WHERE id = $2
+`
+
+type BackdateAuditLogParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test-only: stamps one audit row at a chosen instant so a test can build a
+// window over rows it wrote. Production never sets created_at — it defaults to
+// clock_timestamp() — but a test asserting on a time range needs the rows to
+// sit at known, distinct points rather than microseconds apart.
+func (q *Queries) BackdateAuditLog(ctx context.Context, arg BackdateAuditLogParams) error {
+	_, err := q.db.Exec(ctx, backdateAuditLog, arg.CreatedAt, arg.ID)
+	return err
+}
+
 const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT COUNT(*)
 FROM audit_logs

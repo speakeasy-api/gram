@@ -20,7 +20,7 @@ func (CodexLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
 func (CodexLog) InputContent(record *otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
 	switch record.GetEventName() {
 	case codexUserPromptEvent:
-		key, prompt := getOneLogAttr(record, "prompt")
+		key, prompt := getOneLogAttr(record, codexPromptKey)
 		if key == "" || prompt == "" || prompt == codexRedactedUserPrompt {
 			return "", nil, nil
 		}
@@ -48,12 +48,12 @@ func (CodexLog) SessionID(record *otelv1.InboundLogRecord) (string, string, erro
 }
 
 func (CodexLog) ExternalUserEmail(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.email")
+	key, value := getOneLogAttr(record, userEmailKey)
 	return key, value, nil
 }
 
 func (CodexLog) ExternalUserID(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, "user.account_id")
+	key, value := getOneLogAttr(record, vendorUserAccountIDKey)
 	return key, value, nil
 }
 

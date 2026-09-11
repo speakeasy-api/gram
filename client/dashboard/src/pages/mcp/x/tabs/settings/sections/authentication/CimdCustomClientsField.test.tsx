@@ -12,6 +12,11 @@ import { CimdCustomClientsField } from "./CimdCustomClientsField";
 
 const testState = vi.hoisted(() => ({
   hasScope: true,
+  presets: [] as {
+    clientIdMetadataUri: string;
+    displayName: string;
+    enabled: boolean;
+  }[],
   items: [] as { id: string; clientIdMetadataUri: string }[],
   isLoading: false,
   isError: false,
@@ -46,6 +51,14 @@ const testState = vi.hoisted(() => ({
 
 // Mirrors the real RequireScope contract: it disables (rather than hides)
 // component-level children and supports the render-function form.
+vi.mock("@gram/client/react-query/cimdClientPresets.js", () => ({
+  useCimdClientPresets: () => ({
+    data: { items: testState.presets },
+    isLoading: false,
+    isError: false,
+  }),
+}));
+
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
@@ -139,6 +152,7 @@ const issuer: UserSessionIssuer = {
   clientIdMetadataAdmissionMode: "presets",
   createdAt: new Date(0),
   id: "issuer-1",
+  organizationId: "org-1",
   projectId: "project-1",
   sessionDurationHours: 24,
   slug: "issuer",
@@ -154,6 +168,7 @@ beforeEach(() => {
   testState.createPending = false;
   testState.verifyPending = false;
   testState.items = [];
+  testState.presets = [];
 });
 
 afterEach(() => {
@@ -162,31 +177,41 @@ afterEach(() => {
 });
 
 describe("CimdCustomClientsField", () => {
+  // The add row lives behind the table footer's "Add new" button now, so
+  // every test that types a URL has to open it first.
+  function renderField() {
+    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    const addNew = screen.queryByRole("button", { name: "Add new" });
+    if (addNew && !(addNew as HTMLButtonElement).disabled) {
+      fireEvent.click(addNew);
+    }
+  }
+
   it("renders the configured URLs from the API", () => {
     testState.items = [
       { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
       { id: "row-2", clientIdMetadataUri: "https://b.example.com/client.json" },
     ];
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     expect(screen.getByText("https://a.example.com/client.json")).toBeDefined();
     expect(screen.getByText("https://b.example.com/client.json")).toBeDefined();
   });
 
   it("explains the empty state", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
-    expect(screen.getByText(/No custom client URLs/)).toBeDefined();
+    expect(screen.getByText(/No clients are allowed yet/)).toBeDefined();
   });
 
   it("adds a trimmed URL", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "  https://new.example.com/client.json  " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allow" }));
 
     expect(testState.createMutate).toHaveBeenCalledWith({
       request: {
@@ -206,12 +231,12 @@ describe("CimdCustomClientsField", () => {
       },
     ];
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "https://dupe.example.com/client.json" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allow" }));
 
     expect(testState.createMutate).not.toHaveBeenCalled();
     expect(
@@ -220,7 +245,7 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("surfaces a server-side syntax rejection inline", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     act(() => {
       testState.createOptions?.onError?.(
@@ -234,7 +259,7 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("clears the input and confirms on a successful add", async () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "https://new.example.com/client.json" },
@@ -245,27 +270,29 @@ describe("CimdCustomClientsField", () => {
     });
 
     expect(testState.toastSuccess).toHaveBeenCalledWith("Client URL allowed");
-    expect(screen.getByRole("textbox")).toHaveProperty("value", "");
+    // The add row closes on success: the URL is in the table now, and a
+    // still-open row invites a second submission of the same thing.
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("reports a failed list fetch instead of claiming there are no URLs", () => {
     testState.isError = true;
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     expect(
-      screen.getByText(/Could not load the custom client URLs/),
+      screen.getByText(/Could not load the clients allowed on this issuer/),
     ).toBeDefined();
-    expect(screen.queryByText(/No custom client URLs/)).toBeNull();
+    expect(screen.queryByText(/No clients are allowed yet/)).toBeNull();
   });
 
   it("drains the remaining pages while more are outstanding", () => {
     testState.hasNextPage = true;
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     expect(testState.fetchNextPage).toHaveBeenCalled();
-    expect(screen.getByText(/Loading custom client URLs/)).toBeDefined();
+    expect(screen.getByText("Loading…")).toBeDefined();
   });
 
   it("stops draining and reports an error when a later page fails", () => {
@@ -275,19 +302,19 @@ describe("CimdCustomClientsField", () => {
       { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
     ];
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     // hasNextPage stays true after a failure, so without the error guard this
     // retries forever and the list claims to be loading indefinitely.
     expect(testState.fetchNextPage).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Loading custom client URLs/)).toBeNull();
+    expect(screen.queryByText("Loading…")).toBeNull();
     expect(
-      screen.getByText(/Could not load the custom client URLs/),
+      screen.getByText(/Could not load the clients allowed on this issuer/),
     ).toBeDefined();
   });
 
   it("toasts a refused verify request rather than blaming the field", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     act(() => {
       testState.verifyOptions?.onError?.(
@@ -306,12 +333,12 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("verifies the typed URL without saving it", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "  https://new.example.com/client.json  " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Verify" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check it works" }));
 
     expect(testState.verifyMutate).toHaveBeenCalledWith({
       request: {
@@ -324,7 +351,7 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("names the client on a successful verify", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     act(() => {
       testState.verifyOptions?.onSuccess?.({
@@ -342,7 +369,7 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("reports a failed verify with the server's detail", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     act(() => {
       testState.verifyOptions?.onSuccess?.({
@@ -361,40 +388,36 @@ describe("CimdCustomClientsField", () => {
   });
 
   it("disables Verify until a URL is typed", () => {
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
-    expect(screen.getByRole("button", { name: "Verify" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(
+      screen.getByRole("button", { name: "Check it works" }),
+    ).toHaveProperty("disabled", true);
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "https://new.example.com/client.json" },
     });
 
-    expect(screen.getByRole("button", { name: "Verify" })).toHaveProperty(
-      "disabled",
-      false,
-    );
+    expect(
+      screen.getByRole("button", { name: "Check it works" }),
+    ).toHaveProperty("disabled", false);
   });
 
-  it("disables Verify without the project:write scope even with a URL", () => {
+  it("offers no way in without the project:write scope", () => {
     testState.hasScope = false;
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
-    fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: "https://new.example.com/client.json" },
-    });
-
-    expect(screen.getByRole("button", { name: "Verify" })).toHaveProperty(
+    // The add row never opens, so the footer button is the whole gate.
+    expect(screen.getByRole("button", { name: "Add new" })).toHaveProperty(
       "disabled",
       true,
     );
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("locks the whole add row while a verify is in flight", () => {
     testState.verifyPending = true;
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "https://new.example.com/client.json" },
@@ -402,7 +425,7 @@ describe("CimdCustomClientsField", () => {
 
     // Add must not be reachable mid-verify, or the two mutations race on the
     // same URL and the operator can save before the answer arrives.
-    expect(screen.getByRole("button", { name: "Add" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: "Allow" })).toHaveProperty(
       "disabled",
       true,
     );
@@ -414,7 +437,7 @@ describe("CimdCustomClientsField", () => {
 
   it("does not claim to check the document while only Add is in flight", () => {
     testState.createPending = true;
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     // Create performs no fetch, so promising a reachability check here would
     // be false assurance.
@@ -428,7 +451,7 @@ describe("CimdCustomClientsField", () => {
       { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
     ];
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -441,23 +464,51 @@ describe("CimdCustomClientsField", () => {
     });
   });
 
-  it("disables add and remove without the project:write scope", () => {
+  it("disables adding and removing without the project:write scope", () => {
     testState.hasScope = false;
     testState.items = [
       { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
     ];
 
-    render(<CimdCustomClientsField userSessionIssuer={issuer} />);
+    renderField();
 
-    expect(screen.getByRole("textbox")).toHaveProperty("disabled", true);
-    expect(screen.getByRole("button", { name: "Add" })).toHaveProperty(
+    expect(screen.getByRole("button", { name: "Add new" })).toHaveProperty(
       "disabled",
       true,
     );
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(
       screen.getByRole("button", {
         name: "Remove https://a.example.com/client.json",
       }),
     ).toHaveProperty("disabled", true);
+  });
+
+  it("lists the verified catalog above the project's own URLs", () => {
+    testState.presets = [
+      {
+        clientIdMetadataUri: "https://claude.ai/oauth/client-metadata",
+        displayName: "Anthropic (Claude)",
+        enabled: true,
+      },
+      {
+        clientIdMetadataUri: "https://retired.example.com/client.json",
+        displayName: "Retired Vendor",
+        enabled: false,
+      },
+    ];
+    testState.items = [
+      { id: "row-1", clientIdMetadataUri: "https://a.example.com/client.json" },
+    ];
+
+    renderField();
+
+    expect(screen.getByText("Anthropic (Claude)")).toBeDefined();
+    expect(screen.queryByText("Retired Vendor")).toBeNull();
+
+    // Source is the only thing separating the two now that they share a
+    // table, so both labels have to be present.
+    expect(screen.getByText("Speakeasy")).toBeDefined();
+    expect(screen.getByText("Custom")).toBeDefined();
   });
 });

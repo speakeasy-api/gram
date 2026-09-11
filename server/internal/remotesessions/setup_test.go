@@ -2,8 +2,12 @@ package remotesessions_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"log"
 	"net/url"
 	"os"
@@ -30,16 +34,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	jsonwebkeysetsrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -79,6 +87,7 @@ type testInstance struct {
 	envEntries     *environments.EnvironmentEntries
 	redisCache     *cache.RedisCacheAdapter
 	tunnelRoutes   *route.RouteTable
+	features       *productfeatures.Client
 }
 
 type testServiceConfig struct {
@@ -124,6 +133,8 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels = tunnelrouting.NewHTTPClient(tunnelRoutes, "test-forward-token", guardianPolicy, []string{"127.0.0.0/8"})
 	}
 
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
@@ -138,6 +149,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		audit.NewLogger(),
 		serverURL,
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
+		features,
 	)
 
 	return ctx, &testInstance{
@@ -147,6 +159,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		envEntries:     envEntries,
 		redisCache:     redisCache,
 		tunnelRoutes:   tunnelRoutes,
+		features:       features,
 	}
 }
 
@@ -262,6 +275,23 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+// seedOrganizationTierUserSessionIssuer creates an issuer shared by every
+// project in the caller's organization.
+func seedOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	id, err := testrepo.New(conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	return id
 }
 
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
@@ -458,6 +488,28 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return created.ID
 }
 
+// seedRemoteClientAtTier creates a remote client with explicit tenancy and
+// binds it to each supplied user-session issuer.
+func seedRemoteClientAtTier(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, organizationID pgtype.Text, remoteIssuerID uuid.UUID, clientID string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := repo.New(conn)
+	created, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              clientID,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+	for _, userSessionIssuerID := range userSessionIssuerIDs {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: created.ID,
+			UserSessionIssuerID:   userSessionIssuerID,
+		}))
+	}
+	return created.ID
+}
+
 // attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
 // so clients on that issuer derive serverURL as their resource.
 func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
@@ -597,4 +649,128 @@ func seedProjectRemoteClientNoOrg(t *testing.T, ctx context.Context, conn *pgxpo
 	})
 	require.NoError(t, err)
 	return created.ID
+}
+
+// enableCustomerManagedKeys grants the entitlement the JSON Web Key Set attach
+// and detach paths are gated on. Every other remote_session_client method is
+// ungated, so tests that do not touch a key set never need to call this.
+//
+// Takes an explicit organization id rather than reading it back out of the auth
+// context. The product-feature cache is Redis-backed and keyed by organization
+// id, while this package's harness hands every test the same seeded
+// organization, so a test asserting the *refusal* has to run against an
+// organization of its own or a parallel sibling's enable lands in the very
+// cache entry it reads.
+func (ti *testInstance) enableCustomerManagedKeys(t *testing.T, ctx context.Context, organizationID string) {
+	t.Helper()
+
+	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, organizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+}
+
+// activeOrganizationID returns the organization the context's principal acts in.
+func activeOrganizationID(t *testing.T, ctx context.Context) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	return authCtx.ActiveOrganizationID
+}
+
+// withOrganization rebinds the auth context to another organization and grants
+// it org:admin. RBAC then passes in that organization, which is what leaves the
+// entitlement as the only remaining thing that can refuse.
+func withOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	authCtx.ActiveOrganizationID = organizationID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	return withExactAccessGrants(t, ctx, conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID),
+	})
+}
+
+// createJsonWebKeySet builds a set through the shared testenv fixture, which
+// writes the credential / external key / set chain directly. Going through the
+// jsonwebkeysets service instead would mean minting a real key through a KMS
+// signing client, which is more machinery than these tests need: nothing here
+// reads the set's keys, only the reference to the set row.
+func createJsonWebKeySet(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, name string) uuid.UUID {
+	t.Helper()
+
+	setID, err := testrepo.New(conn).SeedJsonWebKeySetFixture(ctx, testrepo.SeedJsonWebKeySetFixtureParams{
+		OrganizationID: organizationID,
+		Name:           name,
+	})
+	require.NoError(t, err)
+
+	return setID
+}
+
+// createJsonWebKey plants a valid public key in a fixture set without involving
+// the external KMS signer. Its private half exists only long enough to derive
+// the public modulus and is never persisted.
+func createJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, setID uuid.UUID, state, kid string) uuid.UUID {
+	t.Helper()
+
+	set, err := jsonwebkeysetsrepo.New(conn).GetJsonWebKeySet(ctx, jsonwebkeysetsrepo.GetJsonWebKeySetParams{
+		ID:             setID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	keyMaterial, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	publicJWK, err := json.Marshal(map[string]string{
+		"alg": "RS256",
+		"e":   "AQAB",
+		"kid": kid,
+		"kty": "RSA",
+		"n":   base64.RawURLEncoding.EncodeToString(keyMaterial.N.Bytes()),
+		"use": "sig",
+	})
+	require.NoError(t, err)
+
+	key, err := jsonwebkeysetsrepo.New(conn).CreateJsonWebKey(ctx, jsonwebkeysetsrepo.CreateJsonWebKeyParams{
+		OrganizationID:  organizationID,
+		JsonWebKeySetID: setID,
+		ExternalKeyID:   set.ExternalKeyID,
+		State:           state,
+		Kid:             kid,
+		PublicJwk:       publicJWK,
+	})
+	require.NoError(t, err)
+
+	return key.ID
+}
+
+func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, keyID uuid.UUID) {
+	t.Helper()
+
+	_, err := jsonwebkeysetsrepo.New(conn).RevokeJsonWebKey(ctx, jsonwebkeysetsrepo.RevokeJsonWebKeyParams{
+		ID:             keyID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+}
+
+// forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum
+// does not yet accept. private_key_jwt arrives with AIM-156; until then the only
+// way to exercise the rules that guard it is to plant the value directly.
+func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
+	t.Helper()
+
+	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
+		TokenEndpointAuthMethod: conv.ToPGText(method),
+		ID:                      clientID,
+		ProjectID:               conv.ToNullUUID(projectID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
 }

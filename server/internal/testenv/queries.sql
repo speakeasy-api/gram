@@ -1,3 +1,42 @@
+-- name: InsertNetworkIngressFixture :exec
+INSERT INTO network_ingresses (
+    id,
+    organization_id,
+    provider,
+    hostname,
+    endpoint_namespace_kind,
+    enabled,
+    attestor_namespace,
+    attestor_service_account,
+    dns_name
+) VALUES (
+    @id,
+    @organization_id,
+    'test',
+    'private',
+    'platform',
+    true,
+    'test-ns',
+    'test-sa',
+    @dns_name
+);
+
+-- name: SetNetworkIngressEnabledFixture :exec
+UPDATE network_ingresses
+SET enabled = @enabled
+WHERE id = @id;
+
+-- name: SoftDeleteNetworkIngressFixture :exec
+UPDATE network_ingresses
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetNetworkIngressObservationFixture :exec
+UPDATE network_ingresses
+SET status = @status,
+    last_error = @last_error
+WHERE organization_id = @organization_id;
+
 -- name: InsertChatMessage :one
 INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
@@ -166,6 +205,10 @@ ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
 -- Test-only failure injection proving audit callers roll back when enqueueing fails.
 ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
 
+-- name: RejectAgentPolicyGrantAuditWritesFixture :exec
+-- Allow agent creation audit, then fail after the policy grant has been persisted.
+ALTER TABLE audit_logs ADD CONSTRAINT reject_agent_policy_grant_audit_fixture CHECK (action <> 'agent:policy_grant_create') NOT VALID;
+
 -- name: CountOutboxEntriesByEventType :one
 -- Counts enqueued webhook events of a given type. The event type lives in a
 -- Pub/Sub message attribute rather than a column now, because the outbox row
@@ -183,31 +226,6 @@ FROM risk_results
 WHERE project_id = @project_id
   AND risk_policy_id = @risk_policy_id
 ORDER BY id;
-
--- name: SeedOutboxEntry :one
--- Fixture insert for the deprecated outbox table. Producers write to
--- publish_outbox now, so the only thing that still needs to create one of
--- these rows is the legacy relay's own tests; this goes away with them.
-INSERT INTO outbox (organization_id, event_type, payload)
-VALUES (@organization_id, @event_type, @payload)
-RETURNING id;
-
--- name: GetOutboxEntry :one
--- Returns the ID of an outbox row; errors with pgx.ErrNoRows if deleted.
-SELECT id FROM outbox WHERE id = @id;
-
--- name: GetOutboxRelayState :one
--- Reads the relay tracking state for a single outbox row.
-SELECT
-    outbox_id,
-    processed_at,
-    noop,
-    dead_lettered,
-    svix_message_id,
-    attempts,
-    last_error
-FROM outbox_relays
-WHERE outbox_id = @outbox_id;
 
 -- name: GetPublishOutboxRow :one
 SELECT id, public_id, organization_id, topic, message, attributes,
@@ -397,6 +415,15 @@ SELECT organization_id, serial_number, email, hostname, first_seen_at, last_seen
 FROM device_agent_device_syncs
 WHERE organization_id = @organization_id
 ORDER BY serial_number ASC;
+
+-- name: ListDeviceAgentEnvironmentSyncsFixture :many
+-- Reads back non-laptop agent heartbeats so tests can assert the write path,
+-- and — the part that matters — assert that these rows land HERE rather than
+-- in device_agent_syncs, which the coverage join reads.
+SELECT organization_id, email, environment, hostname, first_seen_at, last_seen_at
+FROM device_agent_environment_syncs
+WHERE organization_id = @organization_id
+ORDER BY environment ASC, email ASC;
 
 -- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
@@ -796,6 +823,60 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
 VALUES (@project_id, @organization_id, @name, @sources, 1)
 RETURNING id;
 
+-- name: SeedLegacyScopeRiskPolicyFixture :one
+-- Test-only fixture: inserts a risk policy still carrying the legacy
+-- policy-level scope, for exercising the legacy-policy-scope fold.
+INSERT INTO risk_policies (
+    project_id,
+    organization_id,
+    name,
+    sources,
+    action,
+    message_types,
+    scope_include,
+    scope_exempt,
+    version
+) VALUES (
+    @project_id,
+    @organization_id,
+    @name,
+    @sources,
+    @action,
+    sqlc.narg('message_types')::text[],
+    sqlc.narg('scope_include')::text,
+    sqlc.narg('scope_exempt')::text,
+    1
+)
+RETURNING id;
+
+-- name: SetRiskPolicyAnalyzerConfigFixture :exec
+-- Test-only fixture: seeds analyzer_config on a risk policy, for exercising
+-- how the legacy-policy-scope fold rewrites it.
+UPDATE risk_policies
+SET analyzer_config = @analyzer_config::jsonb
+WHERE id = @id;
+
+-- name: LockRiskPolicyFixture :one
+-- Test-only fixture: takes a row lock on a risk policy so a test can hold it
+-- while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
+SELECT id
+FROM risk_policies
+WHERE id = @id
+FOR UPDATE;
+
+-- name: LockRiskPoliciesTableFixture :exec
+-- Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
+-- can verify that readers elsewhere fail fast under their configured timeouts
+-- instead of blocking indefinitely.
+LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE;
+
+-- name: ReadRiskPolicyScopeFixture :one
+-- Test-only fixture: reads back the columns the legacy-policy-scope fold
+-- rewrites, so a test can assert on the folded row.
+SELECT analyzer_config, message_types, scope_include, scope_exempt, version
+FROM risk_policies
+WHERE id = @id;
+
 -- name: SeedRiskResultFixture :one
 -- Test-only fixture: records one open finding against a chat message, with the
 -- primary span mirrored into the spans JSONB set.
@@ -839,3 +920,199 @@ WHERE id = @id
 -- Test-only fixture: associates an organization with a Stripe customer.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
+
+-- name: SetMCPServerNetworkAccessModeFixture :execrows
+-- Test-only fixture for building a pre-existing non-public row so update tests
+-- can prove omitted values fail closed while explicit public_only recovers.
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+-- Test-only equivalent for Meta MCP servers.
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+-- Writes an issuer that belongs to an organization and to no project. No
+-- production surface creates one: CreateUserSessionIssuer always writes a
+-- project_id. Tests need such a row to exercise the organization-tier arm of
+-- the issuer predicates, the delete path's sweep for owners in a project other
+-- than the caller's included.
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
+RETURNING id;
+
+-- name: SeedJsonWebKeySetFixture :one
+-- Builds the external credential / external key / key set chain a
+-- json_web_key_sets row needs, for tests outside the jsonwebkeysets package.
+-- Those tests reference the set row and never read its keys, so this skips the
+-- KMS mint that jsonwebkeysets.CreateSet performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+)
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+SELECT @organization_id, key.id, @name FROM key
+RETURNING id;
+
+-- name: SeedRemoteSessionClientForKeySetFixture :exec
+-- Plants an issuer and a client referencing a key set, for the jsonwebkeysets
+-- delete guard and its preflight. Those live in the jsonwebkeysets package,
+-- which cannot reach the remotesessions service to build the reference.
+WITH issuer AS (
+    INSERT INTO remote_session_issuers (organization_id, slug, issuer, authorization_endpoint, token_endpoint)
+    VALUES (@organization_id, @issuer_slug, 'https://idp.example.com', 'https://idp.example.com/authorize', 'https://idp.example.com/token')
+    RETURNING id
+)
+INSERT INTO remote_session_clients (organization_id, remote_session_issuer_id, client_id, json_web_key_set_id)
+SELECT @organization_id, issuer.id, @client_id, @json_web_key_set_id FROM issuer;
+
+-- name: ClearRemoteSessionClientKeySetFixture :execrows
+-- Releases a key set the way the detach endpoint does, so the delete guard can
+-- be shown to read the live reference rather than any reference.
+UPDATE remote_session_clients
+SET json_web_key_set_id = NULL
+WHERE json_web_key_set_id = @json_web_key_set_id;
+
+-- name: SoftDeleteRemoteSessionClientsForKeySetFixture :execrows
+-- Tombstones the clients referencing a key set, so the delete guard can be
+-- shown to ignore them.
+UPDATE remote_session_clients
+SET deleted_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND deleted IS FALSE;
+
+-- name: CreateOwnerlessAgentFixture :exec
+INSERT INTO agents (organization_id, owner_user_id, name)
+VALUES (@organization_id, NULL, @name);
+
+-- name: DeleteOrganizationUserRelationshipFixture :exec
+DELETE FROM organization_user_relationships
+WHERE organization_id = @organization_id AND user_id = @user_id;
+
+-- name: SetAgentOwnerFixture :exec
+-- TEST FIXTURE ONLY. Simulates ownership transfer before the transfer API lands.
+UPDATE agents
+SET owner_user_id = @owner_user_id
+WHERE organization_id = @organization_id AND id = @id;
+
+-- name: SetAgentSuspendedFixture :exec
+UPDATE agents SET suspended_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentRevokedFixture :exec
+UPDATE agents
+SET suspended_at = NULL, revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SoftDeleteAgentFixture :exec
+UPDATE agents SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentInvalidLifecycleFixture :exec
+UPDATE agents
+SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetAgentOwnerLatchTimestampOnlyFixture :exec
+UPDATE agents SET owner_reassignment_required_at = clock_timestamp() WHERE id = @id;
+
+-- name: SetAgentOwnerLatchReasonOnlyFixture :exec
+UPDATE agents SET owner_reassignment_reason = 'owner unavailable' WHERE id = @id;
+
+-- name: SetAgentOwnerLatchFixture :exec
+UPDATE agents
+SET owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: SetAgentRevokedAndOwnerLatchFixture :exec
+UPDATE agents
+SET suspended_at = NULL,
+    revoked_at = clock_timestamp(),
+    owner_reassignment_required_at = clock_timestamp(),
+    owner_reassignment_reason = 'owner unavailable'
+WHERE id = @id;
+
+-- name: ListAgentColumnNamesFixture :many
+SELECT column_name::text
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'agents'
+ORDER BY ordinal_position;
+
+-- name: CreateProjectFixture :one
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES (@id, @name, @slug, @organization_id)
+RETURNING id;
+
+-- name: CreateToolsetFixture :one
+INSERT INTO toolsets (id, organization_id, project_id, name, slug)
+VALUES (@id, @organization_id, @project_id, @name, @slug)
+RETURNING id;
+
+-- name: CreateRemoteMCPServerFixture :one
+INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
+VALUES (@id, @project_id, @toolset_id, @visibility)
+RETURNING id;
+
+-- name: CreateMCPGatewayFixture :one
+INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
+VALUES (@id, @organization_id, @project_id, @name)
+RETURNING id;
+
+-- name: InstallRemoteSessionIdentityWriteMarkerFixture :exec
+-- Marks every remote_sessions update that leaves updated_at and last_used_at alone, the
+-- identity restatement's signature, by appending to validation_reason.
+DO $install$
+BEGIN
+    CREATE FUNCTION mark_remote_session_identity_write() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    BEGIN
+        NEW.validation_reason := concat(OLD.validation_reason, 'identity-write;');
+        RETURN NEW;
+    END
+    $fn$;
+    CREATE TRIGGER mark_remote_session_identity_write
+        BEFORE UPDATE ON remote_sessions FOR EACH ROW
+        WHEN (OLD.updated_at = NEW.updated_at AND OLD.last_used_at IS NOT DISTINCT FROM NEW.last_used_at)
+        EXECUTE FUNCTION mark_remote_session_identity_write();
+END
+$install$;
+-- name: ListDemoSeedAgentsFixture :many
+SELECT id, owner_user_id
+FROM agents
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: InsertDemoSeedPrincipalGrantFixture :one
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, 'agent:read', '{"resource_kind":"*","resource_id":"*"}')
+RETURNING row_to_json(principal_grants)::text AS grant_json;
+
+-- name: GetDemoSeedPrincipalGrantFixture :one
+SELECT row_to_json(g)::text AS grant_json
+FROM principal_grants g
+WHERE organization_id = @organization_id
+  AND id = (@grant_json::jsonb->>'id')::uuid;
+
+-- name: CountDemoSeedAgentGrantsFixture :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
+
+-- name: CountDemoSeedAPIKeysFixture :one
+SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;

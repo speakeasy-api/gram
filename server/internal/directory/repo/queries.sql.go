@@ -553,6 +553,51 @@ func (q *Queries) ListActiveDirectoryGroupIDsByEmails(ctx context.Context, arg L
 	return items, nil
 }
 
+const listActiveDirectoryGroupMemberEmails = `-- name: ListActiveDirectoryGroupMemberEmails :many
+SELECT DISTINCT LOWER(du.email) AS email
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE dg.id = $1
+  AND du.organization_id = $2
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND TRIM(du.email) != ''
+ORDER BY email
+`
+
+type ListActiveDirectoryGroupMemberEmailsParams struct {
+	DirectoryGroupID uuid.UUID
+	OrganizationID   string
+}
+
+func (q *Queries) ListActiveDirectoryGroupMemberEmails(ctx context.Context, arg ListActiveDirectoryGroupMemberEmailsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryGroupMemberEmails, arg.DirectoryGroupID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		items = append(items, email)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveDirectoryGroups = `-- name: ListActiveDirectoryGroups :many
 SELECT
   dg.id,

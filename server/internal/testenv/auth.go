@@ -50,7 +50,8 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 	fakePylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 
-	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
+	// Auth fixtures do not send analytics; avoid starting unused SDK workers.
+	fakePosthog := posthog.New(t.Context(), logger, "", "", "")
 
 	resolver := identity.NewResolver(
 		logger,
@@ -64,6 +65,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
+		nil,
 		suffix,
 	)
 

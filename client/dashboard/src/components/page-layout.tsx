@@ -115,7 +115,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           direction="horizontal"
           justify="space-between"
           align="center"
-          className="mb-6"
+          className="mb-6 max-sm:flex-col max-sm:items-stretch max-sm:gap-4"
         >
           <Stack gap={2} className="min-w-0">
             {slots.title}
@@ -125,7 +125,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
             direction="horizontal"
             gap={2}
             align="center"
-            className="shrink-0"
+            className="shrink-0 max-sm:self-end"
           >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
@@ -237,7 +237,7 @@ export function EmptyState({
 
   const CTA: React.ReactNode = nonEmptyProjectCTA ?? (
     <Button asChild size="sm">
-      <Link to={routes.catalog.href()}>Browse catalog</Link>
+      <Link to={routes.mcp.add.catalog.href()}>Browse catalog</Link>
     </Button>
   );
 

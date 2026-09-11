@@ -285,25 +285,51 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	reader             *readmodel.Reader
-	inventory          *platformrepo.Queries
-	inventoryCursor    *inventoryCursorCodec
-	metadataVersionKey []byte
-	riskReads          *RiskReadService
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	reader              *readmodel.Reader
+	inventory           *platformrepo.Queries
+	inventoryCursor     *inventoryCursorCodec
+	metadataVersionKey  []byte
+	riskReads           *RiskReadService
+	dataExports         *DataExportReadService
+	dataExportMutations *dataExportMutationService
+	recentToolCalls     *RecentToolCallReadService
+	eventFeed           *EventFeedReadService
+	shadowInventory     *ShadowInventoryService
+	shadowDecisions     *ShadowDecisionService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:             logger.With(attr.SlogComponent("platformmcp")),
-		db:                 db,
-		reader:             readmodel.New(db),
-		inventory:          platformrepo.New(db),
-		inventoryCursor:    nil,
-		metadataVersionKey: nil,
-		riskReads:          nil,
+		logger:              logger.With(attr.SlogComponent("platformmcp")),
+		db:                  db,
+		reader:              readmodel.New(db),
+		inventory:           platformrepo.New(db),
+		inventoryCursor:     nil,
+		metadataVersionKey:  nil,
+		riskReads:           nil,
+		dataExports:         nil,
+		dataExportMutations: nil,
+		recentToolCalls:     nil,
+		eventFeed:           nil,
+		shadowInventory:     nil,
+		shadowDecisions:     nil,
 	}
+}
+
+func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
+	if r != nil && service != nil && service.valid() {
+		r.shadowDecisions = service
+	}
+	return r
+}
+
+func (r *PostgresReader) WithShadowInventory(service *ShadowInventoryService) *PostgresReader {
+	if r != nil && service != nil && service.valid() {
+		r.shadowInventory = service
+	}
+	return r
 }
 
 func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {

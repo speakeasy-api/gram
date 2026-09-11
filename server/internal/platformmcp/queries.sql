@@ -530,7 +530,8 @@ SELECT EXISTS (
      AND project.deleted IS FALSE
     JOIN user_session_issuers AS issuer
       ON issuer.id = server.user_session_issuer_id
-     AND issuer.project_id = project.id
+     AND (issuer.project_id = project.id
+          OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
      AND issuer.deleted IS FALSE
     JOIN mcp_endpoints AS endpoint
       ON endpoint.mcp_server_id = server.id
@@ -589,25 +590,16 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: IsPlatformMCPCatalogRegistrationTargetEligible :one
--- Registration is safe for a new organization: the selected project may be
--- empty. It remains unavailable for a project that already owns an active
--- toolset-backed MCP, because that legacy model must not be mixed with the
--- Platform registration lifecycle. Package admission retains its independent
--- organization-level cohort check.
+-- Registration may add a separately managed MCP server to any live project in
+-- the active organization. Existing toolset-backed servers can coexist because
+-- registration identity, component ownership, and active caps are enforced on
+-- the Platform registration and its own component rows.
 SELECT EXISTS (
     SELECT 1
     FROM projects AS target
     WHERE target.id = @project_id
       AND target.organization_id = @organization_id
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 );
 
 -- name: LockPlatformMCPOperationReceipt :exec
@@ -2426,7 +2418,11 @@ SELECT
     m.id AS mcp_server_id,
     m.project_id,
     COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COUNT(*) FILTER (
+      WHERE sibling.id IS NOT NULL
+        AND sibling.deleted IS FALSE
+    )::bigint AS toolset_mcp_count
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -2434,12 +2430,16 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
- AND toolset.project_id = m.project_id
- AND toolset.organization_id = @organization_id
- AND toolset.deleted IS FALSE
+  AND toolset.project_id = m.project_id
+  AND toolset.organization_id = @organization_id
+  AND toolset.deleted IS FALSE
+LEFT JOIN mcp_servers AS sibling
+  ON sibling.project_id = m.project_id
+  AND sibling.toolset_id = m.toolset_id
 WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
-  AND m.deleted IS FALSE;
+  AND m.deleted IS FALSE
+GROUP BY m.id, m.project_id, m.slug, toolset.slug;
 
 -- Session recall (list_my_sessions / continue_session). Every read below
 -- fuses tenancy and ownership into the row filter — organization, owner
@@ -2582,9 +2582,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2592,6 +2592,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND projects.organization_id = @organization_id
@@ -2622,9 +2640,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2632,6 +2650,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = @project_id
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = @organization_id
+) assignment_counts ON TRUE
 WHERE p.id = @plugin_id
   AND p.project_id = @project_id
   AND p.organization_id = @organization_id
@@ -2706,6 +2742,130 @@ WHERE sd.plugin_id = @plugin_id
 ORDER BY sk.name ASC
 LIMIT @result_limit;
 
+-- name: ListPlatformMCPPluginAssignments :many
+-- Reads the exact plugin's complete assignment set only after proving the
+-- plugin belongs to the caller's organization and project. The complete set is
+-- required for the optimistic-concurrency version; no principal leaves this
+-- internal query boundary.
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
+-- name: ListPlatformMCPPluginAssignmentOptions :many
+-- Resolves only the bounded assignment options this Platform response can use.
+-- selected_principal_urns is empty for the organization-wide chooser and set to
+-- one plugin's current assignments for the detail view.
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_roles.organization_id = @organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+), assignment_options AS (
+  SELECT
+    0::int AS kind_order,
+    ''::text AS sort_key,
+    'everyone'::text AS kind,
+    'Everyone'::text AS display_name,
+    NULL::bigint AS member_count,
+    '*'::text AS principal_urn
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR '*' = ANY(@selected_principal_urns::text[])
+  UNION ALL
+  SELECT
+    1::int,
+    active_roles.workos_slug,
+    'role'::text,
+    active_roles.workos_name,
+    COUNT(DISTINCT ora.user_id)::bigint,
+    ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text
+  FROM active_roles
+  LEFT JOIN organization_role_assignments ora
+    ON ora.organization_id = @organization_id
+    AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+    AND ora.user_id IS NOT NULL
+    AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY(@selected_principal_urns::text[])
+  GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
+  UNION ALL
+  SELECT
+    2::int,
+    dg.name,
+    'directory_group'::text,
+    dg.name,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_group:' || dg.id::text)::text
+  FROM directory_groups dg
+  LEFT JOIN directory_user_group_memberships m
+    ON m.directory_group_id = dg.id
+    AND m.deleted IS FALSE
+  LEFT JOIN directory_users du
+    ON du.id = m.directory_user_id
+    AND du.organization_id = dg.organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+  WHERE dg.organization_id = @organization_id
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY(@selected_principal_urns::text[])
+    )
+  GROUP BY dg.id, dg.name
+  UNION ALL
+  SELECT
+    3::int,
+    attribute.key || ':' || attribute.value,
+    'directory_attribute'::text,
+    attribute.key || ': ' || attribute.value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_attribute:' ||
+      translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+      translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_'))::text
+  FROM directory_users du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) attribute(key, value)
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
+    AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY(@selected_principal_urns::text[])
+    )
+  GROUP BY attribute.key, attribute.value
+)
+SELECT kind, display_name, member_count, principal_urn
+FROM assignment_options
+WHERE COALESCE(cardinality(@selected_principal_urns::text[]), 0) = 0
+   OR principal_urn = ANY(@selected_principal_urns::text[])
+ORDER BY kind_order, sort_key, principal_urn
+LIMIT @result_limit;
+
 -- name: ResolvePlatformMCPPluginTarget :many
 -- Matches one plugin by id, slug, or whole name over the project's entire
 -- plugin set. Matching in SQL rather than over a bounded page is what keeps a
@@ -2732,6 +2892,39 @@ WHERE p.project_id = @project_id
   )
 ORDER BY p.id ASC
 LIMIT 2;
+
+-- name: SearchPlatformMCPAccessMembers :many
+-- Count distinct members and return only a bounded page from the same snapshot.
+-- Active local role assignments follow the access roster's WorkOS identity join.
+WITH member_roles AS (
+  SELECT ora.workos_user_id,
+    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
+    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
+  FROM organization_role_assignments ora
+  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
+    AND r.organization_id = @organization_id AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
+  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
+    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
+  WHERE ora.organization_id = @organization_id AND ora.deleted_at IS NULL
+    AND COALESCE(r.id, g.id) IS NOT NULL
+  GROUP BY ora.workos_user_id
+), matching AS (
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  FROM organization_user_relationships rel
+  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
+  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
+  WHERE rel.organization_id = @organization_id AND rel.deleted IS FALSE
+    AND (@role_id::text = '' OR @role_id::text = ANY(m.role_ids))
+    AND (@query::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), @query::text) > 0
+      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), @query::text) > 0))
+)
+SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+FROM matching
+ORDER BY email, id
+LIMIT @result_limit;
 
 -- name: GetPlatformMCPPluginForUpdate :one
 -- Serializes an MCP distribution write against concurrent deletion of the

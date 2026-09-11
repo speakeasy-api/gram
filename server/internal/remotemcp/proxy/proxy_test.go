@@ -2740,6 +2740,50 @@ func TestProxy_Post_UpstreamResponseInterceptorRuns(t *testing.T) {
 	require.Equal(t, "gram-sid", rr.Header().Get("Mcp-Session-Id"), "interceptor header mutation must reach the client")
 }
 
+func TestProxy_Post_UpstreamResponseInterceptorRejectionWritesJSONRPCError(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Gram-Tunnel-Error", "tunnel-busy")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("internal transport detail"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.UpstreamResponseInterceptor = func(_ context.Context, _ *http.Response) error {
+		return &proxy.RejectError{
+			Code:    proxy.RejectCodeServerError,
+			Message: "The MCP server is temporarily unavailable. Please retry.",
+			Data: map[string]any{
+				"code":      "service_unavailable",
+				"retryable": true,
+			},
+		}
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	require.Empty(t, rr.Header().Get("X-Gram-Tunnel-Error"))
+	require.JSONEq(t, `{
+		"jsonrpc": "2.0",
+		"id": 1,
+		"error": {
+			"code": -32000,
+			"message": "The MCP server is temporarily unavailable. Please retry.",
+			"data": {
+				"code": "service_unavailable",
+				"retryable": true
+			}
+		}
+	}`, rr.Body.String())
+}
+
 // An interceptor error must abort the relay with nothing written to the
 // client, so callers can fail closed.
 func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing.T) {

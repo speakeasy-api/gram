@@ -1634,6 +1634,27 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
+func TestHooksBootstrapAvoidsWindowsChecksumFilenameEscaping(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksBootstrap(GenerateConfig{}))
+
+	// Git Bash receives LOCALAPPDATA with native backslashes. Normalizing the
+	// cache root avoids mixed paths for every downstream MSYS utility.
+	require.Contains(t, script, `printf '%s' "$LOCALAPPDATA" | tr '\\' '/'`)
+
+	// More importantly, never give checksum utilities the filename: GNU
+	// coreutils prefixes the digest with an escape marker when that filename
+	// contains a backslash. Stdin produces an unconditionally plain digest.
+	for _, command := range []string{
+		`sha256sum < "$archive"`,
+		`shasum -a 256 < "$archive"`,
+		`openssl dgst -sha256 < "$archive"`,
+	} {
+		require.Contains(t, script, command)
+	}
+	require.NotContains(t, script, `sha256sum "$archive"`)
+}
+
 func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -2009,6 +2030,356 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	}
 }
 
+type codexOTLPHTTPExporter struct {
+	Endpoint string            `toml:"endpoint"`
+	Protocol string            `toml:"protocol"`
+	Headers  map[string]string `toml:"headers"`
+}
+
+type codexOTELConfig struct {
+	Environment     string                           `toml:"environment"`
+	Exporter        map[string]codexOTLPHTTPExporter `toml:"exporter"`
+	TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+	MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+}
+
+func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai/",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+
+	exporters := map[string]map[string]codexOTLPHTTPExporter{
+		"logs":    decoded.OTel.Exporter,
+		"traces":  decoded.OTel.TraceExporter,
+		"metrics": decoded.OTel.MetricsExporter,
+	}
+	for signal, signalExporters := range exporters {
+		exporter, ok := signalExporters["otlp-http"]
+		require.True(t, ok, "%s exporter missing", signal)
+		require.Equal(t, "https://app.getgram.ai/otel/v1/"+signal, exporter.Endpoint)
+		require.Equal(t, "binary", exporter.Protocol)
+		require.Equal(t, map[string]string{
+			"Gram-Key":     cfg.HooksAPIKey,
+			"Gram-Project": cfg.ProjectSlug,
+		}, exporter.Headers)
+	}
+}
+
+func TestGenerateCodexInstallScriptAcceptsSecureOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for serverURL, endpoint := range map[string]string{
+		"https://app.getgram.ai/": "https://app.getgram.ai/otel/v1",
+		"http://localhost:8080":   "http://localhost:8080/otel/v1",
+	} {
+		script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.NoError(t, err, serverURL)
+		require.Contains(t, string(script), fmt.Sprintf("OTEL_ENDPOINT_BASE = %q", endpoint), serverURL)
+	}
+}
+
+func TestGenerateCodexInstallScriptRejectsUnsafeOTLPServerURLs(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{
+		"http://app.getgram.ai",
+		"https://user:password@app.getgram.ai",
+		"https://user:password%zz@app.getgram.ai",
+		"https://app.getgram.ai/#fragment",
+		"://malformed",
+		"https://%zz",
+		"https://:443",
+		"https://app.getgram.ai?tenant=example",
+		"https://app.getgram.ai?",
+	} {
+		_, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", GenerateConfig{
+			OrgName:     "Example Org",
+			ServerURL:   serverURL,
+			HooksAPIKey: "gram_test_hooks_key",
+			ProjectSlug: "default",
+		})
+		require.Error(t, err, serverURL)
+		require.Contains(t, err.Error(), "invalid Codex OTLP server URL", serverURL)
+		require.NotContains(t, err.Error(), "password")
+	}
+}
+
+func TestGenerateCodexInstallScriptPreservesMultilineOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel . exporter . "otlp-http"]
+endpoint = "https://collector.example.com/v1/logs"
+protocol = "json"
+headers = {
+  "Authorization" = "Bearer existing",
+}
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "otel . \"exporter\" = \"none\"\n")
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.NotContains(t, patched, "\n[otel]\n")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesRootDottedOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `targets = [
+  [1, 2],
+  [3]
+]
+otel . "exporter" = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Targets [][]int `toml:"targets"`
+		OTel    struct {
+			Environment     string                           `toml:"environment"`
+			Exporter        string                           `toml:"exporter"`
+			TraceExporter   map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, [][]int{{1, 2}, {3}}, decoded.Targets)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesOTELExporterAfterMultilineArray(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+resource_attributes = [
+  ["region", "us-east"],
+  ["service"]
+]
+exporter = "none"
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel struct {
+			Environment        string                           `toml:"environment"`
+			ResourceAttributes [][]string                       `toml:"resource_attributes"`
+			Exporter           string                           `toml:"exporter"`
+			TraceExporter      map[string]codexOTLPHTTPExporter `toml:"trace_exporter"`
+			MetricsExporter    map[string]codexOTLPHTTPExporter `toml:"metrics_exporter"`
+		} `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, [][]string{{"region", "us-east"}, {"service"}}, decoded.OTel.ResourceAttributes)
+	require.Equal(t, "none", decoded.OTel.Exporter)
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresOTELTextInMultilineString(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `hint = 'Use """ for Python strings'
+instructions = """
+otel = example
+[otel]
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		Hint         string          `toml:"hint"`
+		Instructions string          `toml:"instructions"`
+		OTel         codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, `Use """ for Python strings`, decoded.Hint)
+	require.Contains(t, decoded.Instructions, "otel = example")
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptIgnoresExporterTextInMultilineValue(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `[otel]
+environment = """
+exporter = "none"
+"""
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Contains(t, decoded.OTel.Environment, `exporter = "none"`)
+	require.Contains(t, decoded.OTel.Exporter, "otlp-http")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
+func TestGenerateCodexInstallScriptPreservesExistingOTELExporter(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := `["ot\u0065l"]
+exporter . "otlp-http" . endpoint = "https://collector.example.com/v1/logs"
+exporter . "otlp-http" . protocol = "json"
+exporter . "otlp-http" . headers = { Authorization = "Bearer existing" }
+`
+	home, _ := runCodexInstallScript(t, script, existing)
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	var decoded struct {
+		OTel codexOTELConfig `toml:"otel"`
+	}
+	_, err = toml.Decode(patched, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, "prod", decoded.OTel.Environment)
+	require.Equal(t, codexOTLPHTTPExporter{
+		Endpoint: "https://collector.example.com/v1/logs",
+		Protocol: "json",
+		Headers:  map[string]string{"Authorization": "Bearer existing"},
+	}, decoded.OTel.Exporter["otlp-http"])
+	require.NotContains(t, patched, "[otel.exporter.otlp-http]")
+	require.Contains(t, decoded.OTel.TraceExporter, "otlp-http")
+	require.Contains(t, decoded.OTel.MetricsExporter, "otlp-http")
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (for example, when a bootstrap argument changes) the installer must
@@ -2198,7 +2569,12 @@ func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
 func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	cfg := GenerateConfig{
+		OrgName:     "Example Org",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_test_hooks_key",
+		ProjectSlug: "default",
+	}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
@@ -2222,6 +2598,16 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	require.Equal(t, 1, countTableHeaderLines(patched, "[hooks.state]"))
 	require.Equal(t, 1, countTableHeaderLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace)))
 	require.Equal(t, 1, countTableKeyLines(patched, fmt.Sprintf(`[plugins."%s@%s"]`, plugin, marketplace), "enabled"))
+	for _, table := range []string{
+		"[otel.exporter.otlp-http]",
+		"[otel.trace_exporter.otlp-http]",
+		"[otel.metrics_exporter.otlp-http]",
+	} {
+		require.Equal(t, 1, countTableHeaderLines(patched, table))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "endpoint"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "protocol"))
+		require.Equal(t, 1, countTableKeyLines(patched, table, "headers"))
+	}
 
 	for _, approval := range approvals {
 		section := fmt.Sprintf(`[hooks.state."%s"]`, approval.StateKey)
@@ -2469,14 +2855,14 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
 
-	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
 	require.NoError(t, err)
 	// One entry per plugin plus the reserved shared entry.
 	require.Contains(t, first, "engineering-tools")
 	require.Contains(t, first, mcpSharedFingerprintKey)
 	require.True(t, strings.HasPrefix(first["engineering-tools"], "sha256:"))
 
-	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
@@ -2491,7 +2877,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
-	})
+	}, true)
 	require.NoError(t, err)
 
 	// Version and the injected API keys vary on every publish; the fingerprints
@@ -2503,7 +2889,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 		Version:     "1750000000",
 		APIKey:      "gram_live_realkey",
 		HooksAPIKey: "gram_live_realhookskey",
-	})
+	}, true)
 	require.NoError(t, err)
 
 	require.Equal(t, base, withNoise, "manifest version and API keys must not affect the fingerprints")
@@ -2520,7 +2906,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
 
-	base, err := MCPFingerprints(plugins, cfg)
+	base, err := MCPFingerprints(plugins, cfg, true)
 	require.NoError(t, err)
 
 	// Add a server to plugin A only.
@@ -2531,7 +2917,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		}},
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
-	changedFP, err := MCPFingerprints(changed, cfg)
+	changedFP, err := MCPFingerprints(changed, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
@@ -2600,11 +2986,11 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 		return []PluginInfo{a, b}
 	}
 
-	base, err := MCPFingerprints(makePlugins(""), cfg)
+	base, err := MCPFingerprints(makePlugins(""), cfg, true)
 	require.NoError(t, err)
-	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg)
+	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg, true)
 	require.NoError(t, err)
-	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg)
+	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")

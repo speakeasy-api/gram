@@ -195,11 +195,18 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 
 const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
 UPDATE openrouter_api_keys
-SET disabled = TRUE,
-    disable_causes = NULL,
-    updated_at = clock_timestamp()
+SET disable_causes = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN disable_causes
+      ELSE array_prepend('admin_lock', disable_causes)
+    END,
+    disabled = TRUE,
+    updated_at = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
 WHERE organization_id = $1
   AND key_type = $2
+  AND disable_causes IS NOT NULL
   AND deleted IS FALSE
 `
 
@@ -208,9 +215,8 @@ type DisableOpenRouterAPIKeyParams struct {
 	KeyType        string
 }
 
-// Locks the key down without deleting it, so a reinstated organization keeps
-// the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
-// refuses to hand the key to a completion.
+// Legacy query retained for compatibility. Generic disables are admin locks and
+// must preserve classified causes; unclassified rows remain untouched.
 func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRouterAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, disableOpenRouterAPIKey, arg.OrganizationID, arg.KeyType)
 	return err
@@ -456,17 +462,9 @@ func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg Re
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = CASE
-      WHEN $3::boolean AND disable_causes IS NULL THEN FALSE
-      ELSE disabled
-    END,
-    disable_causes = CASE
-      WHEN $3::boolean AND disable_causes IS NULL THEN '{}'::text[]
-      ELSE disable_causes
-    END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
-WHERE organization_id = $4
-  AND key_type = $5
+WHERE organization_id = $3
+  AND key_type = $4
   AND deleted IS FALSE
 RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
@@ -474,7 +472,6 @@ RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credi
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -483,7 +480,6 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
-		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)

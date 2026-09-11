@@ -90,6 +90,42 @@ WHERE r.project_id = @project_id
   AND r.target_key = ANY (@target_keys::text[])
   AND r.deleted IS FALSE;
 
+-- name: GetApprovalRequestTarget :one
+-- Exact projection for one inventory target. This carries the same latest
+-- decision and requester count as ListApprovalRequestTargets without scanning
+-- every review in the project for a get-by-reference call. The partial unique
+-- index on (project_id, target_kind, target_key) guarantees one live row.
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.evidence_changed_at
+  , r.created_at
+  , r.updated_at
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = @target_kind
+  AND r.target_key = @target_key
+  AND r.deleted IS FALSE;
+
 -- name: ListApprovalRequestTargets :many
 -- Every review in a project, any kind and any status, with the requester
 -- count the unified servers table displays. Bounded by the one-review-per-

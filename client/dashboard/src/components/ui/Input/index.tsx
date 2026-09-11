@@ -71,6 +71,16 @@ export function Input({
   const [validationError, setValidationError] = useState<string | null>(() =>
     runValidation(value ?? ""),
   );
+  const validationErrorId = React.useId();
+  const describedBy =
+    [
+      props["aria-describedby"],
+      validationError && validationError !== DEFAULT_ERROR
+        ? validationErrorId
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const [isFocused, setIsFocused] = useState(false);
 
   const handleFocus = (
@@ -146,6 +156,7 @@ export function Input({
       onFocus={handleFocus}
       onBlur={handleBlur}
       className={cn(fieldClassName, "max-h-60 min-h-16 resize-y py-1")}
+      aria-describedby={describedBy}
     />
   ) : (
     <input
@@ -164,6 +175,7 @@ export function Input({
         ...props.style,
       }}
       className={fieldClassName}
+      aria-describedby={describedBy}
     />
   );
 
@@ -174,6 +186,9 @@ export function Input({
       <div
         className={cn(
           "flex items-center gap-3 border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
+          // The field recolours its own border on focus, so the global focus
+          // outline would double it up.
+          "focus-within:outline-none",
           icon && "px-3",
           isFocused && "border-focus text-default",
           hasError && "border-destructive-default",
@@ -208,7 +223,10 @@ export function Input({
         )}
       </div>
       {validationError && validationError !== DEFAULT_ERROR && (
-        <span className="text-xs text-default-destructive">
+        <span
+          id={validationErrorId}
+          className="text-xs text-default-destructive"
+        >
           {validationError}
         </span>
       )}

@@ -26,6 +26,7 @@ import (
 type assembledCompletion struct {
 	MessageID    string
 	Model        string
+	Provider     string
 	Content      string
 	ToolCalls    []openrouter.ToolCall
 	FinishReason *string
@@ -76,6 +77,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 	out := assembledCompletion{
 		MessageID:    "",
 		Model:        "",
+		Provider:     "",
 		Content:      "",
 		ToolCalls:    nil,
 		FinishReason: nil,
@@ -111,6 +113,9 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 		}
 		if chunk.Model != "" {
 			out.Model = chunk.Model
+		}
+		if chunk.Provider != "" {
+			out.Provider = chunk.Provider
 		}
 		if chunk.Usage != nil {
 			out.Usage = *chunk.Usage
@@ -225,6 +230,7 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		Message:      &message,
 		MessageID:    assembled.MessageID,
 		Model:        assembled.Model,
+		Provider:     assembled.Provider,
 		Usage:        assembled.Usage,
 		FinishReason: assembled.FinishReason,
 		ToolCalls:    assembled.ToolCalls,

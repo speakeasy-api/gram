@@ -21,6 +21,14 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
   const verify = useVerifyRemoteMcpURLMutation();
   const [result, setResult] = useState<VerifyResult | null>(null);
   const resultUrlRef = useRef<string | null>(null);
+  // The URL on screen right now. A verify started for one URL must not answer
+  // for another: edit the field mid-flight and the reply would otherwise land
+  // as a verdict on what is now a different, unverified URL.
+  const latestUrlRef = useRef(url);
+  // Written during render, not in an effect: a reply can land between the
+  // keystroke and the effect, and would find the ref still holding the URL the
+  // user has already moved off.
+  latestUrlRef.current = url;
 
   useEffect(() => {
     if (resultUrlRef.current !== null && resultUrlRef.current !== url) {
@@ -41,11 +49,13 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
           },
         },
       });
+      if (latestUrlRef.current.trim() !== trimmed) return;
       setResult({ verified: response.verified, message: response.message });
       resultUrlRef.current = trimmed;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to verify URL";
+      if (latestUrlRef.current.trim() !== trimmed) return;
       setResult({ verified: false, message });
       resultUrlRef.current = trimmed;
     }

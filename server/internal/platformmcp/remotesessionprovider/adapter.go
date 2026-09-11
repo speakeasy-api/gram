@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -159,9 +160,19 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		Subject:             &subject,
 		McpSlug:             request.MCPSlug,
 		RouteBase:           "mcp",
+		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
+		Authority: networkingress.Authority{
+			Surface:          "",
+			BaseURL:          "",
+			OrganizationID:   "",
+			NetworkIngressID: uuid.Nil,
+			NamespaceKind:    "",
+			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)
@@ -228,6 +239,8 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 		authorization:         "Bearer " + token,
 		authorizationRejected: atomic.Bool{},
 		responseTooLarge:      atomic.Bool{},
+		responseReceived:      atomic.Bool{},
+		transientResponse:     atomic.Bool{},
 	}
 	httpClient.Transport = authRT
 
@@ -247,11 +260,11 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 		DisableStandaloneSSE: true,
 	}, nil)
 	if err != nil {
-		return normalizedProbeFailure(err, authRT)
+		return normalizedProbeFailure(err, authRT, probeStageInitialize)
 	}
 	defer func() { _ = session.Close() }()
 	if _, err := session.ListTools(ctx, nil); err != nil {
-		return normalizedProbeFailure(err, authRT)
+		return normalizedProbeFailure(err, authRT, probeStageToolsList)
 	}
 	return platformmcp.ReadinessReady, "tools_list_ok"
 }
@@ -280,17 +293,40 @@ func (a *Adapter) readinessResult(state platformmcp.ReadinessState, evidence str
 	}
 }
 
-func normalizedProbeFailure(err error, authRT *authorizationRoundTripper) (platformmcp.ReadinessState, string) {
+type probeStage string
+
+const (
+	probeStageInitialize probeStage = "initialize"
+	probeStageToolsList  probeStage = "tools_list"
+)
+
+func normalizedProbeFailure(err error, authRT *authorizationRoundTripper, stage probeStage) (platformmcp.ReadinessState, string) {
+	if authRT == nil {
+		return platformmcp.ReadinessUnsupported, "invalid_mcp_response"
+	}
 	if authRT.authorizationRejected.Load() {
 		return platformmcp.ReadinessUnauthorized, "provider_authorization_rejected"
 	}
+	if authRT.transientResponse.Load() {
+		return platformmcp.ReadinessDegraded, "probe_temporarily_unavailable"
+	}
 	if authRT.responseTooLarge.Load() || errors.Is(err, errResponseTooLarge) {
-		return platformmcp.ReadinessUnsupported, "response_too_large"
+		if stage == probeStageToolsList {
+			return platformmcp.ReadinessDegraded, "tools_list_response_too_large"
+		}
+		return platformmcp.ReadinessUnsupported, "initialize_response_too_large"
 	}
 	if errors.Is(err, errRedirectRejected) {
 		return platformmcp.ReadinessUnsupported, "redirect_rejected"
 	}
-	return platformmcp.ReadinessUnreachable, "probe_failed"
+	state, evidence := platformmcp.ClassifyReadinessProbeFailure(err)
+	if evidence == "probe_timeout" || evidence == "probe_unreachable" {
+		return state, evidence
+	}
+	if evidence == "probe_failed" && authRT.responseReceived.Load() && !platformmcp.IsReadinessMCPErrorResponse(err) {
+		return platformmcp.ReadinessUnsupported, "invalid_mcp_response"
+	}
+	return state, evidence
 }
 
 func validateSetupRequest(request platformmcp.ProviderSetupRequest) error {
@@ -329,6 +365,8 @@ type authorizationRoundTripper struct {
 	authorization         string
 	authorizationRejected atomic.Bool
 	responseTooLarge      atomic.Bool
+	responseReceived      atomic.Bool
+	transientResponse     atomic.Bool
 }
 
 func (rt *authorizationRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -338,8 +376,12 @@ func (rt *authorizationRoundTripper) RoundTrip(request *http.Request) (*http.Res
 	if err != nil {
 		return nil, fmt.Errorf("send reviewed provider request: %w", err)
 	}
+	rt.responseReceived.Store(true)
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 		rt.authorizationRejected.Store(true)
+	}
+	if transientProbeStatus(response.StatusCode) {
+		rt.transientResponse.Store(true)
 	}
 	if response.ContentLength > maxResponseBytes {
 		rt.responseTooLarge.Store(true)
@@ -348,6 +390,10 @@ func (rt *authorizationRoundTripper) RoundTrip(request *http.Request) (*http.Res
 	}
 	response.Body = &boundedReadCloser{ReadCloser: response.Body, remaining: maxResponseBytes, exceeded: &rt.responseTooLarge}
 	return response, nil
+}
+
+func transientProbeStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status == http.StatusInternalServerError || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
 }
 
 type boundedReadCloser struct {

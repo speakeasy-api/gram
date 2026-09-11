@@ -58,6 +58,14 @@ type DiagnosticsTelemetryReader interface {
 	GetOverviewSummary(ctx context.Context, arg telemetryrepo.GetOverviewSummaryParams) (*telemetryrepo.OverviewSummary, error)
 	GetActiveCounts(ctx context.Context, arg telemetryrepo.GetActiveCountsParams) (*telemetryrepo.ActiveCounts, error)
 	GetTopServers(ctx context.Context, arg telemetryrepo.GetTopServersParams) ([]telemetryrepo.TopServer, error)
+	GetSkillsSummary(ctx context.Context, arg telemetryrepo.GetSkillsSummaryParams) ([]telemetryrepo.SkillSummaryRow, error)
+	GetSkillBreakdown(ctx context.Context, arg telemetryrepo.GetSkillBreakdownParams) ([]telemetryrepo.SkillBreakdownRow, error)
+}
+
+// CanonicalIdentityGate keeps Platform MCP user grouping under the same rollout
+// switch as the dashboard telemetry APIs.
+type CanonicalIdentityGate interface {
+	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
 
 // DiagnosticsService answers the two overview-first questions: what is this
@@ -75,6 +83,7 @@ type DiagnosticsService struct {
 	reader          Reader
 	readiness       *ReadinessService
 	budget          OperationBudget
+	identityGate    CanonicalIdentityGate
 	now             func() time.Time
 }
 
@@ -95,8 +104,26 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		reader:         reader,
 		readiness:      readiness,
 		budget:         budget,
+		identityGate:   nil,
 		now:            time.Now,
 	}
+}
+
+// WithCanonicalIdentityGate applies the telemetry service's rollout-aware
+// identity folding to user attribution without making the ClickHouse repository
+// responsible for feature flags.
+func (s *DiagnosticsService) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *DiagnosticsService {
+	if s != nil {
+		s.identityGate = gate
+	}
+	return s
+}
+
+func (s *DiagnosticsService) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if s == nil || s.identityGate == nil {
+		return ""
+	}
+	return s.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
 // WithDrilldown attaches the bounded drill-down reads. Reference key material
@@ -290,6 +317,7 @@ type MCPOutcomeSummary struct {
 	ClientError  int64 `json:"client_error"`
 	ServerError  int64 `json:"server_error"`
 	Failed       int64 `json:"failed"`
+	Blocked      int64 `json:"blocked"`
 	Unknown      int64 `json:"unknown"`
 }
 
@@ -305,9 +333,12 @@ type MCPClientEvidence struct {
 // MCPDiagnosticsReadiness is the latest server-side readiness result, with the
 // freshness that decides whether it can exonerate anything.
 type MCPDiagnosticsReadiness struct {
-	State     string `json:"state"`
-	Freshness string `json:"freshness"`
-	CheckedAt string `json:"checked_at,omitempty"`
+	State         string         `json:"state"`
+	EvidenceCode  string         `json:"evidence_code,omitempty"`
+	SetupCategory SetupCategory  `json:"setup_category,omitempty"`
+	Freshness     string         `json:"freshness"`
+	CheckedAt     string         `json:"checked_at,omitempty"`
+	Actions       []RepairAction `json:"actions"`
 }
 
 type GetMCPDiagnosticsOutput struct {
@@ -362,20 +393,30 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	}
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
+	toolsetSlugs := nonEmpty(target.ToolsetSlug)
+	if target.ToolsetMcpCount > 1 {
+		toolsetSlugs = nil
+	}
 	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{input.ProjectID},
-		ToolsetSlugs:         nonEmpty(target.ToolsetSlug),
+		ToolsetSlugs:         toolsetSlugs,
 		MCPServerURLSuffixes: mcpURLSuffixes(target.McpSlug),
+		CanonicalIdentityOrg: "",
 		TimeStart:            start,
 		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read mcp outcome breakdown: %w", err)
 	}
 	organizationRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs: projectIDs,
-		TimeStart:      start,
-		TimeEnd:        end,
+		GramProjectIDs:       projectIDs,
+		ToolsetSlugs:         nil,
+		MCPServerURLSuffixes: nil,
+		CanonicalIdentityOrg: "",
+		TimeStart:            start,
+		TimeEnd:              end,
+		Limit:                0,
 	})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
@@ -388,6 +429,8 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	serverTotals := totalsFromRows(serverRows)
 	organizationTotals := totalsFromRows(organizationRows)
 	readiness, readinessFound := s.currentReadiness(ctx, principal, mcp)
+	normalized := diagnosticsReadiness(mcp, readiness, readinessFound)
+	setupCategory := setupCategoryFromReadiness(normalized)
 	clients, truncated := clientEvidence(serverRows)
 
 	attribution := attributeFault(readiness, readinessFound, serverTotals, organizationTotals)
@@ -402,9 +445,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		MCPID:     input.MCPID,
 		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window, serverTotals.Total > 0),
 		Readiness: MCPDiagnosticsReadiness{
-			State:     string(normalizedReadiness(readiness, readinessFound).State),
-			Freshness: readinessFreshness(readiness, readinessFound),
-			CheckedAt: readinessTimestamp(readiness.CheckedAt),
+			State:         string(normalized.State),
+			EvidenceCode:  normalized.EvidenceCode,
+			SetupCategory: setupCategory,
+			Freshness:     readinessFreshness(readiness, readinessFound),
+			CheckedAt:     readinessTimestamp(readiness.CheckedAt),
+			Actions:       setupRepairActions(setupCategory, normalized.State),
 		},
 		Outcomes:                    summaryFromTotals(serverTotals),
 		OrganizationOutcomes:        summaryFromTotals(organizationTotals),
@@ -473,6 +519,16 @@ func (s *DiagnosticsService) currentReadiness(ctx context.Context, principal Pri
 	return readiness, found
 }
 
+// diagnosticsReadiness preserves the inventory's unsupported state for MCPs
+// that are not managed by a Platform registration while normalizing missing
+// evidence for registered MCPs as a retryable gap.
+func diagnosticsReadiness(mcp MCP, readiness Readiness, found bool) Readiness {
+	if mcp.Registration == nil || mcp.Registration.ID == "" {
+		return Readiness{State: ReadinessUnsupported, EvidenceCode: "readiness_not_managed"}
+	}
+	return normalizedReadiness(readiness, found)
+}
+
 func totalsFromRows(rows []telemetryrepo.MCPOutcomeBreakdownRow) outcomeTotals {
 	var totals outcomeTotals
 	for _, row := range rows {
@@ -489,6 +545,8 @@ func addOutcome(totals *outcomeTotals, outcome string, count int64) {
 	switch outcome {
 	case telemetryrepo.MCPOutcomeSuccess:
 		totals.Success += count
+	case telemetryrepo.MCPOutcomeBlocked:
+		totals.Blocked += count
 	case telemetryrepo.MCPOutcomeUnauthorized:
 		totals.Unauthorized += count
 	case telemetryrepo.MCPOutcomeClientError:
@@ -523,7 +581,7 @@ func clientEvidence(rows []telemetryrepo.MCPOutcomeBreakdownRow) ([]MCPClientEvi
 		}
 		count := boundedCount(row.CallCount)
 		evidence.Calls += count
-		if row.Outcome != telemetryrepo.MCPOutcomeSuccess && row.Outcome != telemetryrepo.MCPOutcomeUnknown {
+		if row.Outcome != telemetryrepo.MCPOutcomeSuccess && row.Outcome != telemetryrepo.MCPOutcomeUnknown && row.Outcome != telemetryrepo.MCPOutcomeBlocked {
 			evidence.Failures += count
 		}
 	}

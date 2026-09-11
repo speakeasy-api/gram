@@ -461,6 +461,7 @@ func (s *Service) buildMemberDispatch(
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		wrapperRBACResourceID:    "",
 		wrapperIsPublic:          nil,
+		metaMcpServerID:          gate.metaServerID.String(),
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
@@ -508,6 +509,10 @@ func (s *Service) loadMemberToolset(
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	case err != nil:
 		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "load member toolset").LogError(ctx, logger)
+	}
+	// Matches loadToolset: a toolset with MCP turned off is not servable.
+	if !toolset.McpEnabled {
+		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
 	if !toolset.McpIsPublic && !gate.authenticated {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).

@@ -9,20 +9,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"go.opentelemetry.io/otel/metric"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // RiskFindingInserter writes a batch of findings to ClickHouse. *chrepo.Queries
@@ -55,27 +52,22 @@ type FindingCHWriter struct {
 	inserter      RiskFindingInserter
 	fingerprinter Fingerprinter
 
-	exclusionsCache *expirable.LRU[string, risk_analysis.ExclusionSet]
+	exclusions *FindingExclusionResolver
 
-	// db backs the per-batch Postgres reads: exclusion sets and chat message
-	// attribution. A read replica is fine — both are best-effort enrichment.
+	// db backs the per-batch chat-message attribution read. A read replica is
+	// fine because attribution is best-effort enrichment.
 	db repo.DBTX
 }
-
-const (
-	exclusionsSetCacheSize = 1000
-	exclusionsSetCacheTTL  = time.Minute
-)
 
 func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.MeterProvider, inserter RiskFindingInserter, fingerprinter Fingerprinter) *FindingCHWriter {
 	logger = logger.With(attr.SlogComponent("finding-ch-writer"))
 	return &FindingCHWriter{
-		logger:          logger,
-		metrics:         newMetrics(meterProvider, logger),
-		inserter:        inserter,
-		fingerprinter:   fingerprinter,
-		db:              db,
-		exclusionsCache: expirable.NewLRU[string, risk_analysis.ExclusionSet](exclusionsSetCacheSize, nil, exclusionsSetCacheTTL),
+		logger:        logger,
+		metrics:       newMetrics(meterProvider, logger),
+		inserter:      inserter,
+		fingerprinter: fingerprinter,
+		exclusions:    NewFindingExclusionResolver(db),
+		db:            db,
 	}
 }
 
@@ -208,7 +200,12 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			excludedReason = message.GetExcludedReason()
 			excludedDetail = message.GetExcludedDetail()
 		} else if !deadLetter {
-			if exID, ok := w.matchedExclusion(ctx, message); ok {
+			exID, excluded, err := w.exclusions.ExcludedBy(ctx, message)
+			if err != nil {
+				// ClickHouse storage remains fail-open: exclusions are
+				// best-effort enrichment on this internal analytics path.
+				logger.ErrorContext(ctx, "evaluate finding exclusions", attr.SlogError(err))
+			} else if excluded {
 				now := time.Now().UTC()
 				excludedAt = &now
 				exclusionID = &exID
@@ -470,74 +467,4 @@ func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding)
 		return nil
 	}
 	return ids
-}
-
-// matchedExclusion returns the id of the going-forward exclusion that
-// suppresses the finding, and whether one matched, reusing the same matching
-// logic (ExclusionSet) as the Postgres scan path.
-func (w *FindingCHWriter) matchedExclusion(ctx context.Context, message *riskv1.Finding) (uuid.UUID, bool) {
-	set := w.exclusionSetFor(ctx, message.GetProjectId(), message.GetRiskPolicyId())
-	if set.Empty() {
-		return uuid.UUID{}, false
-	}
-	// ExclusionSet.ExcludedBy matches on RuleID, Source and Match only; the
-	// remaining fields are set for completeness (exhaustruct) but unused.
-	return set.ExcludedBy(scanners.Finding{
-		RuleID:              message.GetRuleId(),
-		Description:         message.GetDescription(),
-		Match:               message.GetMatch(),
-		StartPos:            int(message.GetStartPos()),
-		EndPos:              int(message.GetEndPos()),
-		Tags:                message.GetTags(),
-		Source:              message.GetSource(),
-		Confidence:          message.GetConfidence(),
-		DeadLetterReason:    message.GetDeadLetterReason(),
-		McpLookupToolCallID: "",
-		SpanGroupKey:        "",
-		Field:               "",
-		Path:                "",
-	})
-}
-
-// exclusionSetFor resolves the enabled exclusions (the policy's own plus every
-// global one) that apply to a finding's policy, cached per (project, policy)
-// with a TTL so exclusion edits take effect within exclusionsSetCacheTTL
-// without a Postgres read per batch.
-//
-// Fail-open: an empty/unparseable project or policy id, or a lookup error,
-// returns an empty set (nothing excluded) rather than dropping findings. On a
-// lookup error the result is not cached, so the next batch retries.
-func (w *FindingCHWriter) exclusionSetFor(ctx context.Context, projectID, policyID string) risk_analysis.ExclusionSet {
-	if projectID == "" || policyID == "" {
-		return risk_analysis.ExclusionSet{}
-	}
-
-	key := projectID + "#" + policyID
-	if set, ok := w.exclusionsCache.Get(key); ok {
-		return set
-	}
-
-	projectUUID, err := uuid.Parse(projectID)
-	if err != nil {
-		w.logger.ErrorContext(ctx, "finding has invalid project id", attr.SlogError(err), attr.SlogValueString(projectID))
-		return risk_analysis.ExclusionSet{}
-	}
-	policyUUID, err := uuid.Parse(policyID)
-	if err != nil {
-		w.logger.ErrorContext(ctx, "finding has invalid risk policy id", attr.SlogError(err), attr.SlogValueString(policyID))
-		return risk_analysis.ExclusionSet{}
-	}
-
-	exclusions, err := repo.New(w.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
-		ProjectID:    projectUUID,
-		RiskPolicyID: uuid.NullUUID{UUID: policyUUID, Valid: true},
-	})
-	if err != nil {
-		w.logger.ErrorContext(ctx, "list exclusions for policy", attr.SlogError(err), attr.SlogValueString(policyID))
-		return risk_analysis.ExclusionSet{}
-	}
-
-	set := risk_analysis.NewExclusionSet(exclusions)
-	w.exclusionsCache.Add(key, set)
-	return set
 }

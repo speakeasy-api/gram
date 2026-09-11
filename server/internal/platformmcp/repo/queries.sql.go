@@ -2236,7 +2236,11 @@ SELECT
     m.id AS mcp_server_id,
     m.project_id,
     COALESCE(m.slug, '') AS mcp_slug,
-    COALESCE(toolset.slug, '') AS toolset_slug
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COUNT(*) FILTER (
+      WHERE sibling.id IS NOT NULL
+        AND sibling.deleted IS FALSE
+    )::bigint AS toolset_mcp_count
 FROM mcp_servers AS m
 JOIN projects AS project
   ON project.id = m.project_id
@@ -2244,12 +2248,16 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
- AND toolset.project_id = m.project_id
- AND toolset.organization_id = $1
- AND toolset.deleted IS FALSE
+  AND toolset.project_id = m.project_id
+  AND toolset.organization_id = $1
+  AND toolset.deleted IS FALSE
+LEFT JOIN mcp_servers AS sibling
+  ON sibling.project_id = m.project_id
+  AND sibling.toolset_id = m.toolset_id
 WHERE m.id = $2
   AND m.project_id = $3
   AND m.deleted IS FALSE
+GROUP BY m.id, m.project_id, m.slug, toolset.slug
 `
 
 type GetPlatformMCPDiagnosticsTargetParams struct {
@@ -2259,10 +2267,11 @@ type GetPlatformMCPDiagnosticsTargetParams struct {
 }
 
 type GetPlatformMCPDiagnosticsTargetRow struct {
-	McpServerID uuid.UUID
-	ProjectID   uuid.UUID
-	McpSlug     string
-	ToolsetSlug string
+	McpServerID     uuid.UUID
+	ProjectID       uuid.UUID
+	McpSlug         string
+	ToolsetSlug     string
+	ToolsetMcpCount int64
 }
 
 // Resolves one configured MCP to the identities its telemetry is recorded
@@ -2278,6 +2287,7 @@ func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPl
 		&i.ProjectID,
 		&i.McpSlug,
 		&i.ToolsetSlug,
+		&i.ToolsetMcpCount,
 	)
 	return i, err
 }
@@ -2775,9 +2785,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -2785,18 +2795,36 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-WHERE p.id = $1
-  AND p.project_id = $2
-  AND p.organization_id = $3
-  AND projects.organization_id = $3
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
+WHERE p.id = $3
+  AND p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
   AND projects.deleted IS FALSE
   AND p.deleted IS FALSE
 `
 
 type GetPlatformMCPPluginInventoryItemParams struct {
-	PluginID       uuid.UUID
 	ProjectID      uuid.UUID
 	OrganizationID string
+	PluginID       uuid.UUID
 }
 
 type GetPlatformMCPPluginInventoryItemRow struct {
@@ -2815,7 +2843,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 }
 
 func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg GetPlatformMCPPluginInventoryItemParams) (GetPlatformMCPPluginInventoryItemRow, error) {
-	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.ProjectID, arg.OrganizationID, arg.PluginID)
 	var i GetPlatformMCPPluginInventoryItemRow
 	err := row.Scan(
 		&i.ID,
@@ -3827,14 +3855,6 @@ SELECT EXISTS (
     WHERE target.id = $1
       AND target.organization_id = $2
       AND target.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS legacy_server
-          WHERE legacy_server.project_id = target.id
-            AND legacy_server.deleted IS FALSE
-            AND legacy_server.visibility <> 'disabled'
-            AND legacy_server.toolset_id IS NOT NULL
-      )
 )
 `
 
@@ -3843,11 +3863,10 @@ type IsPlatformMCPCatalogRegistrationTargetEligibleParams struct {
 	OrganizationID string
 }
 
-// Registration is safe for a new organization: the selected project may be
-// empty. It remains unavailable for a project that already owns an active
-// toolset-backed MCP, because that legacy model must not be mixed with the
-// Platform registration lifecycle. Package admission retains its independent
-// organization-level cohort check.
+// Registration may add a separately managed MCP server to any live project in
+// the active organization. Existing toolset-backed servers can coexist because
+// registration identity, component ownership, and active caps are enforced on
+// the Platform registration and its own component rows.
 func (q *Queries) IsPlatformMCPCatalogRegistrationTargetEligible(ctx context.Context, arg IsPlatformMCPCatalogRegistrationTargetEligibleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isPlatformMCPCatalogRegistrationTargetEligible, arg.ProjectID, arg.OrganizationID)
 	var exists bool
@@ -3865,7 +3884,8 @@ SELECT EXISTS (
      AND project.deleted IS FALSE
     JOIN user_session_issuers AS issuer
       ON issuer.id = server.user_session_issuer_id
-     AND issuer.project_id = project.id
+     AND (issuer.project_id = project.id
+          OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
      AND issuer.deleted IS FALSE
     JOIN mcp_endpoints AS endpoint
       ON endpoint.mcp_server_id = server.id
@@ -4394,6 +4414,196 @@ func (q *Queries) ListPlatformMCPInventoryDistributions(ctx context.Context, arg
 	return items, nil
 }
 
+const listPlatformMCPPluginAssignmentOptions = `-- name: ListPlatformMCPPluginAssignmentOptions :many
+WITH active_roles AS (
+  SELECT id, workos_slug, workos_name, 'global'::text AS role_kind
+  FROM global_roles
+  WHERE deleted IS FALSE
+    AND workos_deleted IS FALSE
+  UNION ALL
+  SELECT id, workos_slug, workos_name, 'organization'::text AS role_kind
+  FROM organization_roles
+  WHERE organization_roles.organization_id = $3
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+), assignment_options AS (
+  SELECT
+    0::int AS kind_order,
+    ''::text AS sort_key,
+    'everyone'::text AS kind,
+    'Everyone'::text AS display_name,
+    NULL::bigint AS member_count,
+    '*'::text AS principal_urn
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR '*' = ANY($1::text[])
+  UNION ALL
+  SELECT
+    1::int,
+    active_roles.workos_slug,
+    'role'::text,
+    active_roles.workos_name,
+    COUNT(DISTINCT ora.user_id)::bigint,
+    ('role:' || active_roles.role_kind || ':' || active_roles.id::text)::text
+  FROM active_roles
+  LEFT JOIN organization_role_assignments ora
+    ON ora.organization_id = $3
+    AND ora.role_urn = 'role:' || active_roles.role_kind || ':' || active_roles.id::text
+    AND ora.user_id IS NOT NULL
+    AND ora.deleted_at IS NULL
+  WHERE COALESCE(cardinality($1::text[]), 0) = 0
+     OR ('role:' || active_roles.role_kind || ':' || active_roles.id::text) = ANY($1::text[])
+  GROUP BY active_roles.id, active_roles.role_kind, active_roles.workos_slug, active_roles.workos_name
+  UNION ALL
+  SELECT
+    2::int,
+    dg.name,
+    'directory_group'::text,
+    dg.name,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_group:' || dg.id::text)::text
+  FROM directory_groups dg
+  LEFT JOIN directory_user_group_memberships m
+    ON m.directory_group_id = dg.id
+    AND m.deleted IS FALSE
+  LEFT JOIN directory_users du
+    ON du.id = m.directory_user_id
+    AND du.organization_id = dg.organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+  WHERE dg.organization_id = $3
+    AND dg.deleted IS FALSE
+    AND dg.workos_deleted IS FALSE
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_group:' || dg.id::text) = ANY($1::text[])
+    )
+  GROUP BY dg.id, dg.name
+  UNION ALL
+  SELECT
+    3::int,
+    attribute.key || ':' || attribute.value,
+    'directory_attribute'::text,
+    attribute.key || ': ' || attribute.value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint,
+    ('directory_attribute:' ||
+      translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+      translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_'))::text
+  FROM directory_users du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) attribute(key, value)
+  WHERE du.organization_id = $3
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.key IN ('cost_center_name', 'department_name', 'division_name', 'employee_type', 'job_title')
+    AND attribute.value IS NOT NULL
+    AND (
+      COALESCE(cardinality($1::text[]), 0) = 0
+      OR ('directory_attribute:' ||
+        translate(rtrim(replace(encode(convert_to(attribute.key, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_') || ':' ||
+        translate(rtrim(replace(encode(convert_to(attribute.value, 'UTF8'), 'base64'), E'\n', ''), '='), '+/', '-_')) = ANY($1::text[])
+    )
+  GROUP BY attribute.key, attribute.value
+)
+SELECT kind, display_name, member_count, principal_urn
+FROM assignment_options
+WHERE COALESCE(cardinality($1::text[]), 0) = 0
+   OR principal_urn = ANY($1::text[])
+ORDER BY kind_order, sort_key, principal_urn
+LIMIT $2
+`
+
+type ListPlatformMCPPluginAssignmentOptionsParams struct {
+	SelectedPrincipalUrns []string
+	ResultLimit           int32
+	OrganizationID        string
+}
+
+type ListPlatformMCPPluginAssignmentOptionsRow struct {
+	Kind         string
+	DisplayName  string
+	MemberCount  pgtype.Int8
+	PrincipalUrn string
+}
+
+// Resolves only the bounded assignment options this Platform response can use.
+// selected_principal_urns is empty for the organization-wide chooser and set to
+// one plugin's current assignments for the detail view.
+func (q *Queries) ListPlatformMCPPluginAssignmentOptions(ctx context.Context, arg ListPlatformMCPPluginAssignmentOptionsParams) ([]ListPlatformMCPPluginAssignmentOptionsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignmentOptions, arg.SelectedPrincipalUrns, arg.ResultLimit, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginAssignmentOptionsRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginAssignmentOptionsRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.DisplayName,
+			&i.MemberCount,
+			&i.PrincipalUrn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPPluginAssignments = `-- name: ListPlatformMCPPluginAssignments :many
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
+ORDER BY pa.principal_urn
+`
+
+type ListPlatformMCPPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Reads the exact plugin's complete assignment set only after proving the
+// plugin belongs to the caller's organization and project. The complete set is
+// required for the optimistic-concurrency version; no principal leaves this
+// internal query boundary.
+func (q *Queries) ListPlatformMCPPluginAssignments(ctx context.Context, arg ListPlatformMCPPluginAssignmentsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
 
 SELECT
@@ -4416,9 +4626,9 @@ SELECT
         AND sd.assistant_id IS NULL
         AND sd.revoked_at IS NULL
     ) AS skill_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
-    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    COALESCE(assignment_counts.wildcard_count, 0)::bigint AS wildcard_assignment_count,
+    COALESCE(assignment_counts.role_count, 0)::bigint AS role_assignment_count,
+    COALESCE(assignment_counts.user_count, 0)::bigint AS user_assignment_count,
     (gc.id IS NOT NULL)::boolean AS repository_connected,
     (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
 FROM plugins p
@@ -4426,6 +4636,24 @@ JOIN projects
   ON projects.id = p.project_id
 LEFT JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
+LEFT JOIN LATERAL (
+  SELECT
+    count(*) FILTER (WHERE pa.principal_urn = '*') AS wildcard_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'role:%') AS role_count,
+    count(*) FILTER (WHERE pa.principal_urn LIKE 'user:%') AS user_count
+  FROM plugin_assignments pa
+  JOIN plugins assignment_plugin
+    ON assignment_plugin.id = pa.plugin_id
+    AND assignment_plugin.organization_id = pa.organization_id
+    AND assignment_plugin.project_id = $1
+    AND assignment_plugin.deleted IS FALSE
+  JOIN projects assignment_project
+    ON assignment_project.id = assignment_plugin.project_id
+    AND assignment_project.organization_id = assignment_plugin.organization_id
+    AND assignment_project.deleted IS FALSE
+  WHERE pa.plugin_id = p.id
+    AND pa.organization_id = $2
+) assignment_counts ON TRUE
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND projects.organization_id = $2
@@ -6198,6 +6426,86 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const searchPlatformMCPAccessMembers = `-- name: SearchPlatformMCPAccessMembers :many
+WITH member_roles AS (
+  SELECT ora.workos_user_id,
+    array_agg(DISTINCT COALESCE(r.id::text, g.id::text)) AS role_ids,
+    array_agg(DISTINCT COALESCE(r.workos_name, g.workos_name)) AS role_names
+  FROM organization_role_assignments ora
+  LEFT JOIN organization_roles r ON ora.role_urn = 'role:organization:' || r.id::text
+    AND r.organization_id = $2 AND r.deleted IS FALSE AND r.workos_deleted IS FALSE
+  LEFT JOIN global_roles g ON ora.role_urn = 'role:global:' || g.id::text
+    AND g.deleted IS FALSE AND g.workos_deleted IS FALSE
+  WHERE ora.organization_id = $2 AND ora.deleted_at IS NULL
+    AND COALESCE(r.id, g.id) IS NOT NULL
+  GROUP BY ora.workos_user_id
+), matching AS (
+  SELECT DISTINCT u.id, u.display_name, u.email, COALESCE(m.role_ids, '{}'::text[])::text[] AS role_ids
+  FROM organization_user_relationships rel
+  JOIN users u ON u.id = rel.user_id AND u.deleted_at IS NULL
+  LEFT JOIN member_roles m ON m.workos_user_id = u.workos_id
+  WHERE rel.organization_id = $2 AND rel.deleted IS FALSE
+    AND ($3::text = '' OR $3::text = ANY(m.role_ids))
+    AND ($4::text = ''
+      OR strpos(lower(trim(regexp_replace(u.display_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR strpos(lower(trim(regexp_replace(u.email, '[[:space:]]+', ' ', 'g'))), $4::text) > 0
+      OR EXISTS (SELECT 1 FROM unnest(m.role_names) AS role_name
+        WHERE strpos(lower(trim(regexp_replace(role_name, '[[:space:]]+', ' ', 'g'))), $4::text) > 0))
+)
+SELECT id, display_name, email, role_ids, count(*) OVER ()::bigint AS total_matches
+FROM matching
+ORDER BY email, id
+LIMIT $1
+`
+
+type SearchPlatformMCPAccessMembersParams struct {
+	ResultLimit    int32
+	OrganizationID string
+	RoleID         string
+	Query          string
+}
+
+type SearchPlatformMCPAccessMembersRow struct {
+	ID           string
+	DisplayName  string
+	Email        string
+	RoleIds      []string
+	TotalMatches int64
+}
+
+// Count distinct members and return only a bounded page from the same snapshot.
+// Active local role assignments follow the access roster's WorkOS identity join.
+func (q *Queries) SearchPlatformMCPAccessMembers(ctx context.Context, arg SearchPlatformMCPAccessMembersParams) ([]SearchPlatformMCPAccessMembersRow, error) {
+	rows, err := q.db.Query(ctx, searchPlatformMCPAccessMembers,
+		arg.ResultLimit,
+		arg.OrganizationID,
+		arg.RoleID,
+		arg.Query,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPlatformMCPAccessMembersRow
+	for rows.Next() {
+		var i SearchPlatformMCPAccessMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Email,
+			&i.RoleIds,
+			&i.TotalMatches,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeletePendingPlatformMCPCatalogRegistration = `-- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec

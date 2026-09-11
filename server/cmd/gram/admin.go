@@ -216,10 +216,9 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name: "workos-api-key",
-			Usage: "WorkOS API key for user identity lookups and organization creation. " +
-				"Falls back to the same secret the server and worker read, so a deployment that already sets one does not need a second.",
-			EnvVars:  []string{"WORKOS_API_KEY", "GRAM_IDP_CLIENT_SECRET"},
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups and organization creation.",
+			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -232,6 +231,12 @@ func newAdminCommand() *cli.Command {
 			Name:     "idp-client-id",
 			Usage:    "OIDC client ID for the identity provider",
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "idp-client-secret",
+			Usage:    "Client secret for local admin API calls through dev-idp",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
 			Required: false,
 		},
 		// The server's own flag names and environment variables, so a deployment
@@ -365,7 +370,7 @@ func newAdminCommand() *cli.Command {
 				if err != nil {
 					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
 				} else {
-					defer o11y.LogDefer(ctx, logger, func() error { return chShutdown(ctx) })
+					defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
 					billingTelemetry = telemetryrepo.New(chDB)
 				}
 			}

@@ -23,8 +23,12 @@ type Server struct {
 	ListSyncedUsers      http.Handler
 	GetConfiguration     http.Handler
 	UpdateConfiguration  http.Handler
+	ListAiScanTargets    http.Handler
+	UpsertAiScanTarget   http.Handler
+	DeleteAiScanTarget   http.Handler
 	GetSessionMeta       http.Handler
 	ReportSessionMoved   http.Handler
+	ReportAIScan         http.Handler
 	CreateSessionHandoff http.Handler
 }
 
@@ -59,16 +63,24 @@ func New(
 			{"ListSyncedUsers", "GET", "/rpc/agent.listSyncedUsers"},
 			{"GetConfiguration", "GET", "/rpc/agent.getConfiguration"},
 			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
+			{"ListAiScanTargets", "GET", "/rpc/agent.listAiScanTargets"},
+			{"UpsertAiScanTarget", "POST", "/rpc/agent.upsertAiScanTarget"},
+			{"DeleteAiScanTarget", "POST", "/rpc/agent.deleteAiScanTarget"},
 			{"GetSessionMeta", "GET", "/rpc/agent.getSessionMeta"},
 			{"ReportSessionMoved", "POST", "/rpc/agent.reportSessionMoved"},
+			{"ReportAIScan", "POST", "/rpc/agent.reportAIScan"},
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
 		},
 		GetPlugins:           NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		ListSyncedUsers:      NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
 		GetConfiguration:     NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
 		UpdateConfiguration:  NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
+		ListAiScanTargets:    NewListAiScanTargetsHandler(e.ListAiScanTargets, mux, decoder, encoder, errhandler, formatter),
+		UpsertAiScanTarget:   NewUpsertAiScanTargetHandler(e.UpsertAiScanTarget, mux, decoder, encoder, errhandler, formatter),
+		DeleteAiScanTarget:   NewDeleteAiScanTargetHandler(e.DeleteAiScanTarget, mux, decoder, encoder, errhandler, formatter),
 		GetSessionMeta:       NewGetSessionMetaHandler(e.GetSessionMeta, mux, decoder, encoder, errhandler, formatter),
 		ReportSessionMoved:   NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
+		ReportAIScan:         NewReportAIScanHandler(e.ReportAIScan, mux, decoder, encoder, errhandler, formatter),
 		CreateSessionHandoff: NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -82,8 +94,12 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSyncedUsers = m(s.ListSyncedUsers)
 	s.GetConfiguration = m(s.GetConfiguration)
 	s.UpdateConfiguration = m(s.UpdateConfiguration)
+	s.ListAiScanTargets = m(s.ListAiScanTargets)
+	s.UpsertAiScanTarget = m(s.UpsertAiScanTarget)
+	s.DeleteAiScanTarget = m(s.DeleteAiScanTarget)
 	s.GetSessionMeta = m(s.GetSessionMeta)
 	s.ReportSessionMoved = m(s.ReportSessionMoved)
+	s.ReportAIScan = m(s.ReportAIScan)
 	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
 }
 
@@ -96,8 +112,12 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSyncedUsersHandler(mux, h.ListSyncedUsers)
 	MountGetConfigurationHandler(mux, h.GetConfiguration)
 	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
+	MountListAiScanTargetsHandler(mux, h.ListAiScanTargets)
+	MountUpsertAiScanTargetHandler(mux, h.UpsertAiScanTarget)
+	MountDeleteAiScanTargetHandler(mux, h.DeleteAiScanTarget)
 	MountGetSessionMetaHandler(mux, h.GetSessionMeta)
 	MountReportSessionMovedHandler(mux, h.ReportSessionMoved)
+	MountReportAIScanHandler(mux, h.ReportAIScan)
 	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
 }
 
@@ -318,6 +338,165 @@ func NewUpdateConfigurationHandler(
 	})
 }
 
+// MountListAiScanTargetsHandler configures the mux to serve the "agent"
+// service "listAiScanTargets" endpoint.
+func MountListAiScanTargetsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agent.listAiScanTargets", f)
+}
+
+// NewListAiScanTargetsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "listAiScanTargets" endpoint.
+func NewListAiScanTargetsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAiScanTargetsRequest(mux, decoder)
+		encodeResponse = EncodeListAiScanTargetsResponse(encoder)
+		encodeError    = EncodeListAiScanTargetsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAiScanTargets")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpsertAiScanTargetHandler configures the mux to serve the "agent"
+// service "upsertAiScanTarget" endpoint.
+func MountUpsertAiScanTargetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.upsertAiScanTarget", f)
+}
+
+// NewUpsertAiScanTargetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "upsertAiScanTarget" endpoint.
+func NewUpsertAiScanTargetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpsertAiScanTargetRequest(mux, decoder)
+		encodeResponse = EncodeUpsertAiScanTargetResponse(encoder)
+		encodeError    = EncodeUpsertAiScanTargetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "upsertAiScanTarget")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteAiScanTargetHandler configures the mux to serve the "agent"
+// service "deleteAiScanTarget" endpoint.
+func MountDeleteAiScanTargetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.deleteAiScanTarget", f)
+}
+
+// NewDeleteAiScanTargetHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "deleteAiScanTarget" endpoint.
+func NewDeleteAiScanTargetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteAiScanTargetRequest(mux, decoder)
+		encodeResponse = EncodeDeleteAiScanTargetResponse(encoder)
+		encodeError    = EncodeDeleteAiScanTargetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteAiScanTarget")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetSessionMetaHandler configures the mux to serve the "agent" service
 // "getSessionMeta" endpoint.
 func MountGetSessionMetaHandler(mux goahttp.Muxer, h http.Handler) {
@@ -401,6 +580,59 @@ func NewReportSessionMovedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "reportSessionMoved")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReportAIScanHandler configures the mux to serve the "agent" service
+// "reportAIScan" endpoint.
+func MountReportAIScanHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.reportAIScan", f)
+}
+
+// NewReportAIScanHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agent" service "reportAIScan" endpoint.
+func NewReportAIScanHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReportAIScanRequest(mux, decoder)
+		encodeResponse = EncodeReportAIScanResponse(encoder)
+		encodeError    = EncodeReportAIScanError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "reportAIScan")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

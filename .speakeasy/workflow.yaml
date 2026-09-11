@@ -5,14 +5,29 @@ sources:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
-            - location: overlays/goa.yaml
+            - location: overlays/goa-common.yaml
+            - location: overlays/dashboard-sdk.yaml
+        transformations:
+            - removeUnused: true
         output: .speakeasy/out.openapi.yaml
+    Gram-Admin:
+        inputs:
+            - location: server/gen/http/openapi3.yaml
+        overlays:
+            - location: overlays/goa-common.yaml
+            - location: overlays/admin-sdk.yaml
+        transformations:
+            - removeUnused: true
+        output: .speakeasy/out.admin.openapi.yaml
     Gram-Public:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
-            - location: overlays/goa.yaml
+            - location: overlays/goa-common.yaml
+            - location: overlays/dashboard-sdk.yaml
             - location: overlays/public-sdk.yaml
+        transformations:
+            - removeUnused: true
         output: .speakeasy/openapi-public.yaml
         registry:
             location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
@@ -20,7 +35,8 @@ sources:
         inputs:
             - location: server/gen/http/openapi3.yaml
         overlays:
-            - location: overlays/goa.yaml
+            - location: overlays/goa-common.yaml
+            - location: overlays/dashboard-sdk.yaml
         transformations:
             - filterOperations:
                 operations: ingestHookEvent,uploadSkillContent,skillFeedback
@@ -31,6 +47,10 @@ targets:
         target: typescript
         source: Gram-Internal
         output: client/dashboard/src/sdk
+    gram-admin:
+        target: typescript
+        source: Gram-Admin
+        output: client/admin/src/sdk
     hooks-go:
         target: go
         source: Hooks-Ingest

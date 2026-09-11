@@ -11,7 +11,8 @@ INSERT INTO mcp_servers (
     toolset_id,
     unproxied_mcp_server_id,
     tool_variations_group_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     @id,
@@ -25,7 +26,8 @@ VALUES (
     @toolset_id,
     @unproxied_mcp_server_id,
     @tool_variations_group_id,
-    @visibility
+    @visibility,
+    sqlc.narg('network_access_mode')
 )
 RETURNING *;
 
@@ -33,6 +35,14 @@ RETURNING *;
 SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetMCPServerByToolsetID :one
+-- Deterministic pick until a partial unique index enforces one wrapper per toolset.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
+ORDER BY created_at, id
+LIMIT 1;
 
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
@@ -125,7 +135,7 @@ WHERE p.organization_id = @organization_id
 ORDER BY m.created_at DESC;
 
 -- name: ListMCPServersByProjectIDLimited :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = @project_id
   AND deleted IS FALSE
@@ -181,6 +191,10 @@ SET
     unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
+    network_access_mode = CASE
+        WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -380,13 +394,14 @@ WITH resolved AS (
     FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
     JOIN user_session_issuers AS usi
       ON usi.id = input.user_session_issuer_id
-     AND usi.project_id = @project_id::uuid
+     AND (usi.project_id = @project_id::uuid
+          OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     LEFT JOIN remote_session_client_user_session_issuers AS link
            ON link.user_session_issuer_id = input.user_session_issuer_id
     LEFT JOIN remote_session_clients AS c
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
-          AND (c.project_id = usi.project_id
+          AND (c.project_id = @project_id::uuid
                OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
     LEFT JOIN remote_session_issuers AS i
            ON i.id = c.remote_session_issuer_id

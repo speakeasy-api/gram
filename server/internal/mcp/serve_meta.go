@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -34,9 +33,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // metaGateContext carries the per-request state the meta MCP tools need:
@@ -45,6 +44,7 @@ import (
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
 	projectID       uuid.UUID
+	metaServerID    uuid.UUID
 	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
@@ -70,9 +70,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	metaServer *metamcprepo.MetaMcpServer,
 ) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return r.Body.Close()
-	})
 
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
@@ -81,6 +78,47 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// is parsed it is re-stamped with the revision in effect.
 	supportedMeta := mcpversions.SupportedMetaServer()
 	w.Header().Set(mcpversions.HTTPHeader, supportedMeta[len(supportedMeta)-1])
+
+	prepared := prepareMCPRequest(w, r, metamcp.MaxBodyBytes, supportedMeta)
+
+	req := prepared.request
+	resolution := prepared.protocolVersion
+	if req.Method == "initialize" {
+		// A conforming initialize declares nothing, so Resolve lands on the
+		// default; the negotiated answer is what actually governs the
+		// exchange (the write-back Resolution sanctions).
+		params, _, _ := parseInitializeParams(req.Params)
+		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+	}
+	// Both halves the error wrapper needs, published together: an error
+	// escaping this handler has to echo the id the client sent and be encoded
+	// on the revision governing the request. Publishing only one leaves the
+	// wrapper answering with a modern wire code under a null id.
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = resolution.InEffect
+		if req.ID.IsSet() {
+			rpcCtx.ID = req.ID
+		}
+	}
+
+	if prepared.readyForProtocolVersionValidation() {
+		validationErr := validateMetaDeclaredProtocolVersion(&req, r.Header.Get(mcpversions.HTTPHeader))
+		if validationErr != nil {
+			w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+		}
+		handled, err := s.handleProtocolVersionValidation(
+			ctx,
+			logger,
+			w,
+			&req,
+			resolution,
+			mcpmetrics.SurfaceMeta,
+			validationErr,
+		)
+		if err != nil || handled {
+			return err
+		}
+	}
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateToolSelection *toolfilter.SessionSelection
@@ -98,44 +136,17 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		gateTokens = tokens
 		gateToolSelection = toolSelection
 	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, metamcp.MaxBodyBytes)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	var maxBytesErr *http.MaxBytesError
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case errors.As(err, &maxBytesErr):
-		return oops.E(oops.CodeRequestTooLarge, err, "meta mcp request body exceeds 1 MiB").LogError(ctx, logger)
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
-
-	if bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, logger)
-	}
-	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, logger)
-	}
-
-	resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), supportedMeta)
-	if req.Method == "initialize" {
-		// A conforming initialize declares nothing, so Resolve lands on the
-		// default; the negotiated answer is what actually governs the
-		// exchange (the write-back Resolution sanctions).
-		params, _, _ := parseInitializeParams(req.Params)
-		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
 
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
+		metaServerID:   metaServer.ID,
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
 		toolSelection:  gateToolSelection,
@@ -179,16 +190,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, logger)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, logger)
-		}
-		return nil
+		return writeMCPError(ctx, logger, w, req.ID, resolution.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -216,15 +218,6 @@ func (s *Service) handleMetaMCPRequest(
 		defer func() {
 			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
 		}()
-	}
-
-	if err := validateMetaDeclaredProtocolVersion(req, protocolVersionHeader); err != nil {
-		if !req.ID.IsSet() {
-			// JSON-RPC 2.0 forbids responding to notifications, even with an
-			// error: a notification carrying a bad declaration is dropped.
-			return nil, nil
-		}
-		return nil, err
 	}
 
 	switch req.Method {
@@ -266,6 +259,10 @@ const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 // unsanitizable (or not a string at all) is a malformed value, not an
 // absent one.
 func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) error {
+	if req.Method == "initialize" {
+		return nil
+	}
+
 	headerDeclared := strings.TrimSpace(headerValue) != ""
 	headerVersion := mcpversions.Sanitize(headerValue)
 
@@ -285,17 +282,17 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 		if err := json.Unmarshal(raw, &metaRaw); err != nil {
 			// Present but not a string: a malformed declaration. JSON null
 			// decodes as a no-op and stays "absent".
-			return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+			return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 		}
 	}
 	metaDeclared := strings.TrimSpace(metaRaw) != ""
 	metaVersion := mcpversions.Sanitize(metaRaw)
 
 	if headerDeclared && headerVersion == "" {
-		return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 	}
 	if metaDeclared && metaVersion == "" {
-		return unsupportedMetaProtocolVersionError(req, unparseableVersionPlaceholder)
+		return invalidMetaProtocolVersionError(req, unparseableVersionPlaceholder)
 	}
 
 	if headerDeclared && metaDeclared && headerVersion != metaVersion {
@@ -309,22 +306,21 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 
 	declared := conv.Default(headerVersion, metaVersion)
 	if declared != "" && !slices.Contains(mcpversions.SupportedMetaServer(), declared) {
-		return unsupportedMetaProtocolVersionError(req, declared)
+		return unsupportedProtocolVersionError(req.ID, declared, mcpversions.SupportedMetaServer())
 	}
 
 	return nil
 }
 
-// unsupportedMetaProtocolVersionError is the structured error for a declared
-// protocol version this surface does not serve. The named set is the served
-// set — exactly [mcpversions.SupportedMetaServer], matching what
-// server/discover advertises — not the wider set of recognized revisions.
-// declared must be sanitized (or a placeholder) — it is echoed to the client.
-func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
+// invalidMetaProtocolVersionError preserves the meta surface's malformed
+// declaration behavior separately from a well-formed but unsupported version.
+// declared must be sanitized or the fixed placeholder; raw hostile bytes are
+// never echoed to the client.
+func invalidMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
 	return &oops.MCPError{
 		ID:      req.ID,
 		Code:    oops.MCPCodeInvalidRequest,
-		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
+		Message: fmt.Sprintf("invalid protocol version declaration %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
 		Data:    nil,
 	}
 }
@@ -441,24 +437,78 @@ func (s *Service) callMetaServerTool(
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
 
+	start := time.Now()
+
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
 	// inside one.
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
+		if params.Name != metamcp.ToolExecuteTool {
+			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		}
 		return nil, err
 	}
 
+	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:
-		return s.handleMetaListServersCall(ctx, logger, members, req)
+		body, err = s.handleMetaListServersCall(ctx, logger, members, req)
 	case metamcp.ToolDescribeServer:
-		return s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
+		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolDescribeTools:
-		return s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	default:
+		// execute_tool is deliberately not logged here: the member dispatch
+		// writes the single tool_call row, stamped with this gateway's id.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
+	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+	return body, err
+}
+
+// logMetaDiscovery writes one meta_discovery telemetry row for a gateway
+// discovery call. Failures record their oops status code.
+func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
+	logAttrs := tm.HTTPLogAttributes{
+		attr.EventSourceKey:     string(tm.EventSourceMetaDiscovery),
+		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
+	}
+	logAttrs.RecordDuration(time.Since(start).Seconds())
+	statusCode := http.StatusOK
+	if handlerErr != nil {
+		statusCode = http.StatusInternalServerError
+		if oopsErr, ok := errors.AsType[*oops.ShareableError](handlerErr); ok {
+			statusCode = oopsErr.HTTPStatus(ctx)
+		}
+	}
+	logAttrs.RecordStatusCode(statusCode)
+	logAttrs.RecordTraceContext(ctx)
+	logAttrs.RecordAuthenticatedActor(ctx)
+	if gate.chatID != "" {
+		logAttrs[attr.GenAIConversationIDKey] = gate.chatID
+	}
+	if gate.externalUserID != "" {
+		logAttrs[attr.ExternalUserIDKey] = gate.externalUserID
+	}
+	if gate.apiKeyID != "" {
+		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
+	}
+	s.telemLogger.Log(ctx, tm.LogParams{
+		Timestamp: time.Now(),
+		ToolInfo: tm.ToolInfo{
+			ID: gate.metaServerID.String(),
+			// Not "tools:"-prefixed: that prefix is the query layer's tool-call classifier.
+			URN:            "metamcp:" + gate.metaServerID.String() + ":" + toolName,
+			Name:           toolName,
+			ProjectID:      gate.projectID.String(),
+			DeploymentID:   "",
+			FunctionID:     nil,
+			OrganizationID: gate.organizationID,
+		},
+		UserInfo:   tm.UserInfoByID(gate.userID),
+		Attributes: logAttrs,
+	})
 }
 
 func (s *Service) handleMetaListServersCall(

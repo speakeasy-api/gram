@@ -1,9 +1,11 @@
+import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -49,7 +51,7 @@ import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListToolUsageTraces";
@@ -261,6 +263,14 @@ export function LogsTools(): JSX.Element {
     [selectedTargets],
   );
 
+  const metaMcpServerIds = useMemo(
+    () =>
+      selectedTargets
+        .filter((target) => target.type === "gateway")
+        .map((target) => target.id),
+    [selectedTargets],
+  );
+
   const userFilters = useMemo<ToolUsageUserFilter[]>(() => {
     const emails = [
       ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
@@ -316,6 +326,7 @@ export function LogsTools(): JSX.Element {
       buildServerOptionGroups({
         hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
+        gateways: filterOptionsData?.gateways ?? [],
         activeFilters,
         serverNameMappings,
       }),
@@ -323,6 +334,7 @@ export function LogsTools(): JSX.Element {
       activeFilters,
       filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
+      filterOptionsData?.gateways,
       serverNameMappings,
     ],
   );
@@ -395,6 +407,7 @@ export function LogsTools(): JSX.Element {
         to.toISOString(),
         hostedToolsetSlugs,
         shadowServerNames,
+        metaMcpServerIds,
         targetTypes,
         statuses,
         userFilters,
@@ -413,6 +426,8 @@ export function LogsTools(): JSX.Element {
                 hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
               shadowServerNames:
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
+              metaMcpServerIds:
+                metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
               targetTypes,
               statuses,
               userFilters: userFilters.length > 0 ? userFilters : undefined,
@@ -451,13 +466,50 @@ export function LogsTools(): JSX.Element {
     }
   };
 
-  const handleLogClick = useCallback((log: TelemetryLogRecord) => {
-    setSelectedLog(log);
-  }, []);
+  const [selectedHostedToolsetSlug, setSelectedHostedToolsetSlug] =
+    useState<string>();
+  const handleLogClick = useCallback(
+    (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => {
+      setSelectedLog(log);
+      setSelectedHostedToolsetSlug(
+        trace?.targetType === "hosted_mcp_server" ? trace.targetId : undefined,
+      );
+    },
+    [],
+  );
 
-  const toggleExpand = useCallback((traceId: string) => {
-    setExpandedTraceId((prev) => (prev === traceId ? null : traceId));
-  }, []);
+  const [openingTraceId, setOpeningTraceId] = useState<string | null>(null);
+  const traceOpenRequest = useRef(0);
+  const toggleExpand = useCallback(
+    async (trace: ToolUsageTraceSummary) => {
+      const request = ++traceOpenRequest.current;
+      setOpeningTraceId(null);
+      if (expandedTraceId === trace.id) {
+        setExpandedTraceId(null);
+        return;
+      }
+      const options = traceLogsQueryOptions(client, trace.logGroup, from, to);
+      if (trace.logCount === 1 && options.enabled) {
+        setOpeningTraceId(trace.id);
+        try {
+          const result = await queryClient.fetchQuery(options);
+          if (request !== traceOpenRequest.current) return;
+          const log = result.logs[0];
+          if (log && result.logs.length === 1 && !result.nextCursor) {
+            setExpandedTraceId(null);
+            handleLogClick(log, trace);
+            return;
+          }
+        } catch {
+          // Expand to expose the normal span-loading error and retry behavior.
+        } finally {
+          if (request === traceOpenRequest.current) setOpeningTraceId(null);
+        }
+      }
+      if (request === traceOpenRequest.current) setExpandedTraceId(trace.id);
+    },
+    [client, expandedTraceId, from, handleLogClick, queryClient, to],
+  );
 
   const refetch = useCallback(() => {
     void refetchLogs();
@@ -494,14 +546,12 @@ export function LogsTools(): JSX.Element {
             title="Tool Logs"
             description="Dive into tool traces across all tools, skills, and MCP servers used by organization members in this project"
           />
-          <div className="relative flex-1">
-            <div
-              className="pointer-events-none h-full select-none"
-              aria-hidden="true"
-            >
-              <ObservabilitySkeleton />
-            </div>
-            <EnableLoggingOverlay onEnabled={refetch} />
+          <div className="flex-1">
+            <EnableLoggingOverlay
+              onEnabled={refetch}
+              screenshotSrc="/empty-states/tool_logs_empty.png"
+              screenshotAlt="Tool Logs dashboard with captured tool calls"
+            />
           </div>
         </div>
       ) : (
@@ -532,8 +582,10 @@ export function LogsTools(): JSX.Element {
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={handleRoleSelectionChange}
             expandedTraceId={expandedTraceId}
+            openingTraceId={openingTraceId}
             toggleExpand={toggleExpand}
             selectedLog={selectedLog}
+            selectedHostedToolsetSlug={selectedHostedToolsetSlug}
             handleLogClick={handleLogClick}
             setSelectedLog={setSelectedLog}
             containerRef={containerRef}
@@ -589,8 +641,10 @@ function LogsToolsContent({
   selectedRoleIds,
   onRoleSelectionChange,
   expandedTraceId,
+  openingTraceId,
   toggleExpand,
   selectedLog,
+  selectedHostedToolsetSlug,
   handleLogClick,
   setSelectedLog,
   containerRef,
@@ -641,9 +695,14 @@ function LogsToolsContent({
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
   expandedTraceId: string | null;
-  toggleExpand: (traceId: string) => void;
+  openingTraceId: string | null;
+  toggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
   selectedLog: TelemetryLogRecord | null;
-  handleLogClick: (log: TelemetryLogRecord) => void;
+  selectedHostedToolsetSlug?: string;
+  handleLogClick: (
+    log: TelemetryLogRecord,
+    trace?: ToolUsageTraceSummary,
+  ) => void;
   setSelectedLog: (log: TelemetryLogRecord | null) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -825,6 +884,7 @@ function LogsToolsContent({
                       Boolean(attributeSearchQuery)
                     }
                     expandedTraceId={expandedTraceId}
+                    openingTraceId={openingTraceId}
                     isFetchingNextPage={isFetchingNextPage}
                     onToggleExpand={toggleExpand}
                     onLogClick={handleLogClick}
@@ -850,6 +910,7 @@ function LogsToolsContent({
 
       <LogDetailSheet
         log={selectedLog}
+        hostedToolsetSlug={selectedHostedToolsetSlug}
         open={!!selectedLog}
         onOpenChange={(open) => {
           void (!open && setSelectedLog(null));
@@ -866,6 +927,7 @@ function LogsToolsTableContent({
   traces,
   hasActiveFilters,
   expandedTraceId,
+  openingTraceId,
   isFetchingNextPage,
   onToggleExpand,
   onLogClick,
@@ -878,9 +940,10 @@ function LogsToolsTableContent({
   traces: ToolUsageTraceSummary[];
   hasActiveFilters: boolean;
   expandedTraceId: string | null;
+  openingTraceId: string | null;
   isFetchingNextPage: boolean;
-  onToggleExpand: (traceId: string) => void;
-  onLogClick: (log: TelemetryLogRecord) => void;
+  onToggleExpand: (trace: ToolUsageTraceSummary) => Promise<void>;
+  onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
@@ -955,7 +1018,8 @@ function LogsToolsTableContent({
           key={trace.id}
           trace={trace}
           isExpanded={expandedTraceId === trace.id}
-          onToggle={() => onToggleExpand(trace.id)}
+          isOpening={openingTraceId === trace.id}
+          onToggle={() => void onToggleExpand(trace)}
           onLogClick={onLogClick}
           serverNameMappings={serverNameMappings}
           from={from}
@@ -976,6 +1040,7 @@ function LogsToolsTableContent({
 function LogsToolsTraceRow({
   trace,
   isExpanded,
+  isOpening,
   onToggle,
   onLogClick,
   serverNameMappings,
@@ -984,12 +1049,14 @@ function LogsToolsTraceRow({
 }: {
   trace: ToolUsageTraceSummary;
   isExpanded: boolean;
+  isOpening: boolean;
   onToggle: () => void;
-  onLogClick: (log: TelemetryLogRecord) => void;
+  onLogClick: (log: TelemetryLogRecord, trace?: ToolUsageTraceSummary) => void;
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
   to: Date;
 }) {
+  const routes = useRoutes();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const timestamp = new Date(
     Number(BigInt(trace.startTimeUnixNano) / 1_000_000n),
@@ -1036,6 +1103,7 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
+  const expandIcon = isExpanded ? "chevron-down" : "chevron-right";
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
   const userLabel = trace.userLabel || "—";
@@ -1046,8 +1114,16 @@ function LogsToolsTraceRow({
         role="button"
         tabIndex={0}
         onClick={onToggle}
+        aria-busy={isOpening}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onToggle();
+          // The row holds focusable children (the identity link): a key press
+          // aimed at one of those must act on it alone rather than also
+          // toggling the row it bubbles through.
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
         }}
         className="flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left"
       >
@@ -1060,14 +1136,22 @@ function LogsToolsTraceRow({
 
         <div className="flex w-5 shrink-0 items-center justify-center">
           <Icon
-            name={isExpanded ? "chevron-down" : "chevron-right"}
-            className="text-muted-foreground size-4"
+            name={isOpening ? "loader-circle" : expandIcon}
+            className={cn(
+              "text-muted-foreground size-4",
+              isOpening && "animate-spin",
+            )}
           />
         </div>
 
         <div className="flex min-w-0 flex-2 items-center gap-2">
           <div className="group/server relative flex shrink-0 items-center">
-            <span className="border-border text-muted-foreground shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase">
+            <span
+              className={cn(
+                "border-border shrink-0 truncate border px-2 py-1 font-mono text-[10px] tracking-wide uppercase",
+                targetConfig.className,
+              )}
+            >
               {targetConfig.label}
             </span>
             {editDialogProps && (
@@ -1084,10 +1168,43 @@ function LogsToolsTraceRow({
               </button>
             )}
           </div>
-          <div className="flex min-w-0 items-baseline gap-2">
+          {trace.viaMetaMcpServerId && (
+            // The gateway that dispatched this member call.
+            <SimpleTooltip
+              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+            >
+              <Link
+                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
+                onClick={(event) => event.stopPropagation()}
+                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
+                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
+              >
+                <Icon name="network" className="size-4" />
+              </Link>
+            </SimpleTooltip>
+          )}
+          <div className="flex min-w-0 items-center gap-2">
             {showTargetLabel && (
               <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-                {targetLabel}
+                {trace.targetType === "hosted_mcp_server" && trace.targetId ? (
+                  <Link
+                    to={routes.mcp.details.overview.href(trace.targetId)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {targetLabel}
+                  </Link>
+                ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
+                  <Link
+                    to={routes.mcp.gateway.overview.href(trace.targetId)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="hover:text-foreground hover:underline"
+                  >
+                    {targetLabel}
+                  </Link>
+                ) : (
+                  targetLabel
+                )}
                 {" /"}
               </span>
             )}
@@ -1102,9 +1219,12 @@ function LogsToolsTraceRow({
             accountType={trace.accountType}
             className="shrink-0"
           />
-          <span className="text-muted-foreground min-w-0 truncate">
+          <IdentityLink
+            identifier={identityRefForKind(trace.userKind, trace.userKey)}
+            className="text-muted-foreground min-w-0 truncate"
+          >
             {userLabel || "—"}
-          </span>
+          </IdentityLink>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">
@@ -1161,7 +1281,7 @@ function LogsToolsTraceRow({
             logGroup={trace.logGroup}
             toolName={trace.toolName}
             isExpanded={isExpanded}
-            onLogClick={onLogClick}
+            onLogClick={(log) => onLogClick(log, trace)}
             parentTimestamp={trace.startTimeUnixNano}
             from={from}
             to={to}
@@ -1186,21 +1306,44 @@ function LogsToolsTraceRow({
   );
 }
 
-// One neutral tag treatment for every target type — the type is metadata, not
-// a signal, so it no longer carries its own color.
 function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   switch (targetType) {
     case "hosted_mcp_server":
-      return { label: "Hosted MCP" };
+      return {
+        label: "Hosted MCP",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
     case "tunneled_mcp_server":
-      return { label: "Tunneled MCP" };
+      return {
+        label: "Tunneled MCP",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+      };
+    case "meta_mcp_server":
+      return {
+        label: "Gateway",
+        className:
+          "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300",
+      };
     case "shadow_mcp_server":
-      return { label: "Shadow MCP" };
+      return {
+        label: "Shadow MCP",
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+      };
     case "skill":
-      return { label: "Skill" };
+      return {
+        label: "Skill",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     case "local_tool":
     default:
-      return { label: "Local Tools" };
+      return {
+        label: "Local Tools",
+        className: "bg-muted/50 text-primary",
+      };
   }
 }
 

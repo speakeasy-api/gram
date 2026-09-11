@@ -6,9 +6,6 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-/**
- * Name of the feature to update
- */
 export const FeatureName = {
   Logs: "logs",
   ToolIoLogs: "tool_io_logs",
@@ -28,24 +25,13 @@ export const FeatureName = {
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
   ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
+  NetworkIngress: "network_ingress",
 } as const;
-/**
- * Name of the feature to update
- */
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 
 export type SetProductFeatureRequestBody = {
-  /**
-   * Whether the feature should be enabled
-   */
   enabled: boolean;
-  /**
-   * Name of the feature to update
-   */
   featureName: FeatureName;
-  /**
-   * Organization whose product feature to update.
-   */
   organizationId: string;
 };
 

@@ -77,6 +77,26 @@ type Client struct {
 	// requests to the resolveShadowMCPInventoryRequest endpoint.
 	ResolveShadowMCPInventoryRequestDoer goahttp.Doer
 
+	// ListAIDetections Doer is the HTTP client used to make requests to the
+	// listAIDetections endpoint.
+	ListAIDetectionsDoer goahttp.Doer
+
+	// ListEmployeeAIDetections Doer is the HTTP client used to make requests to
+	// the listEmployeeAIDetections endpoint.
+	ListEmployeeAIDetectionsDoer goahttp.Doer
+
+	// ListResourceAudience Doer is the HTTP client used to make requests to the
+	// listResourceAudience endpoint.
+	ListResourceAudienceDoer goahttp.Doer
+
+	// SetResourceAudience Doer is the HTTP client used to make requests to the
+	// setResourceAudience endpoint.
+	SetResourceAudienceDoer goahttp.Doer
+
+	// ListAudienceOptions Doer is the HTTP client used to make requests to the
+	// listAudienceOptions endpoint.
+	ListAudienceOptionsDoer goahttp.Doer
+
 	// RequestAccess Doer is the HTTP client used to make requests to the
 	// requestAccess endpoint.
 	RequestAccessDoer goahttp.Doer
@@ -128,6 +148,11 @@ func NewClient(
 		ListShadowMCPInventoryUsersDoer:          doer,
 		ListShadowMCPInventoryServersForUserDoer: doer,
 		ResolveShadowMCPInventoryRequestDoer:     doer,
+		ListAIDetectionsDoer:                     doer,
+		ListEmployeeAIDetectionsDoer:             doer,
+		ListResourceAudienceDoer:                 doer,
+		SetResourceAudienceDoer:                  doer,
+		ListAudienceOptionsDoer:                  doer,
 		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
@@ -495,6 +520,126 @@ func (c *Client) ResolveShadowMCPInventoryRequest() goa.Endpoint {
 		resp, err := c.ResolveShadowMCPInventoryRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveShadowMCPInventoryRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAIDetections returns an endpoint that makes HTTP requests to the access
+// service listAIDetections server.
+func (c *Client) ListAIDetections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAIDetectionsRequest(c.encoder)
+		decodeResponse = DecodeListAIDetectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAIDetectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAIDetectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAIDetections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListEmployeeAIDetections returns an endpoint that makes HTTP requests to the
+// access service listEmployeeAIDetections server.
+func (c *Client) ListEmployeeAIDetections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListEmployeeAIDetectionsRequest(c.encoder)
+		decodeResponse = DecodeListEmployeeAIDetectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListEmployeeAIDetectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListEmployeeAIDetectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listEmployeeAIDetections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListResourceAudience returns an endpoint that makes HTTP requests to the
+// access service listResourceAudience server.
+func (c *Client) ListResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeListResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetResourceAudience returns an endpoint that makes HTTP requests to the
+// access service setResourceAudience server.
+func (c *Client) SetResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeSetResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAudienceOptions returns an endpoint that makes HTTP requests to the
+// access service listAudienceOptions server.
+func (c *Client) ListAudienceOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAudienceOptionsRequest(c.encoder)
+		decodeResponse = DecodeListAudienceOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAudienceOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAudienceOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAudienceOptions", err)
 		}
 		return decodeResponse(resp)
 	}

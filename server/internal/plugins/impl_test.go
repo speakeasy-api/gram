@@ -6,7 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -859,6 +863,22 @@ func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePr
 	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
 }
 
+func TestPluginsService_SetPluginAssignments_ZeroPluginIDReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      uuid.Nil.String(),
+		PrincipalUrns: []string{"*"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -886,6 +906,25 @@ func TestPluginsService_SetPluginAssignments_InvalidURNReturnsBadRequest(t *test
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{"not a valid urn"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_AgentURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Agent URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"agent:" + uuid.NewString()},
 	})
 	require.Error(t, err)
 
@@ -952,6 +991,69 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.Contains(t, result.ContentDisposition, "download-test.zip")
 	require.NotNil(t, body)
 	require.NoError(t, body.Close())
+}
+
+func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	_, err := pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
+		ProjectID:                *authCtx.ProjectID,
+		InstallationID:           12345,
+		RepoOwner:                "test-owner",
+		RepoName:                 "test-marketplace",
+		MarketplaceToken:         conv.ToPGText("marketplace-token"),
+		PublishedMcpFingerprints: []byte(`{}`),
+		PublishedHooksVersion:    pgtype.Text{},
+		PublishedHooksConfig:     nil,
+	})
+	require.NoError(t, err)
+
+	result, body, err := ti.service.DownloadCodexInstallScript(ctx, &gen.DownloadCodexInstallScriptPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "text/x-shellscript", result.ContentType)
+	script, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+
+	scriptText := string(script)
+	require.Contains(t, scriptText, `OTEL_ENDPOINT_BASE = "https://app.getgram.ai/otel/v1"`)
+	require.Contains(t, scriptText, fmt.Sprintf("OTEL_PROJECT = %q", *authCtx.ProjectSlug))
+	require.Contains(t, scriptText, `OTEL_API_KEY = "gram_local_`)
+
+	home := t.TempDir()
+	binDir := filepath.Join(home, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	cmd := exec.CommandContext(t.Context(), "bash")
+	cmd.Stdin = bytes.NewReader(script)
+	cmd.Env = append(os.Environ(),
+		"HOME="+home,
+		"CODEX_HOME="+filepath.Join(home, ".codex"),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "run downloaded install script: %s", output)
+
+	config, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	require.NoError(t, err)
+	configText := string(config)
+	require.Contains(t, configText, "[otel]\nenvironment = \"prod\"")
+	for table, signal := range map[string]string{
+		"[otel.exporter.otlp-http]":         "logs",
+		"[otel.trace_exporter.otlp-http]":   "traces",
+		"[otel.metrics_exporter.otlp-http]": "metrics",
+	} {
+		require.Contains(t, configText, table)
+		require.Contains(t, configText, `endpoint = "https://app.getgram.ai/otel/v1/`+signal+`"`)
+	}
 }
 
 func TestPluginsService_AgentPluginCompatibilityIsConsistent(t *testing.T) {
@@ -1445,7 +1547,7 @@ func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
 	// the default — so a plugin created here is seeded with the org wildcard.
 	inDefault, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Default"})
 	require.NoError(t, err)
-	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inDefault.ID))
+	defaultAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: uuid.MustParse(inDefault.ID), OrganizationID: orgID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, defaultAssignments, 1)
 	require.Equal(t, "*", defaultAssignments[0].PrincipalUrn)
@@ -1462,7 +1564,7 @@ func TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject(t *testing.T) {
 
 	inOther, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "In Other"})
 	require.NoError(t, err)
-	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, uuid.MustParse(inOther.ID))
+	otherAssignments, err := pluginsrepo.New(ti.conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: uuid.MustParse(inOther.ID), OrganizationID: orgID, ProjectID: other.ID})
 	require.NoError(t, err)
 	require.Empty(t, otherAssignments,
 		"a plugin in a non-default project starts with no audience")

@@ -1,3 +1,4 @@
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -19,10 +20,11 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useRoutes } from "@/routes";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForUserKey } from "@/lib/identity-urn";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
@@ -64,7 +66,6 @@ import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
-import { Link } from "react-router";
 import { toast } from "sonner";
 
 ChartJS.register(
@@ -235,17 +236,21 @@ export function InsightsAgentsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  const projectQuery = useQuery({
-    queryKey: [
-      "insights",
-      "agents",
-      "project",
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: () => fetchProjectMetrics(client, from, to),
-    throwOnError: false,
-  });
+  // The project summary also acts as the logging setup probe. A 404 means
+  // logging has not been enabled, rather than a failed or empty cost query.
+  const projectQuery = useLogsEnabledErrorCheck(
+    useQuery({
+      queryKey: [
+        "insights",
+        "agents",
+        "project",
+        from.toISOString(),
+        to.toISOString(),
+      ],
+      queryFn: () => fetchProjectMetrics(client, from, to),
+      throwOnError: false,
+    }),
+  );
 
   const overviewQuery = useQuery({
     queryKey: [
@@ -471,6 +476,43 @@ export function InsightsAgentsContent(): JSX.Element {
     },
     [costFilters],
   );
+
+  if (projectQuery.isLogsDisabled) {
+    const refetch = () => {
+      void usersQuery.refetch();
+      void projectQuery.refetch();
+      void overviewQuery.refetch();
+      void roleUsageQuery.refetch();
+    };
+
+    return (
+      <>
+        <InsightsConfig hideTrigger />
+        <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
+          <div className="mx-auto flex max-w-7xl flex-col gap-6">
+            <div className="flex min-w-0 flex-col gap-1">
+              <Page.Eyebrow />
+              <div className="flex items-center gap-2">
+                <h1 className="text-display-sm font-thin">AI Agent Costs</h1>
+                <ReleaseStageBadge stage="preview" />
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Track token consumption and costs across users, clients, and
+                models.
+              </p>
+            </div>
+            <div>
+              <EnableLoggingOverlay
+                onEnabled={refetch}
+                screenshotSrc="/empty-states/cost_empty.png"
+                screenshotAlt="Costs dashboard with agent usage data"
+              />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -940,14 +982,13 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
-function employeeDetailSegment(user: EmployeeRow): string {
-  if (user.email) {
-    return slugify(user.displayName);
-  }
-  if (user.userId.includes("@")) {
-    return encodeURIComponent(user.userId);
-  }
-  return slugify(user.userId);
+/**
+ * The row's person, in whichever form it holds one. The resolver folds an
+ * address and an agent-side id onto the same identity, so a row keyed either
+ * way reaches the same page.
+ */
+function employeeIdentityRef(user: EmployeeRow) {
+  return identityRefForUserKey(user.email || user.userId);
 }
 
 function EmployeeCostTable({
@@ -968,7 +1009,6 @@ function EmployeeCostTable({
   roleUsageLoading: boolean;
 }) {
   const PAGE_SIZE = 10;
-  const routes = useRoutes();
   const [page, setPage] = useState(0);
   const isCost = valueMode === "cost";
   const isRoleView = groupByDimension === "role";
@@ -1247,18 +1287,17 @@ function EmployeeCostTable({
         header: "",
         width: "0.6fr",
         render: (user) => (
-          <Link
-            to={routes.employees.detail.href(employeeDetailSegment(user))}
+          <IdentityLink
+            identifier={employeeIdentityRef(user)}
             className="flex items-center gap-1"
-            aria-label={`View ${user.displayName}`}
           >
             View
             <Icon name="arrow-right" />
-          </Link>
+          </IdentityLink>
         ),
       },
     ],
-    [clientFilter, isCost, routes.employees.detail],
+    [clientFilter, isCost],
   );
 
   const sortedUsers = useMemo(

@@ -178,18 +178,22 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	}
 
 	// Named-plugin distribution is intentionally unavailable until
-	// compatibility deployment. Session recall is external-only in v1: the
-	// shared project-assistant surface must not serve user-personal
-	// cross-project transcripts.
+	// compatibility deployment. Session recall stays external-only because it
+	// contains user-personal cross-project transcripts. Data exports stay
+	// external-only because creation can send future project data off-platform.
 	for _, name := range []string{
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
+		"list_plugin_assignments",
 		"list_plugins",
 		"get_plugin",
+		operationSetPluginAssignments,
 		"list_my_sessions",
 		"continue_session",
+		"list_data_exports",
+		"create_data_export",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
 
 	// The reads, registration paths, and persisted readiness projections are
@@ -201,6 +205,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"list_recent_tool_calls",
+		"list_organization_events",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
@@ -280,7 +286,9 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	// results carry no subject count. The handler is never called here — only
 	// the schema the registration advertises is under test.
 	server := newTestMCPServer()
-	registerDiagnosticsTools(newRegistrar(server), nil)
+	registrar := newRegistrar(server)
+	registerDiagnosticsTools(registrar, nil)
+	registerSkillUsageTools(registrar, nil)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -322,9 +330,61 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 	}
 }
 
+func TestPluginAssignmentMemberCountSchemaMatchesWireForm(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetPluginOutput]("get_plugin")
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	zero := NewSubjectCount(0)
+	reported := NewSubjectCount(16)
+	suppressed := NewSubjectCount(3)
+	for _, count := range []*SubjectCount{&zero, &reported, &suppressed, nil} {
+		output := GetPluginOutput{
+			Servers:     []PluginServer{},
+			Skills:      []PluginSkill{},
+			Assignments: []PluginAssignmentOption{{MemberCount: count}},
+		}
+		encoded, err := json.Marshal(output)
+		require.NoError(t, err)
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
+
+	memberCount := schema.Properties["assignments"].Items.Properties["member_count"]
+	require.ElementsMatch(t, []string{"integer", "string", "null"}, memberCount.Types)
+	resolvedMemberCount, err := memberCount.Resolve(nil)
+	require.NoError(t, err)
+	require.Error(t, resolvedMemberCount.Validate(float64(-1)))
+	require.Error(t, resolvedMemberCount.Validate("redacted"))
+}
+
+func TestAdvertisedSetupCategoryIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetMCPReadinessToolOutput]("get_mcp_readiness")
+	category := schema.Properties["setup_category"]
+	require.NotNil(t, category)
+	require.Equal(t, setupCategoryEnumValues(), category.Enum)
+}
+
 // Schema inference panics at process boot, so a tool input the nil-dependency
 // server never registers can crash-loop production while CI stays green. The
 // jsonschema tag is a description; a "word=" prefix is rejected outright.
+func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[FindMCPOutput]("find_mcp")
+	mcps := schema.Properties["mcps"]
+	require.NotNil(t, mcps)
+	require.NotNil(t, mcps.Items)
+	backendKind := mcps.Items.Properties["backend_kind"]
+	require.NotNil(t, backendKind)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
+}
+
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
 	t.Parallel()
 

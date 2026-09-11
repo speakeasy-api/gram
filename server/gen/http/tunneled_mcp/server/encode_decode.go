@@ -1631,20 +1631,24 @@ func EncodeDeleteServerError(encoder func(context.Context, http.ResponseWriter) 
 // *types.TunneledMcpServer.
 func marshalTypesTunneledMcpServerToTunneledMcpServerResponseBody(v *types.TunneledMcpServer) *TunneledMcpServerResponseBody {
 	res := &TunneledMcpServerResponseBody{
-		ID:                         v.ID,
-		ProjectID:                  v.ProjectID,
-		Name:                       v.Name,
-		KeyPrefix:                  v.KeyPrefix,
-		Status:                     string(v.Status),
-		ConnectionStatus:           string(v.ConnectionStatus),
-		AllowPublic:                v.AllowPublic,
-		AgentVersion:               v.AgentVersion,
-		ResourceIdentifier:         v.ResourceIdentifier,
-		LastSeenAt:                 v.LastSeenAt,
-		ActiveConnectionCount:      v.ActiveConnectionCount,
-		ActiveConsumerSessionCount: v.ActiveConsumerSessionCount,
-		CreatedAt:                  v.CreatedAt,
-		UpdatedAt:                  v.UpdatedAt,
+		ID:                                  v.ID,
+		ProjectID:                           v.ProjectID,
+		Name:                                v.Name,
+		KeyPrefix:                           v.KeyPrefix,
+		Status:                              string(v.Status),
+		ConnectionStatus:                    string(v.ConnectionStatus),
+		AllowPublic:                         v.AllowPublic,
+		AgentVersion:                        v.AgentVersion,
+		ResourceIdentifier:                  v.ResourceIdentifier,
+		PublicRequestRatePerSecond:          v.PublicRequestRatePerSecond,
+		PublicRequestBurst:                  v.PublicRequestBurst,
+		EffectivePublicRequestRatePerSecond: v.EffectivePublicRequestRatePerSecond,
+		EffectivePublicRequestBurst:         v.EffectivePublicRequestBurst,
+		LastSeenAt:                          v.LastSeenAt,
+		ActiveConnectionCount:               v.ActiveConnectionCount,
+		ActiveConsumerSessionCount:          v.ActiveConsumerSessionCount,
+		CreatedAt:                           v.CreatedAt,
+		UpdatedAt:                           v.UpdatedAt,
 	}
 
 	return res

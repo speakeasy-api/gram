@@ -17,6 +17,18 @@ export type RemoteSessionIssuer = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
+   */
+  authorizationResponseIssParameterSupported?: boolean | undefined;
+  /**
+   * Whether the issuer supports OpenID Connect Back-Channel Logout. Null until discovery captures the field.
+   */
+  backchannelLogoutSupported?: boolean | undefined;
+  /**
+   * Claims the issuer can return in ID tokens and from userinfo. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+   */
+  claimsSupported?: Array<string> | null | undefined;
+  /**
    * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
    */
   clientIdMetadataDocumentSupported: boolean;
@@ -34,6 +46,18 @@ export type RemoteSessionIssuer = {
    * The remote_session_issuer id.
    */
   id: string;
+  /**
+   * JWS algorithms the issuer signs ID tokens with. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+   */
+  idTokenSigningAlgValuesSupported?: Array<string> | null | undefined;
+  /**
+   * RFC 7662 token introspection endpoint. Null when not advertised or not yet captured by discovery.
+   */
+  introspectionEndpoint?: string | undefined;
+  /**
+   * Client authentication methods the introspection endpoint accepts. Null until discovery captures the field; an empty array means the field was captured and the issuer advertises none.
+   */
+  introspectionEndpointAuthMethodsSupported?: Array<string> | null | undefined;
   /**
    * Issuer URL; matches the iss claim.
    */
@@ -78,11 +102,19 @@ export type RemoteSessionIssuer = {
    * Upstream RFC 7591 registration endpoint; null for issuers without DCR.
    */
   registrationEndpoint?: string | undefined;
+  /**
+   * Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.
+   */
+  resourceIndicatorSupported?: boolean | undefined;
   responseTypesSupported?: Array<string> | undefined;
   /**
    * Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
    */
   revocationEndpoint?: string | undefined;
+  /**
+   * Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.
+   */
+  scopeOverride?: Array<string> | null | undefined;
   scopesSupported?: Array<string> | undefined;
   /**
    * RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.
@@ -102,6 +134,10 @@ export type RemoteSessionIssuer = {
    */
   tunneledMcpServerId?: string | undefined;
   updatedAt: Date;
+  /**
+   * OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
+   */
+  userinfoEndpoint?: string | undefined;
 };
 
 /** @internal */
@@ -111,6 +147,9 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorization_endpoint: z.optional(z.string()),
+    authorization_response_iss_parameter_supported: z.optional(z.boolean()),
+    backchannel_logout_supported: z.optional(z.boolean()),
+    claims_supported: z.optional(z.nullable(z.array(z.string()))),
     client_id_metadata_document_supported: z.boolean(),
     client_setup_documentation_url: z.optional(z.string()),
     code_challenge_methods_supported: z.optional(
@@ -122,6 +161,13 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     ),
     grant_types_supported: z.optional(z.array(z.string())),
     id: z.string(),
+    id_token_signing_alg_values_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
+    introspection_endpoint: z.optional(z.string()),
+    introspection_endpoint_auth_methods_supported: z.optional(
+      z.nullable(z.array(z.string())),
+    ),
     issuer: z.string(),
     jwks_uri: z.optional(z.string()),
     logo_asset_id: z.optional(z.string()),
@@ -133,8 +179,10 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     passthrough: z.boolean(),
     project_id: z.string(),
     registration_endpoint: z.optional(z.string()),
+    resource_indicator_supported: z.optional(z.boolean()),
     response_types_supported: z.optional(z.array(z.string())),
     revocation_endpoint: z.optional(z.string()),
+    scope_override: z.optional(z.nullable(z.array(z.string()))),
     scopes_supported: z.optional(z.array(z.string())),
     service_documentation: z.optional(z.string()),
     slug: z.string(),
@@ -145,16 +193,26 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    userinfo_endpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "authorization_endpoint": "authorizationEndpoint",
+      "authorization_response_iss_parameter_supported":
+        "authorizationResponseIssParameterSupported",
+      "backchannel_logout_supported": "backchannelLogoutSupported",
+      "claims_supported": "claimsSupported",
       "client_id_metadata_document_supported":
         "clientIdMetadataDocumentSupported",
       "client_setup_documentation_url": "clientSetupDocumentationUrl",
       "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "created_at": "createdAt",
       "grant_types_supported": "grantTypesSupported",
+      "id_token_signing_alg_values_supported":
+        "idTokenSigningAlgValuesSupported",
+      "introspection_endpoint": "introspectionEndpoint",
+      "introspection_endpoint_auth_methods_supported":
+        "introspectionEndpointAuthMethodsSupported",
       "jwks_uri": "jwksUri",
       "logo_asset_id": "logoAssetId",
       "op_policy_uri": "opPolicyUri",
@@ -162,8 +220,10 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "organization_id": "organizationId",
       "project_id": "projectId",
       "registration_endpoint": "registrationEndpoint",
+      "resource_indicator_supported": "resourceIndicatorSupported",
       "response_types_supported": "responseTypesSupported",
       "revocation_endpoint": "revocationEndpoint",
+      "scope_override": "scopeOverride",
       "scopes_supported": "scopesSupported",
       "service_documentation": "serviceDocumentation",
       "token_endpoint": "tokenEndpoint",
@@ -171,6 +231,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
         "tokenEndpointAuthMethodsSupported",
       "tunneled_mcp_server_id": "tunneledMcpServerId",
       "updated_at": "updatedAt",
+      "userinfo_endpoint": "userinfoEndpoint",
     });
   }),
 );

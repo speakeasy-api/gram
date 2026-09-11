@@ -174,7 +174,6 @@ func (s *stubProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouter.
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        key.KeyHash,
-		Reinstate:      key.Disabled,
 	}); err != nil {
 		return 0, fmt.Errorf("stub refresh write: %w", err)
 	}

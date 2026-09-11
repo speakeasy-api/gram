@@ -105,6 +105,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		mcpServerID:              nil,
 		wrapperRBACResourceID:    "",
 		wrapperIsPublic:          nil,
+		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     nil,
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),

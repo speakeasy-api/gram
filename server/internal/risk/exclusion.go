@@ -40,8 +40,7 @@ func nullableText(value string) pgtype.Text {
 // while sharing validation with transport-neutral exclusion administration.
 func validateExclusionMatchValue(matchType, matchValue string) error {
 	if err := exclusioncore.ValidateMatchValue(matchType, matchValue); err != nil {
-		var validation *exclusioncore.ValidationError
-		if errors.As(err, &validation) {
+		if validation, ok := errors.AsType[*exclusioncore.ValidationError](err); ok {
 			return oops.E(oops.CodeInvalid, validation.Cause, "%s", validation.Message)
 		}
 		// Keep a valid Goa error if shared validation gains another typed error

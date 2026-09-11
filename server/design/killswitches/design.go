@@ -28,10 +28,11 @@ var ComingSoonCapability = Type("KillswitchComingSoonCapability", func() {
 })
 
 var MCPServer = Type("KillswitchMCPServer", func() {
-	Required("id", "name", "project_id")
+	Required("id", "name", "project_id", "project_name")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("name", String)
 	Attribute("project_id", String, func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The project's display name")
 })
 
 var CustomerScope = Type("KillswitchScope", func() {

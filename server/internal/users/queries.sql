@@ -1,4 +1,7 @@
 -- name: UpsertUser :one
+-- Login and other IDP upserts mean the user is authenticating now, so clear
+-- WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+-- email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 INSERT INTO users (id, email, display_name, photo_url, admin)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE SET
@@ -7,7 +10,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING *, (xmax = 0) AS was_created;
 
 -- name: UpsertSyncedUser :execrows
@@ -25,14 +30,15 @@ ON CONFLICT (workos_id) DO UPDATE SET
   updated_at = clock_timestamp()
 WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at;
 
--- name: DisableUser :exec
+-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = @workos_updated_at,
   workos_deleted_at = @workos_deleted_at,
   deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_id = @workos_id
-  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
+  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at)
+RETURNING id;
 
 -- name: GetUser :one
 SELECT * FROM users

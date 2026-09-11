@@ -64,6 +64,61 @@ func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAt
 	return result.RowsAffected(), nil
 }
 
+const autoDetachMemberProviderClient = `-- name: AutoDetachMemberProviderClient :execrows
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.remote_session_client_id = c.id
+  AND l.user_session_issuer_id = $1
+  AND c.remote_session_issuer_id = $2
+  AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = $3
+      AND s.remote_session_issuer_id = $2
+      AND (
+        s.user_session_issuer_id = $1
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_server_members AS m
+          JOIN meta_mcp_servers AS mm
+            ON mm.project_id = m.project_id
+           AND mm.id = m.meta_mcp_server_id
+           AND mm.deleted IS FALSE
+          WHERE m.project_id = s.project_id
+            AND m.mcp_server_id = s.id
+            AND m.deleted IS FALSE
+            AND mm.user_session_issuer_id = $1
+        )
+      )
+  )
+`
+
+type AutoDetachMemberProviderClientParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
+// client(s) for a removed member's upstream so the provider stops appearing on
+// the gateway's consent screen. The binding is scoped to the user_session_issuer,
+// so it must survive as long as ANY live consumer of that issuer still fronts
+// the upstream — a live member of a meta server on the issuer, or a server
+// directly issuer-gated to it (issuers can be shared across gateways/servers).
+// Run after the member row is soft-deleted so the just-removed member is
+// already excluded by the deleted filter below.
+func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -164,16 +219,18 @@ INSERT INTO meta_mcp_servers (
     project_id,
     name,
     user_session_issuer_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
 )
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMetaMCPServerParams struct {
@@ -182,6 +239,7 @@ type CreateMetaMCPServerParams struct {
 	Name                string
 	UserSessionIssuerID uuid.NullUUID
 	Visibility          string
+	NetworkAccessMode   pgtype.Text
 }
 
 func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServerParams) (MetaMcpServer, error) {
@@ -191,6 +249,7 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		arg.Name,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
+		arg.NetworkAccessMode,
 	)
 	var i MetaMcpServer
 	err := row.Scan(
@@ -200,6 +259,7 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -362,7 +422,7 @@ WHERE id = $1
   AND organization_id = $2
   AND project_id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMetaMCPServerParams struct {
@@ -381,6 +441,7 @@ func (q *Queries) DeleteMetaMCPServer(ctx context.Context, arg DeleteMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -473,7 +534,7 @@ func (q *Queries) GetMetaMCPMember(ctx context.Context, arg GetMetaMCPMemberPara
 }
 
 const getMetaMCPServer = `-- name: GetMetaMCPServer :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND organization_id = $2
@@ -497,6 +558,7 @@ func (q *Queries) GetMetaMCPServer(ctx context.Context, arg GetMetaMCPServerPara
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -506,7 +568,7 @@ func (q *Queries) GetMetaMCPServer(ctx context.Context, arg GetMetaMCPServerPara
 }
 
 const getMetaMCPServerByIDAndProjectID = `-- name: GetMetaMCPServerByIDAndProjectID :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND project_id = $2
@@ -531,6 +593,7 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -577,6 +640,94 @@ func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemb
 	for rows.Next() {
 		var i ListMemberProviderIdentitiesRow
 		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetaMCPEndpointsForTelemetryByProjectID = `-- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
+SELECT
+    ms.id AS meta_mcp_server_id,
+    ms.name,
+    e.slug,
+    e.deleted,
+    e.is_domain_root,
+    cd.domain AS custom_domain,
+    EXISTS (
+      SELECT 1
+      FROM mcp_endpoints r
+      WHERE r.custom_domain_id = e.custom_domain_id
+        AND r.is_domain_root IS TRUE
+        AND r.deleted IS FALSE
+        AND r.id <> e.id
+    ) AS domain_root_taken
+FROM mcp_endpoints e
+JOIN meta_mcp_servers ms
+  ON ms.id = e.meta_mcp_server_id
+ AND ms.project_id = e.project_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+ AND cd.organization_id = ms.organization_id
+WHERE e.project_id = $1
+  AND e.meta_mcp_server_id IS NOT NULL
+  AND (
+    e.deleted IS FALSE
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM mcp_endpoints l
+        WHERE l.slug = e.slug
+          AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND l.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM toolsets t
+        WHERE t.mcp_slug = e.slug
+          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND t.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC
+`
+
+type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
+	MetaMcpServerID uuid.UUID
+	Name            string
+	Slug            string
+	Deleted         bool
+	IsDomainRoot    pgtype.Bool
+	CustomDomain    pgtype.Text
+	DomainRootTaken bool
+}
+
+// Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
+// matching unless a live endpoint or toolset now holds the slug in that namespace;
+// those existence checks mirror the global unique indexes, so they are not project-scoped.
+func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPEndpointsForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMetaMCPEndpointsForTelemetryByProjectIDRow
+		if err := rows.Scan(
+			&i.MetaMcpServerID,
+			&i.Name,
+			&i.Slug,
+			&i.Deleted,
+			&i.IsDomainRoot,
+			&i.CustomDomain,
+			&i.DomainRootTaken,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -650,7 +801,8 @@ const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersFor
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
-    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
+    (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -684,6 +836,7 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 	McpServerID         uuid.UUID
 	McpServerVisibility string
 	UpstreamUrl         string
+	Tunneled            bool
 }
 
 // The meta MCP's proxied (remote or tunneled) members that authenticate
@@ -708,7 +861,45 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 	var items []ListMetaMCPMembersForRemoteSessionIssuerRow
 	for rows.Next() {
 		var i ListMetaMCPMembersForRemoteSessionIssuerRow
-		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerVisibility,
+			&i.UpstreamUrl,
+			&i.Tunneled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
+SELECT id, name
+FROM meta_mcp_servers
+WHERE project_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Gateway names for telemetry labels, deleted gateways included.
+func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -720,7 +911,7 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 }
 
 const listMetaMCPServers = `-- name: ListMetaMCPServers :many
-SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
+SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.network_access_mode, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
        (SELECT count(*)
         FROM meta_mcp_server_members AS mm
         WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
@@ -758,6 +949,7 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 			&i.MetaMcpServer.UserSessionIssuerID,
 			&i.MetaMcpServer.Name,
 			&i.MetaMcpServer.Visibility,
+			&i.MetaMcpServer.NetworkAccessMode,
 			&i.MetaMcpServer.CreatedAt,
 			&i.MetaMcpServer.UpdatedAt,
 			&i.MetaMcpServer.DeletedAt,
@@ -907,7 +1099,7 @@ func (q *Queries) LockMetaMCPMember(ctx context.Context, arg LockMetaMCPMemberPa
 }
 
 const lockMetaMCPServer = `-- name: LockMetaMCPServer :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND organization_id = $2
@@ -932,6 +1124,7 @@ func (q *Queries) LockMetaMCPServer(ctx context.Context, arg LockMetaMCPServerPa
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1002,21 +1195,27 @@ UPDATE meta_mcp_servers
 SET name = $1,
     user_session_issuer_id = $2,
     visibility = COALESCE($3, visibility),
+    network_access_mode = CASE
+        WHEN $4::boolean THEN $5
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND project_id = $6
+WHERE id = $6
+  AND organization_id = $7
+  AND project_id = $8
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMetaMCPServerParams struct {
-	Name                string
-	UserSessionIssuerID uuid.NullUUID
-	Visibility          pgtype.Text
-	ID                  uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.UUID
+	Name                 string
+	UserSessionIssuerID  uuid.NullUUID
+	Visibility           pgtype.Text
+	NetworkAccessModeSet bool
+	NetworkAccessMode    pgtype.Text
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
 }
 
 // The service always supplies user_session_issuer_id (an omitted payload
@@ -1029,6 +1228,8 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		arg.Name,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
+		arg.NetworkAccessModeSet,
+		arg.NetworkAccessMode,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -1041,6 +1242,7 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

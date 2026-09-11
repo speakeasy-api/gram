@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -98,6 +99,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		ActorEmail:            authCtx.Email,
 		Name:                  displayName,
 		Visibility:            dashboardRemoteMCPInitialVisibility,
+		NetworkAccessMode:     networkaccess.ModePublicOnly,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMCPServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},

@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const disableUser = `-- name: DisableUser :exec
+const disableUser = `-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = $1,
   workos_deleted_at = $2,
@@ -19,6 +19,7 @@ SET workos_updated_at = $1,
   updated_at = clock_timestamp()
 WHERE workos_id = $3
   AND (workos_updated_at IS NULL OR $1 >= workos_updated_at)
+RETURNING id
 `
 
 type DisableUserParams struct {
@@ -27,9 +28,24 @@ type DisableUserParams struct {
 	WorkosID        pgtype.Text
 }
 
-func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error {
-	_, err := q.db.Exec(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
-	return err
+func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, disableUser, arg.WorkosUpdatedAt, arg.WorkosDeletedAt, arg.WorkosID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
@@ -530,7 +546,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at, (xmax = 0) AS was_created
 `
 
@@ -559,6 +577,9 @@ type UpsertUserRow struct {
 	WasCreated      bool
 }
 
+// Login and other IDP upserts mean the user is authenticating now, so clear
+// WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+// email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertUserRow, error) {
 	row := q.db.QueryRow(ctx, upsertUser,
 		arg.ID,

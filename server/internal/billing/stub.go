@@ -401,7 +401,7 @@ func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen
 	if err != nil {
 		return fmt.Errorf("open local billing file: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close local billing usage file", func() error {
 		return f.Close()
 	})
 
@@ -476,7 +476,7 @@ func (s *StubClient) writeModelUsage(ctx context.Context, orgID string, usage *m
 	if err != nil {
 		return fmt.Errorf("open local model usage file: %w", err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close local model usage file", func() error {
 		return f.Close()
 	})
 

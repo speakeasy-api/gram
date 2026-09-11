@@ -379,6 +379,25 @@ func (q *Queries) CountChatsWithResolutions(ctx context.Context, arg CountChatsW
 	return total, err
 }
 
+const countInferenceMessages = `-- name: CountInferenceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE chat_id = $1 AND project_id = $2
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%'
+`
+
+type CountInferenceMessagesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) CountInferenceMessages(ctx context.Context, arg CountInferenceMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInferenceMessages, arg.ChatID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 type CreateChatContentPartParams struct {
 	ChatID              uuid.UUID
 	ProjectID           uuid.UUID
@@ -3670,6 +3689,41 @@ func (q *Queries) UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams
 	return err
 }
 
+const updateInferenceMessageAttribution = `-- name: UpdateInferenceMessageAttribution :exec
+UPDATE chat_messages
+SET external_user_id = COALESCE($1::text, external_user_id),
+    user_id = COALESCE($2::text, user_id),
+    source = CASE WHEN source = 'anthropic-inference' THEN $3::text ELSE source END
+WHERE chat_id = $4 AND project_id = $5
+  AND origin = 'anthropic-inference'
+  AND (
+    ($1::text IS NOT NULL AND external_user_id IS DISTINCT FROM $1::text)
+    OR ($2::text IS NOT NULL AND user_id IS DISTINCT FROM $2::text)
+    OR (source = 'anthropic-inference' AND $3::text <> 'anthropic-inference')
+  )
+`
+
+type UpdateInferenceMessageAttributionParams struct {
+	ActorEmail pgtype.Text
+	UserID     pgtype.Text
+	Source     string
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+}
+
+// Refresh display metadata on previously captured inference messages without
+// changing their identity or replacing a known product source.
+func (q *Queries) UpdateInferenceMessageAttribution(ctx context.Context, arg UpdateInferenceMessageAttributionParams) error {
+	_, err := q.db.Exec(ctx, updateInferenceMessageAttribution,
+		arg.ActorEmail,
+		arg.UserID,
+		arg.Source,
+		arg.ChatID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
 SET tool_outcome = $1,
@@ -3836,7 +3890,7 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
 RETURNING id, content, tool_calls, model, user_id, external_user_id, source
 `

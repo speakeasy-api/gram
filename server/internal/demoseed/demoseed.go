@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -31,6 +32,11 @@ var clickhouseSQL string
 
 //go:embed openapi.yaml
 var openapiDoc []byte
+
+const (
+	clickHouseDeleteVisibilityTimeout = 30 * time.Second
+	clickHouseDeleteVisibilityPoll    = 250 * time.Millisecond
+)
 
 // Run applies the seed for spec's tenant: Postgres first (installs and
 // executes demo.ensure_demo_org(), whose pre/postflight asserts abort the
@@ -117,9 +123,35 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		"lightweight_deletes_sync": 2,
 		"max_execution_time":       600,
 	}))
+	deleted := false
+	deleteVisible := false
 	for _, stmt := range splitStatements(spec.Rewrite(clickhouseSQL)) {
-		if strings.HasPrefix(strings.ToUpper(stmt), "SET ") {
+		upperStmt := strings.ToUpper(stmt)
+		if strings.HasPrefix(upperStmt, "SET ") {
 			continue
+		}
+		if strings.HasPrefix(upperStmt, "DELETE ") {
+			deleted = true
+		} else if deleted && !deleteVisible {
+			if err := waitForClickHouseTelemetryDelete(
+				chCtx,
+				clickHouseDeleteVisibilityTimeout,
+				clickHouseDeleteVisibilityPoll,
+				func(queryCtx context.Context) (uint64, error) {
+					var remaining uint64
+					err := ch.QueryRow(queryCtx, `
+						SELECT count()
+						FROM telemetry_logs
+						WHERE gram_project_id = toUUID(?)`, spec.ProjectID()).Scan(&remaining)
+					if err != nil {
+						return 0, fmt.Errorf("count demo telemetry rows: %w", err)
+					}
+					return remaining, nil
+				},
+			); err != nil {
+				return fmt.Errorf("apply demo seed to clickhouse: %w", err)
+			}
+			deleteVisible = true
 		}
 		if err := ch.Exec(chCtx, stmt); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
@@ -128,6 +160,35 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	logger.InfoContext(ctx, "demo seed applied to clickhouse")
 
 	return nil
+}
+
+func waitForClickHouseTelemetryDelete(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+	countRows func(context.Context) (uint64, error),
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		remaining, err := countRows(waitCtx)
+		if err != nil {
+			return fmt.Errorf("check demo telemetry delete visibility: %w", err)
+		}
+		if remaining == 0 {
+			return nil
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("wait for demo telemetry delete visibility with %d rows remaining: %w", remaining, context.Cause(waitCtx))
+		case <-ticker.C:
+		}
+	}
 }
 
 // splitStatements strips -- line comments and splits the script into

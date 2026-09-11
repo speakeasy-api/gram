@@ -255,3 +255,43 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- Live clients still pointing at a set. Backs both the delete preflight and the
+-- refusal inside DeleteSet, over the same predicate, so the preflight cannot
+-- disagree with the mutation it predicts.
+--
+-- Runs after LockJsonWebKeySetForKeyWrite; the attach side takes FOR SHARE on
+-- that row, so an attach either lands before this count or blocks and then
+-- finds the set gone. The database cannot enforce this itself: the foreign key
+-- is NO ACTION and `deleted` is generated, so soft deletes never fire it.
+--
+-- COUNT(*) rather than EXISTS: the preflight needs the number, and it types as
+-- a non-nullable int64, which cannot fail open the way an unset pgtype.Bool can.
+-- name: CountRemoteSessionClientsForJsonWebKeySet :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE organization_id = @organization_id::text
+  AND json_web_key_set_id = @json_web_key_set_id::uuid
+  AND deleted IS FALSE;
+
+-- The delete preflight's impact summary: how many live clients reference the
+-- set, plus a capped list to name them. The count is authoritative; the list
+-- truncates past the cap. Oldest first so it is stable across calls, and
+-- COALESCE because array_agg is NULL over an empty group.
+--
+-- One statement, because READ COMMITTED snapshots per statement: a count and a
+-- listing run separately could disagree, and a transaction around them does not
+-- help. The cap is applied to the finished aggregate on purpose. Capping inside
+-- reads better and measures worse, since the index cannot order this and the
+-- sibling COUNT(*) scans everything regardless; see 94918ed for the numbers.
+-- name: SummarizeRemoteSessionClientsForJsonWebKeySet :one
+SELECT
+    COUNT(*) AS client_count,
+    COALESCE(
+        (array_agg(client_id ORDER BY created_at, id))[1:sqlc.arg('limit_value')::int],
+        '{}'::text[]
+    )::text[] AS client_ids
+FROM remote_session_clients
+WHERE organization_id = @organization_id::text
+  AND json_web_key_set_id = @json_web_key_set_id::uuid
+  AND deleted IS FALSE;

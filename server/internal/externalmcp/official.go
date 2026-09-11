@@ -140,22 +140,21 @@ func officialEntry(registryID uuid.UUID, server serverJSON) *types.ExternalMCPSe
 		})
 	}
 	return &types.ExternalMCPServerEntry{
-		Repository:                          toExternalMCPRepository(server.Repository),
-		Packages:                            toExternalMCPPackages(server.Packages),
-		RegistrySpecifier:                   server.Name,
-		Version:                             server.Version,
-		Description:                         server.Description,
-		ToolsetID:                           nil,
-		McpServerID:                         nil,
-		RegistryID:                          &registryIDString,
-		OrganizationMcpCollectionRegistryID: nil,
-		Title:                               server.Title,
-		IconURL:                             officialIconURL(server),
-		Meta:                                nil,
-		ToolCount:                           0,
-		IsReadOnly:                          false,
-		SupportsDcr:                         false,
-		Remotes:                             remotes,
+		Repository:        toExternalMCPRepository(server.Repository),
+		Packages:          toExternalMCPPackages(server.Packages),
+		RegistrySpecifier: server.Name,
+		Version:           server.Version,
+		Description:       server.Description,
+		ToolsetID:         nil,
+		McpServerID:       nil,
+		RegistryID:        &registryIDString,
+		Title:             server.Title,
+		IconURL:           officialIconURL(server),
+		Meta:              nil,
+		ToolCount:         0,
+		IsReadOnly:        false,
+		SupportsDcr:       false,
+		Remotes:           remotes,
 	}
 }
 

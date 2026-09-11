@@ -18,9 +18,12 @@
 //     has linked under the user_session_issuer, returning them as a
 //     remote_session_issuer_id -> token map.
 //
-// Refresh is invoked only when the stored access_expires_at is in the
-// past. A still-valid access token short-circuits: no upstream token
-// endpoint is contacted.
+// Refresh is invoked only when the stored access_expires_at has passed,
+// or is within AccessTokenExpirySkew of passing and a refresh grant is
+// available. A still-valid access token short-circuits: no upstream
+// token endpoint is contacted. A refresh that fails inside the skew
+// window falls back to the stored token, which is still within its
+// stated lifetime; only a failure past the deadline leaves no token.
 
 package remotesessions
 
@@ -30,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -41,10 +45,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -74,6 +75,12 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Set("client_secret", clientSecret)
 	case TokenEndpointAuthMethodNone:
 		form.Set("client_id", clientID)
+	case TokenEndpointAuthMethodPrivateKeyJWT:
+		// AIM-156 builds the RFC 7523 assertion this method needs. No client can
+		// store the value yet (it is absent from tokenEndpointAuthMethodEnum), so
+		// this is unreachable; it fails loudly rather than falling through to an
+		// unauthenticated request that the upstream rejects as an opaque 401.
+		return nil, fmt.Errorf("token endpoint auth method %q is not implemented", method)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
@@ -120,13 +127,13 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 
 // ResolveAccessToken returns the upstream access token stored for the
 // (client, subject) pair, refreshing via the upstream /token endpoint
-// when the stored access_expires_at is in the past and a
-// refresh_token is present.
+// when the stored access_expires_at has passed (or is within
+// AccessTokenExpirySkew of passing) and a refresh_token is present.
 //
 // Returns ("", nil) when there is no usable token for this binding —
-// no row, expired with no refresh path, refresh failed, decryption
-// failed. The empty string is the "no token" signal; the caller
-// decides whether absence is a challenge or a no-op.
+// no row, expired with no refresh path, refresh failed past the
+// deadline, decryption failed. The empty string is the "no token"
+// signal; the caller decides whether absence is a challenge or a no-op.
 //
 // Returns a non-nil error only for unexpected failures (database
 // errors). "No token available" is not an error.
@@ -181,34 +188,14 @@ func (m *ChallengeManager) resolveUpstreamToken(
 			return zero, nil
 		}
 		// validateAndRefresh errors only when a refresh was required (the
-		// stored access token is past its usable window) and could not be
+		// stored access token is past its deadline) and could not be
 		// completed — the upstream rejected the refresh token, or the stored
 		// token could not be decrypted. That is a broken link needing a
 		// re-connect, distinct from "never linked" (the pgx.ErrNoRows case
 		// above). Both collapse to the same empty-token signal downstream and
-		// then to a byte-identical 401, so log the reason here — using the
-		// public-safe TokenRefreshError.Reason when present — instead of
-		// discarding it silently. The issuer URL and outcome are the ones the
-		// upstream-refresh metric recorded, so this line joins to its series;
-		// the user id is what lets "how many users are affected" be answered,
-		// since a client id is one row per provider connection, not per user.
-		reason := "upstream token refresh failed"
-		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
-			reason = refreshErr.Reason
-		}
-		args := []any{
-			attr.SlogRemoteSessionClientID(clientID.String()),
-			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
-			attr.SlogOAuthFailureReason(reason),
-			attr.SlogError(err),
-		}
-		if failure, ok := errors.AsType[*RefreshError](err); ok {
-			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
-		}
-		if subject.Kind == urn.SessionSubjectKindUser {
-			args = append(args, attr.SlogUserID(subject.ID))
-		}
-		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", args...)
+		// then to a byte-identical 401, so log the reason here instead of
+		// discarding it silently.
+		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
 		return zero, nil
 	}
 
@@ -444,7 +431,12 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 // just-backfilled RFC 8707 resource, from the same row as the token.
 //
 // The usable window depends on what the upstream told us:
-//   - access_expires_at set: the upstream-stated expiry governs.
+//   - access_expires_at set: the upstream-stated expiry governs. With a usable
+//     refresh grant, a token within AccessTokenExpirySkew of it is refreshed
+//     before it is forwarded rather than rejected upstream mid-request; with
+//     none, the token is forwarded until the deadline itself. A refresh that
+//     fails inside the skew window falls back to the stored token until the
+//     deadline; only a failure past the deadline is an error.
 //   - access_expires_at NULL: no expiry was reported, so the stored access
 //     token is served as-is. A refresh token does not imply that access expires.
 //
@@ -456,13 +448,16 @@ func (m *ChallengeManager) validateAndRefresh(
 	resource string,
 ) (string, remotesessions_repo.RemoteSession, error) {
 	now := time.Now()
-	if sess.AuthorizationExpiresAt.Valid && !sess.AuthorizationExpiresAt.Time.After(now) {
+	if !authorizationUsable(sess, now) {
 		return "", sess, ErrNoValidToken
 	}
 
-	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+	hasRefresh := hasRefreshToken(sess)
 
-	if !sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now) {
+	// The skew and its refresh-grant condition are pinned by
+	// accessTokenUsable's unit tests; they cover this path only while the
+	// deadline check stays on the shared predicate rather than inlined.
+	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
 			return "", sess, fmt.Errorf("decrypt access token: %w", err)
@@ -476,64 +471,104 @@ func (m *ChallengeManager) validateAndRefresh(
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
 	if err != nil {
-		return "", sess, err
+		// Inside the skew window the stored token is still within its stated
+		// lifetime, so a refresh that fails there — an upstream 5xx or 429, a
+		// lock cache blip — leaves it exactly as usable as it was before the
+		// attempt. Forwarding it keeps the early refresh a pure optimization:
+		// nobody is sent to reconnect while holding a token that still works.
+		// Past the deadline there is nothing to fall back to.
+		if !accessTokenLive(sess, time.Now()) {
+			return "", sess, err
+		}
+		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
+		if derr != nil {
+			return "", sess, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
+		}
+		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
+		return plain, sess, nil
 	}
 	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
 	return res.AccessToken, res.Session, nil
 }
 
+// refreshFailureAttrs is the attribute set a failed request-path refresh is
+// logged with. The reason is the public-safe TokenRefreshError.Reason when
+// there is one, joined by the error code the upstream answered with when its
+// body carried one. The issuer URL and outcome are the ones the
+// upstream-refresh metric recorded for the attempt, so the log line joins to
+// its series; the user id is what lets "how many users are affected" be
+// answered, since a client id is one row per provider connection, not per
+// user.
+func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []any {
+	reason := "upstream token refresh failed"
+	code := ""
+	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
+		reason = refreshErr.Reason
+		code = refreshErr.UpstreamCode()
+	}
+	args := []any{
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+		attr.SlogOAuthFailureReason(reason),
+		attr.SlogError(err),
+	}
+	if code != "" {
+		args = append(args, attr.SlogOAuthError(code))
+	}
+	if failure, ok := errors.AsType[*RefreshError](err); ok {
+		args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+	}
+	if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+		args = append(args, attr.SlogUserID(sess.SubjectUrn.ID))
+	}
+	return args
+}
+
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
 // endpoint and persists the new token pair on success, returning the updated
-// remote_session row and the new plaintext access token.
+// remote_session row and the decoded token response the caller restates
+// identity from after the lease is released.
 //
-// RefreshService is its only caller and supplies the session's client +
-// issuer row, read after the single-flight lock so the POST runs on current
-// configuration. The upstream token POST is an external call, so q must be a
-// pool-bound querier, never a transaction-bound one — the POST must not run
-// inside an open database transaction.
+// The caller supplies the session's client + issuer row, read after the
+// single-flight lock so the POST runs on current configuration. The POST is
+// an external call, so q must be a pool-bound querier, never a
+// transaction-bound one.
 //
 // Operator-actionable failures (unreadable stored token, missing token
 // endpoint, an upstream rejection, no access token returned) come back as a
 // *TokenRefreshError carrying a public-safe Reason, so callers can distinguish
 // them from internal infrastructure errors and surface the Reason.
-func refreshSessionTokens(
+func (s *RefreshService) refreshSessionTokens(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
-	enc *encryption.Client,
-	policy *guardian.Policy,
-	tunnels *tunnelrouting.HTTPClient,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (remotesessions_repo.RemoteSession, string, error) {
+) (remotesessions_repo.RemoteSession, tokenResponse, error) {
 	var zero remotesessions_repo.RemoteSession
+	var noToken tokenResponse
 
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
-		return zero, "", newTokenRefreshError("the identity provider has no token endpoint configured", nil)
+		return zero, noToken, newTokenRefreshError("the identity provider has no token endpoint configured", nil)
 	}
 
-	doer, err := upstreamHTTPDoer(policy.PooledClient(), tunnels, client.TunneledMcpServerID)
+	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
 	if err != nil {
-		return zero, "", newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
-	}
-
-	refreshToken, err := enc.Decrypt(sess.RefreshTokenEncrypted.String)
-	if err != nil {
-		return zero, "", newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
+		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
 	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid {
-		clientSecret, err = enc.Decrypt(client.ClientSecretEncrypted.String)
+		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
-			return zero, "", newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
+			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
 		}
 	}
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		return zero, "", newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
 	}
 
 	form := url.Values{}
@@ -542,62 +577,52 @@ func refreshSessionTokens(
 	if audience := conv.FromPGTextOrEmpty[string](client.ClientAudience); audience != "" {
 		form.Set("audience", audience)
 	}
-	if resource != "" {
+	// An operator's false keeps the resource off the refresh grant; the
+	// session still carries it for routing.
+	sendResource := resource != "" && (!client.ResourceIndicatorSupported.Valid || client.ResourceIndicatorSupported.Bool)
+	if sendResource {
 		form.Set("resource", resource)
 	}
 
-	// Scoped to the exchange so an unresponsive upstream cannot outlive the
-	// single-flight lease; the persist below still runs on ctx.
+	// One deadline bounds both POSTs so an unresponsive upstream cannot
+	// outlive the single-flight lease; the persist below still runs on ctx.
 	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
 	defer cancel()
 
-	req, err := newTokenEndpointRequest(postCtx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	tok, err := s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok && sendResource && refreshErr.invalidTarget() {
+		// RFC 8707 invalid_target rejects this resource; the grant itself may
+		// still refresh without it, as the login did.
+		s.logger.DebugContext(ctx, "identity provider rejected the RFC 8707 resource parameter on refresh; retrying without it",
+			attr.SlogOAuthIssuer(client.IssuerUrl),
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogOAuthResource(resource),
+			attr.SlogError(err),
+		)
+		form.Del("resource")
+		tok, err = s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+	}
 	if err != nil {
-		return zero, "", fmt.Errorf("new refresh request: %w", err)
+		return zero, noToken, err
 	}
 
-	resp, err := doer.Do(req)
+	accessEnc, err := s.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return zero, "", fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
-	}
-	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-	if err != nil {
-		return zero, "", fmt.Errorf("read refresh response: %w", err)
-	}
-	if resp.StatusCode/100 != 2 {
-		return zero, "", newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
-	}
-	var tok tokenResponse
-	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, "", fmt.Errorf("decode refresh response: %w", err)
-	}
-	if tok.AccessToken == "" {
-		return zero, "", newTokenRefreshError("the identity provider returned no access token", nil)
-	}
-
-	accessEnc, err := enc.Encrypt([]byte(tok.AccessToken))
-	if err != nil {
-		return zero, "", fmt.Errorf("encrypt new access token: %w", err)
+		return zero, noToken, fmt.Errorf("encrypt new access token: %w", err)
 	}
 	newRefreshEnc := sess.RefreshTokenEncrypted
 	if tok.RefreshToken != "" {
-		v, eerr := enc.Encrypt([]byte(tok.RefreshToken))
+		v, eerr := s.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return zero, "", fmt.Errorf("encrypt new refresh token: %w", eerr)
+			return zero, noToken, fmt.Errorf("encrypt new refresh token: %w", eerr)
 		}
 		newRefreshEnc = conv.PtrToPGText(&v)
 	}
 
-	// expires_in absent ⇒ NULL (no known expiry), matching exchangeCode. Never
-	// fabricate a deadline the upstream did not assert.
+	// No reported expiry ⇒ NULL (no known expiry), matching the code
+	// exchange. Never fabricate a deadline the upstream did not assert.
 	now := time.Now()
-	var accessExpires *time.Time
-	if tok.ExpiresIn > 0 {
-		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
-		accessExpires = &v
-	}
+	accessExpires := tok.AccessExpiresAt(now)
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
 
@@ -632,10 +657,132 @@ func refreshSessionTokens(
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, "", newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
+			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
 		}
-		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
 	}
 
-	return updated, tok.AccessToken, nil
+	return updated, tok, nil
+}
+
+// identityRestatementBudget bounds one restatement on a context detached from the request.
+const identityRestatementBudget = idTokenVerifyBudget + 5*time.Second
+
+// restateIdentity writes what a refresh said about the grant's owner after the
+// tokens are stored, outside the lease. Any rejection, including a different
+// subject (§12.2), keeps the identity verified at the exchange.
+func (s *RefreshService) restateIdentity(
+	ctx context.Context,
+	q *remotesessions_repo.Queries,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
+	sess remotesessions_repo.RemoteSession,
+	tok tokenResponse,
+) remotesessions_repo.RemoteSession {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityRestatementBudget)
+	defer cancel()
+
+	attrs := []slog.Attr{
+		attr.SlogOAuthIssuer(client.IssuerUrl),
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+	}
+	var identity *UpstreamIdentity
+	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
+		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
+			issuer:      client.IssuerUrl,
+			clientID:    client.ExternalClientID,
+			jwksURI:     client.JwksUri.String,
+			fetchScope:  client.RemoteSessionIssuerID.String(),
+			signingAlgs: client.IDTokenSigningAlgValuesSupported,
+			nonce:       "",
+			subject:     sess.UpstreamSubject.String,
+		})
+		switch {
+		case errors.Is(err, errIDTokenVerificationDisabled):
+		case err != nil:
+			logIdentityFailure(ctx, s.logger, "refresh id token rejected; stored identity kept", err, attrs...)
+		default:
+			identity = &verified
+		}
+	}
+	enrichment, err := buildEnrichment(tok, identity)
+	if err != nil {
+		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
+	}
+	if identity == nil && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
+		return sess
+	}
+
+	cols := identity.columns()
+	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		ID:                    sess.ID,
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: sess.RemoteSessionClientID,
+		UpstreamSubject:       cols.Subject,
+		UpstreamEmail:         cols.Email,
+		UpstreamDisplayName:   cols.DisplayName,
+		IdentitySource:        cols.Source,
+		Enrichment:            enrichment,
+		ExpectedUpdatedAt:     sess.UpdatedAt,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// updated_at moved during verification: a reconnect, a revocation, or
+		// another refresh's rotation. No column tells those apart, so a retry
+		// could stamp this grant's identity onto a reconnected one; the
+		// restatement is best-effort and the stored identity stands.
+		return sess
+	}
+	if err != nil {
+		s.logger.LogAttrs(ctx, slog.LevelError, "persist restated remote session identity", append([]slog.Attr{attr.SlogError(err)}, attrs...)...)
+		return sess
+	}
+	return restated
+}
+
+// postRefreshGrant sends one refresh_token grant and decodes the token set
+// it returns. An upstream rejection comes back as a *TokenRefreshError.
+func (s *RefreshService) postRefreshGrant(
+	ctx context.Context,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
+	form url.Values,
+	authMethod TokenEndpointAuthMethod,
+	clientSecret string,
+) (tokenResponse, error) {
+	var zero tokenResponse
+
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	if err != nil {
+		return zero, fmt.Errorf("new refresh request: %w", err)
+	}
+
+	doer, err := upstreamHTTPDoer(s.policy.PooledClient(), s.tunnels, client.TunneledMcpServerID)
+	if err != nil {
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
+	}
+
+	resp, err := doer.Do(req)
+	if err != nil {
+		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return zero, fmt.Errorf("read refresh response: %w", err)
+	}
+	if resp.StatusCode/100 != 2 {
+		return zero, newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
+	}
+	var tok tokenResponse
+	if err := json.Unmarshal(body, &tok); err != nil {
+		return zero, fmt.Errorf("decode refresh response: %w", err)
+	}
+	tok.raw = body
+	if tok.AccessToken == "" {
+		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
+			return zero, refreshErr
+		}
+		return zero, newTokenRefreshError("the identity provider returned no access token", nil)
+	}
+	return tok, nil
 }

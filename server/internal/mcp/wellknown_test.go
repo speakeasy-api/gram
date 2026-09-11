@@ -22,11 +22,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -66,6 +69,45 @@ func TestHandleGetAuthorizationServer_MissingSlug(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mcp slug must be provided")
 	require.Empty(t, w.Body.String())
+}
+
+func TestWellKnownPrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+	sharedSlug := "wellknown-private-only-" + uuid.NewString()[:8]
+	endpointToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "endpoint-"+uuid.NewString()[:8])
+	legacy := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug: sharedSlug, IsPublic: true,
+	})
+	_, err := toolsetsRepo.UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
+		Name: legacy.Toolset.Name, Description: legacy.Toolset.Description,
+		DefaultEnvironmentSlug: legacy.Toolset.DefaultEnvironmentSlug,
+		McpSlug:                pgtype.Text{String: sharedSlug, Valid: true},
+		McpIsPublic:            true, McpEnabled: true,
+		CustomDomainID: uuid.NullUUID{}, ToolSelectionMode: "",
+		Slug: legacy.Toolset.Slug, ProjectID: legacy.Toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, sharedSlug, "public", uuid.NullUUID{}, uuid.Nil)
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
+		ID:                server.ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetAuthorizationServer,
+		ti.service.HandleGetProtectedResource,
+	} {
+		w, err := runMCPWellKnown(t, ctx, handler, sharedSlug)
+		require.Error(t, err)
+		require.Empty(t, w.Body.String())
+	}
 }
 
 func TestHandleGetAuthorizationServer_NotFound(t *testing.T) {
@@ -298,6 +340,49 @@ func TestHandleGetProtectedResource_ToolsetBackendWithoutOAuth(t *testing.T) {
 	require.Empty(t, w.Body.String())
 }
 
+func TestHandleGetProtectedResource_ToolsetBackendWithExternalOAuth(t *testing.T) {
+	t.Parallel()
+
+	upstreamIssuer := "https://issuer.example.com/Tenant/CaseSensitive"
+	for _, tc := range []struct {
+		name           string
+		slug           string
+		upstreamIssuer *string
+	}{
+		{name: "upstream issuer", slug: "mcp-pr-external", upstreamIssuer: &upstreamIssuer},
+		{name: "metadata-based", slug: "mcp-pr-metadata-external"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+
+			external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+				Slug: tc.slug, IsPublic: true, AuthorizationServerIssuer: tc.upstreamIssuer,
+			})
+			slug := external.Toolset.McpSlug.String
+			createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+
+			w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code)
+
+			var metadata map[string]any
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+			resourceURL := "http://0.0.0.0/mcp/" + slug
+			expectedIssuer := resourceURL
+			if tc.upstreamIssuer != nil {
+				expectedIssuer = *tc.upstreamIssuer
+			}
+			require.Equal(t, resourceURL, metadata["resource"])
+			require.Equal(t, []any{expectedIssuer}, metadata["authorization_servers"])
+		})
+	}
+}
+
 // TestHandleGetProtectedResource_IssuerGatedRemoteBackend is the
 // protected-resource companion of the AGE-2624 regression: an issuer-gated
 // remote-backed mcp_server at /mcp/{slug} serves RFC 9728 metadata whose
@@ -376,6 +461,10 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
 	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 
 	w, err := runMCPWellKnown(t, domainCtx, ti.service.HandleGetProtectedResource, slug)
 	require.NoError(t, err)
@@ -393,3 +482,78 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 
 // TestHandleGetProtectedResource_LegacySlugFallbackProxy is the
 // protected-resource companion of the legacy fallback test.
+
+// TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints pins the AIS-634
+// contract: a hosted (toolset-backed) server carrying two endpoints serves
+// both well-known documents keyed on whichever endpoint the request arrived
+// at, with no dependence on toolsets.mcp_slug.
+func TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "ts-two-ep-"+uuid.NewString()[:8])
+	slugA := "two-ep-a-" + uuid.NewString()
+	slugB := "two-ep-b-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slugA, "public", uuid.NullUUID{}, issuerID)
+	createPlatformMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer.ID, slugB)
+
+	for _, slug := range []string{slugA, slugB} {
+		expected := "http://0.0.0.0/mcp/" + slug
+
+		w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+		var asDoc map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &asDoc))
+		require.Equal(t, expected, asDoc["issuer"])
+		require.Equal(t, expected+"/authorize", asDoc["authorization_endpoint"])
+		require.Equal(t, expected+"/token", asDoc["token_endpoint"])
+
+		w, err = runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code)
+		var prDoc map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &prDoc))
+		require.Equal(t, expected, prDoc["resource"])
+		authServers, ok := prDoc["authorization_servers"].([]any)
+		require.True(t, ok)
+		require.Equal(t, []any{expected}, authServers)
+	}
+}
+
+// TestHandleGetAuthorizationServer_ExternalOAuth_EndpointSlugDiffers pins
+// that the external-OAuth (non-issuer-gated) branch also keys its document
+// on the endpoint slug: the served issuer is the endpoint URL even when it
+// differs from toolsets.mcp_slug.
+func TestHandleGetAuthorizationServer_ExternalOAuth_EndpointSlugDiffers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "ext-ep-differs",
+		IsPublic: true,
+		Metadata: nil,
+	})
+	slug := "ext-ep-" + uuid.NewString()
+	require.NotEqual(t, external.Toolset.McpSlug.String, slug)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, external.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+
+	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.Equal(t, "http://0.0.0.0/mcp/"+slug, metadata["issuer"])
+	require.Equal(t, "https://test-oauth-server.example.com/authorize", metadata["authorization_endpoint"])
+}

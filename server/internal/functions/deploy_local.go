@@ -330,7 +330,7 @@ func (l *LocalRunner) handleLocalProxyRequest(action string) http.HandlerFunc {
 			http.Error(w, "local function invocation failed", http.StatusBadGateway)
 			return
 		}
-		defer o11y.LogDefer(ctx, l.logger, func() error { return resp.Body.Close() })
+		defer o11y.LogDefer(ctx, l.logger, "failed to close local function runner response body", func() error { return resp.Body.Close() })
 
 		for key, values := range resp.Header {
 			if strings.EqualFold(key, "Content-Length") || strings.EqualFold(key, "Transfer-Encoding") {
@@ -563,7 +563,7 @@ func (l *LocalRunner) copyAsset(ctx context.Context, assetURL *url.URL, dst stri
 	if err != nil {
 		return fmt.Errorf("open asset: %w", err)
 	}
-	defer o11y.LogDefer(ctx, l.logger, func() error { return src.Close() })
+	defer o11y.LogDefer(ctx, l.logger, "failed to close function asset reader", func() error { return src.Close() })
 
 	tmpPath := dst + ".tmp"
 	//nolint:gosec // temporary destination lives under the orchestrator-managed local function directory.
@@ -576,7 +576,7 @@ func (l *LocalRunner) copyAsset(ctx context.Context, assetURL *url.URL, dst stri
 		if closed {
 			return
 		}
-		_ = o11y.LogDefer(ctx, l.logger, func() error { return dstFile.Close() })
+		_ = o11y.LogDefer(ctx, l.logger, "failed to close local function asset file", func() error { return dstFile.Close() })
 	}()
 
 	if _, err := io.Copy(dstFile, src); err != nil {

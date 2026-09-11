@@ -18,7 +18,7 @@ import (
 
 // BuildGetPluginsPayload builds the payload for the agent getPlugins endpoint
 // from CLI flags.
-func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string) (*agent.GetPluginsPayload, error) {
+func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsApikeyToken string, agentGetPluginsEmail string, agentGetPluginsSerialNumber string, agentGetPluginsHostname string, agentGetPluginsEnvironment string) (*agent.GetPluginsPayload, error) {
 	var legacyEmail *string
 	{
 		if agentGetPluginsLegacyEmail != "" {
@@ -49,12 +49,19 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsAp
 			hostname = &agentGetPluginsHostname
 		}
 	}
+	var environment *string
+	{
+		if agentGetPluginsEnvironment != "" {
+			environment = &agentGetPluginsEnvironment
+		}
+	}
 	v := &agent.GetPluginsPayload{}
 	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
+	v.Environment = environment
 
 	return v, nil
 }
@@ -120,6 +127,112 @@ func BuildUpdateConfigurationPayload(agentUpdateConfigurationBody string, agentU
 			tv := val
 			v.Config[tk] = tv
 		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListAiScanTargetsPayload builds the payload for the agent
+// listAiScanTargets endpoint from CLI flags.
+func BuildListAiScanTargetsPayload(agentListAiScanTargetsSessionToken string) (*agent.ListAiScanTargetsPayload, error) {
+	var sessionToken *string
+	{
+		if agentListAiScanTargetsSessionToken != "" {
+			sessionToken = &agentListAiScanTargetsSessionToken
+		}
+	}
+	v := &agent.ListAiScanTargetsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUpsertAiScanTargetPayload builds the payload for the agent
+// upsertAiScanTarget endpoint from CLI flags.
+func BuildUpsertAiScanTargetPayload(agentUpsertAiScanTargetBody string, agentUpsertAiScanTargetSessionToken string) (*agent.UpsertAiScanTargetPayload, error) {
+	var err error
+	var body UpsertAiScanTargetRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUpsertAiScanTargetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"category\": \"local_model\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }'")
+		}
+		if body.Signatures == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("signatures", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.id", body.ID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if utf8.RuneCountInString(body.DisplayName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 1, true))
+		}
+		if utf8.RuneCountInString(body.DisplayName) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.display_name", body.DisplayName, utf8.RuneCountInString(body.DisplayName), 128, false))
+		}
+		if !(body.Category == "harness" || body.Category == "local_model") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", body.Category, []any{"harness", "local_model"}))
+		}
+		if body.Signatures != nil {
+			if err2 := ValidateAiScanTargetSignaturesRequestBody(body.Signatures); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.VersionPlistKey != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.version_plist_key", *body.VersionPlistKey, "^[A-Za-z0-9]{1,64}$"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentUpsertAiScanTargetSessionToken != "" {
+			sessionToken = &agentUpsertAiScanTargetSessionToken
+		}
+	}
+	v := &agent.UpsertAiScanTargetPayload{
+		ID:              body.ID,
+		DisplayName:     body.DisplayName,
+		Category:        body.Category,
+		VersionPlistKey: body.VersionPlistKey,
+		Enabled:         body.Enabled,
+	}
+	if body.Signatures != nil {
+		v.Signatures = marshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures(body.Signatures)
+	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDeleteAiScanTargetPayload builds the payload for the agent
+// deleteAiScanTarget endpoint from CLI flags.
+func BuildDeleteAiScanTargetPayload(agentDeleteAiScanTargetBody string, agentDeleteAiScanTargetSessionToken string) (*agent.DeleteAiScanTargetPayload, error) {
+	var err error
+	var body DeleteAiScanTargetRequestBody
+	{
+		err = json.Unmarshal([]byte(agentDeleteAiScanTargetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"1\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.id", body.ID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentDeleteAiScanTargetSessionToken != "" {
+			sessionToken = &agentDeleteAiScanTargetSessionToken
+		}
+	}
+	v := &agent.DeleteAiScanTargetPayload{
+		ID: body.ID,
 	}
 	v.SessionToken = sessionToken
 
@@ -212,6 +325,90 @@ func BuildReportSessionMovedPayload(agentReportSessionMovedBody string, agentRep
 		Email:           body.Email,
 	}
 	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildReportAIScanPayload builds the payload for the agent reportAIScan
+// endpoint from CLI flags.
+func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApikeyToken string, agentReportAIScanEmail string, agentReportAIScanSerialNumber string, agentReportAIScanHostname string) (*agent.ReportAIScanPayload, error) {
+	var err error
+	var body ReportAIScanRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportAIScanBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
+		}
+		if body.Matches == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_started_at", body.ScanStartedAt, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_completed_at", body.ScanCompletedAt, goa.FormatDateTime))
+		if body.TargetListVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 0, true))
+		}
+		if body.TargetListVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 2.147483647e+09, false))
+		}
+		if len(body.Matches) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.matches", body.Matches, len(body.Matches), 100, false))
+		}
+		for _, e := range body.Matches {
+			if e != nil {
+				if err2 := ValidateAIScanMatchRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportAIScanApikeyToken != "" {
+			apikeyToken = &agentReportAIScanApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentReportAIScanEmail != "" {
+			email = &agentReportAIScanEmail
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportAIScanSerialNumber != "" {
+			serialNumber = &agentReportAIScanSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportAIScanHostname != "" {
+			hostname = &agentReportAIScanHostname
+		}
+	}
+	v := &agent.ReportAIScanPayload{
+		ScanStartedAt:     body.ScanStartedAt,
+		ScanCompletedAt:   body.ScanCompletedAt,
+		TargetListVersion: body.TargetListVersion,
+	}
+	if body.Matches != nil {
+		v.Matches = make([]*agent.AIScanMatch, len(body.Matches))
+		for i, val := range body.Matches {
+			if val == nil {
+				v.Matches[i] = nil
+				continue
+			}
+			v.Matches[i] = marshalAIScanMatchRequestBodyToAgentAIScanMatch(val)
+		}
+	} else {
+		v.Matches = []*agent.AIScanMatch{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 

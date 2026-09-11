@@ -1,14 +1,72 @@
 package metering
 
 const (
+	// AttributeRiskPolicyID identifies the policy that initiated the scan.
+	AttributeRiskPolicyID = "risk_policy_id"
+
+	// AttributeRiskPolicyVersion pins the initiating policy's execution version.
+	AttributeRiskPolicyVersion = "risk_policy_version"
+
+	// AttributeRiskPolicyLinkStatus distinguishes policy-triggered from other scans.
+	AttributeRiskPolicyLinkStatus = "risk_policy_link_status"
+
+	// AttributeRiskPolicyLinkReason identifies a scan performed without a risk policy.
+	AttributeRiskPolicyLinkReason = "risk_policy_link_reason"
+
+	// AttributeChatMessageID identifies the canonical scanned chat message.
+	AttributeChatMessageID = "chat_message_id"
+
+	// AttributeContentPartID identifies an independently scanned content part.
+	AttributeContentPartID = "content_part_id"
+
+	// AttributeMessageLinkStatus distinguishes linked from unlinked scan inputs.
+	AttributeMessageLinkStatus = "message_link_status"
+
+	// AttributeMessageLinkReason explains why a canonical message link is absent.
+	AttributeMessageLinkReason = "message_link_reason"
+
+	// AttributeScanExecutionPath distinguishes independently executed scan paths.
+	AttributeScanExecutionPath = "scan_execution_path"
+
+	// AttributeScanRequestID correlates the scan with its originating request.
+	AttributeScanRequestID = "scan_request_id"
+
+	// AttributeMessageType identifies the kind of content scanned.
+	AttributeMessageType = "message_type"
+
+	// AttributeToolCallID identifies the scanned tool invocation.
+	AttributeToolCallID = "tool_call_id"
+
+	// AttributeToolName identifies the tool whose content was scanned.
+	AttributeToolName = "tool_name"
+
 	// AttributeChatID identifies the chat containing the metered message.
 	AttributeChatID = "chat_id"
+
+	// AttributeExternalConversationID identifies the external agent's conversation, not a Gram chat row.
+	AttributeExternalConversationID = "external_conversation_id"
 
 	// AttributeAssistantID identifies the assistant responsible for the workload.
 	AttributeAssistantID = "assistant_id"
 
 	// AttributeWorkloadSource identifies the product path responsible for the workload.
 	AttributeWorkloadSource = "workload_source"
+
+	// AttributeRequestPath identifies the HTTP request path that carried the workload.
+	AttributeRequestPath = "request_path"
+
+	// AttributeCustomDomain identifies the validated custom domain carrying the workload.
+	AttributeCustomDomain = "custom_domain"
+
+	// AttributeMCPServerType identifies the resolved MCP server implementation.
+	AttributeMCPServerType = "mcp_server_type"
+
+	// AttributeMCPServerID identifies the resolved server within its type-specific namespace.
+	AttributeMCPServerID = "mcp_server_id"
+
+	// AttributeMCPServerSlug identifies the resolved server's canonical slug,
+	// or its stable route slug when the server type has no persisted slug.
+	AttributeMCPServerSlug = "mcp_server_slug"
 
 	// AttributeModel identifies the model that produced or received the message.
 	AttributeModel = "model"

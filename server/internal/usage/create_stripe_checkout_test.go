@@ -15,9 +15,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
@@ -32,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -39,6 +42,7 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type checkoutStripeClient struct {
@@ -47,6 +51,8 @@ type checkoutStripeClient struct {
 	customers                map[string]*stripeclient.Customer
 	checkoutResults          map[string]checkoutStripeResult
 	customerInputs           []stripeclient.CreateCustomerInput
+	customerUpdates          []stripeclient.UpdateCustomerInput
+	customerUpdateError      error
 	checkoutInputs           []stripeclient.CreateCheckoutSessionInput
 	customerError            error
 	checkoutError            error
@@ -97,6 +103,18 @@ func (c *checkoutStripeClient) CreateCustomer(_ context.Context, input stripecli
 	customer := &stripeclient.Customer{ID: fmt.Sprintf("cus_%d", len(c.customers)+1)}
 	c.customers[input.IdempotencyKey] = customer
 	return customer, nil
+}
+
+func (c *checkoutStripeClient) GetCustomer(context.Context, string) (*stripeclient.CustomerDetails, error) {
+	return nil, errors.New("unexpected Stripe customer lookup")
+}
+
+func (c *checkoutStripeClient) UpdateCustomer(_ context.Context, input stripeclient.UpdateCustomerInput) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.customerUpdates = append(c.customerUpdates, input)
+	return c.customerUpdateError
 }
 
 func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input stripeclient.CreateCheckoutSessionInput) (*stripeclient.CheckoutSession, error) {
@@ -236,6 +254,15 @@ func (c *checkoutStripeClient) VerifyWebhook([]byte, string) (*stripeclient.Webh
 
 func (c *checkoutStripeClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDTUM: "price_tum", MeterIDTUM: "mtr_tum", MeterEventName: "tum", PortalConfigurationID: "bpc_test"}
+}
+
+func (c *checkoutStripeClient) updates() []stripeclient.UpdateCustomerInput {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	updates := make([]stripeclient.UpdateCustomerInput, len(c.customerUpdates))
+	copy(updates, c.customerUpdates)
+	return updates
 }
 
 func (c *checkoutStripeClient) snapshot() (int, []stripeclient.CreateCustomerInput, []stripeclient.CreateCheckoutSessionInput) {
@@ -1584,6 +1611,75 @@ func TestCreateStripeCheckoutConcurrentDoubleClickCreatesOneCustomer(t *testing.
 	require.Equal(t, "cus_1", stored.StripeCustomerID.String)
 }
 
+func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	holder := testenv.BeginTx(t, t.Context(), ti.service.db)
+	require.NoError(t, repo.New(holder).LockBillingMetadataOrganization(t.Context(), ti.orgID))
+
+	ctx, cancel := context.WithCancel(ti.adminContext(t))
+	done := make(chan struct{})
+	var checkoutErr error
+	go func() {
+		defer close(done)
+		_, checkoutErr = ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	}()
+	defer func() {
+		cancel()
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancelCleanup()
+		select {
+		case <-done:
+		case <-cleanupCtx.Done():
+			t.Error("Checkout did not return after cancellation during cleanup")
+		}
+	}()
+
+	// The deadline guards the test; cancellation follows an observed lock wait.
+	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancelProbe()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		blocked, err := testrepo.New(ti.db).IsQueryBlockedOnLockFixture(probeCtx, "%LockBillingMetadataOrganization%")
+		require.NoError(t, err)
+		if blocked {
+			break
+		}
+		select {
+		case <-done:
+			require.FailNow(t, "Checkout returned before waiting for the billing metadata organization lock", "%v", checkoutErr)
+		case <-probeCtx.Done():
+			require.FailNow(t, "Checkout did not reach the billing metadata organization lock", "%v", probeCtx.Err())
+		case <-poll.C:
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-probeCtx.Done():
+		require.FailNow(t, "Checkout did not return after lock cancellation", "%v", probeCtx.Err())
+	}
+	require.ErrorIs(t, checkoutErr, context.Canceled)
+	require.ErrorContains(t, checkoutErr, "lock billing metadata organization")
+
+	_, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "Checkout must not insert billing metadata before acquiring the organization lock")
+	uniqueCustomers, customers, checkouts := ti.stripe.snapshot()
+	require.Equal(t, 1, uniqueCustomers, "idempotent Stripe customer creation intentionally precedes the billing metadata lock")
+	require.Len(t, customers, 1)
+	require.Equal(t, "customer:"+ti.orgID, customers[0].IdempotencyKey)
+	require.Empty(t, checkouts)
+
+	require.NoError(t, holder.Rollback(t.Context()))
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.NotEmpty(t, checkoutURL)
+	uniqueCustomers, _, _ = ti.stripe.snapshot()
+	require.Equal(t, 1, uniqueCustomers, "retry must reuse the Stripe customer created before cancellation")
+}
+
 func TestCreateStripeCheckoutPersistsIntentWhenCheckoutFails(t *testing.T) {
 	t.Parallel()
 
@@ -1604,4 +1700,127 @@ func TestCreateStripeCheckoutPersistsIntentWhenCheckoutFails(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionBillingMetadataCreateStripeCheckout)
 	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestCreateStripeCheckoutStampsOrganizationIdentity(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, customers, checkouts := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Equal(t, ti.orgID, customers[0].OrganizationID)
+	require.Equal(t, ti.orgSlug, customers[0].OrganizationSlug)
+	require.Equal(t, "Billing Test Organization", customers[0].OrganizationName)
+	require.Equal(t, "free", customers[0].AccountType)
+	require.Empty(t, customers[0].Email, "no alert email and no org admins: customer email stays unset")
+
+	require.Len(t, checkouts, 1)
+	require.Equal(t, ti.orgID, checkouts[0].OrganizationID)
+	require.Empty(t, ti.stripe.updates(), "a freshly created customer must not also be updated")
+}
+
+func TestCreateStripeCheckoutUsesBillingAlertEmailForCustomer(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	_, err := repo.New(ti.db).UpsertBillingEmail(t.Context(), repo.UpsertBillingEmailParams{
+		OrganizationID: ti.orgID,
+		AlertEmail:     conv.ToPGText("finance@example.test"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, customers, _ := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Equal(t, "finance@example.test", customers[0].Email)
+}
+
+func TestCreateStripeCheckoutFallsBackToOrganizationAdminEmail(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ctx := t.Context()
+	pool, ok := ti.db.(*pgxpool.Pool)
+	require.True(t, ok, "test database must be a pgxpool.Pool to seed system role grants")
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, pool, ti.orgID))
+	_, err := usersrepo.New(ti.db).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          ti.userID,
+		Email:       ti.email,
+		DisplayName: "Billing Admin",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.db).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(ti.userID),
+	})
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.db).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     ti.orgID,
+		WorkosUserID:       ti.userID,
+		UserID:             conv.ToPGText(ti.userID),
+		WorkosMembershipID: conv.ToPGText("membership_" + ti.userID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     authz.SystemRoleAdmin,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, customers, _ := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Equal(t, ti.email, customers[0].Email)
+}
+
+func TestCreateStripeCheckoutRefreshesExistingCustomerIdentity(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	_, err := repo.New(ti.db).StoreStripeCustomer(t.Context(), repo.StoreStripeCustomerParams{
+		OrganizationID:   ti.orgID,
+		StripeCustomerID: conv.ToPGText("cus_existing"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
+	require.Zero(t, uniqueCustomers, "existing customer must be reused")
+	require.Len(t, checkouts, 1)
+	require.Equal(t, "cus_existing", checkouts[0].CustomerID)
+
+	updates := ti.stripe.updates()
+	require.Len(t, updates, 1)
+	require.Equal(t, "cus_existing", updates[0].CustomerID)
+	require.Equal(t, ti.orgID, updates[0].OrganizationID)
+	require.Equal(t, ti.orgSlug, updates[0].OrganizationSlug)
+	require.Equal(t, "Billing Test Organization", updates[0].OrganizationName)
+	require.Equal(t, "free", updates[0].AccountType)
+}
+
+func TestCreateStripeCheckoutOmitsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	require.NoError(t, orgrepo.New(ti.db).SetAccountType(t.Context(), orgrepo.SetAccountTypeParams{
+		GramAccountType: "legacy-unknown",
+		ID:              ti.orgID,
+	}))
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, customers, _ := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Empty(t, customers[0].AccountType, "values outside constants.AccountTypes must not reach Stripe")
 }

@@ -205,6 +205,8 @@ export function setAuditLogsData(
       subjectId?: string | undefined;
       subjectIds?: Array<string> | undefined;
       actingSurface?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -228,6 +230,8 @@ export function invalidateAuditLogs(
       subjectId?: string | undefined;
       subjectIds?: Array<string> | undefined;
       actingSurface?: string | undefined;
+      from?: Date | undefined;
+      to?: Date | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

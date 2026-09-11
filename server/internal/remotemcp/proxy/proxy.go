@@ -84,6 +84,9 @@ type ServerIdentity struct {
 	RemoteMCPServerID   string
 	TunneledMCPServerID string
 	McpServerID         string
+	// MetaMCPServerID is set when the proxy call was dispatched through a
+	// gateway (meta MCP server). Attribution only.
+	MetaMCPServerID string
 }
 
 func (i ServerIdentity) SourceID() string {
@@ -103,7 +106,7 @@ func (i ServerIdentity) ToolURNKind() string {
 }
 
 func (i ServerIdentity) SlogAttrs() []slog.Attr {
-	attrs := make([]slog.Attr, 0, 3)
+	attrs := make([]slog.Attr, 0, 4)
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
 	}
@@ -113,9 +116,15 @@ func (i ServerIdentity) SlogAttrs() []slog.Attr {
 	if i.McpServerID != "" {
 		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
 	}
+	if i.MetaMCPServerID != "" {
+		attrs = append(attrs, attr.SlogMetaMcpServerID(i.MetaMCPServerID))
+	}
 	return attrs
 }
 
+// AppendAttributes deliberately omits MetaMCPServerID: it labels OTEL metric
+// instruments, and a per-gateway dimension there is a cardinality cost the
+// counters must not pay. Per-gateway analytics live in ClickHouse.
 func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))
@@ -228,9 +237,9 @@ type Proxy struct {
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
 	// relayed to the user. It may mutate resp.Header (headers are copied to
-	// the client afterwards). A non-nil error aborts the relay entirely; no
-	// status or headers have been written yet, so the caller's error path
-	// owns the client response.
+	// the client afterwards). On POST, a [RejectError] is converted into a
+	// correlated JSON-RPC error response; any other non-nil error aborts the
+	// relay entirely so the caller's error path owns the client response.
 	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
 
 	// DisableRedirects stops the upstream client from following redirect
@@ -689,6 +698,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	if p.UpstreamResponseInterceptor != nil {
 		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			if rejection, ok := errors.AsType[*RejectError](err); ok {
+				responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
+				return nil
+			}
 			return fmt.Errorf("upstream response interceptor: %w", err)
 		}
 	}

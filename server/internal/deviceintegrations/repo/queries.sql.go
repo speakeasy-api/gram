@@ -494,6 +494,7 @@ SELECT
   , s.consecutive_failures
   , s.auto_paused_at
   , s.last_push_digest
+  , s.last_poll_success_at
 FROM device_integration_syncs s
 JOIN device_integration_schedules sch
   ON sch.id = s.device_integration_schedule_id
@@ -518,6 +519,7 @@ type GetSyncTargetRow struct {
 	ConsecutiveFailures  int32
 	AutoPausedAt         pgtype.Timestamptz
 	LastPushDigest       pgtype.Text
+	LastPollSuccessAt    pgtype.Timestamptz
 }
 
 func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncTargetRow, error) {
@@ -539,6 +541,7 @@ func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncT
 		&i.ConsecutiveFailures,
 		&i.AutoPausedAt,
 		&i.LastPushDigest,
+		&i.LastPollSuccessAt,
 	)
 	return i, err
 }
@@ -1365,7 +1368,7 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 	return i, err
 }
 
-const upsertMdmDevice = `-- name: UpsertMdmDevice :execrows
+const upsertMdmDevice = `-- name: UpsertMdmDevice :one
 
 INSERT INTO mdm_devices (
     device_integration_config_id
@@ -1410,6 +1413,7 @@ ON CONFLICT (device_integration_config_id, external_id) DO UPDATE SET
     last_seen_at = clock_timestamp(),
     missing_since = NULL,
     updated_at = clock_timestamp()
+RETURNING (xmax = 0) AS inserted
 `
 
 type UpsertMdmDeviceParams struct {
@@ -1433,8 +1437,11 @@ type UpsertMdmDeviceParams struct {
 // the sync started: a config save (rotation, endpoint change) mid-pull makes
 // the insert a zero-row no-op, so stale-credential inventory never merges
 // into the newly saved config.
-func (q *Queries) UpsertMdmDevice(ctx context.Context, arg UpsertMdmDeviceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, upsertMdmDevice,
+// xmax is zero on a freshly inserted row and non-zero on one this statement
+// updated, which is the only way to tell a first sighting from a re-sighting:
+// the row count is 1 for both. A guard failure returns no row at all.
+func (q *Queries) UpsertMdmDevice(ctx context.Context, arg UpsertMdmDeviceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, upsertMdmDevice,
 		arg.DeviceIntegrationConfigID,
 		arg.OrganizationID,
 		arg.ExternalID,
@@ -1448,8 +1455,7 @@ func (q *Queries) UpsertMdmDevice(ctx context.Context, arg UpsertMdmDeviceParams
 		arg.Raw,
 		arg.ConfigUpdatedAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var inserted bool
+	err := row.Scan(&inserted)
+	return inserted, err
 }

@@ -116,7 +116,7 @@ func TestRemoveAPIKeyDisableCauseRecoversLegacyZeroLimit(t *testing.T) {
 	require.NoError(t, err)
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
 	require.NoError(t, err)
-	_, err = queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyHash: row.KeyHash, MonthlyCredits: 0, Reinstate: false})
+	_, err = queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyHash: row.KeyHash, MonthlyCredits: 0})
 	require.NoError(t, err)
 	patchesBefore := len(upstream.recorded())
 

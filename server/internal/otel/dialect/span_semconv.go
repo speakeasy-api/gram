@@ -15,11 +15,11 @@ func (e SemconvSpan) AppliesTo(span *otelv1.InboundSpan) bool {
 }
 
 func (e SemconvSpan) InputContent(span *otelv1.InboundSpan) (string, genaiconv.InputMessages, error) {
-	return semconvContent[genaiconv.InputMessages](span, "gen_ai.input.messages")
+	return semconvContent[genaiconv.InputMessages](span, semconvInputMessagesKey)
 }
 
 func (e SemconvSpan) OutputContent(span *otelv1.InboundSpan) (string, genaiconv.OutputMessages, error) {
-	return semconvContent[genaiconv.OutputMessages](span, "gen_ai.output.messages")
+	return semconvContent[genaiconv.OutputMessages](span, semconvOutputMessagesKey)
 }
 
 func semconvContent[T any](span *otelv1.InboundSpan, desired string) (string, T, error) {
@@ -99,12 +99,12 @@ func (e SemconvSpan) SessionID(span *otelv1.InboundSpan) (key string, val string
 }
 
 func (e SemconvSpan) ExternalUserEmail(span *otelv1.InboundSpan) (key string, val string, err error) {
-	key, val = getOneAttr(span, "user.email")
+	key, val = getOneAttr(span, userEmailKey)
 	return key, val, nil
 }
 
 func (e SemconvSpan) ExternalUserID(span *otelv1.InboundSpan) (key string, val string, err error) {
-	key, val = getOneAttr(span, "user.id")
+	key, val = getOneAttr(span, semconvUserIDKey)
 	return key, val, nil
 }
 

@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   getProject: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
-  listOrganizationActivity: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -28,7 +27,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getProject: mocks.getProject,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
-    listOrganizationActivity: mocks.listOrganizationActivity,
   };
 });
 
@@ -77,11 +75,21 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
-  mocks.listOrganizationActivity.mockReset();
-  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // The breadcrumb names the same views the nav does, so every link query here
 // has to say which of the two it means.

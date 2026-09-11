@@ -1,3 +1,7 @@
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+
+export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+
 // Gram admin API client.
 //
 // This app is served from the same origin as the Gram admin API (the admin
@@ -97,14 +101,9 @@ async function gramAdminRequest(
     // absolute return_to silently loses the page the operator was on. The hash
     // is left out because the router keeps the whole route in the path and
     // query.
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
+    startLoginRedirect(
+      new GramAdminError(401, null, "redirecting to admin login"),
     );
-    redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
-    // Setting window.location starts the navigation but does not stop the code
-    // that follows it. Throw to unwind the in-flight call.
-    throw new GramAdminError(401, null, "redirecting to admin login");
   }
 
   if (!res.ok) {
@@ -147,19 +146,6 @@ async function gramAdminMutation<T>(
 // the action they just took.
 async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
   await gramAdminRequest(path, init, false);
-}
-
-// True once gramAdminFetch has sent the browser to the login page. The document
-// is on its way out, so no caller should report the failure that caused it.
-//
-// The module records the navigation instead of reading it back off the failed
-// query, because React Query clears the error of a query that holds no data on
-// the next refetch, and a refetch on window focus would then reopen the gate
-// while the browser is still leaving.
-let redirectingToLogin = false;
-
-export function isRedirectingToLogin(): boolean {
-  return redirectingToLogin;
 }
 
 // Identity of the admin operator that owns the current session. The backend
@@ -217,6 +203,8 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   whitelisted: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
@@ -229,46 +217,50 @@ export type AdminOrganization = {
   updated_at: string;
 };
 
+export type AdminStripeCustomer = {
+  id: string;
+  name?: string;
+  email?: string;
+  description?: string;
+  livemode: boolean;
+};
+
+export function getStripeCustomer(
+  organizationID: string,
+  stripeCustomerID: string,
+): Promise<AdminStripeCustomer> {
+  const query = toSearchParams({
+    organization_id: organizationID,
+    stripe_customer_id: stripeCustomerID,
+  });
+  return gramAdminFetch<AdminStripeCustomer>(
+    `/admin/organization.stripeCustomer?${query}`,
+    { cache: "no-store" },
+  );
+}
+
+export type SetStripeCustomerRequest = {
+  organization_id: string;
+  stripe_customer_id: string;
+};
+
+export function setStripeCustomer(
+  body: SetStripeCustomerRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setStripeCustomer",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export type ListOrganizationsResult = {
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
-
-export type AdminAuditLog = {
-  id: string;
-  project_id?: string;
-  project_slug?: string;
-  actor_id: string;
-  actor_type: string;
-  actor_display_name?: string;
-  actor_slug?: string;
-  action: string;
-  acting_surface: string;
-  acting_client_id?: string;
-  subject_id: string;
-  subject_type: string;
-  subject_display_name?: string;
-  subject_slug?: string;
-  before_snapshot?: unknown;
-  after_snapshot?: unknown;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-};
-
-export type ListOrganizationActivityResult = {
-  logs: AdminAuditLog[];
-  next_cursor?: string;
-};
-
-export function listOrganizationActivity(
-  organizationID: string,
-  cursor?: string,
-): Promise<ListOrganizationActivityResult> {
-  const qs = toSearchParams({ organization_id: organizationID, cursor });
-  return gramAdminFetch<ListOrganizationActivityResult>(
-    `/admin/organization.activity?${qs.toString()}`,
-  );
-}
 
 // Each filter is a repeated parameter the server reads as a set, and an absent
 // one means no filter of that kind: no account_types is every type, no
@@ -560,55 +552,6 @@ export type AdminInferenceKey = Omit<
 > & {
   disable_causes: string[] | null;
 };
-
-export type AdminOrganizationFeatures = {
-  authz_challenge_logging_enabled: boolean;
-  customer_managed_encryption_keys_enabled: boolean;
-  custom_model_keys_enabled: boolean;
-  platform_mcp_enabled: boolean;
-  remote_session_auto_refresh_enabled: boolean;
-  session_portability_enabled: boolean;
-  sso_enabled: boolean;
-  scim_enabled: boolean;
-};
-
-export type AdminOrganizationFeatureName =
-  | "authz_challenge_logging"
-  | "customer_managed_encryption_keys"
-  | "custom_model_keys"
-  | "platform_mcp"
-  | "remote_session_auto_refresh"
-  | "session_portability"
-  | "sso"
-  | "scim";
-
-export function getOrganizationFeatures(
-  organizationID: string,
-): Promise<AdminOrganizationFeatures> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminOrganizationFeatures>(
-    `/admin/organization.features?${qs}`,
-  );
-}
-
-export function setOrganizationFeature(input: {
-  organizationID: string;
-  featureName: AdminOrganizationFeatureName;
-  enabled: boolean;
-}): Promise<AdminOrganizationFeatures> {
-  return gramAdminMutation<AdminOrganizationFeatures>(
-    "/admin/organization.features",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organization_id: input.organizationID,
-        feature_name: input.featureName,
-        enabled: input.enabled,
-      }),
-    },
-  );
-}
 
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 

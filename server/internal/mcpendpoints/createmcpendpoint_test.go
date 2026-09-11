@@ -438,7 +438,7 @@ func TestCreateMcpEndpoint_LegacyProject_TriggersInitialPublish(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	workflowID := fmt.Sprintf("v1:plugin-initial-publish/%s", authCtx.ProjectID.String())
+	workflowID := fmt.Sprintf("v1:plugin-publish:%s", authCtx.ProjectID.String())
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	require.NoError(t, temporalEnv.Client().GetWorkflow(waitCtx, workflowID, "").Get(waitCtx, nil), "initial publish workflow did not complete")

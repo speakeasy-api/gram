@@ -1,6 +1,5 @@
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import type { MetaMcpServerVisibility } from "@gram/client/models/components/metamcpserver.js";
 
 interface MCPStatusIndicatorProps {
   mcpEnabled: boolean | undefined;
@@ -40,37 +39,6 @@ function getStatusConfig(
     color: "bg-success-default",
     pulseColor: "bg-success-default",
     label: "Public",
-    animate: true,
-  };
-}
-
-// A gateway's closest equivalent of server visibility: whether it serves at
-// all, and whether callers must sign in first.
-function getGatewayStatusConfig(
-  visibility: MetaMcpServerVisibility,
-  requiresSignIn: boolean,
-): StatusConfig {
-  if (visibility === "disabled") {
-    return {
-      color: "bg-destructive",
-      pulseColor: "bg-destructive/60",
-      label: "Disabled",
-      animate: false,
-    };
-  }
-  if (requiresSignIn) {
-    return {
-      color: "bg-muted-foreground/60",
-      pulseColor: "bg-muted-foreground/40",
-      label: "Sign-in required",
-      animate: true,
-    };
-  }
-  // "Anonymous" matches the gateway overview's Authentication tile wording.
-  return {
-    color: "bg-success-default",
-    pulseColor: "bg-success-default",
-    label: "Anonymous",
     animate: true,
   };
 }
@@ -121,26 +89,6 @@ export function MCPStatusIndicator({
   return (
     <StatusDotLabel
       status={getStatusConfig(mcpEnabled, mcpIsPublic)}
-      size={size}
-      className={className}
-    />
-  );
-}
-
-export function GatewayStatusIndicator({
-  visibility,
-  requiresSignIn,
-  size = "md",
-  className,
-}: {
-  visibility: MetaMcpServerVisibility;
-  requiresSignIn: boolean;
-  size?: "sm" | "md";
-  className?: string;
-}): JSX.Element {
-  return (
-    <StatusDotLabel
-      status={getGatewayStatusConfig(visibility, requiresSignIn)}
       size={size}
       className={className}
     />

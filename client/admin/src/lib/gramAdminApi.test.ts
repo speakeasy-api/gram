@@ -7,12 +7,12 @@ import {
   enableOrganization,
   errorMessage,
   extendTrial,
+  getStripeCustomer,
   getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
-  listOrganizationActivity,
   listOrganizations,
   logout,
   markEnterpriseTrialConverted,
@@ -24,6 +24,7 @@ import {
   rearmTrial,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
+  setStripeCustomer,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -62,69 +63,6 @@ describe("toSearchParams", () => {
 // has to arrive as one key per value. A comma-joined `account_types=free,pro`
 // parses on the server as a single account type named "free,pro", which matches
 // no organization: the browser would show an empty list and no error.
-describe("listOrganizationActivity", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("encodes the explicit organization ID and omits an absent cursor", async () => {
-    const payload = {
-      logs: [
-        {
-          id: "event_2",
-          project_id: "project_1",
-          project_slug: "fictional-project",
-          actor_id: "user_1",
-          actor_type: "user",
-          actor_display_name: "Example Operator",
-          actor_slug: "example-operator",
-          action: "organization:settings_updated",
-          acting_surface: "dashboard",
-          acting_client_id: "client_1",
-          subject_id: "org_1",
-          subject_type: "organization",
-          subject_display_name: "Test Org",
-          subject_slug: "test-org",
-          before_snapshot: { enabled: false },
-          after_snapshot: { enabled: true },
-          metadata: { source: "test" },
-          created_at: "2026-01-15T12:30:00Z",
-        },
-        {
-          id: "event_1",
-          actor_id: "system",
-          actor_type: "system",
-          action: "organization:sync_completed",
-          acting_surface: "unknown",
-          subject_id: "org_1",
-          subject_type: "organization",
-          created_at: "2026-01-15T12:00:00Z",
-        },
-      ],
-      next_cursor: "opaque+/=",
-    };
-    const fetch = vi.fn().mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(payload), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-    vi.stubGlobal("fetch", fetch);
-
-    await expect(listOrganizationActivity("org explicit")).resolves.toEqual(
-      payload,
-    );
-    expect(fetch.mock.calls[0]?.[0]).toBe(
-      "/admin/organization.activity?organization_id=org+explicit",
-    );
-
-    await listOrganizationActivity("org explicit", "opaque+/=");
-    expect(fetch.mock.calls[1]?.[0]).toBe(
-      "/admin/organization.activity?organization_id=org+explicit&cursor=opaque%2B%2F%3D",
-    );
-  });
-});
-
 describe("listOrganizations", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -280,6 +218,17 @@ describe("organization billing endpoints", () => {
     );
   });
 
+  it("fetches a live Stripe customer preview for the exact organization and ID", async () => {
+    const fetch = stubFetch();
+
+    await getStripeCustomer("org one", "cus_placeholder_1");
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/organization.stripeCustomer?organization_id=org+one&stripe_customer_id=cus_placeholder_1",
+    );
+    expect(fetch.mock.calls.at(-1)?.[1]).toMatchObject({ cache: "no-store" });
+  });
+
   it("posts the canonical organization and materialized key when setting a monthly limit", async () => {
     const fetch = stubFetch();
 
@@ -297,6 +246,26 @@ describe("organization billing endpoints", () => {
           organization_id: "org_1",
           key_type: "internal",
           monthly_credits: 750,
+        }),
+      }),
+    );
+  });
+
+  it("posts the initial Stripe customer ID to the guarded organization endpoint", async () => {
+    const fetch = stubFetch();
+
+    await setStripeCustomer({
+      organization_id: "org_1",
+      stripe_customer_id: "cus_placeholder_1",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setStripeCustomer",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          stripe_customer_id: "cus_placeholder_1",
         }),
       }),
     );

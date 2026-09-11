@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
+	remotesessionissuersserver "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -1188,6 +1191,26 @@ func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {
 	require.Empty(t, draft.DiscoveryWarnings)
 }
 
+func TestFetchRemoteSessionIssuerMetadata_EmitsUnsupportedAuthorizationResponseIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := fakeIssuerServer(t, func(doc map[string]any) {
+		doc["authorization_response_iss_parameter_supported"] = false
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
+	require.NoError(t, err)
+
+	body := remotesessionissuersserver.NewFetchRemoteSessionIssuerMetadataResponseBody(draft)
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(raw, &response))
+	require.Contains(t, response, "authorization_response_iss_parameter_supported")
+	require.Equal(t, false, response["authorization_response_iss_parameter_supported"])
+}
+
 func TestFetchRemoteSessionIssuerMetadata_WithWarnings(t *testing.T) {
 	t.Parallel()
 
@@ -1361,7 +1384,8 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 		"/.well-known/openid-configuration/tenant",
 		"/tenant/.well-known/openid-configuration",
 		"/.well-known/oauth-authorization-server",
-	}, probedPaths, "path-aware candidates 404, fall back to origin-style")
+		"/.well-known/openid-configuration",
+	}, probedPaths, "path-aware candidates 404, fall back to origin-style; every candidate is probed so a sibling document can be merged")
 }
 
 func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
@@ -1407,7 +1431,8 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 		"/.well-known/openid-configuration/tenant",
 		"/tenant/.well-known/openid-configuration",
 		"/.well-known/oauth-authorization-server",
-	}, probedPaths, "incomplete catch-all 200s skipped until the real document")
+		"/.well-known/openid-configuration",
+	}, probedPaths, "incomplete catch-all 200s skipped until the real document; every candidate is probed so a sibling document can be merged")
 }
 
 func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *testing.T) {
@@ -1592,6 +1617,168 @@ func TestCreateRemoteSessionIssuer_RejectsRelativeDocumentationURL(t *testing.T)
 	payload.OpTosURI = &relative
 
 	_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// The capability fields discovery reports on the draft are accepted on create,
+// so an issuer created from a discovery result carries them from the start
+// instead of waiting for the next metadata refresh.
+func TestCreateRemoteSessionIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	userinfo := "https://idp.example.com/userinfo"
+	introspection := "https://idp.example.com/introspect"
+	backchannel := true
+	issParam := false
+
+	payload := newIssuerPayload("idp-capabilities-create")
+	payload.UserinfoEndpoint = &userinfo
+	payload.IntrospectionEndpoint = &introspection
+	payload.IntrospectionEndpointAuthMethodsSupported = []string{"client_secret_basic"}
+	payload.IDTokenSigningAlgValuesSupported = []string{"RS256", "ES256"}
+	payload.ClaimsSupported = []string{"sub", "email"}
+	payload.BackchannelLogoutSupported = &backchannel
+	payload.AuthorizationResponseIssParameterSupported = &issParam
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetRemoteSessionIssuer(ctx, &gen.GetRemoteSessionIssuerPayload{
+		ID:               &created.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	for _, issuer := range []*types.RemoteSessionIssuer{created, fetched} {
+		require.NotNil(t, issuer.UserinfoEndpoint)
+		require.Equal(t, userinfo, *issuer.UserinfoEndpoint)
+		require.NotNil(t, issuer.IntrospectionEndpoint)
+		require.Equal(t, introspection, *issuer.IntrospectionEndpoint)
+		require.Equal(t, []string{"client_secret_basic"}, issuer.IntrospectionEndpointAuthMethodsSupported)
+		require.Equal(t, []string{"RS256", "ES256"}, issuer.IDTokenSigningAlgValuesSupported)
+		require.Equal(t, []string{"sub", "email"}, issuer.ClaimsSupported)
+		require.NotNil(t, issuer.BackchannelLogoutSupported)
+		require.True(t, *issuer.BackchannelLogoutSupported)
+		require.NotNil(t, issuer.AuthorizationResponseIssParameterSupported)
+		require.False(t, *issuer.AuthorizationResponseIssParameterSupported)
+	}
+}
+
+// Capability fields the payload omits store NULL ("not captured"), while an
+// empty array records that discovery ran and the issuer advertises nothing.
+func TestCreateRemoteSessionIssuer_OmittedCapabilitiesStoredAsNull(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	payload := newIssuerPayload("idp-capabilities-omitted")
+	payload.ClaimsSupported = []string{}
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint)
+	require.Nil(t, created.IntrospectionEndpoint)
+	require.Nil(t, created.IntrospectionEndpointAuthMethodsSupported)
+	require.Nil(t, created.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, created.ClaimsSupported)
+	require.Empty(t, created.ClaimsSupported)
+	require.Nil(t, created.BackchannelLogoutSupported)
+	require.Nil(t, created.AuthorizationResponseIssParameterSupported)
+}
+
+// The userinfo and introspection endpoints receive access tokens, so a
+// plaintext URL is refused at the handler like a plaintext revocation endpoint.
+func TestCreateRemoteSessionIssuer_RejectsPlaintextTokenBearingEndpoints(t *testing.T) {
+	t.Parallel()
+
+	plaintext := "http://idp.example.com/userinfo"
+	cases := map[string]func(p *gen.CreateRemoteSessionIssuerPayload){
+		"userinfo":      func(p *gen.CreateRemoteSessionIssuerPayload) { p.UserinfoEndpoint = &plaintext },
+		"introspection": func(p *gen.CreateRemoteSessionIssuerPayload) { p.IntrospectionEndpoint = &plaintext },
+	}
+	for name, set := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+
+			payload := newIssuerPayload("idp-capabilities-plaintext-" + name)
+			set(payload)
+
+			_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+			require.Error(t, err)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
+	}
+}
+
+// Re-discovery on an existing issuer forwards the capability fields through
+// update, so a repointed issuer does not keep the previous issuer's values.
+func TestUpdateRemoteSessionIssuer_SetsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-capabilities-update"))
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint)
+	require.Nil(t, created.BackchannelLogoutSupported)
+
+	userinfo := "https://idp.example.com/userinfo"
+	backchannel := true
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                               created.ID,
+		UserinfoEndpoint:                 &userinfo,
+		IDTokenSigningAlgValuesSupported: []string{"RS256"},
+		ClaimsSupported:                  []string{},
+		BackchannelLogoutSupported:       &backchannel,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.UserinfoEndpoint)
+	require.Equal(t, userinfo, *updated.UserinfoEndpoint)
+	require.Equal(t, []string{"RS256"}, updated.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, updated.ClaimsSupported)
+	require.Empty(t, updated.ClaimsSupported)
+	require.NotNil(t, updated.BackchannelLogoutSupported)
+	require.True(t, *updated.BackchannelLogoutSupported)
+	// Omitted fields keep their stored value.
+	require.Nil(t, updated.IntrospectionEndpoint)
+	require.Nil(t, updated.IntrospectionEndpointAuthMethodsSupported)
+	require.Nil(t, updated.AuthorizationResponseIssParameterSupported)
+
+	// A second update that omits everything keeps what the first one set, and
+	// an explicit empty string clears an endpoint to NULL.
+	empty := ""
+	cleared, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		UserinfoEndpoint: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.UserinfoEndpoint)
+	require.Equal(t, []string{"RS256"}, cleared.IDTokenSigningAlgValuesSupported)
+	require.NotNil(t, cleared.BackchannelLogoutSupported)
+	require.True(t, *cleared.BackchannelLogoutSupported)
+}
+
+func TestUpdateRemoteSessionIssuer_RejectsPlaintextIntrospectionEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-capabilities-update-plaintext"))
+	require.NoError(t, err)
+
+	plaintext := "http://idp.example.com/introspect"
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                    created.ID,
+		IntrospectionEndpoint: &plaintext,
+	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -1794,4 +1981,303 @@ func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// metadataServerOptions shapes the two documents metadataServer
+// serves.
+type metadataServerOptions struct {
+	// mutateOAuth edits the RFC 8414 document per request, after the
+	// defaults are filled in.
+	mutateOAuth func(doc map[string]any)
+	// mutateOIDC edits the OpenID Connect Discovery document per request,
+	// after the defaults are filled in.
+	mutateOIDC func(doc map[string]any)
+	// oauthStatus, when set, makes the RFC 8414 path answer with that status
+	// and no body whenever it is not 200, so a test can take the document
+	// down and bring it back mid-run.
+	oauthStatus *atomic.Int32
+	// oidcStatus does the same for the OpenID Connect Discovery path.
+	oidcStatus *atomic.Int32
+}
+
+// metadataServer serves an RFC 8414 document at the OAuth path and an
+// OpenID Connect Discovery document at the OIDC path. The OAuth document
+// carries only the OAuth core; the OIDC one adds the OIDC-only fields several
+// real providers publish nowhere else.
+func metadataServer(t *testing.T, opts metadataServerOptions) *httptest.Server {
+	t.Helper()
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var doc map[string]any
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			if opts.oauthStatus != nil {
+				if status := int(opts.oauthStatus.Load()); status != http.StatusOK {
+					w.WriteHeader(status)
+					return
+				}
+			}
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"registration_endpoint":                 server.URL + "/register",
+				"scopes_supported":                      []string{"read", "write"},
+				"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+				"response_types_supported":              []string{"code"},
+				"token_endpoint_auth_methods_supported": []string{"client_secret_basic"},
+				"code_challenge_methods_supported":      []string{"S256"},
+				"oauth_only_extension":                  "kept",
+			}
+			if opts.mutateOAuth != nil {
+				opts.mutateOAuth(doc)
+			}
+		case "/.well-known/openid-configuration":
+			if opts.oidcStatus != nil {
+				if status := int(opts.oidcStatus.Load()); status != http.StatusOK {
+					w.WriteHeader(status)
+					return
+				}
+			}
+			doc = map[string]any{
+				"issuer":                                server.URL,
+				"authorization_endpoint":                server.URL + "/authorize",
+				"token_endpoint":                        server.URL + "/token",
+				"jwks_uri":                              server.URL + "/jwks",
+				"userinfo_endpoint":                     server.URL + "/userinfo",
+				"scopes_supported":                      []string{"openid", "email"},
+				"claims_supported":                      []string{"sub", "email", "email_verified"},
+				"id_token_signing_alg_values_supported": []string{"RS256"},
+				"backchannel_logout_supported":          true,
+			}
+			if opts.mutateOIDC != nil {
+				opts.mutateOIDC(doc)
+			}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// Linear, Slack, and WorkOS publish jwks_uri, claims_supported, and the ID
+// token signing algorithms only in their OpenID document. Discovery merges it
+// into the RFC 8414 document rather than stopping at the first hit, with the
+// RFC 8414 document winning any field both set.
+func TestFetchRemoteSessionIssuerMetadata_MergesOpenIDDocumentIntoOAuthDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI, "OIDC-only field filled from the second document")
+	require.Equal(t, server.URL+"/userinfo", *draft.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, draft.ClaimsSupported)
+	require.Equal(t, []string{"RS256"}, draft.IDTokenSigningAlgValuesSupported)
+	require.True(t, draft.BackchannelLogoutSupported)
+	require.False(t, draft.AuthorizationResponseIssParameterSupported)
+	require.Nil(t, draft.IntrospectionEndpoint)
+	require.Equal(t, []string{"read", "write"}, draft.ScopesSupported, "the RFC 8414 document wins a field both set")
+	require.Equal(t, server.URL+"/register", *draft.RegistrationEndpoint, "fields only the first document sets survive")
+	require.NotContains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+}
+
+// An OpenID document naming another issuer is a sibling tenant on a shared
+// host, not a second view of the same authorization server, and contributes
+// nothing.
+func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["issuer"] = "https://other-tenant.example"
+		doc["authorization_endpoint"] = "https://other-tenant.example/authorize"
+		doc["token_endpoint"] = "https://other-tenant.example/token"
+		doc["jwks_uri"] = "https://other-tenant.example/jwks"
+		doc["userinfo_endpoint"] = "https://other-tenant.example/userinfo"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.JwksURI)
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.ClaimsSupported)
+	require.False(t, draft.BackchannelLogoutSupported)
+	require.Contains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+}
+
+// A document naming no issuer cannot be tied to the primary, so it
+// contributes nothing even when the primary names none either.
+func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeDocumentWithoutIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{
+		mutateOAuth: func(doc map[string]any) { delete(doc, "issuer") },
+		mutateOIDC:  func(doc map[string]any) { delete(doc, "issuer") },
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.JwksURI)
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.ClaimsSupported)
+}
+
+// Enrichment endpoints are dialled with a bearer token, so a plaintext one
+// outside loopback is dropped from the typed fields while the rest of the
+// document still merges.
+func TestFetchRemoteSessionIssuerMetadata_DropsPlaintextEnrichmentEndpoints(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["userinfo_endpoint"] = "http://idp.example.com/userinfo"
+		doc["introspection_endpoint"] = "http://idp.example.com/introspect"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Nil(t, draft.UserinfoEndpoint)
+	require.Nil(t, draft.IntrospectionEndpoint)
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI, "the rest of the OpenID document still merges")
+	require.Equal(t, []string{"sub", "email", "email_verified"}, draft.ClaimsSupported)
+}
+
+// The persisted document is the union of the merged documents, so the OIDC
+// fields the typed columns omit and the OAuth extensions they never modelled
+// both survive verbatim.
+func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
+	t.Parallel()
+
+	server := metadataServer(t, metadataServerOptions{})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+
+	var merged map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &merged))
+	require.Equal(t, "kept", merged["oauth_only_extension"])
+	require.Equal(t, server.URL+"/jwks", merged["jwks_uri"])
+	require.Equal(t, []any{"read", "write"}, merged["scopes_supported"], "the first document's value wins in the raw union too")
+	require.Equal(t, []string{}, discovered.IntrospectionEndpointAuthMethodsSupported, "an omitted array is captured as empty, never nil")
+}
+
+// A member the sanitizer blanks is reported, so an operator can tell a
+// provider that advertises nothing from one whose value Gram refused.
+func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["userinfo_endpoint"] = "http://idp.example/userinfo"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Nil(t, draft.UserinfoEndpoint, "a plaintext userinfo endpoint is never proposed")
+	require.Contains(t, draft.DiscoveryWarnings, "userinfo_endpoint is not an https URL and was not captured")
+	require.NotNil(t, draft.JwksURI, "the rest of the OpenID document still merges")
+}
+
+// The merge gate compares issuers the way the rest of the package does,
+// ignoring a trailing slash, so an OpenID document that spells the issuer
+// with one still contributes.
+func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var server *httptest.Server
+	server = metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["issuer"] = server.URL + "/"
+	}})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft.JwksURI, "a trailing slash on the OpenID issuer does not block the merge")
+	require.Equal(t, server.URL+"/jwks", *draft.JwksURI)
+}
+
+// A flag the RFC 8414 document states explicitly, even as false, is never
+// overruled by the OpenID document: only members the primary omits are filled.
+func TestFetchRemoteSessionIssuerMetadata_PrimaryExplicitFalseFlagWins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := metadataServer(t, metadataServerOptions{
+		mutateOAuth: func(doc map[string]any) { doc["client_id_metadata_document_supported"] = false },
+		mutateOIDC:  func(doc map[string]any) { doc["client_id_metadata_document_supported"] = true },
+	})
+
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+		Issuer:           server.URL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.False(t, draft.ClientIDMetadataDocumentSupported, "an explicit false in the primary document stands")
+	require.True(t, draft.BackchannelLogoutSupported, "a member the primary omits is filled")
+}
+
+// Another issuer's document stays out of the persisted union as well as out
+// of the typed fields.
+func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["issuer"] = "https://other-tenant.example"
+	}})
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+	require.NoError(t, err)
+
+	var members map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &members))
+	require.NotContains(t, members, "claims_supported")
+	require.Equal(t, "kept", members["oauth_only_extension"])
 }

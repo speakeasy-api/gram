@@ -36,7 +36,9 @@ var sessionSharedPredicateFragments = []string{
 	// LiteLLM normalized model spans.
 	"gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')",
 	// Agent completed tool-call hook rows.
-	"hook_source IN ('codex', 'cursor', 'opencode') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
+	"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
+	// Unified-ingest per-turn usage rows (opencode, openclaw).
+	"hook_source IN ('opencode', 'openclaw') AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')",
 	// Tool-call dedup identity.
 	"multiIf(toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), toString(id))",
 	// Failed tool-call markers.
@@ -77,6 +79,7 @@ func TestSessionPredicates_SchemaMVStaysInSync(t *testing.T) {
 		sessionClaudeToolResultPredicate,
 		sessionCodexAPIRequestPredicate,
 		sessionAgentUsageRowPredicate,
+		sessionHookTurnUsageRowPredicate,
 		sessionLiteLLMUsageRowPredicate,
 		sessionAgentToolCallPredicate,
 		sessionFailedToolCallPredicate,

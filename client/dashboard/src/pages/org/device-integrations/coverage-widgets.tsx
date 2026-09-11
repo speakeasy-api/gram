@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { isEmailAddress } from "@/lib/identity-urn";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Page } from "@/components/page-layout";
 import {
@@ -8,8 +10,6 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useSlugs } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
 import type { DeviceIntegrationCoverage } from "@gram/client/models/components/deviceintegrationcoverage.js";
 import type {
@@ -31,7 +31,6 @@ import {
   UserX,
 } from "lucide-react";
 import { memo, useDeferredValue, useMemo, useState } from "react";
-import { Link } from "react-router";
 
 // Coverage joins the MDM-reported fleet against device agent heartbeats, in
 // one of two modes the server selects per org. Under device-level matching
@@ -251,7 +250,6 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
   // Keep the raw (possibly undefined) reference: defaulting to a fresh []
   // here would change the memo dependency every render.
   const selectedBuckets = values.coverage;
-  const userHref = useEmployeeDetailHref();
 
   const filteredDevices = useMemo(() => {
     const normalizedSearch = deferredSearch.trim().toLowerCase();
@@ -272,7 +270,7 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
     });
   }, [devices, deferredSearch, selectedBuckets]);
 
-  const columns = useMemo(() => deviceColumns(userHref), [userHref]);
+  const columns = useMemo(() => deviceColumns(), []);
 
   if (isLoading) return <SkeletonTable />;
   if (isError) {
@@ -345,25 +343,7 @@ const DEVICE_FILTERS = defineFilters([
   { id: "coverage", label: "Coverage", kind: "multiselect", pinned: true },
 ]);
 
-// Builds a link to the (project-scoped) Employee Detail page for a device's
-// assigned user, when the device resolved to an org member. The employee
-// pages live under a project, so the org's first project anchors the link.
-function useEmployeeDetailHref(): (device: ManagedDevice) => string | null {
-  const organization = useOrganization();
-  const { orgSlug } = useSlugs();
-  const projectSlug = organization.projects[0]?.slug;
-  return useMemo(
-    () => (device: ManagedDevice) => {
-      if (!device.userId || !device.userEmail || !projectSlug) return null;
-      return `/${orgSlug}/projects/${projectSlug}/employees/${encodeURIComponent(device.userEmail)}`;
-    },
-    [orgSlug, projectSlug],
-  );
-}
-
-function deviceColumns(
-  userHref: (device: ManagedDevice) => string | null,
-): Column<ManagedDevice>[] {
+function deviceColumns(): Column<ManagedDevice>[] {
   return [
     {
       key: "device",
@@ -382,21 +362,13 @@ function deviceColumns(
     {
       key: "user",
       header: "Assigned user",
-      render: (device) => (
-        <AssignedUserCell device={device} href={userHref(device)} />
-      ),
+      render: (device) => <AssignedUserCell device={device} />,
     },
     ...trailingDeviceColumns,
   ];
 }
 
-function AssignedUserCell({
-  device,
-  href,
-}: {
-  device: ManagedDevice;
-  href: string | null;
-}) {
+function AssignedUserCell({ device }: { device: ManagedDevice }) {
   if (!device.userEmail) {
     return (
       <Text muted small className="truncate">
@@ -404,20 +376,19 @@ function AssignedUserCell({
       </Text>
     );
   }
-  if (!href) {
-    return (
-      <Text muted small className="truncate">
-        {device.userEmail}
-      </Text>
-    );
-  }
+  // The MDM's reported address is enough for the resolver, whether or not it
+  // resolved to a member on the server side. What it reports is freeform
+  // though, so a value that is not an address stays plain text rather than
+  // becoming a URN the resolver rejects.
   return (
-    <Link
-      to={href}
-      className="text-muted-foreground hover:text-foreground block truncate text-sm underline-offset-2 hover:underline"
+    <IdentityLink
+      identifier={
+        isEmailAddress(device.userEmail) ? { email: device.userEmail } : null
+      }
+      className="text-muted-foreground hover:text-foreground block truncate text-sm underline-offset-2"
     >
       {device.userEmail}
-    </Link>
+    </IdentityLink>
   );
 }
 

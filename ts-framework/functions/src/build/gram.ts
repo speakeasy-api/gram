@@ -368,6 +368,49 @@ function logCLIOutput(logger: Logger, line: string) {
   }
 }
 
+const DASHBOARD_URL = "https://app.getgram.ai";
+
+/**
+ * Where someone lands after their function deploys.
+ *
+ * The offer is to build an MCP server, so the link is the flow that does it,
+ * scoped to the project the deployment went to. The slugs come from the CLI's
+ * own profile — the same one that ran the push — and any part of that failing
+ * falls back to the dashboard root rather than a link to nowhere.
+ */
+async function resolveCreateServerURL(cfg: ParsedUserConfig): Promise<string> {
+  const fallback = `${DASHBOARD_URL}?from=cli`;
+  try {
+    const result = await $({
+      stdio: ["pipe", "pipe", "pipe"],
+    })`${resolveGramCLI()} whoami --json`
+      .quiet()
+      .nothrow();
+    if (result.exitCode !== 0) {
+      return fallback;
+    }
+
+    const profile: unknown = JSON.parse(result.stdout);
+    if (typeof profile !== "object" || profile === null) {
+      return fallback;
+    }
+    const record = profile as Record<string, unknown>;
+    const org = record["org"];
+    const orgSlug =
+      typeof org === "object" && org !== null
+        ? (org as Record<string, unknown>)["Slug"]
+        : undefined;
+    const project = cfg.deployProject ?? record["project"];
+
+    if (typeof orgSlug !== "string" || typeof project !== "string") {
+      return fallback;
+    }
+    return `${DASHBOARD_URL}/${orgSlug}/${project}/mcp/add/from-existing-source?from=cli`;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function handleOpenBrowser(
   logger: Logger,
   cwd: string,
@@ -383,7 +426,7 @@ export async function handleOpenBrowser(
   );
 
   if (shouldOpen) {
-    await openBrowser(logger, "https://app.getgram.ai?from=cli");
+    await openBrowser(logger, await resolveCreateServerURL(cfg));
   } else {
     // Only persist when user says no
     await updateConfigFile(cwd, false);

@@ -1,7 +1,14 @@
-import { useOrganization, useSession, useUser } from "@/contexts/Auth";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+  useUser,
+} from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { getAdminServerUrl } from "@/lib/admin-server-url";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   DropdownMenu,
@@ -19,6 +26,7 @@ import {
   BuildingIcon,
   CompassIcon,
   CreditCardIcon,
+  CrownIcon,
   LogOutIcon,
   MailIcon,
   MapIcon,
@@ -38,6 +46,13 @@ import {
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const adminServerUrl = getAdminServerUrl(
+    document
+      .querySelector<HTMLMetaElement>('meta[name="gram-admin-server-url"]')
+      ?.getAttribute("content"),
+    import.meta.env.DEV,
+  );
   const session = useSession();
   const organization = useOrganization();
   const navigate = useNavigate();
@@ -115,8 +130,8 @@ export function SidebarUserMenu(): JSX.Element {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex items-start justify-between gap-2">
+          <DropdownMenuGroup className="relative">
+            <DropdownMenuLabel className="pr-8 font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm leading-none font-medium">
                   {user.displayName || "User"}
@@ -125,18 +140,23 @@ export function SidebarUserMenu(): JSX.Element {
                   {user.email}
                 </p>
               </div>
-              {projectSlug && (
-                <button
-                  type="button"
-                  aria-label="Project Settings"
-                  onClick={() => routes.settings.goTo()}
-                  className="text-muted-foreground hover:text-foreground"
+            </DropdownMenuLabel>
+            {isPlatformAdmin && adminServerUrl && (
+              <DropdownMenuItem
+                asChild
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-offset-1"
+              >
+                <a
+                  href={adminServerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Platform admin"
                 >
-                  <SettingsIcon className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </DropdownMenuLabel>
+                  <CrownIcon className="h-4 w-4" />
+                </a>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             {projectSlug && (
@@ -226,10 +246,7 @@ export function SidebarUserMenu(): JSX.Element {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
-              void (async () => {
-                await client.auth.logout();
-                window.location.href = "/login";
-              })();
+              void logoutToLogin(client);
             }}
           >
             <LogOutIcon className="mr-2 h-4 w-4" />

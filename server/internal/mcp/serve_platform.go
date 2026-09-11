@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -23,8 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -45,9 +44,6 @@ const platformToolsetMaxBodyBytes = 1 << 20
 // are intentionally not honored here.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	slug := chi.URLParam(r, "toolsetSlug")
 	if slug == "" {
@@ -57,6 +53,18 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	toolset, ok := s.platformToolsets[slug]
 	if !ok {
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	prepared, handled, err := s.prepareTerminatedMCPRequest(
+		w,
+		r,
+		s.logger,
+		platformToolsetMaxBodyBytes,
+		mcpversions.SupportedPlatformToolset(),
+		mcpmetrics.SurfacePlatform,
+	)
+	if err != nil || handled {
+		return err
 	}
 
 	token := httpheaders.AuthorizationBearerToken(r)
@@ -74,55 +82,28 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").LogError(ctx, s.logger)
 	}
+	metering.AttributeMCPBandwidth(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, slug, slug)
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
 		return err
 	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	var maxBytesErr *http.MaxBytesError
-	switch {
-	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
+	if prepared.empty() {
 		return nil
-	case errors.As(err, &maxBytesErr):
-		return oops.E(oops.CodeRequestTooLarge, err, "platform toolset request body exceeds 1 MiB").LogError(ctx, s.logger)
-	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
+	}
+	if err := validateMCPRequestEnvelope(ctx, s.logger, prepared, oops.CodeRequestTooLarge, "platform toolset request body exceeds 1 MiB"); err != nil {
+		return err
 	}
 
-	if len(bodyBytes) > 0 && bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, s.logger)
-	}
-
-	var req rawRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
-	}
-	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
-	}
-
-	// Resolved once per request; the initialize handler overwrites InEffect
-	// with the negotiated answer, which is the one sanctioned mutation.
-	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+	req := prepared.request
+	protocolVersion := prepared.protocolVersion
 
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
-		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
-		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, s.logger)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, s.logger)
-		}
-		return nil
+		return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -456,6 +437,7 @@ func (s *Service) callPlatformToolsetTool(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          nil,
+			MetaMCPServerID:       nil,
 			ChatID:                conv.PtrEmpty(chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
@@ -469,6 +451,7 @@ func (s *Service) callPlatformToolsetTool(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 

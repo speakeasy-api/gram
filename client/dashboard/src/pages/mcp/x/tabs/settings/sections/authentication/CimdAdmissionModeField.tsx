@@ -1,22 +1,9 @@
 import { RequireScope } from "@/components/require-scope";
-import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/Field";
-import { Icon } from "@/components/ui/Icon";
+import { FieldError } from "@/components/ui/Field";
 import { Label } from "@/components/ui/Label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/Popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 import { useCimdClientPresets } from "@gram/client/react-query/cimdClientPresets.js";
@@ -28,8 +15,10 @@ import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSes
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useId, useState, type MouseEvent } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { AllowedClientsDialog } from "./AllowedClientsDialog";
+import { AuthRow, ExplainerDialog, RowSave } from "./AuthRow";
 
 // The three WRITABLE modes. "open" is what an issuer carries unless someone
 // changes it, so it is what a newly created or never-configured issuer shows
@@ -39,44 +28,48 @@ import { toast } from "sonner";
 // storing it renders with nothing selected.
 const MODE_OPTIONS: {
   value: WritableMode;
-  title: string;
-  description: string;
+  label: string;
+  /** Shown only while this option is the selection. */
+  explanation: string;
 }[] = [
   {
     value: WritableMode.Presets,
-    title: "Known clients (recommended)",
-    // Deliberately not "custom URLs you add below": the custom URL list only
+    label: "Verified clients",
+    // Deliberately not "the URLs you add below": the custom URL list only
     // renders in the modes that consult it, so "below" would point at
-    // nothing for an issuer currently on Open or Disabled.
-    description:
-      "Allow well-known MCP clients verified by Gram, plus any custom URLs configured on this issuer.",
+    // nothing for an issuer currently on Any or Off.
+    explanation:
+      "Clients Speakeasy has checked, plus any document URLs you allow yourself.",
   },
   {
     value: WritableMode.Open,
-    title: "Open",
-    description:
-      "Allow any spec-valid CIMD client. Documents are accepted from any origin on the internet.",
+    label: "Any client",
+    explanation:
+      "Any client with a valid document, hosted anywhere on the internet. Nobody vets it first — each user decides at the consent screen.",
   },
   {
     value: WritableMode.Disabled,
-    title: "Disabled",
-    description:
-      "Reject all CIMD clients. Gram stops advertising CIMD support for this issuer, so clients fall back to dynamic registration.",
+    label: "Off",
+    explanation:
+      "No client connects this way. Speakeasy stops advertising it, so clients register themselves instead.",
   },
 ];
 
 export function CimdAdmissionModeField({
   userSessionIssuer,
   onDraftModeChange,
+  children,
 }: {
   userSessionIssuer: UserSessionIssuer;
   /**
    * Publishes each unsaved selection so a sibling field can render against
    * it. The custom-URL list belongs to the modes that consult it, and an
-   * operator moving an issuer onto "Known clients" needs to stage those URLs
-   * before the switch takes effect, not after.
+   * operator moving an issuer onto "Verified apps only" needs to stage those
+   * URLs before the switch takes effect, not after.
    */
   onDraftModeChange?: (mode: WritableMode) => void;
+  /** The custom-URL list, rendered only in the modes that consult it. */
+  children?: ReactNode;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const fieldId = useId();
@@ -135,47 +128,96 @@ export function CimdAdmissionModeField({
     save(draftMode);
   };
 
-  return (
-    <Field data-invalid={update.isError ? true : undefined}>
-      {/* No htmlFor: a group label must not target one option, or clicking
-          the heading silently arms that choice. Names the group instead. */}
-      <FieldLabel id={`${fieldId}-label`}>CIMD Client Admission</FieldLabel>
+  const explanation = MODE_OPTIONS.find(
+    (option) => option.value === selectedMode,
+  )?.explanation;
 
+  // The allowlist only means anything in the mode that consults it, and it
+  // follows the SELECTION rather than the saved value: an operator moving
+  // onto "Verified clients" needs to stage those URLs before the switch
+  // takes effect, not after.
+  const admitsCustomUrls =
+    selectedMode === WritableMode.Presets ||
+    // "reporting" is not selectable, so selectedMode is null for an issuer
+    // still stored that way — but it consults the same list, and hiding the
+    // affordance would strand those issuers with no way to edit it.
+    (draftMode === null && unconfigured);
+
+  return (
+    <AuthRow
+      label="Client access"
+      hint={
+        <>
+          Which MCP clients may identify themselves by URL.
+          <ExplainerDialog title="Client ID Metadata Documents (CIMD)">
+            <Text muted small className="block">
+              A client can host a small public file — its name, logo and where
+              it sends users after sign-in — and hand Speakeasy that URL instead
+              of registering first. This setting decides whose files Speakeasy
+              accepts.
+            </Text>
+            <Text muted small className="block">
+              Clients that publish no such file register themselves
+              automatically (Dynamic Client Registration). That path stays open
+              to every client no matter what you pick here.
+            </Text>
+          </ExplainerDialog>
+        </>
+      }
+    >
       <RadioGroup
-        aria-labelledby={`${fieldId}-label`}
+        aria-label="Client access"
+        aria-describedby={explanation ? `${fieldId}-explanation` : undefined}
         value={selectedMode ?? ""}
         onValueChange={(next) => {
           setDraftMode(next as WritableMode);
           onDraftModeChange?.(next as WritableMode);
         }}
-        className="space-y-2.5"
+        className="flex flex-wrap items-center gap-x-6 gap-y-2"
       >
         {MODE_OPTIONS.map((option) => (
-          <ModeOptionCard
-            key={option.value}
-            id={`${fieldId}-${option.value}`}
-            option={option}
-            selected={selectedMode === option.value}
-          />
+          <div key={option.value} className="flex items-center gap-2">
+            <RadioGroupItem
+              value={option.value}
+              id={`${fieldId}-${option.value}`}
+            />
+            <Label
+              htmlFor={`${fieldId}-${option.value}`}
+              className="cursor-pointer text-sm"
+            >
+              {option.label}
+            </Label>
+          </div>
         ))}
       </RadioGroup>
 
-      {selectedMode === WritableMode.Open && (
-        <Alert variant="warning" dismissible={false}>
-          Open admission accepts client metadata documents from any origin on
-          the internet. Any valid CIMD client can reach the consent screen, so
-          users must review it before approving an authorization flow.
-        </Alert>
+      {explanation && (
+        <Text muted small id={`${fieldId}-explanation`} className="block">
+          {explanation}
+        </Text>
       )}
 
-      <FieldDescription>
-        Which MCP clients may authenticate using a Client ID Metadata Document
-        (CIMD). This does not restrict clients that lack CIMD support: they
-        register through Dynamic Client Registration (DCR), which stays enabled
-        and open to any client whatever you choose here.
-      </FieldDescription>
+      {/* A link on the explanation line, not a button stacked above Save:
+          two buttons in one row read as a choice between them, when only
+          one of them writes the setting. */}
+      {admitsCustomUrls && (
+        <AllowedClientsDialog
+          trigger={
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground cursor-pointer text-sm underline underline-offset-2"
+            >
+              <AllowedClientsSummary />
+            </button>
+          }
+        >
+          {children}
+        </AllowedClientsDialog>
+      )}
 
-      <div className="flex">
+      {update.isError && <FieldError>{update.error.message}</FieldError>}
+
+      <RowSave visible={dirty}>
         {/* Render-function form: RequireScope's loading branch applies only
             pointer-events-none, so a keyboard user could still fire the
             mutation while grants are in flight. */}
@@ -184,7 +226,7 @@ export function CimdAdmissionModeField({
             <Button
               variant="primary"
               size="md"
-              disabled={disabled || !dirty || update.isPending}
+              disabled={disabled || update.isPending}
               onClick={handleSave}
             >
               {update.isPending && (
@@ -192,157 +234,22 @@ export function CimdAdmissionModeField({
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 </Button.LeftIcon>
               )}
-              <Button.Text>Save</Button.Text>
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           )}
         </RequireScope>
-      </div>
-
-      {update.isError && <FieldError>{update.error.message}</FieldError>}
-    </Field>
+      </RowSave>
+    </AuthRow>
   );
 }
 
-function ModeOptionCard({
-  id,
-  option,
-  selected,
-}: {
-  id: string;
-  option: (typeof MODE_OPTIONS)[number];
-  selected: boolean;
-}) {
-  // Radix renders the item as a <button role="radio">, which takes no
-  // accessible name from a wrapping <label> — name it explicitly.
-  const labelId = `${id}-label`;
-  const descriptionId = `${id}-description`;
-
-  // The whole card reads as the target, so the whole card selects. Clicks
-  // that started on a button are ignored, or opening the presets popover
-  // would silently arm this mode too. Mouse affordance only: the radio group
-  // already handles keyboard selection, and the radio stays the accessible
-  // control.
-  const selectFromCard = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target instanceof Element && event.target.closest("button")) {
-      return;
-    }
-    document.getElementById(id)?.click();
-  };
-
-  return (
-    <div
-      onClick={selectFromCard}
-      className={cn(
-        "grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-3 rounded-lg border p-3.5 transition-colors",
-        selected ? "border-foreground bg-muted/40" : "border-border",
-      )}
-    >
-      <RadioGroupItem
-        value={option.value}
-        id={id}
-        aria-labelledby={labelId}
-        aria-describedby={descriptionId}
-      />
-      <Label
-        id={labelId}
-        htmlFor={id}
-        className="cursor-pointer text-sm font-medium"
-      >
-        {option.title}
-      </Label>
-      <div
-        id={descriptionId}
-        className="text-muted-foreground col-start-2 mt-1.5 text-xs"
-      >
-        {option.description}
-        {option.value === WritableMode.Presets && <KnownClientsPopover />}
-      </div>
-    </div>
-  );
-}
-
-// A click-triggered Popover rather than a Tooltip: this is the only place a
-// user can find out what "Known clients" covers, and the URLs need to be
-// readable, selectable, and reachable on touch devices.
-function KnownClientsPopover() {
+// The button's own label, so the counts an operator is about to manage are
+// visible before the modal opens.
+function AllowedClientsSummary() {
   const { data, isLoading, isError } = useCimdClientPresets();
-  const enabled = (data?.items ?? []).filter((preset) => preset.enabled);
+  const verified = (data?.items ?? []).filter((preset) => preset.enabled);
 
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground ml-1 inline-flex cursor-pointer items-center gap-1 underline underline-offset-2"
-        >
-          <Icon name="info" className="size-3" />
-          What's included?
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-96">
-        <Text variant="body" className="font-medium">
-          Clients verified by Gram
-        </Text>
-        <Text muted small className="mt-1">
-          Gram maintains this list; newly verified vendors may be added over
-          time. Some entries match a family of URLs rather than one exact
-          address.
-        </Text>
-        <KnownClientsList
-          isLoading={isLoading}
-          isError={isError}
-          presets={enabled}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
+  if (isLoading || isError) return <>Manage allowed clients</>;
 
-function KnownClientsList({
-  isLoading,
-  isError,
-  presets,
-}: {
-  isLoading: boolean;
-  isError: boolean;
-  presets: { clientIdMetadataUri: string; displayName: string }[];
-}) {
-  if (isLoading) {
-    return (
-      <Text muted small className="mt-3 block">
-        Loading verified clients…
-      </Text>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Text muted small className="mt-3 block">
-        Could not load the verified client list.
-      </Text>
-    );
-  }
-
-  if (presets.length === 0) {
-    return (
-      <Text muted small className="mt-3 block">
-        No verified clients are currently enabled.
-      </Text>
-    );
-  }
-
-  return (
-    <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-      {presets.map((preset) => (
-        <li key={preset.clientIdMetadataUri}>
-          <Text small className="block font-medium">
-            {preset.displayName}
-          </Text>
-          <Text muted className="block font-mono text-xs break-all">
-            {preset.clientIdMetadataUri}
-          </Text>
-        </li>
-      ))}
-    </ul>
-  );
+  return <>Manage allowed clients ({verified.length} verified)</>;
 }

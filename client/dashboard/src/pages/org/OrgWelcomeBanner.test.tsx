@@ -43,8 +43,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
-vi.mock("@/hooks/useOnboardingCta", () => ({
-  useOnboardingCta: () => ({ eligible: setupEligible.current }),
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => (setupEligible.current ? "enterprise" : "base"),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -83,7 +83,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
-    platformMcp: { href: () => "/acme/platform-mcp" },
+    headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
@@ -216,7 +216,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Set up Platform MCP")).toBe(
-      "/acme/platform-mcp?setup=1&entrySource=organization_home",
+      "/acme/headless?entrySource=organization_home",
     );
     expect(hrefFor("Begin rollout")).toBe("/acme/setup");
     expect(screen.queryByText("Announcement")).toBeNull();
@@ -314,7 +314,7 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     render(<OrgWelcomeBanner />);
 
-    expect(screen.getByText("8 steps · resumable")).toBeTruthy();
+    expect(screen.getByText("Assignable · resumable")).toBeTruthy();
     fireEvent.click(screen.getByText("Begin rollout"));
 
     expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(

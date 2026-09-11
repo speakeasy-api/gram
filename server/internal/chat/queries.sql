@@ -312,7 +312,7 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
 RETURNING id, content, tool_calls, model, user_id, external_user_id, source;
 
@@ -1853,3 +1853,24 @@ WHERE l.project_id = @project_id
     OR cc.id IS NOT NULL
   )
 ORDER BY l.created_at DESC;
+
+-- Refresh display metadata on previously captured inference messages without
+-- changing their identity or replacing a known product source.
+-- name: UpdateInferenceMessageAttribution :exec
+UPDATE chat_messages
+SET external_user_id = COALESCE(sqlc.narg('actor_email')::text, external_user_id),
+    user_id = COALESCE(sqlc.narg('user_id')::text, user_id),
+    source = CASE WHEN source = 'anthropic-inference' THEN @source::text ELSE source END
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference'
+  AND (
+    (sqlc.narg('actor_email')::text IS NOT NULL AND external_user_id IS DISTINCT FROM sqlc.narg('actor_email')::text)
+    OR (sqlc.narg('user_id')::text IS NOT NULL AND user_id IS DISTINCT FROM sqlc.narg('user_id')::text)
+    OR (source = 'anthropic-inference' AND @source::text <> 'anthropic-inference')
+  );
+
+-- name: CountInferenceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%';

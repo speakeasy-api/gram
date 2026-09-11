@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { TabbedPage } from "@/components/page-templates";
@@ -78,13 +79,11 @@ import type { Role } from "@gram/client/models/components/role.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
-  POLICY_MESSAGE_TYPE_META,
   RULE_FAMILY_OF,
   RULE_FAMILY_ORDER,
   type DetectionRule,
   type RuleCategory,
   type PolicyAction,
-  type PolicyMessageType,
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
@@ -92,12 +91,7 @@ import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
-import {
-  ACTION_OPTIONS,
-  ALL_POLICY_MESSAGE_TYPES,
-  categoriesToPayload,
-  policyMessageTypesForForm,
-} from "./policy-form";
+import { ACTION_OPTIONS, categoriesToPayload } from "./policy-form";
 import {
   getPolicyDeleteImpactText,
   getPolicyDeleteRuleListItems,
@@ -381,17 +375,6 @@ type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 
 const USER_SEARCH_RESULT_LIMIT = 10;
 
-const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
-  "tool_request",
-  "tool_response",
-]);
-
-function policyMessageTypesForDisplay(
-  messageTypes?: string[],
-): PolicyMessageType[] {
-  return [...policyMessageTypesForForm(messageTypes)];
-}
-
 function policyAudienceSummary(row: PolicyRow): string {
   if (row.kind === "prompt") {
     return "Everyone";
@@ -470,34 +453,6 @@ function compareMembersByName(a: AccessMember, b: AccessMember): number {
 
 function compareRolesByName(a: Role, b: Role): number {
   return a.name.localeCompare(b.name);
-}
-
-function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
-  return (
-    types.size === TOOL_CALL_MESSAGE_TYPES.size &&
-    [...types].every((type) => TOOL_CALL_MESSAGE_TYPES.has(type))
-  );
-}
-
-function messageTypesSummary(
-  selectedMessageTypes: Set<PolicyMessageType>,
-): string {
-  if (selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length) {
-    return "All types";
-  }
-
-  if (hasOnlyToolCallMessageTypes(selectedMessageTypes)) {
-    return "Tool Calls";
-  }
-
-  if (
-    selectedMessageTypes.size === 1 &&
-    selectedMessageTypes.has("tool_request")
-  ) {
-    return "Tool Requests";
-  }
-
-  return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
 function isPromptPolicy(policy: RiskPolicy): boolean {
@@ -890,39 +845,6 @@ function PolicyCenterContent() {
       ),
     },
     {
-      key: "messageTypes",
-      header: "Applies To",
-      width: "2.1fr",
-      render: (row) => {
-        const types = policyMessageTypesForDisplay(row.policy.messageTypes);
-        const typeSet = new Set(types);
-        const tooltip = types
-          .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-          .join(", ");
-
-        if (
-          typeSet.size === ALL_POLICY_MESSAGE_TYPES.length ||
-          hasOnlyToolCallMessageTypes(typeSet)
-        ) {
-          return (
-            <SimpleTooltip tooltip={tooltip}>
-              <span className="text-muted-foreground text-sm">
-                {messageTypesSummary(typeSet)}
-              </span>
-            </SimpleTooltip>
-          );
-        }
-
-        return (
-          <span className="text-muted-foreground text-sm">
-            {types
-              .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
-              .join(", ")}
-          </span>
-        );
-      },
-    },
-    {
       key: "audience",
       header: "Audience",
       width: "1fr",
@@ -1009,7 +931,9 @@ function PolicyCenterContent() {
       width: "1fr",
       render: (row) => (
         <span className="text-muted-foreground text-sm">
-          {row.userId || "Unknown user"}
+          <IdentityLink identifier={row.userId ? { userId: row.userId } : null}>
+            {row.userId || "Unknown user"}
+          </IdentityLink>
         </span>
       ),
     },
@@ -1117,7 +1041,13 @@ function PolicyCenterContent() {
                 <dt className="text-muted-foreground">Policy</dt>
                 <dd>{row.riskPolicyName}</dd>
                 <dt className="text-muted-foreground">User</dt>
-                <dd className="break-all">{row.userId || "Unknown user"}</dd>
+                <dd className="break-all">
+                  <IdentityLink
+                    identifier={row.userId ? { userId: row.userId } : null}
+                  >
+                    {row.userId || "Unknown user"}
+                  </IdentityLink>
+                </dd>
                 <dt className="text-muted-foreground">Quarantined</dt>
                 <dd>
                   <PolicyDateCell date={row.createdAt} />

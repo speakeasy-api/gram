@@ -221,8 +221,8 @@ func handleToolsCall(
 	var tool *types.Tool
 
 	if planInputs != nil {
-		// Matched a proxy tool - use captured plan with updated tool name
-		matchedPlan.ExternalMCP.ToolName = planInputs.ToolName
+		// Use the resolved upstream name and discard the proxy placeholder schema.
+		matchedPlan.ExternalMCP = planInputs
 		plan = matchedPlan
 		toolURN = plan.Descriptor.URN
 	} else {
@@ -383,6 +383,7 @@ func handleToolsCall(
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                conv.PtrEmpty(payload.chatID),
+			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -395,6 +396,7 @@ func handleToolsCall(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 
@@ -414,6 +416,9 @@ func handleToolsCall(
 		logAttrs.RecordToolsetSlug(payload.toolset)
 		if payload.mcpServerID != nil {
 			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		}
+		if payload.metaMcpServerID != "" {
+			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
@@ -631,7 +636,7 @@ var dynamicExecuteToolSchema = json.RawMessage(`{
 		"properties": {
 			"name": {
 				"type": "string",
-				"description": "Exact name of the tool to execute."
+				"description": "Exact name of the tool to execute. The key is name, not tool."
 			},
 			"arguments": {
 				"description": "JSON payload to forward to the tool as its arguments."
@@ -657,7 +662,7 @@ func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw js
 
 	name := strings.TrimSpace(args.Name)
 	if name == "" {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").LogError(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool: pass the tool's exact name as \"name\"").LogError(ctx, logger)
 	}
 
 	payload := args.Arguments

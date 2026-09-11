@@ -11,6 +11,18 @@ export type CreateIssuerRequestBody = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
+   */
+  authorizationResponseIssParameterSupported?: boolean | undefined;
+  /**
+   * Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the field stores null ("not captured").
+   */
+  backchannelLogoutSupported?: boolean | undefined;
+  /**
+   * Claims the issuer can return in ID tokens and from userinfo. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  claimsSupported?: Array<string> | undefined;
+  /**
    * When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.
    */
   clientIdMetadataDocumentSupported?: boolean | undefined;
@@ -26,6 +38,18 @@ export type CreateIssuerRequestBody = {
    * Grant types advertised by the issuer.
    */
   grantTypesSupported?: Array<string> | undefined;
+  /**
+   * JWS algorithms the issuer signs ID tokens with. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  idTokenSigningAlgValuesSupported?: Array<string> | undefined;
+  /**
+   * RFC 7662 token introspection endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+   */
+  introspectionEndpoint?: string | undefined;
+  /**
+   * Client authentication methods the introspection endpoint accepts. Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises none").
+   */
+  introspectionEndpointAuthMethodsSupported?: Array<string> | undefined;
   /**
    * Issuer URL; matches the iss claim.
    */
@@ -67,6 +91,10 @@ export type CreateIssuerRequestBody = {
    */
   registrationEndpoint?: string | undefined;
   /**
+   * Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it unset: the parameter is then sent, and a login or refresh the issuer answers with invalid_target is retried once without it. Set false to never send it.
+   */
+  resourceIndicatorSupported?: boolean | undefined;
+  /**
    * Response types advertised by the issuer.
    */
   responseTypesSupported?: Array<string> | undefined;
@@ -74,6 +102,10 @@ export type CreateIssuerRequestBody = {
    * Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
    */
   revocationEndpoint?: string | undefined;
+  /**
+   * Operator-pinned scope request. When set, it is sent verbatim on the upstream authorize redirect in place of the resolved scope set. Omit or send an empty array to leave it unset.
+   */
+  scopeOverride?: Array<string> | undefined;
   /**
    * Scopes advertised by the issuer.
    */
@@ -98,15 +130,25 @@ export type CreateIssuerRequestBody = {
    * Route this issuer's OAuth endpoint calls through an MCP tunnel in the same project. Platform admins only.
    */
   tunneledMcpServerId?: string | undefined;
+  /**
+   * OpenID Connect userinfo endpoint. Discovered from the issuer metadata document; rejected unless an absolute https URL, or http on loopback.
+   */
+  userinfoEndpoint?: string | undefined;
 };
 
 /** @internal */
 export type CreateIssuerRequestBody$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_response_iss_parameter_supported?: boolean | undefined;
+  backchannel_logout_supported?: boolean | undefined;
+  claims_supported?: Array<string> | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
   client_setup_documentation_url?: string | undefined;
   code_challenge_methods_supported?: Array<string> | undefined;
   grant_types_supported?: Array<string> | undefined;
+  id_token_signing_alg_values_supported?: Array<string> | undefined;
+  introspection_endpoint?: string | undefined;
+  introspection_endpoint_auth_methods_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
   logo_asset_id?: string | undefined;
@@ -117,14 +159,17 @@ export type CreateIssuerRequestBody$Outbound = {
   passthrough?: boolean | undefined;
   project_id?: string | undefined;
   registration_endpoint?: string | undefined;
+  resource_indicator_supported?: boolean | undefined;
   response_types_supported?: Array<string> | undefined;
   revocation_endpoint?: string | undefined;
+  scope_override?: Array<string> | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug: string;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
   tunneled_mcp_server_id?: string | undefined;
+  userinfo_endpoint?: string | undefined;
 };
 
 /** @internal */
@@ -134,10 +179,16 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationResponseIssParameterSupported: z.optional(z.boolean()),
+    backchannelLogoutSupported: z.optional(z.boolean()),
+    claimsSupported: z.optional(z.array(z.string())),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     clientSetupDocumentationUrl: z.optional(z.string()),
     codeChallengeMethodsSupported: z.optional(z.array(z.string())),
     grantTypesSupported: z.optional(z.array(z.string())),
+    idTokenSigningAlgValuesSupported: z.optional(z.array(z.string())),
+    introspectionEndpoint: z.optional(z.string()),
+    introspectionEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
     logoAssetId: z.optional(z.string()),
@@ -148,37 +199,51 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     passthrough: z.optional(z.boolean()),
     projectId: z.optional(z.string()),
     registrationEndpoint: z.optional(z.string()),
+    resourceIndicatorSupported: z.optional(z.boolean()),
     responseTypesSupported: z.optional(z.array(z.string())),
     revocationEndpoint: z.optional(z.string()),
+    scopeOverride: z.optional(z.array(z.string())),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
     tunneledMcpServerId: z.optional(z.string()),
+    userinfoEndpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationResponseIssParameterSupported:
+        "authorization_response_iss_parameter_supported",
+      backchannelLogoutSupported: "backchannel_logout_supported",
+      claimsSupported: "claims_supported",
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
       clientSetupDocumentationUrl: "client_setup_documentation_url",
       codeChallengeMethodsSupported: "code_challenge_methods_supported",
       grantTypesSupported: "grant_types_supported",
+      idTokenSigningAlgValuesSupported: "id_token_signing_alg_values_supported",
+      introspectionEndpoint: "introspection_endpoint",
+      introspectionEndpointAuthMethodsSupported:
+        "introspection_endpoint_auth_methods_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
       opPolicyUri: "op_policy_uri",
       opTosUri: "op_tos_uri",
       projectId: "project_id",
       registrationEndpoint: "registration_endpoint",
+      resourceIndicatorSupported: "resource_indicator_supported",
       responseTypesSupported: "response_types_supported",
       revocationEndpoint: "revocation_endpoint",
+      scopeOverride: "scope_override",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
       tunneledMcpServerId: "tunneled_mcp_server_id",
+      userinfoEndpoint: "userinfo_endpoint",
     });
   }),
 );

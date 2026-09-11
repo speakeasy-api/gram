@@ -15,6 +15,7 @@ export function resourceKindForScope(scope: string): string {
   if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
+  if (scope.startsWith("agent:")) return "agent";
   return "*";
 }
 
@@ -58,8 +59,12 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "org:admin": ["org:blocked_admin", "org:blocked_read"],
   "project:read": ["project:blocked_read"],
   "project:write": ["project:blocked_write", "project:blocked_read"],
-  "mcp:read": ["mcp:blocked_read", "mcp:blocked_connect"],
-  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read", "mcp:blocked_connect"],
+  // The mcp:blocked_* scopes are independent of one another, unlike the
+  // other families: connecting to a server and administering it are
+  // different jobs, so a block on one takes nothing from the others. Mirrors
+  // scopeExpansions in server/internal/authz/scopes.go.
+  "mcp:read": ["mcp:blocked_read"],
+  "mcp:write": ["mcp:blocked_write"],
   "mcp:connect": ["mcp:blocked_connect"],
   "environment:read": ["environment:blocked_read"],
   "environment:write": [

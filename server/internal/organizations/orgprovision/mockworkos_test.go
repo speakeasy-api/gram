@@ -22,13 +22,13 @@ import (
 func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 	t.Parallel()
 
-	idp := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: true})
+	idp := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: true})
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
 	client := workos.NewClient(guardianPolicy, "dev-idp-mock", workos.ClientOpts{
-		Endpoint: idp.MockWorkosURL,
+		Endpoint: idp.WorkOSURL,
 		ClientID: "dev-idp-mock",
 	})
 

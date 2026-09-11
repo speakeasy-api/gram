@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -68,6 +70,11 @@ type testInstance struct {
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPMetadataServiceWithAdmission(t, nil)
+}
+
+func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context.Context, string) error) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -96,7 +103,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, admission)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -120,6 +127,7 @@ type mcpServerFixtureOptions struct {
 	tunneledMcpServerID uuid.NullUUID
 	customDomainID      uuid.NullUUID
 	userSessionIssuerID uuid.NullUUID
+	networkAccessMode   networkaccess.Mode
 }
 
 func createMcpServerWithEndpoint(
@@ -173,6 +181,7 @@ func createMcpServerWithEndpoint(
 		TunneledMcpServerID: opts.tunneledMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
+		NetworkAccessMode:   networkaccess.Storage(opts.networkAccessMode),
 	})
 	require.NoError(t, err)
 
@@ -193,9 +202,12 @@ func createMcpServerWithEndpoint(
 // needed here.
 func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) usersessions_repo.UserSessionIssuer {
 	t.Helper()
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectID)
+	require.NoError(t, err)
 
 	usi, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(project.OrganizationID),
 		Slug:               "usi-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

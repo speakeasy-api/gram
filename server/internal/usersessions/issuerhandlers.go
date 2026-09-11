@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+const maxSessionDurationHours = int64(math.MaxInt64) / int64(time.Hour)
+
+func sessionDurationFromHours(hours int) (time.Duration, error) {
+	if hours <= 0 {
+		return 0, fmt.Errorf("session_duration_hours must be positive")
+	}
+	if int64(hours) > maxSessionDurationHours {
+		return 0, fmt.Errorf("session_duration_hours must not exceed %d", maxSessionDurationHours)
+	}
+
+	return time.Duration(int64(hours) * int64(time.Hour)), nil
+}
+
 // Creates an issuer. authn_challenge_mode is "chain" (the issuer
 // re-uses an upstream IdP without prompting) or "interactive" (the
 // issuer collects user consent before issuing a session).
@@ -43,10 +57,10 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 	if payload.Slug == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
-	if payload.SessionDurationHours <= 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+	dur, err := sessionDurationFromHours(payload.SessionDurationHours)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid session_duration_hours: %v", err).LogError(ctx, logger)
 	}
-	dur := time.Duration(payload.SessionDurationHours) * time.Hour
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -104,10 +118,10 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	var durPtr *time.Duration
 	if payload.SessionDurationHours != nil {
-		if *payload.SessionDurationHours <= 0 {
-			return nil, oops.E(oops.CodeBadRequest, nil, "session_duration_hours must be positive").LogError(ctx, logger)
+		parsed, parseErr := sessionDurationFromHours(*payload.SessionDurationHours)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid session_duration_hours: %v", parseErr).LogError(ctx, logger)
 		}
-		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
 	// Validated in app code: the column carries no CHECK constraint by
@@ -125,7 +139,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 
 	txRepo := repo.New(dbtx)
 
-	existing, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -196,9 +210,10 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionIssuersByProjectID(ctx, repo.ListUserSessionIssuersByProjectIDParams{
-		ProjectID:  *authCtx.ProjectID,
-		Cursor:     cursor,
-		LimitValue: limit,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Cursor:         cursor,
+		LimitValue:     limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers").LogError(ctx, s.logger)
@@ -246,8 +261,9 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 
 		row, err = repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-			ID:        id,
-			ProjectID: *authCtx.ProjectID,
+			ID:             id,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -298,6 +314,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
+	}
 
 	// Lock the issuer row before the ownership check. A concurrent meta MCP
 	// attach holds this same row lock while writing its reference, so once the
@@ -403,6 +422,7 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
 		ProjectID:                     projectID,
+		OrganizationID:                conv.FromPGTextOrEmpty[string](row.OrganizationID),
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),

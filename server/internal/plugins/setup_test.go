@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,6 +69,32 @@ type testInstance struct {
 	service        *plugins.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	publisher      *capturePublishSignaler
+}
+
+// capturePublishSignaler records the republish enqueues a plugin mutation makes
+// in place of the real Temporal signal.
+type capturePublishSignaler struct {
+	mu      sync.Mutex
+	signals []capturedPublishSignal
+}
+
+type capturedPublishSignal struct {
+	projectID       uuid.UUID
+	createdByUserID string
+}
+
+func (c *capturePublishSignaler) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID})
+	return nil
+}
+
+func (c *capturePublishSignaler) captured() []capturedPublishSignal {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.signals)
 }
 
 func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
@@ -100,12 +128,13 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		publisher:      nil,
 	}
 }
 
@@ -175,6 +204,8 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 
 	auditLogger := audit.NewLogger()
 
+	publisher := &capturePublishSignaler{mu: sync.Mutex{}, signals: nil}
+
 	svc := plugins.NewService(
 		logger,
 		tracerProvider,
@@ -187,12 +218,14 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"local",
 		"https://app.getgram.ai",
 		features,
+		publisher,
 	)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		publisher:      publisher,
 	}
 }
 

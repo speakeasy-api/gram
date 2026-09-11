@@ -58,6 +58,14 @@ func (f *fakeStripeWebhookClient) CreateCustomer(context.Context, stripeclient.C
 	return nil, errors.New("not implemented")
 }
 
+func (f *fakeStripeWebhookClient) GetCustomer(context.Context, string) (*stripeclient.CustomerDetails, error) {
+	return nil, errors.New("unexpected Stripe customer lookup")
+}
+
+func (f *fakeStripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
+	return errors.New("not implemented")
+}
+
 func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripeclient.CreateCheckoutSessionInput) (*stripeclient.CheckoutSession, error) {
 	return nil, errors.New("not implemented")
 }
@@ -1095,7 +1103,7 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.True(t, organization.Whitelisted)
 	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
 
-	expectedFeatures := append([]productfeatures.Feature{productfeatures.FeaturePlatformMCP}, productfeatures.EnterpriseTrialBundle...)
+	expectedFeatures := append([]productfeatures.Feature{productfeatures.FeaturePlatformMCP}, productfeatures.EnterpriseAccessBundle...)
 	expectedFeatures = append(expectedFeatures, productfeatures.FeatureSkills)
 	featureQueries := featurerepo.New(db)
 	for _, feature := range expectedFeatures {
@@ -2526,7 +2534,7 @@ func TestStripeSubscriptionDeletionDeactivatesCurrentPaygBillingAtomically(t *te
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 654)
 
 	tx := testenv.BeginTx(t, t.Context(), db)
-	_, err := productfeatures.SeedPaygEntitlementsTx(t.Context(), tx, stripeWebhookOrganizationID)
+	_, err := productfeatures.SeedEnterpriseAccessEntitlementsTx(t.Context(), tx, stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 

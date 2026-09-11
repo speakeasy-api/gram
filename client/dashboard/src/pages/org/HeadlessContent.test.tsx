@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { HeadlessContent } from "./HeadlessContent";
+import { MemoryRouter } from "react-router";
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => (
@@ -33,8 +34,29 @@ const agentNames = (container: HTMLElement) =>
   );
 
 describe("HeadlessContent", () => {
+  it("describes the control-plane workflows available to the agent", () => {
+    render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Connect your agent" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Administer the control plane from the agent you already work in. Deploy and Manage MCP gateway servers, Review security policies and deep dive your AI usage data.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers a catch-all agent last", () => {
-    const { container } = render(<HeadlessContent />);
+    const { container } = render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
 
     const names = agentNames(container);
     expect(names).toContain("Other agent");
@@ -43,7 +65,11 @@ describe("HeadlessContent", () => {
   });
 
   it("still lists the certified agents ahead of it", () => {
-    const { container } = render(<HeadlessContent />);
+    const { container } = render(
+      <MemoryRouter>
+        <HeadlessContent />
+      </MemoryRouter>,
+    );
 
     expect(agentNames(container).slice(0, -1)).toEqual([
       "Claude Code",

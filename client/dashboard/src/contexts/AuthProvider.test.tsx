@@ -29,7 +29,16 @@ vi.mock("@/contexts/Sdk", async () => {
 
 // The route table pulls in every page; the provider only reads the org-level
 // path list from it.
-vi.mock("@/routes", () => ({ orgRoutePaths: [] }));
+vi.mock("@/routes", () => ({
+  orgRoutePaths: [
+    "data",
+    "data/event-feed",
+    "data/exports",
+    "agent-management",
+    "setup",
+    "setup/:taskSlug",
+  ],
+}));
 
 vi.mock("@/pages/demo/BookDemo", () => ({
   default: () => <div data-testid="book-demo" />,
@@ -153,7 +162,7 @@ describe("AuthProvider organization telemetry group", () => {
 
     renderGate();
 
-    // The expired gate lives on /talk-to-us, so this render only redirects.
+    // The expired gate lives on /trial-ended, so this render only redirects.
     expect(screen.queryByTestId("book-demo")).toBeNull();
     expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
   });
@@ -217,6 +226,86 @@ describe("AuthProvider organization telemetry group", () => {
 
     expect(screen.getByTestId("app")).toBeTruthy();
     expect(screen.getByTestId("location").textContent).toBe("/guide");
+  });
+});
+
+describe("AuthProvider legacy project redirects", () => {
+  const DATA_PROJECT_ORG = {
+    ...ORG,
+    projects: [{ ...PROJECT, slug: "data" }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [DATA_PROJECT_ORG],
+        organization: DATA_PROJECT_ORG,
+        activeOrganizationId: DATA_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+  });
+
+  afterEach(cleanup);
+
+  it.each([
+    "/test-org/data",
+    "/test-org/data/event-feed",
+    "/test-org/data/exports?status=enabled#latest",
+  ])("preserves exact organization route %s", (path) => {
+    renderGate(path);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe(path);
+  });
+
+  it("redirects an unknown Data subpath as a legacy project URL", () => {
+    renderGate("/test-org/data/toolsets?status=enabled#latest");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/projects/data/toolsets?status=enabled#latest",
+    );
+  });
+
+  it("preserves an org route with a dynamic segment over a same-named project", () => {
+    const SETUP_PROJECT_ORG = {
+      ...ORG,
+      projects: [{ ...PROJECT, slug: "setup" }],
+    };
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [SETUP_PROJECT_ORG],
+        organization: SETUP_PROJECT_ORG,
+        activeOrganizationId: SETUP_PROJECT_ORG.id,
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/test-org/setup/idp");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/setup/idp",
+    );
+  });
+
+  it("preserves a legacy project whose slug is agents", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [{ ...ORG, projects: [{ ...PROJECT, slug: "agents" }] }],
+        organization: {
+          ...ORG,
+          projects: [{ ...PROJECT, slug: "agents" }],
+        },
+        whitelisted: true,
+      }),
+    );
+
+    renderGate("/test-org/agents");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/projects/agents",
+    );
   });
 });
 

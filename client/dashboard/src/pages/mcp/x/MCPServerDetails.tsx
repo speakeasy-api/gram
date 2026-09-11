@@ -170,7 +170,10 @@ export default function MCPServerDetails(): JSX.Element {
                   id as the resource id. No `tools` prop because the
                   Remote MCP backend doesn't expose a Gram-side tool
                   catalog. */}
-                <MCPTeamAccessTab resourceId={mcpServer.id} />
+                <MCPTeamAccessTab
+                  resourceId={mcpServer.id}
+                  serverName={mcpServer.name ?? undefined}
+                />
               </RequireScope>
             </RequireScope>
           )
@@ -179,7 +182,10 @@ export default function MCPServerDetails(): JSX.Element {
         return (
           mcpServer && (
             <RequireScope scope="project:read" level="page">
-              <ClientsAndSessionsTab issuerId={mcpServer.userSessionIssuerId} />
+              <ClientsAndSessionsTab
+                issuerId={mcpServer.userSessionIssuerId}
+                originatingMcpServerId={mcpServer.id}
+              />
             </RequireScope>
           )
         );

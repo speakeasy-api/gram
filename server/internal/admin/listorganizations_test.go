@@ -82,6 +82,29 @@ func seedMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID
 	require.NoError(t, err)
 }
 
+func TestGetOrganization_StripeCustomerWithoutSubscription(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_stripe_ids", name: "Billing Example", slug: "billing-example"})
+
+	org, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_stripe_ids"})
+	require.NoError(t, err)
+	require.Nil(t, org.StripeCustomerID)
+	require.Nil(t, org.StripeSubscriptionID)
+
+	err = testrepo.New(conn).CreateStripeBillingMetadataFixture(ctx, testrepo.CreateStripeBillingMetadataFixtureParams{
+		OrganizationID:   org.ID,
+		StripeCustomerID: conv.ToPGText("cus_example"),
+	})
+	require.NoError(t, err)
+
+	org, err = svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_stripe_ids"})
+	require.NoError(t, err)
+	require.NotNil(t, org.StripeCustomerID)
+	require.Equal(t, "cus_example", *org.StripeCustomerID)
+	require.Nil(t, org.StripeSubscriptionID)
+}
+
 func TestGetOrganization_ByID(t *testing.T) {
 	t.Parallel()
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -313,7 +314,7 @@ func pgTextEqual(a, b pgtype.Text) bool {
 
 // issuerURLsCanonicallyEqual reports whether two issuer identifiers name the
 // same upstream authorization server, collapsing the trailing-slash and
-// default-port spellings that parseCanonicalIssuerURL treats as equivalent.
+// default-port spellings that issuerurl.Parse treats as equivalent.
 //
 // A value that does not parse as an issuer identifier is only ever equal to an
 // identical string. Migration must not widen an identity comparison on input it
@@ -323,12 +324,12 @@ func issuerURLsCanonicallyEqual(a, b string) bool {
 		return true
 	}
 
-	canonicalA, err := parseCanonicalIssuerURL(a)
+	canonicalA, err := issuerurl.Parse(a)
 	if err != nil {
 		return false
 	}
 
-	canonicalB, err := parseCanonicalIssuerURL(b)
+	canonicalB, err := issuerurl.Parse(b)
 	if err != nil {
 		return false
 	}

@@ -209,7 +209,7 @@ func TestProductFeaturesService_SetProductFeatureSSODeniedForOrgAdmin(t *testing
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSSO),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSSO),
 		Enabled:        true,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -230,7 +230,7 @@ func TestProductFeaturesService_SetProductFeatureSkillsDisableNoopForOrgAdmin(t 
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        false,
 	})
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *t
 
 	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSSO),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSSO),
 		Enabled:        true,
 	})
 	require.NoError(t, err)

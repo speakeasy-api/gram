@@ -53,6 +53,27 @@ type Service interface {
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
+	// List AI tools detected on enrolled devices by device-agent AI scans,
+	// aggregated per detection target across the organization. Org-scoped —
+	// detections attach to devices and enrolled users, not projects. Requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Display names and categories are decorated from the server's detection
+	// target catalog at read time; targets the catalog does not know are listed
+	// under their raw reported id.
+	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List AI tools detected for one enrolled employee in the active organization.
+	// The employee email is required so project viewers cannot broaden the request
+	// into an organization-wide inventory. Linked alias emails are folded to the
+	// canonical identity. Requires project:read on the active project.
+	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List who can reach one resource: the principals granted or blocked on it,
+	// and the organization-wide rules they inherit.
+	ListResourceAudience(context.Context, *ListResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// Replace the rules that name one resource. Organization-wide rules are left
+	// untouched.
+	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
+	// List the principals that can be given access: everyone, roles, and people.
+	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -88,7 +109,36 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [24]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+
+// One AI detection target aggregated across an organization's device-agent
+// scan reports.
+type AIDetection struct {
+	// Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
+	TargetID string
+	// Human-readable name from the server's detection target catalog. Ids the
+	// catalog does not know — agent binaries can ship newer target lists — fall
+	// back to the raw id.
+	DisplayName string
+	// Detection target category: harness (an AI coding tool) or local_model (a
+	// local model runtime). From the catalog for ids it knows, otherwise as
+	// recorded at detection time.
+	Category string
+	// Distinct enrolled users this tool was detected for.
+	UserCount int64
+	// Distinct devices, by hardware serial, this tool was detected on. Devices
+	// that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this target across all reports: installed
+	// and/or running.
+	Signals []string
+	// Unique non-empty detected versions for this target.
+	Versions []string
+	// When this tool was first detected anywhere in the organization.
+	FirstSeen string
+	// When this tool was most recently detected.
+	LastSeen string
+}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -107,6 +157,23 @@ type AccessMember struct {
 	RoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
+	// Department name as reported by the identity provider.
+	Department *string
+	// Names of the directory groups the member belongs to.
+	Groups []string
+}
+
+type AudienceOption struct {
+	// Canonical principal URN to grant access to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
 }
 
 type AuthzChallenge struct {
@@ -265,6 +332,38 @@ type GetShadowMCPInventoryServerPayload struct {
 	SessionToken *string
 }
 
+// ListAIDetectionsPayload is the payload type of the access service
+// listAIDetections method.
+type ListAIDetectionsPayload struct {
+	// Filter to detection targets of one category.
+	Category *string
+	// Filter to detections attributed to active members of this SCIM directory
+	// group. A group with no active members yields an empty list.
+	DirectoryGroupID *string
+	SessionToken     *string
+}
+
+// ListAIDetectionsResult is the result type of the access service
+// listAIDetections method.
+type ListAIDetectionsResult struct {
+	// Detected AI tools aggregated per target, most recently seen first.
+	Detections []*AIDetection
+}
+
+// ListAudienceOptionsPayload is the payload type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListAudienceOptionsResult is the result type of the access service
+// listAudienceOptions method.
+type ListAudienceOptionsResult struct {
+	// Principals that can be given access.
+	Options []*AudienceOption
+}
+
 // ListChallengeBucketsPayload is the payload type of the access service
 // listChallengeBuckets method.
 type ListChallengeBucketsPayload struct {
@@ -311,6 +410,12 @@ type ListChallengesPayload struct {
 	// Fetch specific challenges by ID. When set, other filters and pagination are
 	// ignored.
 	Ids []string
+	// Inclusive start of the window to list challenges from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to list challenges from. Omit for the whole
+	// history.
+	To *string
 	// Maximum number of results to return.
 	Limit int
 	// Number of results to skip.
@@ -326,6 +431,15 @@ type ListChallengesResult struct {
 	Challenges []*AuthzChallenge
 	// Total number of matching challenges for pagination.
 	Total int
+}
+
+// ListEmployeeAIDetectionsPayload is the payload type of the access service
+// listEmployeeAIDetections method.
+type ListEmployeeAIDetectionsPayload struct {
+	// Canonical enrolled-employee email to list detections for.
+	UserEmail        string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListGrantsPayload is the payload type of the access service listGrants
@@ -347,6 +461,17 @@ type ListMembersPayload struct {
 type ListMembersResult struct {
 	// The members in your organization.
 	Members []*AccessMember
+}
+
+// ListResourceAudiencePayload is the payload type of the access service
+// listResourceAudience method.
+type ListResourceAudiencePayload struct {
+	// The kind of resource to describe.
+	ResourceKind string
+	// The resource to describe.
+	ResourceID   string
+	ApikeyToken  *string
+	SessionToken *string
 }
 
 type ListRoleGrant struct {
@@ -407,7 +532,13 @@ type ListShadowMCPInventoryServersForUserPayload struct {
 	ProjectID string
 	// The identifiers to attribute usage to, matched against the reported email or
 	// user id. Pass every identifier the subject is known by.
-	UserKeys     []string
+	UserKeys []string
+	// Inclusive start of the window to attribute calls from. Omit for the whole
+	// history.
+	From *string
+	// Exclusive end of the window to attribute calls from. Omit for the whole
+	// history.
+	To           *string
 	Limit        int
 	SessionToken *string
 }
@@ -500,6 +631,39 @@ type ResolveShadowMCPInventoryRequestPayload struct {
 	PolicyIds    []string
 }
 
+type ResourceAudienceEntry struct {
+	// Canonical principal URN this rule belongs to.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// Secondary line: email, member count, or attribute key.
+	Description *string
+	// How many people the principal reaches, when known.
+	MemberCount *int64
+	// Access this principal has on the resource, or the access a rule takes away.
+	Level string
+	// Whether the rule names this resource or every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// User ids of the organization members this rule currently reaches.
+	MemberIds []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
+}
+
+// ResourceAudienceResult is the result type of the access service
+// listResourceAudience method.
+type ResourceAudienceResult struct {
+	// Rules deciding access to this resource, widest first.
+	Entries []*ResourceAudienceEntry
+	// Fingerprint of the rules naming this resource. Send it back when saving so a
+	// change made elsewhere is a conflict rather than a silent overwrite.
+	Version string
+}
+
 // Role is the result type of the access service getRole method.
 type Role struct {
 	// Unique role identifier.
@@ -559,6 +723,38 @@ type Selector struct {
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
 	ServerURL *string
+}
+
+type SetResourceAudienceEntry struct {
+	// Principal to grant or block. Use '*' for everyone in the organization.
+	PrincipalUrn string
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
+	Level string
+	// Narrow the access to these tool names. Omit for the whole resource.
+	Tools []string
+	// Narrow the access to tools carrying these annotations. Omit for the whole
+	// resource.
+	Dispositions []string
+}
+
+// SetResourceAudiencePayload is the payload type of the access service
+// setResourceAudience method.
+type SetResourceAudiencePayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The kind of resource being changed.
+	ResourceKind string
+	// The resource being changed.
+	ResourceID string
+	// The complete set of rules that name this resource. Rules covering every
+	// resource are not affected.
+	Entries []*SetResourceAudienceEntry
+	// The version this edit was based on, from the last read. The save is refused
+	// if the rules changed since.
+	ExpectedVersion string
 }
 
 // The enforcement verdict for a shadow MCP server, computed server-side from

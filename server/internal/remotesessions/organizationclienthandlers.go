@@ -309,6 +309,10 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		return nil, err
 	}
 
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return nil, err
+	}
+
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               clientProjectID,
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
@@ -540,6 +544,12 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 
 	txRepo := repo.New(dbtx)
 
+	// Locked before the read: this handler evaluates the private_key_jwt rule
+	// against the client's json_web_key_set_id, which detachKeySet writes.
+	if err := lockOrganizationClientForAuthMethodWrite(ctx, logger, txRepo, clientID, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
 	existing, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -556,6 +566,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 	beforeView, err := mv.BuildRemoteSessionClientView(existing.RemoteSessionClient, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
+	}
+
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, existing.RemoteSessionClient.JsonWebKeySetID); err != nil {
+		return nil, err
 	}
 
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{

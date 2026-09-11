@@ -3,6 +3,7 @@ package metamcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -43,13 +45,14 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	audit       *audit.Logger
-	temporalEnv *tenv.Environment
+	tracer                   trace.Tracer
+	logger                   *slog.Logger
+	db                       *pgxpool.Pool
+	auth                     *auth.Auth
+	authz                    *authz.Engine
+	audit                    *audit.Logger
+	temporalEnv              *tenv.Environment
+	networkAccessEligibility networkaccess.EligibilityChecker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,17 +66,19 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
+	networkAccessEligibility networkaccess.EligibilityChecker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		audit:       auditLogger,
-		temporalEnv: temporalEnv,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
+		logger:                   logger,
+		db:                       db,
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		networkAccessEligibility: networkAccessEligibility,
 	}
 }
 
@@ -107,13 +112,23 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
-
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.Storage(networkaccess.ModePublicOnly))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode)
+	if err != nil {
+		return nil, err
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
@@ -136,6 +151,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
 		Visibility:          string(conv.PtrValOrEmpty(payload.Visibility, VisibilityPrivate)),
+		NetworkAccessMode:   networkaccess.Storage(mode),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
@@ -232,6 +248,28 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
+	unlocked, err := repo.New(s.db).GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -239,6 +277,9 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
 
 	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
@@ -271,13 +312,27 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, err
 	}
 
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, existing.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "meta mcp server network access mode changed concurrently; retry the update")
+	}
+	storedMode := networkaccess.Storage(mode)
+
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
-		Name:                payload.Name,
-		UserSessionIssuerID: issuerID,
-		Visibility:          conv.PtrToPGText((*string)(payload.Visibility)),
-		ID:                  serverID,
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		ProjectID:           *authCtx.ProjectID,
+		Name:                 payload.Name,
+		UserSessionIssuerID:  issuerID,
+		Visibility:           conv.PtrToPGText((*string)(payload.Visibility)),
+		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
+		NetworkAccessMode:    storedMode,
+		ID:                   serverID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
@@ -340,6 +395,25 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 
 	return afterView, nil
+}
+
+func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) (networkaccess.AdmissionFinalizer, error) {
+	if mode.IsPublicOnly() {
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
+	}
+	if s.networkAccessEligibility == nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
+	if err != nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+		}
+		return nil
+	}), nil
 }
 
 func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMetaMcpServerPayload) error {
@@ -855,6 +929,45 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.E(oops.CodeUnexpected, err, "remove meta mcp member").LogError(ctx, logger)
 	}
 
+	// Reverse the add-side auto-attach: when no other live member of this
+	// gateway still fronts the removed member's upstream, unbind that provider
+	// client from the gateway issuer so it stops appearing on the consent
+	// screen. The member row is already soft-deleted above, so the detach's
+	// "last member" guard sees the post-removal set. Mirrors the add path's
+	// lock + post-commit resync.
+	wiredGatewayIssuer := false
+	if meta.UserSessionIssuerID.Valid {
+		server, serr := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        deleted.McpServerID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		switch {
+		case errors.Is(serr, pgx.ErrNoRows):
+			// The member's server is itself gone (e.g. removed as part of a
+			// server deletion); its binding is cleaned up on that path.
+		case serr != nil:
+			return oops.E(oops.CodeUnexpected, serr, "load removed member server").LogError(ctx, logger)
+		case server.RemoteSessionIssuerID.Valid:
+			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
+				return oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+			}
+			detached, derr := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
+				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+				RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
+				ProjectID:       *authCtx.ProjectID,
+			})
+			if derr != nil {
+				return oops.E(oops.CodeUnexpected, derr, "detach member provider client").LogError(ctx, logger)
+			}
+			if detached > 0 {
+				logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
+					attr.SlogMetaMcpServerID(meta.ID.String()),
+					attr.SlogMcpServerID(server.ID.String()))
+			}
+			wiredGatewayIssuer = true
+		}
+	}
+
 	if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -872,6 +985,12 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Keep the denormalized mcp_servers.remote_session_issuer_id in sync after a
+	// binding change, matching the add path's post-commit resync.
+	if wiredGatewayIssuer {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 
 	return nil

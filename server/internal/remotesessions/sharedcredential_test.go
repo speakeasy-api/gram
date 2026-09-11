@@ -340,6 +340,10 @@ func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t
 	require.Len(t, creds, 1, "revoking the subject's sessions under a sibling issuer must tombstone the shared credential")
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
 
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "ordinary repeated revocation must not retry tombstoned upstream credentials")
+
 	requireSessionRevoked(t, ctx, ti, fx)
 }
 

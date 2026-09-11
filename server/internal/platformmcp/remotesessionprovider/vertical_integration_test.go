@@ -160,7 +160,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	overflow, err := adapter.ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessUnsupported, overflow.State)
-	require.Equal(t, "response_too_large", overflow.EvidenceCode)
+	require.Equal(t, "initialize_response_too_large", overflow.EvidenceCode)
 	upstream.mode.Store(upstreamModeNormal)
 
 	_, err = remotesessionsrepo.New(conn).RevokeRemoteSession(ctx, remotesessionsrepo.RevokeRemoteSessionParams{ID: remoteSession.ID, ProjectID: project.ID})

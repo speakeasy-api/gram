@@ -851,6 +851,18 @@ pubsub:
           repeated ToolCall tool_calls = 10;
           repeated string custom_rule_ids = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string policy_link_reason = 23;
+          string external_conversation_id = 24;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -912,6 +924,52 @@ pubsub:
           string reply_urn = 8;
           string content = 9;
           string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message GitleaksEnforcement {
+          reserved 8;
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -934,6 +992,58 @@ pubsub:
           repeated string entities = 10;
           double score_threshold = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string finding_surface = 26;
+          string external_conversation_id = 27;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message PresidioEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          repeated string entities = 11;
+          double score_threshold = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -959,6 +1069,18 @@ pubsub:
           string tool_name = 13;
           repeated ToolCall tool_calls = 14;
           string content_part_id = 15;
+          string chat_id = 24;
+          string parent_chat_message_id = 25;
+          string origin_risk_policy_id = 18;
+          int64 origin_risk_policy_version = 19;
+          string message_link_reason = 20;
+          string execution_path = 21;
+          string tool_call_id = 22;
+          string hook_source = 23;
+          string policy_link_reason = 26;
+          string external_conversation_id = 27;
+          string prior_user_request = 16;
+          string recent_untrusted_content = 17;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -989,6 +1111,16 @@ pubsub:
           string tool_name = 14;
           repeated ToolCall tool_calls = 15;
           string content_part_id = 16;
+          string chat_id = 17;
+          string parent_chat_message_id = 18;
+          string origin_risk_policy_id = 19;
+          int64 origin_risk_policy_version = 20;
+          string message_link_reason = 21;
+          string execution_path = 22;
+          string tool_call_id = 23;
+          string hook_source = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -1297,6 +1429,24 @@ pubsub:
         name: gram-risk-v1-finding
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-otel-relay
+      topic_proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding-otel-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-finding-otel-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-finding
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analyzer
       topic_proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analyzer
@@ -1311,6 +1461,24 @@ pubsub:
         name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcer
+      topic_proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-gitleaks-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-gitleaks-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analyzer
       topic_proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analyzer
@@ -1323,6 +1491,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+      topic_proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-presidio-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-presidio-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analyzer
@@ -1399,7 +1585,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-authz-v1-challenge-ch-writer
     name: gram-authz-v1-challenge-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
@@ -1415,7 +1602,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 2678400s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
@@ -1430,7 +1618,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
     name: gram-otel-v1-inbound-log-record-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-metric
@@ -1446,7 +1635,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-metric-transformer
     name: gram-otel-v1-inbound-metric-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span
@@ -1461,13 +1651,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
     name: gram-otel-v1-inbound-span-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-otel-v1-log-event-ch-writer
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-event-ch-writer
     name: gram-otel-v1-log-event-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
@@ -1483,7 +1675,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
     name: gram-otel-v1-log-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-metric
@@ -1499,7 +1692,8 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-metric-relay
     name: gram-otel-v1-metric-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span
@@ -1515,13 +1709,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-event-ch-writer
     name: gram-otel-v1-span-event-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-otel-v1-span-relay
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
     name: gram-otel-v1-span-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message
@@ -1537,13 +1733,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
     name: gram-ping-v2-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       dlq_for: gram-ping-v2-py-processor
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-py-processor
     name: gram-ping-v2-py-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
@@ -1565,6 +1763,13 @@ pubsub:
         schemaRef:
           name: gram-risk-v1-finding
   - labels:
+      dlq_for: gram-risk-v1-finding-otel-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-otel-relay
+    name: gram-risk-v1-finding-otel-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analysis
@@ -1576,6 +1781,23 @@ pubsub:
           name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-gitleaks-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-gitleaks-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcer
+    name: gram-risk-v1-gitleaks-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
@@ -1584,6 +1806,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-presidio-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-presidio-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+    name: gram-risk-v1-presidio-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
@@ -1629,4 +1868,5 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
     name: gram-webhooks-v1-svix-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s

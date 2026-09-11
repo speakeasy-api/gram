@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -11,10 +12,11 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/temporal"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -26,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
@@ -46,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
@@ -58,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -92,11 +95,17 @@ type Publishers struct {
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
+	MeterReadings           gcp.Publisher[*meteringv1.MeterReading]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
 	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
 	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
 	Outbox                  topics.Publisher
+}
+
+type expiredTrialDemoter interface {
+	List(context.Context) ([]string, error)
+	Demote(context.Context, activities.DemoteExpiredTrialArgs) error
 }
 
 type Activities struct {
@@ -116,6 +125,7 @@ type Activities struct {
 	sendOpenRouterCreditsAlerts     *activities.MaybeSendOpenRouterCreditsAlerts
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	syncIdentityMap                 *activities.SyncIdentityMap
+	syncTenantDimensions            *activities.SyncTenantDimensions
 	promoteStagedTelemetry          *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects     *activities.ListStagedTelemetryProjects
 	generateChatTitle               *activities.GenerateChatTitle
@@ -164,8 +174,6 @@ type Activities struct {
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
-	outboxRelay                     *outbox_relay.Relay
-	outboxGC                        *outbox_relay.GC
 	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
@@ -176,7 +184,7 @@ type Activities struct {
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
-	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	demoteExpiredTrials             expiredTrialDemoter
 	trialEmails                     *trialemails.Service
 	mcpResearch                     *activities.McpResearch
 	mcpApprovalRecheck              *activities.McpApprovalRecheck
@@ -223,7 +231,6 @@ func NewActivities(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
-	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
 	chatWriter *chat.ChatMessageWriter,
@@ -236,6 +243,7 @@ func NewActivities(
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
 	tumMeterStreamingEnabled bool,
+	idTokenVerifier remotesessions.IDTokenVerifier,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -252,6 +260,8 @@ func NewActivities(
 	if chConn != nil && !disableRiskRetroReconcile {
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
+
+	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
@@ -277,6 +287,7 @@ func NewActivities(
 		&shadowMCPPolicyBypassChecker{
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
+		riskRecorder,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
@@ -311,7 +322,7 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier)),
 		)
 	}
 
@@ -329,7 +340,7 @@ func NewActivities(
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(piScanner),
+			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
 			researchMenu,
 			researchagent.ProductionToolset(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
@@ -372,6 +383,11 @@ func NewActivities(
 
 	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
+	// Built here rather than threaded in: this constructor already holds every
+	// dependency the emitter needs, and only the device sync reports growth
+	// activity from the worker.
+	growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
+
 	return &Activities{
 		db:                              db,
 		temporalEnv:                     temporalEnv,
@@ -381,14 +397,15 @@ func NewActivities(
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
 		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
-		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
+		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
+		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		syncIdentityMap:                 activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
+		syncTenantDimensions:            activities.NewSyncTenantDimensions(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:          activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:     activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -437,8 +454,6 @@ func NewActivities(
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
-		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
-		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
@@ -461,7 +476,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -761,6 +776,10 @@ func (a *Activities) SyncIdentityMap(ctx context.Context) (*activities.SyncIdent
 	return a.syncIdentityMap.Do(ctx)
 }
 
+func (a *Activities) SyncTenantDimensions(ctx context.Context) (*activities.SyncTenantDimensionsResult, error) {
+	return a.syncTenantDimensions.Do(ctx)
+}
+
 func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activities.PromoteStagedTelemetryArgs) (*activities.PromoteStagedTelemetryResult, error) {
 	return a.promoteStagedTelemetry.Do(ctx, input)
 }
@@ -919,29 +938,6 @@ func (a *Activities) CancelAssistantsSubscription(ctx context.Context, args acti
 	return a.cancelAssistantsSubscription.Do(ctx, args)
 }
 
-func (a *Activities) FetchPendingOutboxEvents(ctx context.Context, events outbox_relay.FetchEventArgs) (outbox_relay.FetchEventsResult, error) {
-	result, err := a.outboxRelay.FetchEvents(ctx, events)
-	if err != nil {
-		return outbox_relay.FetchEventsResult{}, fmt.Errorf("fetch pending outbox events: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) FilterNoopOutboxEvents(ctx context.Context, events []*outbox_relay.Event) ([]*outbox_relay.Event, error) {
-	result, err := a.outboxRelay.FilterNoopEvents(ctx, events)
-	if err != nil {
-		return nil, fmt.Errorf("mark outbox events noop: %w", err)
-	}
-	return result, nil
-}
-
-func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay.Event) error {
-	if err := a.outboxRelay.RelayEvents(ctx, args); err != nil {
-		return fmt.Errorf("relay outbox events: %w", err)
-	}
-	return nil
-}
-
 // DrainPublishOutbox claims, publishes and settles one batch in a single
 // activity. Keeping it fused is deliberate: splitting claim from publish would
 // put message bodies into workflow history.
@@ -981,20 +977,19 @@ func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, bat
 	return n, nil
 }
 
-func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
-	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
-	if err != nil {
-		return 0, fmt.Errorf("gc outbox processed rows: %w", err)
-	}
-	return n, nil
-}
-
 func (a *Activities) ListPluginPublishCandidates(ctx context.Context, input activities.ListPluginPublishCandidatesInput) (*activities.ListPluginPublishCandidatesResult, error) {
 	result, err := a.pluginPublisher.ListCandidates(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("list plugin publish candidates: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
+	if err := a.pluginPublisher.RepairOrphanedAPIKeyCreators(ctx); err != nil {
+		return fmt.Errorf("repair orphaned api key creators: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
@@ -1068,10 +1063,16 @@ func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
 }
 
 func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
-	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
-		return fmt.Errorf("demote expired trial: %w", err)
+	err := a.demoteExpiredTrials.Demote(ctx, args)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if errors.Is(err, openrouter.ErrAPIKeyDisableCausesUnclassified) {
+		return temporal.NewNonRetryableApplicationError(
+			"demote expired trial: "+err.Error(), "openrouter_disable_causes_unclassified", err,
+		)
+	}
+	return fmt.Errorf("demote expired trial: %w", err)
 }
 
 // RunMcpResearch executes one research-agent run for an MCP approval request

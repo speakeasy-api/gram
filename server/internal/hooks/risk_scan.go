@@ -7,9 +7,13 @@ import (
 
 	"github.com/google/uuid"
 
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
@@ -79,7 +83,39 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	markRiskScanned(ctx)
-	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
+	toolCallID := ""
+	if messageType == message.ToolRequest {
+		toolCallID = hookEventToolCallID(ev, toolName)
+	}
+	// Capture runs independently of enforcement; resolving a canonical message
+	// here would add a database round trip before the safety decision.
+	result, err := s.riskScanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:         ev.Context.OrganizationID,
+			ProjectID:              ev.Context.ProjectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: ev.ConversationID,
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_message_not_resolved",
+			OperationID:            hookRiskOperationID(ev, messageType, toolName),
+			ExecutionPath:          "realtime_local",
+			RequestID:              "",
+			MessageType:            messageType,
+			HookSource:             string(ev.Provider),
+			UserID:                 ev.Context.User.ID,
+			ToolCallID:             toolCallID,
+			ToolName:               toolName,
+			Model:                  "",
+			Provider:               "",
+		},
+		Text:        text,
+		MessageType: messageType,
+		ToolName:    toolName,
+	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
@@ -91,6 +127,52 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	return result
+}
+func hookRiskOperationID(ev hookevents.Event, messageType message.Type, toolName string) string {
+	var token string
+	switch payload := ev.Raw.(type) {
+	case *gen.ClaudePayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.CursorPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.CodexPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	case *gen.IngestPayload:
+		token = conv.PtrValOr(payload.IdempotencyKey, "")
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		// Match hook ingestion: without a sender token, identical content
+		// cannot distinguish a new invocation from a redelivery.
+		return uuid.NewString()
+	}
+	projectID := ev.Context.ProjectID.String()
+	identity := fmt.Sprintf(
+		"%d:%s%d:%s%d:%s%d:%s%d:%s%d:%s%d:%s",
+		len(ev.Context.OrganizationID), ev.Context.OrganizationID,
+		len(projectID), projectID,
+		len(ev.Provider), ev.Provider,
+		len(ev.RawEventType), ev.RawEventType,
+		len(messageType), messageType,
+		len(toolName), toolName,
+		len(token), token,
+	)
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:realtime:"+identity)).String()
+}
+
+func hookEventToolCallID(ev hookevents.Event, toolName string) string {
+	switch payload := ev.Raw.(type) {
+	case *gen.ClaudePayload:
+		return conv.PtrValOr(payload.ToolUseID, "")
+	case *gen.CursorPayload:
+		return cursorToolCorrelationID(payload)
+	case *gen.CodexPayload:
+		return syntheticToolCallID(ev.ConversationID, toolName)
+	case *gen.IngestPayload:
+		return canonicalChatToolCallID(payload)
+	default:
+		return ""
+	}
 }
 
 // renderUserBlockReason returns the message shown to the agent when a tool

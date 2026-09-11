@@ -13,8 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -54,6 +56,50 @@ type stripeCheckoutTrialFingerprint struct {
 type preparedStripeCheckoutIntent struct {
 	stripeCheckoutIntent
 	customerID string
+}
+
+// stripeOrganizationIdentity is stamped onto the Stripe Customer only; Checkout
+// requests replay byte-for-byte under their idempotency key.
+type stripeOrganizationIdentity struct {
+	name        string
+	accountType string
+	email       string
+}
+
+// stripeOrganizationIdentity resolves the identity from organization metadata. The
+// customer email prefers the billing alert email and falls back to the first
+// organization admin; it stays empty when neither exists. Account types outside
+// constants.AccountTypes are dropped rather than leaked into the contract.
+func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID string, billingMetadata repo.BillingMetadatum) (stripeOrganizationIdentity, error) {
+	organization, err := s.orgRepo.GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return stripeOrganizationIdentity{}, oops.E(oops.CodeUnexpected, err, "failed to load organization for billing").LogError(ctx, s.logger)
+	}
+
+	email := ""
+	if billingMetadata.AlertEmail.Valid && billingMetadata.AlertEmail.String != "" {
+		email = billingMetadata.AlertEmail.String
+	} else {
+		admins, adminErr := authz.ResolveOrganizationAdminEmails(ctx, s.db, organizationID)
+		if adminErr != nil {
+			s.logger.WarnContext(ctx, "failed to resolve organization admin emails for Stripe customer", attr.SlogError(adminErr))
+		}
+		if len(admins) > 0 {
+			email = admins[0]
+		}
+	}
+
+	accountType := organization.GramAccountType
+	if !constants.IsAccountType(accountType) {
+		s.logger.WarnContext(ctx, "organization account type is outside the Stripe metadata contract; omitting it", attr.SlogOrganizationID(organizationID))
+		accountType = ""
+	}
+
+	return stripeOrganizationIdentity{
+		name:        organization.Name,
+		accountType: accountType,
+		email:       email,
+	}, nil
 }
 
 type stripeCheckoutSessionExpirer interface {
@@ -125,13 +171,33 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		proposedIntent = storedIntent
 	}
 
+	identity, identityErr := s.stripeOrganizationIdentity(ctx, authCtx.ActiveOrganizationID, billingMetadata)
+	if identityErr != nil {
+		return "", identityErr
+	}
+
 	customerID := ""
 	if err == nil && billingMetadata.StripeCustomerID.Valid {
 		customerID = billingMetadata.StripeCustomerID.String
+		// Best effort: keep identity and contract metadata current on customers created
+		// before the contract existed, or whose name/email/account type changed.
+		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
+			CustomerID:       customerID,
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      identity.accountType,
+		}); updateErr != nil {
+			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity", attr.SlogError(updateErr))
+		}
 	} else {
 		customer, err := s.stripeClient.CreateCustomer(ctx, stripeclient.CreateCustomerInput{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      identity.accountType,
 			IdempotencyKey:   fmt.Sprintf("customer:%s", authCtx.ActiveOrganizationID),
 		})
 		if err != nil {
@@ -180,7 +246,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 
 	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, expectedTrial, checkoutIntentTrialFingerprint(preparedIntent.idempotencyKey), checkout.ID)
 	if err != nil {
-		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) {
+		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) || isStripeCheckoutCASConflict(err) {
 			return "", oops.E(oops.CodeConflict, err, "trial lifecycle changed while Stripe Checkout was being created").LogWarn(ctx, s.logger)
 		}
 		return "", oops.E(oops.CodeUnexpected, err, "failed to convert enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
@@ -196,8 +262,8 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		StripeCheckoutExpiresAt:          finiteTimestamptz(preparedIntent.expiresAt),
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", oops.E(oops.CodeConflict, nil, "billing state changed while Checkout was being created").LogWarn(ctx, s.logger)
+		if errors.Is(err, pgx.ErrNoRows) || isStripeCheckoutCASConflict(err) {
+			return "", oops.E(oops.CodeConflict, err, "billing state changed while Checkout was being created").LogWarn(ctx, s.logger)
 		}
 		return "", oops.E(oops.CodeUnexpected, err, "failed to finalize Stripe Checkout").LogError(ctx, s.logger)
 	}
@@ -257,6 +323,10 @@ func (s *Service) prepareStripeCheckoutIntent(
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// Serialize first writes before either unique index sees a concurrent insert.
+	if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
+		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "lock billing metadata organization").LogError(ctx, s.logger)
+	}
 	stored, err := queries.StoreStripeCustomer(ctx, repo.StoreStripeCustomerParams{
 		OrganizationID:   organizationID,
 		StripeCustomerID: pgtype.Text{String: customerID, Valid: true},
@@ -337,6 +407,7 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 	if metadata.StripeCheckoutSessionID.Valid {
 		sessionID = metadata.StripeCheckoutSessionID.String
 	} else {
+		// Same idempotency key as the original request, so the input must match it exactly.
 		stale, createErr := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 			CustomerID: customerID, OrganizationID: organizationID, OrganizationSlug: organizationSlug,
 			SuccessURL: billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,

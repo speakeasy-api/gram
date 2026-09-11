@@ -68,14 +68,14 @@ func (s *ClientAdmissionService) Get(ctx context.Context, principal Principal, p
 		return ClientAdmission{}, err
 	}
 	q := usersessionsrepo.New(s.db)
-	issuer, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID})
+	issuer, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ClientAdmission{}, ErrRegistrationInvalid
 	}
 	if err != nil {
 		return ClientAdmission{}, fmt.Errorf("load platform mcp client admission issuer: %w", err)
 	}
-	urls, err := s.customClientURLs(ctx, q, project.ID, issuerID)
+	urls, err := s.customClientURLs(ctx, q, project.ID, principal.OrganizationID, issuerID)
 	if err != nil {
 		return ClientAdmission{}, err
 	}
@@ -116,7 +116,7 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 		}
 		return ClientAdmission{}, fmt.Errorf("lock platform mcp client admission issuer: %w", err)
 	}
-	existing, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID})
+	existing, err := q.GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{ID: issuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ClientAdmission{}, ErrRegistrationInvalid
 	}
@@ -152,7 +152,7 @@ func (s *ClientAdmissionService) Set(ctx context.Context, principal Principal, p
 	}); err != nil {
 		return ClientAdmission{}, fmt.Errorf("audit platform mcp client admission mode: %w", err)
 	}
-	urls, err := s.customClientURLs(ctx, q, project.ID, issuerID)
+	urls, err := s.customClientURLs(ctx, q, project.ID, principal.OrganizationID, issuerID)
 	if err != nil {
 		return ClientAdmission{}, err
 	}
@@ -182,9 +182,10 @@ func (s *ClientAdmissionService) registrationIssuer(ctx context.Context, db plat
 	return registration.UserSessionIssuerID.UUID, nil
 }
 
-func (s *ClientAdmissionService) customClientURLs(ctx context.Context, q *usersessionsrepo.Queries, projectID, issuerID uuid.UUID) ([]string, error) {
+func (s *ClientAdmissionService) customClientURLs(ctx context.Context, q *usersessionsrepo.Queries, projectID uuid.UUID, organizationID string, issuerID uuid.UUID) ([]string, error) {
 	rows, err := q.ListUserSessionIssuerCimdClientsByIssuerID(ctx, usersessionsrepo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: issuerID,
 		Cursor:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:          clientAdmissionCustomURLLimit,

@@ -2,6 +2,7 @@ import { useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
@@ -20,21 +21,11 @@ import {
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 import { ModeSurface } from "./mode-switch-stage.tsx";
-import {
-  MODE_SWITCHER_HEIGHT,
-  useModeSwitcherEnabled,
-} from "./mode-switch-context.ts";
 import { ModeSwitcher } from "./mode-switcher.tsx";
 
-// Height of the fixed chrome above the panes: the mode strip, plus the
-// impersonation banner when it is showing (h-9 / 2.25rem).
-const chromeTopOffset = (
-  isImpersonating: boolean,
-  hasModeSwitcher: boolean,
-): string => {
-  const strip = hasModeSwitcher ? MODE_SWITCHER_HEIGHT : "0px";
-  return isImpersonating ? `calc(${strip} + 2.25rem)` : strip;
-};
+// Height of the impersonation banner above the app surface (h-9 / 2.25rem).
+const chromeTopOffset = (isImpersonating: boolean): string =>
+  isImpersonating ? "2.25rem" : "0px";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -56,19 +47,15 @@ export const LoginCheck = (): JSX.Element => {
 
 export const AppLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
-  const chromeOffset = chromeTopOffset(
-    isImpersonating,
-    useModeSwitcherEnabled(),
-  );
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          // The mode strip and the impersonation banner both sit above the
-          // panes, so the fixed sidebar starts below their combined height and
-          // pages size themselves against it.
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
           "--header-offset": chromeOffset,
           "--banner-offset": chromeOffset,
         } as React.CSSProperties
@@ -123,8 +110,7 @@ export const ImpersonationBanner = (): JSX.Element => {
         window.location.replace("/");
         return;
       }
-      await client.auth.logout();
-      window.location.href = "/login";
+      await logoutToLogin(client);
     })();
   };
 
@@ -167,7 +153,7 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   return (
-    <div className="flex h-screen w-full flex-col">
+    <div className="relative flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <ModeSwitcher mode="canvas" />
       <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-hidden">
@@ -181,8 +167,9 @@ const AppLayoutContent = ({
             </MembershipSyncGuard>
           </GlobalInsightsWrapper>
         </SidebarInset>
-        {/* Sibling of the content, not an overlay: the page reflows into the
-            remaining width so nothing sits behind the panel. */}
+        {/* Floats over the content rather than displacing it: opening a detail
+            sheet used to reflow the page and move whatever had just been
+            clicked. The page keeps its width; the panel covers its right edge. */}
         <SidePanelSurface />
       </ModeSurface>
       {/* Above the outlet so the suggestion → chat bubble morph survives the
@@ -242,10 +229,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
           type="button"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
-            void (async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
-            })();
+            void logoutToLogin(client);
           }}
         >
           Log out
@@ -257,25 +241,21 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 
 export const OrgLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
-  const chromeOffset = chromeTopOffset(
-    isImpersonating,
-    useModeSwitcherEnabled(),
-  );
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          // The mode strip and the impersonation banner both sit above the
-          // panes, so the fixed sidebar starts below their combined height and
-          // pages size themselves against it.
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
           "--header-offset": chromeOffset,
           "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
-      <div className="flex h-screen w-full flex-col">
+      <div className="relative flex h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
         <ModeSwitcher mode="canvas" />
         <ModeSurface

@@ -168,7 +168,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 
 func validateAgentPluginRemoteURL(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return errors.New("url must be absolute and must not contain user information or a fragment")
 	}
 	if u.Scheme == "https" {

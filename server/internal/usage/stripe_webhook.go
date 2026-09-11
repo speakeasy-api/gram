@@ -51,7 +51,6 @@ type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *s
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, r.Body.Close)
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxStripeWebhookBodyBytes)
 	body, err := io.ReadAll(r.Body)
@@ -618,7 +617,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	convertedDemotedTrial := false
 	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		newlyEnabled, err = productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
+		newlyEnabled, err = productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, tx, organizationID)
 		if err != nil {
 			return stripeWebhookResult{}, fmt.Errorf("seed PAYG entitlements: %w", err)
 		}

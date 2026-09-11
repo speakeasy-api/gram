@@ -30,8 +30,6 @@ import { StepContainer } from "../step-container";
 
 interface AdditionalAgentConfigStepProps {
   onComplete: () => void;
-  onSkip: () => void;
-  onBack: () => void;
 }
 
 type ProviderStatus = "not_started" | "complete";
@@ -45,8 +43,6 @@ const ADDITIONAL_AGENT_CONFIG_PROVIDERS: AdditionalAgentConfigProvider[] = [
 
 export function AdditionalAgentConfigStep({
   onComplete,
-  onSkip,
-  onBack,
 }: AdditionalAgentConfigStepProps): JSX.Element {
   const [drawerProviderId, setDrawerProviderId] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<
@@ -103,11 +99,6 @@ export function AdditionalAgentConfigStep({
       title="Additional agent configuration"
       description="Optionally connect admin and compliance APIs so Speakeasy can import usage, spend, and review data across the agent platforms your team uses."
       onContinue={onComplete}
-      onSkip={onSkip}
-      skipLabel="Skip for now"
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between">

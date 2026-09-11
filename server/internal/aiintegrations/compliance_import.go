@@ -513,7 +513,7 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		UserID:         conv.ToPGTextEmpty(userID),
 		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
 		ExternalChatID: conv.ToPGText(page.ID),
-		Title:          conv.ToPGText(page.Name),
+		Title:          conv.ToPGText(conv.StripNUL(page.Name)),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
 		// Feed titles are authoritative: newest non-null title wins.

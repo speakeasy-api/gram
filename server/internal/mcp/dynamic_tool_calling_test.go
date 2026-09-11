@@ -1,15 +1,44 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+type blockingWorkflowResult struct{}
+
+func (blockingWorkflowResult) Get(ctx context.Context, _ any) error {
+	<-ctx.Done()
+	return fmt.Errorf("wait for workflow result: %w", ctx.Err())
+}
+
+func TestWaitForToolSearchIndexBoundsTheWait(t *testing.T) {
+	t.Parallel()
+
+	err := waitForToolSearchIndex(t.Context(), blockingWorkflowResult{}, time.Millisecond)
+	require.ErrorIs(t, err, errToolSearchIndexUnavailable)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestWaitForToolSearchIndexPreservesParentCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := waitForToolSearchIndex(ctx, blockingWorkflowResult{}, time.Hour)
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, errToolSearchIndexUnavailable)
+}
 
 func TestBuildDynamicSearchToolsSchema(t *testing.T) {
 	t.Parallel()
@@ -329,4 +358,42 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		require.NotNil(t, response)
 		require.Contains(t, string(response), "my-tool")
 	})
+}
+
+func TestBuildToolSearchResultEntriesUsesStableURN(t *testing.T) {
+	t.Parallel()
+
+	const toolURN = "tools:http:billing:billing_customers_list"
+	runtimeName := "customers_list"
+	tools := []*types.Tool{
+		{
+			HTTPToolDefinition: &types.HTTPToolDefinition{
+				ToolUrn:       toolURN,
+				Name:          runtimeName,
+				CanonicalName: "billing_customers_list",
+				Description:   "List customers.",
+				Variation: &types.ToolVariation{
+					SrcToolUrn:  toolURN,
+					SrcToolName: "billing_customers_list",
+					Name:        &runtimeName,
+				},
+			},
+		},
+	}
+	searchResults := []*rag.ToolSearchResult{
+		{
+			ToolURN:         toolURN,
+			ToolName:        "billing_customers_list",
+			Tags:            []string{"billing/customers"},
+			SimilarityScore: 0.9,
+		},
+	}
+
+	entries, err := buildToolSearchResultEntries(tools, searchResults)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, runtimeName, entries[0].Name)
+	require.Equal(t, "List customers.", entries[0].Description)
+	require.InDelta(t, 0.9, entries[0].Meta["similarity_score"], 0)
+	require.Equal(t, []string{"billing/customers"}, entries[0].Meta["tags"])
 }

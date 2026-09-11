@@ -29,17 +29,13 @@ export type ExternalMCPServer = {
    */
   iconUrl?: string | undefined;
   /**
-   * ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+   * ID of the attached MCP server backing this server
    */
   mcpServerId?: string | undefined;
   /**
    * Opaque metadata from the registry
    */
   meta?: any | undefined;
-  /**
-   * ID of the internal collection registry this server came from
-   */
-  organizationMcpCollectionRegistryId?: string | undefined;
   /**
    * ID of the external MCP registry this server came from
    */
@@ -61,7 +57,7 @@ export type ExternalMCPServer = {
    */
   tools?: Array<ExternalMCPTool> | undefined;
   /**
-   * ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
+   * ID of the attached toolset backing this server
    */
   toolsetId?: string | undefined;
   /**
@@ -80,7 +76,6 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     icon_url: z.optional(z.string()),
     mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
-    organization_mcp_collection_registry_id: z.optional(z.string()),
     registry_id: z.optional(z.string()),
     registry_specifier: z.string(),
     remotes: z.optional(z.array(ExternalMCPRemote$inboundSchema)),
@@ -93,8 +88,6 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "icon_url": "iconUrl",
       "mcp_server_id": "mcpServerId",
-      "organization_mcp_collection_registry_id":
-        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_specifier": "registrySpecifier",
       "toolset_id": "toolsetId",

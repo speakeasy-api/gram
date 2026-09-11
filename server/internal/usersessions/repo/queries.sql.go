@@ -101,6 +101,162 @@ func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSe
 	return items, nil
 }
 
+const countOrganizationUserSessionIssuerClients = `-- name: CountOrganizationUserSessionIssuerClients :one
+SELECT COUNT(*)::int
+FROM user_session_issuers AS issuer
+JOIN user_session_clients AS client ON client.user_session_issuer_id = issuer.id
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND client.deleted IS FALSE
+`
+
+type CountOrganizationUserSessionIssuerClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountOrganizationUserSessionIssuerClients(ctx context.Context, arg CountOrganizationUserSessionIssuerClientsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countOrganizationUserSessionIssuerClients, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countOrganizationUserSessionIssuerLiveSessions = `-- name: CountOrganizationUserSessionIssuerLiveSessions :one
+SELECT COUNT(*)::int
+FROM user_session_issuers AS issuer
+JOIN user_sessions AS session ON session.user_session_issuer_id = issuer.id
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND session.deleted IS FALSE
+  AND session.refresh_expires_at > now()
+`
+
+type CountOrganizationUserSessionIssuerLiveSessionsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+func (q *Queries) CountOrganizationUserSessionIssuerLiveSessions(ctx context.Context, arg CountOrganizationUserSessionIssuerLiveSessionsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countOrganizationUserSessionIssuerLiveSessions, arg.UserSessionIssuerID, arg.OrganizationID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const createOrganizationUserSessionIssuer = `-- name: CreateOrganizationUserSessionIssuer :one
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration,
+    client_id_metadata_admission_mode
+)
+VALUES (
+    NULL,
+    $1,
+    $2,
+    $3,
+    $4,
+    'open'
+)
+RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateOrganizationUserSessionIssuerParams struct {
+	OrganizationID     pgtype.Text
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg CreateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createOrganizationUserSessionIssuer,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createOrganizationUserSessionIssuerCimdClient = `-- name: CreateOrganizationUserSessionIssuerCimdClient :one
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT iss.project_id, iss.organization_id, iss.id, $1
+FROM user_session_issuers AS iss
+WHERE iss.id = $2
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $3::text
+  AND iss.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
+DO UPDATE SET
+    organization_id = COALESCE(user_session_issuer_cimd_clients.organization_id, EXCLUDED.organization_id),
+    updated_at = user_session_issuer_cimd_clients.updated_at
+RETURNING id, project_id, organization_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
+`
+
+type CreateOrganizationUserSessionIssuerCimdClientParams struct {
+	ClientIDMetadataUri string
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type CreateOrganizationUserSessionIssuerCimdClientRow struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+	Inserted            bool
+}
+
+// Organization policy is managed only through the session-authenticated,
+// org-admin service. The child copies both ownership columns from its live
+// organization-owned parent. Re-adding a live URL is idempotent and does not
+// emit a second audit event.
+func (q *Queries) CreateOrganizationUserSessionIssuerCimdClient(ctx context.Context, arg CreateOrganizationUserSessionIssuerCimdClientParams) (CreateOrganizationUserSessionIssuerCimdClientRow, error) {
+	row := q.db.QueryRow(ctx, createOrganizationUserSessionIssuerCimdClient, arg.ClientIDMetadataUri, arg.UserSessionIssuerID, arg.OrganizationID)
+	var i CreateOrganizationUserSessionIssuerCimdClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.Inserted,
+	)
+	return i, err
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
@@ -108,6 +264,9 @@ INSERT INTO user_sessions (
     user_session_issuer_id,
     user_session_client_id,
     subject_urn,
+    authorizer_user_id,
+    delegated_grants,
+    delegated_grants_version,
     jti,
     refresh_token_hash,
     refresh_expires_at,
@@ -116,7 +275,12 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
-    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
+    (
+        SELECT COALESCE(issuer.organization_id, project.organization_id)
+        FROM user_session_issuers AS issuer
+        LEFT JOIN projects AS project ON project.id = issuer.project_id
+        WHERE issuer.id = $1
+    ),
     $1,
     $2,
     $3,
@@ -124,20 +288,26 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10,
+    $11
 )
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
-	UserSessionIssuerID uuid.UUID
-	UserSessionClientID uuid.NullUUID
-	SubjectUrn          urn.SessionSubject
-	Jti                 string
-	RefreshTokenHash    string
-	RefreshExpiresAt    pgtype.Timestamptz
-	ExpiresAt           pgtype.Timestamptz
-	ToolSelection       []byte
+	UserSessionIssuerID    uuid.UUID
+	UserSessionClientID    uuid.NullUUID
+	SubjectUrn             urn.SessionSubject
+	AuthorizerUserID       pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+	Jti                    string
+	RefreshTokenHash       string
+	RefreshExpiresAt       pgtype.Timestamptz
+	ExpiresAt              pgtype.Timestamptz
+	ToolSelection          []byte
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -148,6 +318,9 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
+		arg.AuthorizerUserID,
+		arg.DelegatedGrants,
+		arg.DelegatedGrantsVersion,
 		arg.Jti,
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresAt,
@@ -162,6 +335,9 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -327,7 +503,7 @@ VALUES (
     -- the mode afterwards through the update endpoint.
     'open'
 )
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
@@ -356,6 +532,7 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -366,10 +543,10 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 
 const createUserSessionIssuerCimdClient = `-- name: CreateUserSessionIssuerCimdClient :one
 INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
-SELECT $1::uuid, iss.organization_id, iss.id, $2
+SELECT iss.project_id, iss.organization_id, iss.id, $1
 FROM user_session_issuers AS iss
-WHERE iss.id = $3
-  AND iss.project_id = $1::uuid
+WHERE iss.id = $2
+  AND iss.project_id = $3::uuid
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -379,9 +556,9 @@ RETURNING id, project_id, organization_id, user_session_issuer_id, client_id_met
 `
 
 type CreateUserSessionIssuerCimdClientParams struct {
-	ProjectID           uuid.UUID
 	ClientIDMetadataUri string
 	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 type CreateUserSessionIssuerCimdClientRow struct {
@@ -398,8 +575,11 @@ type CreateUserSessionIssuerCimdClientRow struct {
 }
 
 // Adds an issuer-specific allowed CIMD document URL. The SELECT source
-// scopes the write to a live issuer in the caller's project, so a bad
-// issuer id yields no rows (404) rather than an orphan write. Adding a URL
+// scopes the write to a live project-owned issuer, so a bad or
+// organization-owned issuer id yields no rows (404) rather than allowing a
+// project writer to change organization policy. project_id is taken from the
+// issuer rather than the caller so the child inherits its parent's tenancy.
+// Adding a URL
 // that is already live is idempotent via ON CONFLICT; adding one that was
 // previously soft-deleted inserts a fresh row, since the unique index
 // covers live rows only and the audit trail should show a new grant rather
@@ -414,7 +594,7 @@ type CreateUserSessionIssuerCimdClientRow struct {
 // branch really writes, and only when the row has none, so re-adding a grant
 // can fill in tenancy without ever moving it.
 func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (CreateUserSessionIssuerCimdClientRow, error) {
-	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ProjectID, arg.ClientIDMetadataUri, arg.UserSessionIssuerID)
+	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ClientIDMetadataUri, arg.UserSessionIssuerID, arg.ProjectID)
 	var i CreateUserSessionIssuerCimdClientRow
 	err := row.Scan(
 		&i.ID,
@@ -431,6 +611,96 @@ func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg Cre
 	return i, err
 }
 
+const deleteOrganizationUserSessionIssuer = `-- name: DeleteOrganizationUserSessionIssuer :one
+UPDATE user_session_issuers AS issuer
+SET deleted_at = clock_timestamp()
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    WHERE server.user_session_issuer_id = issuer.id
+      AND server.deleted IS FALSE
+      AND project.deleted IS FALSE
+      AND project.organization_id = issuer.organization_id
+
+    UNION ALL
+
+    SELECT 1
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = issuer.id
+      AND toolset.deleted IS FALSE
+      AND project.deleted IS FALSE
+      AND project.organization_id = issuer.organization_id
+  )
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+`
+
+type DeleteOrganizationUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteOrganizationUserSessionIssuer(ctx context.Context, arg DeleteOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, deleteOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteOrganizationUserSessionIssuerCimdClient = `-- name: DeleteOrganizationUserSessionIssuerCimdClient :one
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cimd.id = $1
+  AND iss.id = cimd.user_session_issuer_id
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $2::text
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+RETURNING cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+`
+
+type DeleteOrganizationUserSessionIssuerCimdClientParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) DeleteOrganizationUserSessionIssuerCimdClient(ctx context.Context, arg DeleteOrganizationUserSessionIssuerCimdClientParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, deleteOrganizationUserSessionIssuerCimdClient, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
@@ -440,27 +710,27 @@ WHERE issuer.id = $1
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
-    WHERE server.project_id = $2::uuid
-      AND server.user_session_issuer_id = issuer.id
+    WHERE server.user_session_issuer_id = issuer.id
       AND server.deleted IS FALSE
+      AND server.project_id = issuer.project_id
 
     UNION ALL
 
     SELECT 1
     FROM toolsets AS toolset
-    WHERE toolset.project_id = $2::uuid
-      AND toolset.user_session_issuer_id = issuer.id
+    WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+      AND toolset.project_id = issuer.project_id
 
     UNION ALL
 
     SELECT 1
     FROM meta_mcp_servers AS meta_mcp_server
-    WHERE meta_mcp_server.project_id = $2::uuid
+    WHERE meta_mcp_server.project_id = issuer.project_id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
-RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -470,6 +740,9 @@ type DeleteUserSessionIssuerParams struct {
 
 // Recheck active owners in the write so an owner added after the handler's
 // preflight check prevents the issuer from being soft-deleted.
+//
+// This endpoint only mutates project-owned issuers. Organization-owned rows
+// have a separate org-admin API and cannot be deleted with project:write.
 func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, deleteUserSessionIssuer, arg.ID, arg.ProjectID)
 	var i UserSessionIssuer
@@ -482,6 +755,7 @@ func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSes
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -533,11 +807,11 @@ func (q *Queries) DeleteUserSessionIssuerCimdClient(ctx context.Context, arg Del
 const getLatestLiveUserSessionToolSelection = `-- name: GetLatestLiveUserSessionToolSelection :one
 SELECT tool_selection
 FROM user_sessions
-WHERE project_id = $1::uuid
-  AND user_session_issuer_id = $2
-  AND user_session_client_id = $3
-  AND subject_urn = $4
-  AND tool_selection ->> 'resource' = $5::text
+WHERE (project_id = $1::uuid OR (project_id IS NULL AND organization_id = $2::text))
+  AND user_session_issuer_id = $3
+  AND user_session_client_id = $4
+  AND subject_urn = $5
+  AND tool_selection ->> 'resource' = $6::text
   AND deleted IS FALSE
   AND refresh_expires_at > clock_timestamp()
 ORDER BY created_at DESC, id DESC
@@ -546,6 +820,7 @@ LIMIT 1
 
 type GetLatestLiveUserSessionToolSelectionParams struct {
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.NullUUID
 	SubjectUrn          urn.SessionSubject
@@ -560,6 +835,7 @@ type GetLatestLiveUserSessionToolSelectionParams struct {
 func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg GetLatestLiveUserSessionToolSelectionParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, getLatestLiveUserSessionToolSelection,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.UserSessionClientID,
 		arg.SubjectUrn,
@@ -570,22 +846,128 @@ func (q *Queries) GetLatestLiveUserSessionToolSelection(ctx context.Context, arg
 	return tool_selection, err
 }
 
-const getUserSessionByID = `-- name: GetUserSessionByID :one
-SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
-FROM user_sessions AS s
-JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
-WHERE s.id = $1 AND iss.project_id = $2::uuid AND s.deleted IS FALSE
+const getOrganizationUserSessionIssuerByID = `-- name: GetOrganizationUserSessionIssuerByID :one
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+FROM user_session_issuers
+WHERE id = $1
+  AND project_id IS NULL
+  AND organization_id = $2::text
+  AND deleted IS FALSE
 `
 
-type GetUserSessionByIDParams struct {
+type GetOrganizationUserSessionIssuerByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationUserSessionIssuerByID(ctx context.Context, arg GetOrganizationUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getOrganizationUserSessionIssuerByID, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationUserSessionIssuerCimdClientByID = `-- name: GetOrganizationUserSessionIssuerCimdClientByID :one
+SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE cimd.id = $1
+  AND iss.project_id IS NULL
+  AND iss.organization_id = $2::text
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+`
+
+type GetOrganizationUserSessionIssuerCimdClientByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetOrganizationUserSessionIssuerCimdClientByID(ctx context.Context, arg GetOrganizationUserSessionIssuerCimdClientByIDParams) (UserSessionIssuerCimdClient, error) {
+	row := q.db.QueryRow(ctx, getOrganizationUserSessionIssuerCimdClientByID, arg.ID, arg.OrganizationID)
+	var i UserSessionIssuerCimdClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientIDMetadataUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProjectUserSessionIssuerByID = `-- name: GetProjectUserSessionIssuerByID :one
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+FROM user_session_issuers
+WHERE id = $1
+  AND project_id = $2::uuid
+  AND deleted IS FALSE
+`
+
+type GetProjectUserSessionIssuerByIDParams struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
 
-// Returns the session row scoped to the caller's project, joined through
-// user_session_issuers so project scoping is enforced in the same query.
+func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetProjectUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getProjectUserSessionIssuerByID, arg.ID, arg.ProjectID)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getUserSessionByID = `-- name: GetUserSessionByID :one
+SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE s.id = $1
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
+  AND s.deleted IS FALSE
+`
+
+type GetUserSessionByIDParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Tenancy is scoped through the issuer and spans both tiers: the caller's
+// own project-tier issuers, plus organization-tier issuers (project_id
+// NULL) belonging to the caller's organization.
 func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByIDParams) (UserSession, error) {
-	row := q.db.QueryRow(ctx, getUserSessionByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSession
 	err := row.Scan(
 		&i.ID,
@@ -594,6 +976,9 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -609,7 +994,7 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 }
 
 const getUserSessionByJTI = `-- name: GetUserSessionByJTI :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -635,6 +1020,9 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -650,7 +1038,7 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 }
 
 const getUserSessionByRefreshTokenHash = `-- name: GetUserSessionByRefreshTokenHash :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2
@@ -677,6 +1065,9 @@ func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetU
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -741,16 +1132,19 @@ const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
 SELECT cli.id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE cli.id = $1 AND iss.project_id = $2::uuid AND cli.deleted IS FALSE
+WHERE cli.id = $1
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
+  AND cli.deleted IS FALSE
 `
 
 type GetUserSessionClientByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessionClientByIDParams) (UserSessionClient, error) {
-	row := q.db.QueryRow(ctx, getUserSessionClientByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionClientByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -783,12 +1177,15 @@ SELECT c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_clie
 FROM user_session_consents AS c
 JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE c.id = $1 AND iss.project_id = $2::uuid AND c.deleted IS FALSE
+WHERE c.id = $1
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
+  AND c.deleted IS FALSE
 `
 
 type GetUserSessionConsentByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 type GetUserSessionConsentByIDRow struct {
@@ -807,7 +1204,7 @@ type GetUserSessionConsentByIDRow struct {
 }
 
 func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSessionConsentByIDParams) (GetUserSessionConsentByIDRow, error) {
-	row := q.db.QueryRow(ctx, getUserSessionConsentByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionConsentByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i GetUserSessionConsentByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -827,18 +1224,21 @@ func (q *Queries) GetUserSessionConsentByID(ctx context.Context, arg GetUserSess
 }
 
 const getUserSessionIssuerByID = `-- name: GetUserSessionIssuerByID :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
-WHERE id = $1 AND project_id = $2::uuid AND deleted IS FALSE
+WHERE id = $1
+  AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
+  AND deleted IS FALSE
 `
 
 type GetUserSessionIssuerByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessionIssuerByIDParams) (UserSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getUserSessionIssuerByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionIssuerByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionIssuer
 	err := row.Scan(
 		&i.ID,
@@ -849,6 +1249,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -858,7 +1259,7 @@ func (q *Queries) GetUserSessionIssuerByID(ctx context.Context, arg GetUserSessi
 }
 
 const getUserSessionIssuerBySlug = `-- name: GetUserSessionIssuerBySlug :one
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
 WHERE slug = $1 AND project_id = $2::uuid AND deleted IS FALSE
 `
@@ -868,6 +1269,11 @@ type GetUserSessionIssuerBySlugParams struct {
 	ProjectID uuid.UUID
 }
 
+// Deliberately NOT widened to the organization tier. Slug uniqueness is
+// indexed per project (user_session_issuers_project_slug_key) and there is no
+// (organization_id, slug) equivalent, so admitting organization-tier rows
+// would make this :one query non-deterministic across duplicate slugs.
+// Organization-tier issuers are addressed by id.
 func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSessionIssuerBySlugParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, getUserSessionIssuerBySlug, arg.Slug, arg.ProjectID)
 	var i UserSessionIssuer
@@ -880,6 +1286,7 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -893,18 +1300,19 @@ SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_
 FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
 WHERE cimd.id = $1
-  AND iss.project_id = $2::uuid
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
 `
 
 type GetUserSessionIssuerCimdClientByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg GetUserSessionIssuerCimdClientByIDParams) (UserSessionIssuerCimdClient, error) {
-	row := q.db.QueryRow(ctx, getUserSessionIssuerCimdClientByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionIssuerCimdClientByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionIssuerCimdClient
 	err := row.Scan(
 		&i.ID,
@@ -916,6 +1324,44 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getUserSessionPrincipalCredentialByJTI = `-- name: GetUserSessionPrincipalCredentialByJTI :one
+SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+  AND expires_at > clock_timestamp()
+`
+
+type GetUserSessionPrincipalCredentialByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+type GetUserSessionPrincipalCredentialByJTIRow struct {
+	OrganizationID         pgtype.Text
+	SubjectUrn             urn.SessionSubject
+	AuthorizerUserID       pgtype.Text
+	DelegatedGrants        []byte
+	DelegatedGrantsVersion pgtype.Int4
+}
+
+// Authoritative serve-path lookup for an agent session's immutable credential
+// profile. It intentionally bypasses caches so direct session revocation and
+// expiry remain authoritative on every admission.
+func (q *Queries) GetUserSessionPrincipalCredentialByJTI(ctx context.Context, arg GetUserSessionPrincipalCredentialByJTIParams) (GetUserSessionPrincipalCredentialByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionPrincipalCredentialByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i GetUserSessionPrincipalCredentialByJTIRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 	)
 	return i, err
 }
@@ -980,6 +1426,223 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 	return exists, err
 }
 
+const listOrganizationUserSessionIssuerCimdClientsByIssuerID = `-- name: ListOrganizationUserSessionIssuerCimdClientsByIssuerID :many
+SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
+WHERE iss.project_id IS NULL
+  AND iss.organization_id = $1::text
+  AND cimd.user_session_issuer_id = $2
+  AND cimd.deleted IS FALSE
+  AND iss.deleted IS FALSE
+  AND ($3::uuid IS NULL OR cimd.id < $3::uuid)
+ORDER BY cimd.id DESC
+LIMIT $4
+`
+
+type ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+func (q *Queries) ListOrganizationUserSessionIssuerCimdClientsByIssuerID(ctx context.Context, arg ListOrganizationUserSessionIssuerCimdClientsByIssuerIDParams) ([]UserSessionIssuerCimdClient, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerCimdClientsByIssuerID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSessionIssuerCimdClient
+	for rows.Next() {
+		var i UserSessionIssuerCimdClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.ClientIDMetadataUri,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationUserSessionIssuerMCPServers = `-- name: ListOrganizationUserSessionIssuerMCPServers :many
+SELECT server.id,
+       COALESCE(server.name, server.slug, server.id::text)::text AS name,
+       project.id AS project_id,
+       project.name AS project_name
+FROM user_session_issuers AS issuer
+JOIN mcp_servers AS server ON server.user_session_issuer_id = issuer.id
+JOIN projects AS project ON project.id = server.project_id
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND server.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = issuer.organization_id
+ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id
+`
+
+type ListOrganizationUserSessionIssuerMCPServersParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListOrganizationUserSessionIssuerMCPServersRow struct {
+	ID          uuid.UUID
+	Name        string
+	ProjectID   uuid.UUID
+	ProjectName string
+}
+
+func (q *Queries) ListOrganizationUserSessionIssuerMCPServers(ctx context.Context, arg ListOrganizationUserSessionIssuerMCPServersParams) ([]ListOrganizationUserSessionIssuerMCPServersRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerMCPServers, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationUserSessionIssuerMCPServersRow
+	for rows.Next() {
+		var i ListOrganizationUserSessionIssuerMCPServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationUserSessionIssuerToolsets = `-- name: ListOrganizationUserSessionIssuerToolsets :many
+SELECT toolset.id,
+       toolset.name,
+       project.id AS project_id,
+       project.name AS project_name
+FROM user_session_issuers AS issuer
+JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
+JOIN projects AS project ON project.id = toolset.project_id
+WHERE issuer.id = $1
+  AND issuer.project_id IS NULL
+  AND issuer.organization_id = $2::text
+  AND issuer.deleted IS FALSE
+  AND toolset.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = issuer.organization_id
+ORDER BY project.name, toolset.name, toolset.id
+`
+
+type ListOrganizationUserSessionIssuerToolsetsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListOrganizationUserSessionIssuerToolsetsRow struct {
+	ID          uuid.UUID
+	Name        string
+	ProjectID   uuid.UUID
+	ProjectName string
+}
+
+func (q *Queries) ListOrganizationUserSessionIssuerToolsets(ctx context.Context, arg ListOrganizationUserSessionIssuerToolsetsParams) ([]ListOrganizationUserSessionIssuerToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuerToolsets, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationUserSessionIssuerToolsetsRow
+	for rows.Next() {
+		var i ListOrganizationUserSessionIssuerToolsetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationUserSessionIssuers = `-- name: ListOrganizationUserSessionIssuers :many
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+FROM user_session_issuers
+WHERE project_id IS NULL
+  AND organization_id = $1::text
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3
+`
+
+type ListOrganizationUserSessionIssuersParams struct {
+	OrganizationID string
+	Cursor         uuid.NullUUID
+	LimitValue     int32
+}
+
+func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg ListOrganizationUserSessionIssuersParams) ([]UserSessionIssuer, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuers, arg.OrganizationID, arg.Cursor, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSessionIssuer
+	for rows.Next() {
+		var i UserSessionIssuer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.AuthnChallengeMode,
+			&i.SessionDuration,
+			&i.Classification,
+			&i.ClientIDMetadataAdmissionMode,
+			&i.TrustedRemoteSessionIssuerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
 SELECT rs.id,
        rs.subject_urn,
@@ -1005,7 +1668,7 @@ JOIN (
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE usi.project_id = $3::uuid
+WHERE (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
   AND (rc.project_id = $3::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
   AND (
     EXISTS (
@@ -1026,7 +1689,7 @@ type ListRemoteSessionUpstreamsForSubjectsParams struct {
 	SubjectUrns    []string
 	IssuerIds      []uuid.UUID
 	ProjectID      uuid.UUID
-	OrganizationID pgtype.Text
+	OrganizationID string
 }
 
 type ListRemoteSessionUpstreamsForSubjectsRow struct {
@@ -1063,9 +1726,10 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // happens to share an issuer.
 // Token material is never projected — only expiry metadata and a boolean for
 // whether a refresh grant exists.
-// Scoped by the binding issuer's project: an upstream established through an
-// organization-level or global client, whose project_id is NULL, still belongs
-// to the project whose user_session_issuer the client is bound to. Filtering
+// Scoped by the binding issuer's tenancy, at whichever tier owns it: an
+// upstream established through an organization-level or global client, whose
+// project_id is NULL, still belongs to the tenant whose user_session_issuer
+// the client is bound to. Filtering
 // on the client's project would silently drop those upstreams and report a
 // brokered session as having none. A client that does carry a project must
 // still match, so a row that somehow paired one project's client with another
@@ -1114,10 +1778,18 @@ SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS c
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 JOIN user_session_clients AS c ON c.id = s.user_session_client_id
-WHERE iss.project_id = $1::uuid AND iss.deleted IS FALSE AND c.deleted IS FALSE AND s.deleted IS FALSE
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND iss.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND s.deleted IS FALSE
 GROUP BY c.id, c.client_name
 ORDER BY count DESC, c.client_name ASC
 `
+
+type ListUserSessionClientFacetsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
 
 type ListUserSessionClientFacetsRow struct {
 	Value       string
@@ -1125,8 +1797,8 @@ type ListUserSessionClientFacetsRow struct {
 	Count       int64
 }
 
-func (q *Queries) ListUserSessionClientFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionClientFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listUserSessionClientFacets, projectID)
+func (q *Queries) ListUserSessionClientFacets(ctx context.Context, arg ListUserSessionClientFacetsParams) ([]ListUserSessionClientFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionClientFacets, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1149,17 +1821,18 @@ const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProj
 SELECT cli.id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE iss.project_id = $1::uuid
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
   AND cli.deleted IS FALSE
   AND iss.deleted IS FALSE
-  AND ($2::uuid IS NULL OR cli.user_session_issuer_id = $2::uuid)
-  AND ($3::uuid IS NULL OR cli.id < $3::uuid)
+  AND ($3::uuid IS NULL OR cli.user_session_issuer_id = $3::uuid)
+  AND ($4::uuid IS NULL OR cli.id < $4::uuid)
 ORDER BY cli.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListUserSessionClientsByProjectIDParams struct {
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.NullUUID
 	Cursor              uuid.NullUUID
 	LimitValue          int32
@@ -1167,10 +1840,14 @@ type ListUserSessionClientsByProjectIDParams struct {
 
 // Operator visibility into every client registered against an issuer in the
 // project -- DCR-registered and CIMD-resolved alike -- with optional filter by
-// user_session_issuer_id. Joins through issuers for project scoping.
+// user_session_issuer_id.
+// Tenancy is scoped through the issuer and spans both tiers: the caller's
+// own project-tier issuers, plus organization-tier issuers (project_id
+// NULL) belonging to the caller's organization.
 func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg ListUserSessionClientsByProjectIDParams) ([]UserSessionClient, error) {
 	rows, err := q.db.Query(ctx, listUserSessionClientsByProjectID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -1220,20 +1897,21 @@ SELECT c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_clie
 FROM user_session_consents AS c
 JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE iss.project_id = $1::uuid
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
   AND c.deleted IS FALSE
   AND cli.deleted IS FALSE
   AND iss.deleted IS FALSE
-  AND ($2::text IS NULL OR c.subject_urn = $2::text)
-  AND ($3::uuid IS NULL OR c.user_session_client_id = $3::uuid)
-  AND ($4::uuid IS NULL OR cli.user_session_issuer_id = $4::uuid)
-  AND ($5::uuid IS NULL OR c.id < $5::uuid)
+  AND ($3::text IS NULL OR c.subject_urn = $3::text)
+  AND ($4::uuid IS NULL OR c.user_session_client_id = $4::uuid)
+  AND ($5::uuid IS NULL OR cli.user_session_issuer_id = $5::uuid)
+  AND ($6::uuid IS NULL OR c.id < $6::uuid)
 ORDER BY c.id DESC
-LIMIT $6
+LIMIT $7
 `
 
 type ListUserSessionConsentsByProjectIDParams struct {
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	SubjectUrn          pgtype.Text
 	UserSessionClientID uuid.NullUUID
 	UserSessionIssuerID uuid.NullUUID
@@ -1259,6 +1937,7 @@ type ListUserSessionConsentsByProjectIDRow struct {
 func (q *Queries) ListUserSessionConsentsByProjectID(ctx context.Context, arg ListUserSessionConsentsByProjectIDParams) ([]ListUserSessionConsentsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessionConsentsByProjectID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.SubjectUrn,
 		arg.UserSessionClientID,
 		arg.UserSessionIssuerID,
@@ -1300,27 +1979,31 @@ const listUserSessionIssuerCimdClientsByIssuerID = `-- name: ListUserSessionIssu
 SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
 FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
-WHERE iss.project_id = $1::uuid
-  AND cimd.user_session_issuer_id = $2
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND cimd.user_session_issuer_id = $3
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
-  AND ($3::uuid IS NULL OR cimd.id < $3::uuid)
+  AND ($4::uuid IS NULL OR cimd.id < $4::uuid)
 ORDER BY cimd.id DESC
-LIMIT $4
+LIMIT $5
 `
 
 type ListUserSessionIssuerCimdClientsByIssuerIDParams struct {
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	Cursor              uuid.NullUUID
 	LimitValue          int32
 }
 
-// Operator visibility into an issuer's custom CIMD URLs. Joins through
-// issuers for project scoping.
+// Operator visibility into an issuer's custom CIMD URLs.
+// Tenancy is scoped through the issuer and spans both tiers: the caller's
+// own project-tier issuers, plus organization-tier issuers (project_id
+// NULL) belonging to the caller's organization.
 func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context, arg ListUserSessionIssuerCimdClientsByIssuerIDParams) ([]UserSessionIssuerCimdClient, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuerCimdClientsByIssuerID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -1354,23 +2037,29 @@ func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context
 }
 
 const listUserSessionIssuersByProjectID = `-- name: ListUserSessionIssuersByProjectID :many
-SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
-WHERE project_id = $1::uuid
+WHERE (project_id = $1::uuid OR (project_id IS NULL AND organization_id = $2::text))
   AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR id < $2::uuid)
+  AND ($3::uuid IS NULL OR id < $3::uuid)
 ORDER BY id DESC
-LIMIT $3
+LIMIT $4
 `
 
 type ListUserSessionIssuersByProjectIDParams struct {
-	ProjectID  uuid.UUID
-	Cursor     uuid.NullUUID
-	LimitValue int32
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Cursor         uuid.NullUUID
+	LimitValue     int32
 }
 
 func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg ListUserSessionIssuersByProjectIDParams) ([]UserSessionIssuer, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersByProjectID, arg.ProjectID, arg.Cursor, arg.LimitValue)
+	rows, err := q.db.Query(ctx, listUserSessionIssuersByProjectID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1387,6 +2076,7 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 			&i.SessionDuration,
 			&i.Classification,
 			&i.ClientIDMetadataAdmissionMode,
+			&i.TrustedRemoteSessionIssuerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1406,10 +2096,17 @@ const listUserSessionServerFacets = `-- name: ListUserSessionServerFacets :many
 SELECT s.user_session_issuer_id::text AS value, iss.slug AS display_name, COUNT(*)::bigint AS count
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
-WHERE iss.project_id = $1::uuid AND iss.deleted IS FALSE AND s.deleted IS FALSE
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND iss.deleted IS FALSE
+  AND s.deleted IS FALSE
 GROUP BY s.user_session_issuer_id, iss.slug
 ORDER BY count DESC, iss.slug ASC
 `
+
+type ListUserSessionServerFacetsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
 
 type ListUserSessionServerFacetsRow struct {
 	Value       string
@@ -1417,8 +2114,8 @@ type ListUserSessionServerFacetsRow struct {
 	Count       int64
 }
 
-func (q *Queries) ListUserSessionServerFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionServerFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listUserSessionServerFacets, projectID)
+func (q *Queries) ListUserSessionServerFacets(ctx context.Context, arg ListUserSessionServerFacetsParams) ([]ListUserSessionServerFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionServerFacets, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1444,11 +2141,18 @@ SELECT s.subject_urn::text AS value,
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON u.id = split_part(s.subject_urn::text, ':', 2)
-WHERE iss.project_id = $1::uuid AND iss.deleted IS FALSE AND s.deleted IS FALSE
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
+  AND iss.deleted IS FALSE
+  AND s.deleted IS FALSE
   AND s.subject_urn::text LIKE 'user:%'
 GROUP BY s.subject_urn, u.display_name, u.email
 ORDER BY count DESC, display_name ASC
 `
+
+type ListUserSessionUserFacetsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
 
 type ListUserSessionUserFacetsRow struct {
 	Value       string
@@ -1456,8 +2160,8 @@ type ListUserSessionUserFacetsRow struct {
 	Count       int64
 }
 
-func (q *Queries) ListUserSessionUserFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionUserFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listUserSessionUserFacets, projectID)
+func (q *Queries) ListUserSessionUserFacets(ctx context.Context, arg ListUserSessionUserFacetsParams) ([]ListUserSessionUserFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionUserFacets, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -1504,7 +2208,7 @@ LEFT JOIN api_keys AS k
              WHEN s.subject_urn::text LIKE 'apikey:%'
              THEN split_part(s.subject_urn::text, ':', 2)::uuid
            END
-WHERE iss.project_id = $1::uuid
+WHERE (iss.project_id = $1::uuid OR (iss.project_id IS NULL AND iss.organization_id = $2::text))
   AND iss.deleted IS FALSE
   -- "active"/"expired" are keyed off refresh_expires_at (the authorization
   -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
@@ -1513,24 +2217,25 @@ WHERE iss.project_id = $1::uuid
   -- keying "active" off expires_at would drop those sessions and make the
   -- Active MCP Connections list flicker between showing them and "No active
   -- sessions" depending on how recently the client last refreshed.
-  AND CASE $2::text
+  AND CASE $3::text
         WHEN 'active'  THEN (s.deleted IS FALSE AND s.refresh_expires_at > now())
         WHEN 'expired' THEN (s.deleted IS FALSE AND s.refresh_expires_at <= now())
         WHEN 'revoked' THEN (s.deleted IS TRUE)
         WHEN 'all'     THEN TRUE
         ELSE (s.deleted IS FALSE)
       END
-  AND ($3::text IS NULL OR s.subject_urn = $3::text)
-  AND ($4::uuid IS NULL OR s.user_session_issuer_id = $4::uuid)
-  AND ($5::uuid IS NULL OR s.user_session_client_id = $5::uuid)
-  AND ($6::uuid IS NULL OR s.id = $6::uuid)
-  AND ($7::uuid IS NULL OR s.id < $7::uuid)
+  AND ($4::text IS NULL OR s.subject_urn = $4::text)
+  AND ($5::uuid IS NULL OR s.user_session_issuer_id = $5::uuid)
+  AND ($6::uuid IS NULL OR s.user_session_client_id = $6::uuid)
+  AND ($7::uuid IS NULL OR s.id = $7::uuid)
+  AND ($8::uuid IS NULL OR s.id < $8::uuid)
 ORDER BY s.id DESC
-LIMIT $8
+LIMIT $9
 `
 
 type ListUserSessionsByProjectIDParams struct {
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	Status              pgtype.Text
 	SubjectUrn          pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
@@ -1569,6 +2274,7 @@ type ListUserSessionsByProjectIDRow struct {
 func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserSessionsByProjectIDParams) ([]ListUserSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessionsByProjectID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Status,
 		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
@@ -1617,6 +2323,28 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const lockOrganizationUserSessionIssuer = `-- name: LockOrganizationUserSessionIssuer :one
+SELECT id
+FROM user_session_issuers
+WHERE id = $1
+  AND project_id IS NULL
+  AND organization_id = $2::text
+  AND deleted IS FALSE
+FOR NO KEY UPDATE
+`
+
+type LockOrganizationUserSessionIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg LockOrganizationUserSessionIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
 SELECT id
 FROM user_session_issuers
@@ -1649,21 +2377,33 @@ func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSession
 	return id, err
 }
 
+const lockUserSessionIssuerForOwnerBinding = `-- name: LockUserSessionIssuerForOwnerBinding :exec
+SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 1))
+`
+
+// Serialize deletion against writers that attach an existing issuer to a
+// toolset. Row locks continue to serialize the MCP-server attachment paths.
+func (q *Queries) LockUserSessionIssuerForOwnerBinding(ctx context.Context, userSessionIssuerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockUserSessionIssuerForOwnerBinding, userSessionIssuerID)
+	return err
+}
+
 const purgeUserSessionClientCIMDCache = `-- name: PurgeUserSessionClientCIMDCache :one
 UPDATE user_session_clients
 SET client_id_metadata_cache_expires_at = NULL,
     client_id_metadata_etag = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
-  AND project_id = $2::uuid
+  AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type PurgeUserSessionClientCIMDCacheParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 // Forces the next authorize to re-read, re-parse, and re-validate a CIMD
@@ -1683,11 +2423,13 @@ type PurgeUserSessionClientCIMDCacheParams struct {
 // keep working and only its stored document is suspect. It backs the
 // refreshUserSessionClientCIMD endpoint and is also run by hand.
 //
-// Project-scoped like every management-API mutation in this file, so the
+// Tenancy-scoped like every management-API mutation in this file, so the
 // generated method cannot touch another tenant's row even if a future caller
-// skips the ownership read.
+// skips the ownership read. The client's own project_id is NULL for a client
+// registered against an organization-tier issuer, so the predicate has to
+// admit that tier here too or the refresh silently matches no rows.
 func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg PurgeUserSessionClientCIMDCacheParams) (UserSessionClient, error) {
-	row := q.db.QueryRow(ctx, purgeUserSessionClientCIMDCache, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, purgeUserSessionClientCIMDCache, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -1721,21 +2463,24 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE s.id = $1
   AND iss.id = s.user_session_issuer_id
-  AND iss.project_id = $2::uuid
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND s.deleted IS FALSE
-RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeUserSessionParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
-// Soft-deletes the session. Project scoping is enforced through the join on
-// user_session_issuers. Returns the affected row so the handler can push the
-// jti into the revocation cache and emit an audit event.
+// Tenancy is scoped through the issuer and spans both tiers: the caller's
+// own project-tier issuers, plus organization-tier issuers (project_id
+// NULL) belonging to the caller's organization.
+// Returns the affected row so the handler can push the jti into the
+// revocation cache and emit an audit event.
 func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (UserSession, error) {
-	row := q.db.QueryRow(ctx, revokeUserSession, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, revokeUserSession, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSession
 	err := row.Scan(
 		&i.ID,
@@ -1744,6 +2489,9 @@ func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionPa
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -1764,7 +2512,7 @@ SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeUserSessionByRefreshTokenHashParams struct {
@@ -1787,6 +2535,9 @@ func (q *Queries) RevokeUserSessionByRefreshTokenHash(ctx context.Context, arg R
 		&i.UserSessionIssuerID,
 		&i.UserSessionClientID,
 		&i.SubjectUrn,
+		&i.AuthorizerUserID,
+		&i.DelegatedGrants,
+		&i.DelegatedGrantsVersion,
 		&i.Jti,
 		&i.RefreshTokenHash,
 		&i.RefreshExpiresAt,
@@ -1807,18 +2558,19 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE cli.id = $1
   AND iss.id = cli.user_session_issuer_id
-  AND iss.project_id = $2::uuid
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND cli.deleted IS FALSE
 RETURNING cli.id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 `
 
 type RevokeUserSessionClientParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) RevokeUserSessionClient(ctx context.Context, arg RevokeUserSessionClientParams) (UserSessionClient, error) {
-	row := q.db.QueryRow(ctx, revokeUserSessionClient, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, revokeUserSessionClient, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionClient
 	err := row.Scan(
 		&i.ID,
@@ -1853,14 +2605,15 @@ FROM user_session_clients AS cli, user_session_issuers AS iss
 WHERE c.id = $1
   AND cli.id = c.user_session_client_id
   AND iss.id = cli.user_session_issuer_id
-  AND iss.project_id = $2::uuid
+  AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND c.deleted IS FALSE
 RETURNING c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_client_id, c.remote_set_hash, c.consented_at, c.created_at, c.updated_at, c.deleted_at, c.deleted, cli.user_session_issuer_id AS user_session_issuer_id
 `
 
 type RevokeUserSessionConsentParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 type RevokeUserSessionConsentRow struct {
@@ -1879,7 +2632,7 @@ type RevokeUserSessionConsentRow struct {
 }
 
 func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSessionConsentParams) (RevokeUserSessionConsentRow, error) {
-	row := q.db.QueryRow(ctx, revokeUserSessionConsent, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, revokeUserSessionConsent, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RevokeUserSessionConsentRow
 	err := row.Scan(
 		&i.ID,
@@ -1959,8 +2712,8 @@ RETURNING c.id, c.project_id, c.organization_id, c.subject_urn, c.user_session_c
 
 // Cascading soft-delete of user_session_consents for an issuer being
 // soft-deleted. Joins through user_session_clients since consents are
-// per-client. Project scoping is guaranteed because the parent issuer was
-// already verified to belong to the caller's project.
+// per-client. Tenancy is guaranteed because the parent issuer was already
+// verified to belong to the caller, at whichever tier owns it.
 func (q *Queries) SoftDeleteUserSessionConsentsByIssuerID(ctx context.Context, userSessionIssuerID uuid.UUID) ([]UserSessionConsent, error) {
 	rows, err := q.db.Query(ctx, softDeleteUserSessionConsentsByIssuerID, userSessionIssuerID)
 	if err != nil {
@@ -1997,7 +2750,7 @@ const softDeleteUserSessionsByClientID = `-- name: SoftDeleteUserSessionsByClien
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_client_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions issued through a client being revoked.
@@ -2018,6 +2771,9 @@ func (q *Queries) SoftDeleteUserSessionsByClientID(ctx context.Context, userSess
 			&i.UserSessionIssuerID,
 			&i.UserSessionClientID,
 			&i.SubjectUrn,
+			&i.AuthorizerUserID,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
 			&i.Jti,
 			&i.RefreshTokenHash,
 			&i.RefreshExpiresAt,
@@ -2043,7 +2799,7 @@ const softDeleteUserSessionsByIssuerID = `-- name: SoftDeleteUserSessionsByIssue
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions for an issuer being soft-deleted.
@@ -2064,6 +2820,9 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 			&i.UserSessionIssuerID,
 			&i.UserSessionClientID,
 			&i.SubjectUrn,
+			&i.AuthorizerUserID,
+			&i.DelegatedGrants,
+			&i.DelegatedGrantsVersion,
 			&i.Jti,
 			&i.RefreshTokenHash,
 			&i.RefreshExpiresAt,
@@ -2088,16 +2847,17 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 const touchUserSessionLastUsed = `-- name: TouchUserSessionLastUsed :exec
 UPDATE user_sessions
 SET last_used_at = $1::timestamptz
-WHERE project_id = $2::uuid
-  AND user_session_issuer_id = $3
-  AND jti = $4
+WHERE (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
+  AND user_session_issuer_id = $4
+  AND jti = $5
   AND deleted IS FALSE
-  AND (last_used_at IS NULL OR last_used_at <= $5::timestamptz)
+  AND (last_used_at IS NULL OR last_used_at <= $6::timestamptz)
 `
 
 type TouchUserSessionLastUsedParams struct {
 	NowTs               pgtype.Timestamptz
 	ProjectID           uuid.UUID
+	OrganizationID      string
 	UserSessionIssuerID uuid.UUID
 	Jti                 string
 	UsedCutoff          pgtype.Timestamptz
@@ -2113,11 +2873,64 @@ func (q *Queries) TouchUserSessionLastUsed(ctx context.Context, arg TouchUserSes
 	_, err := q.db.Exec(ctx, touchUserSessionLastUsed,
 		arg.NowTs,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.UserSessionIssuerID,
 		arg.Jti,
 		arg.UsedCutoff,
 	)
 	return err
+}
+
+const updateOrganizationUserSessionIssuer = `-- name: UpdateOrganizationUserSessionIssuer :one
+UPDATE user_session_issuers
+SET
+    slug = COALESCE($1::text, slug),
+    authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
+    session_duration = COALESCE($3::interval, session_duration),
+    client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
+    updated_at = clock_timestamp()
+WHERE id = $5
+  AND project_id IS NULL
+  AND organization_id = $6::text
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateOrganizationUserSessionIssuerParams struct {
+	Slug                          pgtype.Text
+	AuthnChallengeMode            pgtype.Text
+	SessionDuration               pgtype.Interval
+	ClientIDMetadataAdmissionMode pgtype.Text
+	ID                            uuid.UUID
+	OrganizationID                string
+}
+
+func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg UpdateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, updateOrganizationUserSessionIssuer,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+		arg.ClientIDMetadataAdmissionMode,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateUserSessionClientCIMDCache = `-- name: UpdateUserSessionClientCIMDCache :one
@@ -2194,7 +3007,7 @@ SET client_name = $1,
     client_id_metadata_etag = $7,
     updated_at = clock_timestamp()
 WHERE id = $8
-  AND project_id = $9::uuid
+  AND (project_id = $9::uuid OR (project_id IS NULL AND organization_id = $10::text))
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   -- COALESCE for the same reason as the upsert: a NULL method is a legacy
@@ -2217,6 +3030,7 @@ type UpdateUserSessionClientFromCIMDParams struct {
 	ClientIDMetadataEtag    pgtype.Text
 	ID                      uuid.UUID
 	ProjectID               uuid.UUID
+	OrganizationID          string
 }
 
 // Persists a freshly re-read metadata document onto an EXISTING CIMD row,
@@ -2225,7 +3039,7 @@ type UpdateUserSessionClientFromCIMDParams struct {
 // upsert instead would re-insert — and thereby silently resurrect — a client
 // revoked between the refresh's purge and this write, because the conflict
 // target is a partial unique index that only sees live rows. The guards
-// mirror UpdateUserSessionClientCIMDCache's plus the project scoping every
+// mirror UpdateUserSessionClientCIMDCache's plus the tenancy scoping every
 // management-API mutation in this file carries; a miss surfaces as no-rows,
 // which the refresh handler maps to not-found.
 func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg UpdateUserSessionClientFromCIMDParams) (UserSessionClient, error) {
@@ -2239,6 +3053,7 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 		arg.ClientIDMetadataEtag,
 		arg.ID,
 		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i UserSessionClient
 	err := row.Scan(
@@ -2279,8 +3094,10 @@ SET
     -- reports the resolved effective mode either way.
     client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()
-WHERE id = $5 AND project_id = $6::uuid AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
+WHERE id = $5
+  AND project_id = $6::uuid
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionIssuerParams struct {
@@ -2311,6 +3128,7 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 		&i.SessionDuration,
 		&i.Classification,
 		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2463,38 +3281,47 @@ func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg Upser
 const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
 SELECT EXISTS (
     SELECT 1
-    FROM mcp_servers AS server
-    WHERE server.project_id = $1
-      AND server.user_session_issuer_id = $2::uuid
-      AND server.deleted IS FALSE
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = $1::uuid
+      AND issuer.project_id = $2::uuid
+      AND issuer.deleted IS FALSE
+      AND EXISTS (
+        SELECT 1
+        FROM mcp_servers AS server
+        WHERE server.user_session_issuer_id = issuer.id
+          AND server.deleted IS FALSE
+          AND server.project_id = issuer.project_id
 
-    UNION ALL
+        UNION ALL
 
-    SELECT 1
-    FROM toolsets AS toolset
-    WHERE toolset.project_id = $1
-      AND toolset.user_session_issuer_id = $2::uuid
-      AND toolset.deleted IS FALSE
+        SELECT 1
+        FROM toolsets AS toolset
+        WHERE toolset.user_session_issuer_id = issuer.id
+          AND toolset.deleted IS FALSE
+          AND toolset.project_id = issuer.project_id
 
-    UNION ALL
+        UNION ALL
 
-    SELECT 1
-    FROM meta_mcp_servers AS meta_mcp_server
-    WHERE meta_mcp_server.project_id = $1
-      AND meta_mcp_server.user_session_issuer_id = $2::uuid
-      AND meta_mcp_server.deleted IS FALSE
+        SELECT 1
+        FROM meta_mcp_servers AS meta_mcp_server
+        WHERE meta_mcp_server.project_id = issuer.project_id
+          AND meta_mcp_server.user_session_issuer_id = issuer.id
+          AND meta_mcp_server.deleted IS FALSE
+      )
 )
 `
 
 type UserSessionIssuerHasActiveOwnerParams struct {
-	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
 }
 
 // An issuer can be referenced by an MCP server, toolset, or meta MCP server.
 // Only delete it once no active owner remains.
+//
+// This project mutation helper deliberately ignores organization-owned rows.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
+	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.UserSessionIssuerID, arg.ProjectID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

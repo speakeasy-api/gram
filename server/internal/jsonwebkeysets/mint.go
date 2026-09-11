@@ -152,7 +152,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "cannot publish a key right now, try again shortly").LogError(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return client.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return client.Close() })
 
 	public, err := client.GetPublicKey(ctx, row.ResourceName.String)
 	if err != nil {

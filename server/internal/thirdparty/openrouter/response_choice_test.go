@@ -22,6 +22,7 @@ func TestResponseChoice_DecodesWebPluginAnnotations(t *testing.T) {
 
 	var resp OpenAIChatResponse
 	require.NoError(t, json.Unmarshal(raw, &resp))
+	require.Equal(t, "Amazon Bedrock", resp.Provider)
 
 	require.Len(t, resp.Choices, 1)
 	choice := resp.Choices[0]

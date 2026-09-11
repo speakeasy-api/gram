@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -129,6 +130,100 @@ func TestMintUserSessionForServerRejectsUngatedServer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+// TestMintUserSessionForServerUsesPrimaryEndpointIssuer pins the iss claim
+// to the server's primary endpoint URL when the server has mcp_endpoints
+// rows; the legacy /x/mcp/{slug} shape only applies to servers with no
+// endpoints (covered by TestMintUserSessionForServerAllowsMCPConnect, whose
+// fixture creates none).
+func TestMintUserSessionForServerUsesPrimaryEndpointIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createIssuerGatedMintServer(t, ctx, ti, "mint-server-endpoint")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	endpointSlug := "mint-ep-" + uuid.NewString()[:8]
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            endpointSlug,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, server.ID.String()),
+	)
+
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        nil,
+		McpServerID:      conv.PtrEmpty(server.ID.String()),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, "http://0.0.0.0/mcp/"+endpointSlug, claims.Issuer,
+		"iss must derive from the server's primary endpoint")
+}
+
+// TestMintUserSessionForToolsetResolvesWrapper pins the AIS-634 contract for
+// the toolset addressing arm: when the toolset has an mcp_servers wrapper the
+// mint is governed by the wrapper — issuer-URN audience, RBAC against the
+// wrapper id, endpoint-derived iss — even though the toolset row itself
+// carries no issuer.
+func TestMintUserSessionForToolsetResolvesWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createIssuerGatedMintServer(t, ctx, ti, "mint-toolset-wrapper")
+	require.True(t, server.ToolsetID.Valid)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	endpointSlug := "mint-wrapper-ep-" + uuid.NewString()[:8]
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            endpointSlug,
+	})
+	require.NoError(t, err)
+
+	// The RBAC resource for a wrapped toolset is the wrapper id, matching the
+	// runtime gate after the migration's grant rewrite.
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, server.ID.String()),
+	)
+
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        conv.PtrEmpty(server.ToolsetID.UUID.String()),
+		McpServerID:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, "http://0.0.0.0/mcp/"+endpointSlug, claims.Issuer)
+}
+
 // createIssuerGatedMintServer creates an issuer-gated mcp_server. It's backed by
 // a toolset (the backend-exclusivity constraint requires exactly one of
 // toolset_id / remote_mcp_server_id) so the fixture stays lightweight — the
@@ -192,4 +287,86 @@ func createBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, s
 	require.NoError(t, err)
 
 	return toolset
+}
+
+// TestMintUserSessionForToolsetIgnoresUngovernedWrapper pins that a wrapper
+// governs the toolset mint only when the runtime would serve through it; every
+// other shape falls back to the legacy toolset binding.
+func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		visibility string
+		issuer     bool
+	}{
+		// The runtime refuses disabled wrappers and serves the legacy route.
+		{name: "disabled", visibility: mcpservers.VisibilityDisabled, issuer: true},
+		// Production has manually created wrappers with no issuer.
+		{name: "issuerless", visibility: mcpservers.VisibilityPrivate, issuer: false},
+		// Nothing serves a wrapper with no endpoint (none is created below).
+		{name: "endpointless", visibility: mcpservers.VisibilityPrivate, issuer: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			slug := "mint-" + tt.name + "-wrapper"
+			toolset := createIssuerGatedMintToolset(t, ctx, ti, slug)
+
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx)
+
+			issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+			if tt.issuer {
+				issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+					SessionToken:         nil,
+					ApikeyToken:          nil,
+					ProjectSlugInput:     nil,
+					Slug:                 slug + "-srv-issuer",
+					AuthnChallengeMode:   "chain",
+					SessionDurationHours: 24,
+				})
+				require.NoError(t, err)
+				issuerID = uuid.NullUUID{UUID: uuid.MustParse(issuer.ID), Valid: true}
+			}
+
+			_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+				ID:                    uuid.New(),
+				ProjectID:             *authCtx.ProjectID,
+				Name:                  pgtype.Text{String: slug + "-srv", Valid: true},
+				Slug:                  pgtype.Text{String: slug + "-srv", Valid: true},
+				EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				UserSessionIssuerID:   issuerID,
+				RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+				ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Visibility:            tt.visibility,
+			})
+			require.NoError(t, err)
+
+			ctx = withExactAuthzGrants(t, ctx, ti.conn,
+				authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()),
+			)
+
+			toolsetID := toolset.ID.String()
+			got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+				ToolsetID:        &toolsetID,
+				McpServerID:      nil,
+				SessionToken:     nil,
+				ProjectSlugInput: nil,
+			})
+			require.NoError(t, err)
+
+			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+				got.AccessToken,
+				urn.NewToolset(toolset.ID).String(),
+			)
+			require.NoError(t, err)
+			require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+		})
+	}
 }

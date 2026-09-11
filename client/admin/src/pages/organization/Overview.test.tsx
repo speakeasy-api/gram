@@ -9,12 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
 } from "@/lib/adminQueries";
 import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -159,6 +159,28 @@ afterEach(() => {
 });
 
 describe("Overview", () => {
+  it("keeps a Stripe customer copyable without a current subscription", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      stripe_customer_id: "cus_example",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const copy = await screen.findByRole("button", {
+      name: "Copy Stripe customer ID",
+    });
+    fireEvent.click(copy);
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("cus_example");
+    });
+    expect(valueBeside("Stripe subscription ID").textContent).toBe("-");
+    expect(
+      screen.queryByRole("button", { name: "Copy Stripe subscription ID" }),
+    ).toBeNull();
+  });
+
   it("matches the approved active-trial hierarchy", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,

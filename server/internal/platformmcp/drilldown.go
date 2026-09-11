@@ -41,6 +41,7 @@ const (
 // on the audit logger's transaction handling.
 type DrilldownAuditor interface {
 	RecordUserMCPStatusRead(ctx context.Context, principal Principal, projectID, mcpID, maskedIdentity, window string) error
+	RecordUsageAttributionRead(ctx context.Context, principal Principal, projectID, targetKind, target, maskedIdentity, window string) error
 }
 
 // DrilldownTelemetryReader is the additional telemetry the bounded drill-down
@@ -49,6 +50,8 @@ type DrilldownAuditor interface {
 type DrilldownTelemetryReader interface {
 	GetMCPToolOutcomeBreakdown(ctx context.Context, arg telemetryrepo.GetMCPToolOutcomeBreakdownParams) ([]telemetryrepo.MCPToolOutcomeBreakdownRow, error)
 	ListMCPTraceReferences(ctx context.Context, arg telemetryrepo.ListMCPTraceReferencesParams) ([]telemetryrepo.MCPTraceReferenceRow, error)
+	ListMCPUsageUsers(ctx context.Context, arg telemetryrepo.GetMCPOutcomeBreakdownParams) ([]telemetryrepo.MCPUsageUserRow, error)
+	ListMCPUsageUserTools(ctx context.Context, arg telemetryrepo.GetMCPOutcomeBreakdownParams, identityKind, identifier string) ([]telemetryrepo.MCPUsageUserToolRow, error)
 }
 
 // drilldownTarget is one resolved MCP plus the window to read it over. Every
@@ -103,8 +106,14 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 	if err != nil {
 		return drilldownTarget{}, err
 	}
+	toolsetSlugs := nonEmpty(target.ToolsetSlug)
+	if target.ToolsetMcpCount > 1 {
+		// Direct telemetry identifies only the toolset. When several configured
+		// MCP wrappers share it, those rows cannot be attributed to one wrapper.
+		toolsetSlugs = nil
+	}
 	return drilldownTarget{
-		toolsetSlugs: nonEmpty(target.ToolsetSlug),
+		toolsetSlugs: toolsetSlugs,
 		urlSuffixes:  mcpURLSuffixes(target.McpSlug),
 		projectID:    projectID,
 		mcpServerID:  mcpID,
@@ -114,12 +123,23 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 }
 
 func (t drilldownTarget) outcomeParams() telemetryrepo.GetMCPOutcomeBreakdownParams {
+	toolsetSlugs := t.toolsetSlugs
+	urlSuffixes := t.urlSuffixes
+	if len(toolsetSlugs) == 0 && len(urlSuffixes) == 0 {
+		// Both telemetry lanes interpret an empty selector as unfiltered. A
+		// configured MCP without either identity is unresolvable, not the whole
+		// project, so install impossible sentinels and return no attribution.
+		toolsetSlugs = []string{"__platform_mcp_unresolvable__"}
+		urlSuffixes = []string{"/__platform_mcp_unresolvable__"}
+	}
 	return telemetryrepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{t.projectID},
-		ToolsetSlugs:         t.toolsetSlugs,
-		MCPServerURLSuffixes: t.urlSuffixes,
+		ToolsetSlugs:         toolsetSlugs,
+		MCPServerURLSuffixes: urlSuffixes,
+		CanonicalIdentityOrg: "",
 		TimeStart:            t.window.start.UnixNano(),
 		TimeEnd:              t.window.end.UnixNano(),
+		Limit:                0,
 	}
 }
 
@@ -222,13 +242,97 @@ func toolEvents(rows []telemetryrepo.MCPToolOutcomeBreakdownRow) ([]MCPToolEvent
 	return events, false
 }
 
+const maxUsageUsers = 25
+
+// MCPUsageUser is one masked caller with categorical evidence. Exact individual
+// call counts are deliberately absent; aggregate event counts live on the tool
+// breakdown instead.
+type MCPUsageUser struct {
+	SubjectReference string `json:"subject_reference"`
+	MaskedIdentity   string `json:"masked_identity"`
+	Activity         string `json:"activity"`
+	Errors           string `json:"errors"`
+	Blocked          string `json:"blocked"`
+	LastUsedAt       string `json:"last_used_at"`
+}
+
+type ListMCPUsageUsersInput struct {
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
+	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
+}
+
+type ListMCPUsageUsersOutput struct {
+	ProjectID string         `json:"project_id"`
+	MCPID     string         `json:"mcp_id"`
+	Envelope  DataEnvelope   `json:"data"`
+	Users     []MCPUsageUser `json:"users"`
+	Truncated bool           `json:"truncated"`
+}
+
+func (s *DiagnosticsService) ListMCPUsageUsers(ctx context.Context, principal Principal, input ListMCPUsageUsersInput) (ListMCPUsageUsersOutput, error) {
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
+	if err != nil {
+		return ListMCPUsageUsersOutput{}, err
+	}
+	if err := s.volume.AllowRows(ctx, principal, maxUsageUsers); err != nil {
+		return ListMCPUsageUsersOutput{}, err
+	}
+	if err := s.auditor.RecordUsageAttributionRead(ctx, principal, input.ProjectID, "mcp", input.MCPID, "multiple", string(target.window.Window)); err != nil {
+		return ListMCPUsageUsersOutput{}, fmt.Errorf("record mcp usage users read: %w", err)
+	}
+	params := target.outcomeParams()
+	params.CanonicalIdentityOrg = s.canonicalIdentityOrg(ctx, principal.OrganizationID)
+	params.Limit = maxUsageUsers + 1
+	rows, err := s.drilldown.ListMCPUsageUsers(ctx, params)
+	if err != nil {
+		return ListMCPUsageUsersOutput{}, fmt.Errorf("read mcp usage users: %w", err)
+	}
+	envelope, err := s.drilldownEnvelope(ctx, target, len(rows) > 0)
+	if err != nil {
+		return ListMCPUsageUsersOutput{}, err
+	}
+	truncated := len(rows) > maxUsageUsers
+	if truncated {
+		rows = rows[:maxUsageUsers]
+	}
+	users := make([]MCPUsageUser, 0, len(rows))
+	for _, row := range rows {
+		reference, err := s.references.EncodeScoped(
+			principal,
+			subjectKindUser,
+			mcpUsageUserScope(target),
+			FormatSubjectIdentity(row.IdentityKind, row.Identifier),
+			target.now,
+		)
+		if err != nil {
+			return ListMCPUsageUsersOutput{}, fmt.Errorf("mint mcp usage user reference: %w", err)
+		}
+		users = append(users, MCPUsageUser{
+			SubjectReference: reference,
+			MaskedIdentity:   maskSubject(row.Identifier),
+			Activity:         subjectActivity(row.HasSuccess, row.HasError),
+			Errors:           subjectErrors(row.HasError),
+			Blocked:          subjectBlocked(row.HasBlocked),
+			LastUsedAt:       time.Unix(0, row.LastUsedAt).UTC().Format(time.RFC3339),
+		})
+	}
+	return ListMCPUsageUsersOutput{
+		ProjectID: input.ProjectID,
+		MCPID:     input.MCPID,
+		Envelope:  envelope,
+		Users:     users,
+		Truncated: truncated,
+	}, nil
+}
+
 // QueryMCPTracesInput asks for individual occurrences of a failure class the
 // overview or diagnostics already identified.
 type QueryMCPTracesInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
-	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, unauthorized, client_error, server_error, failed, or unknown"`
+	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, blocked, unauthorized, client_error, server_error, failed, or unknown"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous query_mcp_traces result"`
 }
 
@@ -256,7 +360,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		return QueryMCPTracesOutput{}, ErrUnavailable
 	}
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
-		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, unauthorized, client_error, server_error, failed, unknown")
+		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, blocked, unauthorized, client_error, server_error, failed, unknown")
 	}
 	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
@@ -269,7 +373,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	// The cursor resolves only against the query that minted it, so a position
 	// cannot be replayed on a different MCP, outcome class, or window.
 	scope := traceCursorScope(target, input.Outcome)
-	before, beforeTraceID, traversed, err := s.decodeTraceCursor(input.Cursor, principal, scope, target.now)
+	before, beforeTraceID, beforeEventID, traversed, err := s.decodeTraceCursor(input.Cursor, principal, scope, target.now)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -278,6 +382,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		GetMCPOutcomeBreakdownParams: target.outcomeParams(),
 		BeforeUnixNano:               before,
 		BeforeTraceID:                beforeTraceID,
+		BeforeEventID:                beforeEventID,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit: maxTraceReferences + 1,
@@ -338,7 +443,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	traversed += len(rows)
 	if more && len(rows) > 0 && traversed < maxTraceTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatCursorPosition(last.OccurredAt, last.TraceID, traversed), target.now)
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatCursorPosition(last.OccurredAt, last.TraceID, last.EventID, traversed), target.now)
 		if err != nil {
 			return QueryMCPTracesOutput{}, fmt.Errorf("mint trace cursor: %w", err)
 		}
@@ -349,6 +454,10 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 
 // traceCursorScope is the normalized query a trace cursor belongs to: the MCP,
 // the outcome class, and the window it was read over.
+func mcpUsageUserScope(target drilldownTarget) string {
+	return queryScope(target.projectID, target.mcpServerID, string(target.window.Window))
+}
+
 func traceCursorScope(target drilldownTarget, outcome string) string {
 	return queryScope(
 		target.projectID,
@@ -494,6 +603,13 @@ const (
 	SubjectStateNoObservations = "no_observations"
 )
 
+type SubjectToolStatus struct {
+	ToolName string `json:"tool_name"`
+	Outcome  string `json:"outcome"`
+	Errors   string `json:"errors"`
+	Blocked  string `json:"blocked"`
+}
+
 type GetUserMCPStatusOutput struct {
 	ProjectID string       `json:"project_id"`
 	MCPID     string       `json:"mcp_id"`
@@ -504,9 +620,11 @@ type GetUserMCPStatusOutput struct {
 	MaskedIdentity string `json:"masked_identity"`
 	// Activity is a state category rather than a count, so a caller cannot
 	// assemble an activity profile from repeated calls.
-	Activity string `json:"activity"`
-	// Unavailable reports that this MCP's model cannot be scoped by the reads
-	// behind this tool, so no statement is made about the subject at all.
+	Activity       string              `json:"activity"`
+	Tools          []SubjectToolStatus `json:"tools"`
+	ToolsTruncated bool                `json:"tools_truncated"`
+	// Unavailable is retained for compatibility. The call-level reader can scope
+	// every MCP model that carries a trustworthy server identity.
 	Unavailable bool `json:"unavailable"`
 }
 
@@ -528,7 +646,7 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	// An unknown, expired, cross-generation, or cross-organization reference is
 	// a single not-found: distinguishing them would confirm that a reference
 	// once existed, which is itself information about another organization.
-	subject, err := s.references.Decode(input.SubjectReference, principal, subjectKindUser, target.now)
+	subject, err := s.references.DecodeScoped(input.SubjectReference, principal, subjectKindUser, mcpUsageUserScope(target), target.now)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, ErrSubjectReferenceNotFound
 	}
@@ -542,6 +660,7 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 		MCPID:          input.MCPID,
 		MaskedIdentity: maskSubject(identifier),
 		Activity:       SubjectStateNoObservations,
+		Tools:          []SubjectToolStatus{},
 	}
 
 	// Recorded before the answer is composed, and a failure to record refuses
@@ -551,12 +670,7 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	if err := s.auditor.RecordUserMCPStatusRead(ctx, principal, input.ProjectID, input.MCPID, output.MaskedIdentity, string(target.window.Window)); err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("record user mcp status read: %w", err)
 	}
-
-	toolsetSlug := target.hostedToolsetSlug()
-	// A remote, tunneled, or unproxied server carries no toolset slug, and the
-	// read below narrows by nothing else. Answering anyway would report the
-	// project's activity as this MCP's.
-	if toolsetSlug == "" {
+	if len(target.toolsetSlugs) == 0 && len(target.urlSuffixes) == 0 {
 		envelope, err := s.drilldownEnvelope(ctx, target, false)
 		if err != nil {
 			return GetUserMCPStatusOutput{}, err
@@ -565,34 +679,22 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 		output.Unavailable = true
 		return output, nil
 	}
+	if err := s.volume.AllowRows(ctx, principal, maxDrilldownTools); err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
 
-	// Scoped to this one subject rather than filtered out of a truncated
-	// top-user list: a subject outside that list would otherwise be reported as
-	// having no observations, which on a personal-data question is a false
-	// negative rather than a missing row.
-	summaryParams := telemetryrepo.GetOverviewSummaryParams{
-		GramProjectID: target.projectID,
-		TimeStart:     target.window.start.UnixNano(),
-		TimeEnd:       target.window.end.UnixNano(),
-		ToolsetSlug:   toolsetSlug,
-	}
-	// Filtered on the column the identity actually lives in. Telemetry records
-	// a person as an email, an external user id, or a Gram user id, and these
-	// are separate columns: filtering the wrong one matches nothing and would
-	// report an active person as inactive.
-	switch identityKind {
-	case SubjectIdentityEmail:
-		summaryParams.User = telemetryrepo.UserIdentity{Emails: []string{identifier}}
-	case SubjectIdentityExternal:
-		summaryParams.ExternalUserID = identifier
-	default:
-		summaryParams.User = telemetryrepo.UserIdentity{UserIDs: []string{identifier}}
-	}
-	summary, err := s.telemetry.GetOverviewSummary(ctx, summaryParams)
+	params := target.outcomeParams()
+	params.CanonicalIdentityOrg = s.canonicalIdentityOrg(ctx, principal.OrganizationID)
+	params.Limit = maxDrilldownTools + 1
+	rows, err := s.drilldown.ListMCPUsageUserTools(ctx, params, identityKind, identifier)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user activity: %w", err)
 	}
-	observed := summary != nil && summary.TotalToolCalls > 0
+	observed := len(rows) > 0
+	output.ToolsTruncated = len(rows) > maxDrilldownTools
+	if output.ToolsTruncated {
+		rows = rows[:maxDrilldownTools]
+	}
 	envelope, err := s.drilldownEnvelope(ctx, target, observed)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, err
@@ -603,7 +705,52 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	} else {
 		output.Activity = SubjectStateInactive
 	}
+	for _, row := range rows {
+		output.Tools = append(output.Tools, SubjectToolStatus{
+			ToolName: row.ToolName,
+			Outcome:  subjectActivity(row.HasSuccess, row.HasError),
+			Errors:   subjectErrors(row.HasError),
+			Blocked:  subjectBlocked(row.HasBlocked),
+		})
+	}
+	fitted, dropped, err := fitRows(output.Tools, func(tools []SubjectToolStatus) any {
+		candidate := output
+		candidate.Tools = tools
+		return candidate
+	})
+	if err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
+	output.Tools = fitted
+	output.ToolsTruncated = output.ToolsTruncated || dropped
 	return output, nil
+}
+
+func subjectActivity(hasSuccess, hasError bool) string {
+	if hasSuccess && hasError {
+		return "mixed"
+	}
+	if hasError {
+		return "errors_only"
+	}
+	if hasSuccess {
+		return "successful"
+	}
+	return "observed"
+}
+
+func subjectBlocked(hasBlocked bool) string {
+	if hasBlocked {
+		return "observed"
+	}
+	return "none_observed"
+}
+
+func subjectErrors(hasError bool) string {
+	if hasError {
+		return "observed"
+	}
+	return "none_observed"
 }
 
 // maskSubject reduces an identifier to something an administrator who already
@@ -630,19 +777,19 @@ func maskToken(value string) string {
 	return string(runes[0]) + strings.Repeat("*", min(len(runes)-1, 3))
 }
 
-func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, int, error) {
+func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, string, int, error) {
 	if cursor == "" {
-		return 0, "", 0, nil
+		return 0, "", "", 0, nil
 	}
 	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	position, traceID, traversed, err := parseCursorPosition(value)
+	position, traceID, eventID, traversed, err := parseCursorPosition(value)
 	if err != nil {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, traversed, nil
+	return position, traceID, eventID, traversed, nil
 }
 
 // sortToolEvents puts the tool a caller should look at first at the top:
@@ -667,36 +814,39 @@ func sortToolEvents(events []MCPToolEvents) {
 // everything else a caller holds between calls. The count travels inside the
 // sealed token rather than beside it, so a caller cannot reset its own
 // traversal budget by editing what it was handed.
-func formatCursorPosition(unixNano int64, traceID string, traversed int) string {
-	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + traceID
+func formatCursorPosition(unixNano int64, traceID, eventID string, traversed int) string {
+	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + traceID + ":" + eventID
 }
 
-// parseCursorPosition recovers the composite page key and the traversal count.
-// Both halves of the key are required: the repo orders by (event_time_ns,
-// trace_id), and a cursor carrying only the timestamp would skip every trace
-// sharing the boundary nanosecond.
-func parseCursorPosition(value string) (int64, string, int, error) {
+// parseCursorPosition recovers the complete page key and traversal count. The
+// repo orders by event time, trace id, and call event id, so omitting any part
+// can skip occurrences sharing a boundary.
+func parseCursorPosition(value string) (int64, string, string, int, error) {
 	rest, ok := strings.CutPrefix(value, "t:")
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	timestamp, rest, ok := strings.Cut(rest, ":")
 	if !ok {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	count, traceID, ok := strings.Cut(rest, ":")
-	if !ok || traceID == "" {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+	count, rest, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
+	}
+	traceID, eventID, ok := strings.Cut(rest, ":")
+	if !ok || traceID == "" || eventID == "" {
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	position, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || position <= 0 {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
 	traversed, err := strconv.Atoi(count)
 	if err != nil || traversed < 0 || traversed > maxTraceTraversal {
-		return 0, "", 0, ErrSubjectReferenceNotFound
+		return 0, "", "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, traversed, nil
+	return position, traceID, eventID, traversed, nil
 }
 
 // fitRows drops trailing rows until the serialized result fits the response
@@ -754,6 +904,7 @@ func responseFits(output any) (bool, error) {
 func validOutcomeClass(outcome string) bool {
 	switch outcome {
 	case telemetryrepo.MCPOutcomeSuccess,
+		telemetryrepo.MCPOutcomeBlocked,
 		telemetryrepo.MCPOutcomeUnauthorized,
 		telemetryrepo.MCPOutcomeClientError,
 		telemetryrepo.MCPOutcomeServerError,

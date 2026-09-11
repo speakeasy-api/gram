@@ -180,7 +180,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 
 	txRepo := repo.New(dbtx)
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -207,10 +207,14 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
-
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
 	view := &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
@@ -276,6 +280,7 @@ func (s *Service) ListUserSessionIssuerCimdClients(ctx context.Context, payload 
 	limit := pageLimit(payload.Limit)
 	rows, err := repo.New(s.db).ListUserSessionIssuerCimdClientsByIssuerID(ctx, repo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerID,
 		Cursor:              cursor,
 		LimitValue:          limit,
@@ -314,8 +319,9 @@ func (s *Service) GetUserSessionIssuerCimdClient(ctx context.Context, payload *g
 	}
 
 	row, err := repo.New(s.db).GetUserSessionIssuerCimdClientByID(ctx, repo.GetUserSessionIssuerCimdClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -364,7 +370,7 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer cimd client").LogError(ctx, logger)
 	}
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        row.UserSessionIssuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -399,10 +405,15 @@ func userSessionIssuerCimdClientView(row repo.UserSessionIssuerCimdClient) *type
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
 
 	return &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),

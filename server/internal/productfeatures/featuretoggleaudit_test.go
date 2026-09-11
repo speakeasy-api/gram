@@ -38,6 +38,7 @@ func TestSetProductFeatureEnableRecordsGenericAudit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "organization", record.SubjectType)
 	require.Equal(t, authCtx.ActiveOrganizationID, record.OrganizationID)
+	require.Empty(t, record.ActorSlug, "user actor must carry no organization slug")
 	require.False(t, record.ProjectID.Valid, "org-scoped event must carry no project")
 
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
@@ -116,7 +117,7 @@ func TestSetProductFeatureHooksFailOpenSkipsGenericAudit(t *testing.T) {
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureHooksFailOpen),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -138,7 +139,7 @@ func TestSetProductFeatureSkillsEnableRecordsGenericAudit(t *testing.T) {
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)
@@ -156,7 +157,7 @@ func TestSetProductFeatureSkillsEnableRecordsGenericAudit(t *testing.T) {
 	// A replayed enable is a no-op and must not duplicate the event.
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkills),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkills),
 		Enabled:        true,
 	})
 	require.NoError(t, err)

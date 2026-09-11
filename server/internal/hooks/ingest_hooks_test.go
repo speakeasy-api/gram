@@ -64,7 +64,7 @@ func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, valu
 	return nil
 }
 
-func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
@@ -628,7 +628,7 @@ func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
 		Prompt: &gen.HookPromptData{Text: &text},
 	}
 
-	title := canonicalChatTitle(payload, "")
+	title := canonicalChatTitle(payload, "", "custom-adapter")
 	require.True(t, utf8.ValidString(title))
 	require.Len(t, []rune(title), 80)
 }
@@ -647,6 +647,22 @@ func TestCanonicalAgentTurnIDExtractsLegacyOpenCodeMessageID(t *testing.T) {
 	payload := canonicalIngestPayload("opencode", "prompt.submitted", "opencode-session")
 	payload.Raw = json.RawMessage(`{"input":{"messageID":"msg-input"},"output":{"message":{"id":"msg-output"}}}`)
 	require.Equal(t, "opencode:msg-output", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDAcceptsOpenClawRunID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("openclaw", "prompt.submitted", "openclaw-session")
+	payload.Session.TurnID = new("run-oclaw-1")
+	require.Equal(t, "openclaw:run-oclaw-1", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDAcceptsProxiedOpenClawTurnID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", "openclaw-proxied")
+	payload.Session.TurnID = new(agentTurnPrefix + "openclaw:run-oclaw-1")
+	require.Equal(t, "openclaw:run-oclaw-1", canonicalAgentTurnID(payload))
 }
 
 func TestCanonicalAgentTurnIDRejectsSpoofedProviderPrefix(t *testing.T) {

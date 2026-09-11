@@ -274,6 +274,21 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		Oidc:                              false,
 		Passthrough:                       false,
 		TunneledMcpServerID:               uuid.NullUUID{},
+		// Discovery ran, so the enrichment capabilities are captured here
+		// rather than left NULL for a later refresh.
+		UserinfoEndpoint:                           conv.ToPGTextEmpty(metadata.UserinfoEndpoint),
+		IntrospectionEndpoint:                      conv.ToPGTextEmpty(metadata.IntrospectionEndpoint),
+		IntrospectionEndpointAuthMethodsSupported:  metadata.IntrospectionEndpointAuthMethodsSupported,
+		IDTokenSigningAlgValuesSupported:           metadata.IDTokenSigningAlgValuesSupported,
+		ClaimsSupported:                            metadata.ClaimsSupported,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
+		ScopeOverride:                              nil,
+		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		Metadata:                                   metadata.Metadata,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		MetadataLastError:                          metadata.UnreadableMessage,
+		MetadataLastErrorUrl:                       metadata.UnreadableURL,
 	})
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)
@@ -307,13 +322,13 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return false, fmt.Errorf("lock identity provider for client attachment: %w", err)
 	}
-	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID}); err != nil {
+	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID}); err != nil {
 		return false, fmt.Errorf("validate registered MCP session issuer: %w", err)
 	}
 	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             project.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
-		OrganizationID:        conv.ToPGText(principal.OrganizationID),
+		OrganizationID:        principal.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            2,

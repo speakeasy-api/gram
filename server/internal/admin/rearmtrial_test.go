@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -174,7 +175,6 @@ func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string,
 			KeyType:        string(keyType),
 			MonthlyCredits: int64(conv.PtrValOr(limit, 0)),
 			KeyHash:        "hash-" + orgID + "-" + string(keyType),
-			Reinstate:      true,
 		}); err != nil {
 			return 0, fmt.Errorf("reinstate %s key: %w", keyType, err)
 		}
@@ -456,7 +456,7 @@ func TestRearmTrial_PreservesLayeredProtectionAndCaps(t *testing.T) {
 			for _, keyType := range openrouter.AllKeyTypes {
 				classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(tt.cause), string(openrouter.DisableCauseTrialDemotion)})
 				row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
-				_, err := orrepo.New(conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, MonthlyCredits: tt.limit, Reinstate: false})
+				_, err := orrepo.New(conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, MonthlyCredits: tt.limit})
 				require.NoError(t, err)
 			}
 
@@ -761,34 +761,35 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, provisioner := newRearmService(t)
-	seedDemotedTrial(t, ctx, conn, "org_rearm", "enterprise")
-	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, "org_rearm")
-	beforeTrial := readTrial(t, ctx, conn, "org_rearm")
-	beforeOrg := readOrgState(t, ctx, conn, "org_rearm")
+	orgID := "org_rearm_" + uuid.NewString()
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, orgID)
+	beforeTrial := readTrial(t, ctx, conn, orgID)
+	beforeOrg := readOrgState(t, ctx, conn, orgID)
 
-	res, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm", Days: 14})
+	res, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err)
-	require.Equal(t, "org_rearm", res.ID)
+	require.Equal(t, orgID, res.ID)
 
 	require.Len(t, provisioner.revivals, len(openrouter.AllKeyTypes))
 	require.Equal(t, map[openrouter.KeyType]*int{
 		openrouter.KeyTypeChat:     conv.PtrEmpty(50),
 		openrouter.KeyTypeInternal: conv.PtrEmpty(50),
 	}, provisioner.revivedLimits(), "every key type the demotion disables must come back up on its own ceiling")
-	require.False(t, readOpenRouterKey(t, ctx, conn, "org_rearm", openrouter.KeyTypeChat).Disabled)
-	require.False(t, readOpenRouterKey(t, ctx, conn, "org_rearm", openrouter.KeyTypeInternal).Disabled)
+	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).Disabled)
+	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).Disabled)
 
 	// Demotion cleared both; the signup arming path only ever writes the first.
-	state := readOrgState(t, ctx, conn, "org_rearm")
+	state := readOrgState(t, ctx, conn, orgID)
 	require.Equal(t, "enterprise", state.GramAccountType)
 	require.True(t, state.Whitelisted, "a re-armed organization must be whitelisted again")
 	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, "org_rearm", feature)
+		enabled, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
 		require.NoError(t, err)
 		require.Truef(t, enabled, "re-arm should restore %s", feature)
 	}
 
-	after := readTrial(t, ctx, conn, "org_rearm")
+	after := readTrial(t, ctx, conn, orgID)
 	require.False(t, after.DemotedAt.Valid, "re-arming must clear demoted_at")
 	require.False(t, after.ConvertedAt.Valid)
 	require.WithinDuration(t, time.Now().UTC().Add(14*24*time.Hour), after.EndsAt.Time, time.Minute)
@@ -800,7 +801,7 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 		"restoring the organization must stamp its updated_at: was %s, now %s", beforeOrg.UpdatedAt.Time, state.UpdatedAt.Time)
 
 	require.NotNil(t, res.TrialEndsAt)
-	detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_rearm"})
+	detail, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: orgID})
 	require.NoError(t, err)
 	require.Equal(t, "running", *detail.TrialState)
 	require.Equal(t, *res.TrialEndsAt, *detail.TrialEndsAt)

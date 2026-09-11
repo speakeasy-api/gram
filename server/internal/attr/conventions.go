@@ -12,6 +12,15 @@ import (
 type Key = attribute.Key
 
 const (
+	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+
+	WideEventKey = attribute.Key("gram.wide_event")
+
 	ErrorIDKey                       = attribute.Key("error.id")
 	ErrorMessageKey                  = attribute.Key("error.message")
 	ErrorStackKey                    = attribute.Key("error.stack")
@@ -64,6 +73,24 @@ const (
 	UserIDKey                            = semconv.UserIDKey
 	UserEmailKey                         = semconv.UserEmailKey
 	UserRolesKey                         = semconv.UserRolesKey
+
+	RequestAuthAccountTypeKey            = attribute.Key("req.auth_account_type")
+	RequestAuthAPIKeyIDKey               = attribute.Key("req.auth_api_key_id")
+	RequestAuthOrganizationIDKey         = attribute.Key("req.auth_organization_id")
+	RequestAuthOrganizationSlugKey       = attribute.Key("req.auth_organization_slug")
+	RequestAuthProjectIDKey              = attribute.Key("req.auth_project_id")
+	RequestAuthProjectSlugKey            = attribute.Key("req.auth_project_slug")
+	RequestAuthSchemeSessionKey          = attribute.Key("req.auth_scheme_session")
+	RequestAuthSchemeProjectKey          = attribute.Key("req.auth_scheme_project")
+	RequestAuthSchemeAPIKeyKey           = attribute.Key("req.auth_scheme_api_key")
+	RequestAuthUserEmailKey              = attribute.Key("req.auth_user_email")
+	RequestAuthUserIDKey                 = attribute.Key("req.auth_user_id")
+	RequestAuthUserExternalIDKey         = attribute.Key("req.auth_external_user_id")
+	RequestAuthSchemeAPIKeyErrorKey      = attribute.Key("req.auth_api_key_error")
+	RequestAuthSchemeSessionErrorKey     = attribute.Key("req.auth_session_error")
+	RequestAuthSchemeProjectSlugErrorKey = attribute.Key("req.auth_project_slug_error")
+	RequestCustomDomainIDKey             = attribute.Key("req.custom_domain_id")
+	RequestCustomDomainNameKey           = attribute.Key("req.custom_domain_name")
 
 	// UserAttributesKey and UserGroupsKey carry the denormalized WorkOS
 	// Directory Sync snapshot stamped onto telemetry logs at write time.
@@ -124,7 +151,6 @@ const (
 	AuthProjectIDKey         = attribute.Key("gram.auth.project_id")
 	AuthProjectSlugKey       = attribute.Key("gram.auth.project_slug")
 	AuthSchemeKey            = attribute.Key("gram.auth.scheme")
-	AuthSessionIDKey         = attribute.Key("gram.auth.session_id")
 	AuthUserEmailKey         = attribute.Key("gram.auth.user_email")
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
@@ -229,6 +255,7 @@ const (
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
+	DBUpdatedRowsCountKey          = attribute.Key("gram.db.updated_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
 	DeploymentFunctionsAccessIDKey = attribute.Key("gram.deployment.functions.access_id")
 	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
@@ -285,6 +312,13 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
+	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
+	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
+	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
+	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
+	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
+	NetworkIngressErrorCodeKey     = attribute.Key("gram.network_ingress.error_code")
+	NetworkIngressDurationKey      = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -336,6 +370,8 @@ const (
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
 	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey                     = attribute.Key("gram.mcp.url")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
@@ -346,7 +382,9 @@ const (
 	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
-	// — used across DCR registration, /authorize, /token, and /revoke.
+	// — the ones Gram emits across DCR registration, /authorize, /token, and
+	// /revoke, and the ones an upstream authorization server answers Gram
+	// with (IdP and remote-login callbacks, token refresh).
 	OAuthErrorKey            = attribute.Key("gram.oauth.error")
 	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
 	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
@@ -381,14 +419,17 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey                  = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey                  = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey          = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey           = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey      = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey      = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRequiredKey                  = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                     = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey             = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey             = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey     = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey      = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRequiredKey             = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                = attribute.Key("gram.oauth.scope")
+	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
+	// client's configured scope because the issuer advertises them.
+	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
@@ -407,6 +448,9 @@ const (
 	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
 	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
 	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
+	EmbeddingInputCountKey            = attribute.Key("gram.openrouter.embedding.input_count")
+	EmbeddingFallbackStrategyKey      = attribute.Key("gram.openrouter.embedding.fallback_strategy")
+	EmbeddingTruncatedInputCountKey   = attribute.Key("gram.openrouter.embedding.truncated_input_count")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -423,7 +467,6 @@ const (
 	OutboxIDKey                       = attribute.Key("gram.outbox.id")
 	OutboxPublicIDKey                 = attribute.Key("gram.outbox.public_id")
 	OutboxBatchSizeKey                = attribute.Key("gram.outbox.batch_size")
-	OutboxNoopRowsKey                 = attribute.Key("gram.outbox.noop_rows")
 	AccessMemberIDKey                 = attribute.Key("gram.access.member.id")
 	AccessRoleIDKey                   = attribute.Key("gram.access.role.id")
 	AccessRoleSlugKey                 = attribute.Key("gram.access.role.slug")
@@ -461,54 +504,71 @@ const (
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
+	// remote session's access token.
+	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
-	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
-	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
-	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
-	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
-	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
-	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
-	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
-	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
-	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
-	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
-	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
-	RiskSourceKey                  = attribute.Key("gram.risk.source")
-	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
-	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
-	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
-	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
-	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
-	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
-	SecretNameKey                  = attribute.Key("gram.secret.name")
-	SecurityPlacementKey           = attribute.Key("gram.security.placement")
-	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
-	SecurityTypeKey                = attribute.Key("gram.security.type")
-	SessionIDKey                   = attribute.Key("gram.session.id")
-	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
-	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
-	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
-	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
-	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
-	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
-	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
-	ToolIDKey                      = attribute.Key("gram.tool.id")
-	ToolURNKey                     = attribute.Key("gram.tool.urn")
-	ToolNameKey                    = attribute.Key("gram.tool.name")
-	ResourceIDKey                  = attribute.Key("gram.resource.id")
-	ResourceNameKey                = attribute.Key("gram.resource.name")
-	ResourceURNKey                 = attribute.Key("gram.resource.urn")
-	ResourceURIKey                 = attribute.Key("gram.resource.uri")
-	SvixAppIDKey                   = attribute.Key("gram.svix.app_id")
-	SvixMessageIDKey               = attribute.Key("gram.svix.message_id")
-	WebhookDropReasonKey           = attribute.Key("gram.webhook.drop_reason")
-	SvixPreviousAppIDKey           = attribute.Key("gram.svix.previous_app_id")
-	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
-	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
-	ToolsetMCPSlugKey              = attribute.Key("gram.toolset.mcp_slug")
-	ToolsetMCPEnabledKey           = attribute.Key("gram.toolset.mcp_enabled")
-	VisibilityKey                  = attribute.Key("gram.visibility")
+	RiskPolicyCountKey              = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
+	RiskPolicyNameKey               = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey               = attribute.Key("gram.risk.policy_type")
+	RiskPolicyActionKey             = attribute.Key("gram.risk.policy_action")
+	RiskPolicyScopeFoldKey          = attribute.Key("gram.risk.policy_scope_fold")
+	RiskPolicyScopeFoldRemainingKey = attribute.Key("gram.risk.policy_scope_fold_remaining")
+	RiskPolicyScopeFoldAttemptKey   = attribute.Key("gram.risk.policy_scope_fold_attempt")
+	RiskPolicyDetectionScopesKey    = attribute.Key("gram.risk.policy_detection_scopes")
+	RiskMessageTypeKey              = attribute.Key("gram.risk.message_type")
+	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey              = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey       = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey        = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey        = attribute.Key("gram.risk.reconcile_rows_kept")
+	SpendRuleIDKey                  = attribute.Key("gram.spend.rule_id")
+	RiskSourceKey                   = attribute.Key("gram.risk.source")
+	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey          = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey           = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey             = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey            = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey               = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey           = attribute.Key("gram.risk.scan.gate_reason")
+	RiskFindingIDKey                = attribute.Key("gram.risk.finding.id")
+	RiskPolicyVersionKey            = attribute.Key("gram.risk.policy.version")
+	RiskConfidenceKey               = attribute.Key("gram.risk.confidence")
+	RiskTagsKey                     = attribute.Key("gram.risk.tags")
+	RiskSurfaceKey                  = attribute.Key("gram.risk.surface")
+	RiskFieldKey                    = attribute.Key("gram.risk.field")
+	RiskPathKey                     = attribute.Key("gram.risk.path")
+	RiskStartPosKey                 = attribute.Key("gram.risk.start_pos")
+	RiskEndPosKey                   = attribute.Key("gram.risk.end_pos")
+	SecretNameKey                   = attribute.Key("gram.secret.name")
+	SecurityPlacementKey            = attribute.Key("gram.security.placement")
+	SecuritySchemeKey               = attribute.Key("gram.security.scheme")
+	SecurityTypeKey                 = attribute.Key("gram.security.type")
+	SessionIDKey                    = attribute.Key("gram.session.id")
+	SlackEventFullKey               = attribute.Key("gram.slack.event.full")
+	SlackEventTypeKey               = attribute.Key("gram.slack.event.type")
+	SlackTeamIDKey                  = attribute.Key("gram.slack.team.id")
+	ToolCallDurationKey             = attribute.Key("gram.tool_call.duration")
+	ToolCallKindKey                 = attribute.Key("gram.tool_call.kind")
+	ToolCallSourceKey               = attribute.Key("gram.tool_call.source")
+	ToolHTTPResponseContentTypeKey  = attribute.Key("gram.tool.http.response.content_type")
+	ToolIDKey                       = attribute.Key("gram.tool.id")
+	ToolURNKey                      = attribute.Key("gram.tool.urn")
+	ToolNameKey                     = attribute.Key("gram.tool.name")
+	ResourceIDKey                   = attribute.Key("gram.resource.id")
+	ResourceNameKey                 = attribute.Key("gram.resource.name")
+	ResourceURNKey                  = attribute.Key("gram.resource.urn")
+	ResourceURIKey                  = attribute.Key("gram.resource.uri")
+	SvixAppIDKey                    = attribute.Key("gram.svix.app_id")
+	SvixMessageIDKey                = attribute.Key("gram.svix.message_id")
+	WebhookDropReasonKey            = attribute.Key("gram.webhook.drop_reason")
+	SvixPreviousAppIDKey            = attribute.Key("gram.svix.previous_app_id")
+	ToolsetIDKey                    = attribute.Key("gram.toolset.id")
+	ToolsetSlugKey                  = attribute.Key("gram.toolset.slug")
+	ToolsetMCPSlugKey               = attribute.Key("gram.toolset.mcp_slug")
+	ToolsetMCPEnabledKey            = attribute.Key("gram.toolset.mcp_enabled")
+	VisibilityKey                   = attribute.Key("gram.visibility")
 
 	// Hooks
 	// HookDecisionKey carries the policy verdict the hook endpoint returned to
@@ -551,30 +611,33 @@ const (
 	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
-	HookBlockReasonKey             = attribute.Key("gram.hook.block_reason")
-	IdentityFoldCanonicalGroupsKey = attribute.Key("gram.identity_fold.canonical_groups")
-	IdentityFoldCostDeltaKey       = attribute.Key("gram.identity_fold.cost_delta")
-	IdentityFoldLiteralGroupsKey   = attribute.Key("gram.identity_fold.literal_groups")
-	IdentityFoldNewKeysKey         = attribute.Key("gram.identity_fold.new_keys")
-	IdentityFoldOrderChangedKey    = attribute.Key("gram.identity_fold.order_changed")
-	IdentityFoldTruncatedKey       = attribute.Key("gram.identity_fold.truncated")
-	IdentityFoldTokenDeltaKey      = attribute.Key("gram.identity_fold.token_delta")
-	IdentityMapEntryCountKey       = attribute.Key("gram.identity_map.entry_count")
-	LiteLLMInstanceIDKey           = attribute.Key("gram.litellm.instance_id")
-	LiteLLMCallIDKey               = attribute.Key("gram.litellm.call_id")
-	LiteLLMTraceIDKey              = attribute.Key("gram.litellm.trace_id")
-	LiteLLMUserIDKey               = attribute.Key("gram.litellm.user_id")
-	LiteLLMUserEmailKey            = attribute.Key("gram.litellm.user_email")
-	LiteLLMTeamIDKey               = attribute.Key("gram.litellm.team_id")
-	LiteLLMTeamAliasKey            = attribute.Key("gram.litellm.team_alias")
-	LiteLLMEndUserIDKey            = attribute.Key("gram.litellm.end_user_id")
-	LiteLLMOrganizationIDKey       = attribute.Key("gram.litellm.org_id")
-	LiteLLMAPIKeyHashKey           = attribute.Key("gram.litellm.api_key_hash")
-	LiteLLMAPIKeyAliasKey          = attribute.Key("gram.litellm.api_key_alias")
-	LiteLLMInputCostKey            = attribute.Key("litellm.cost.input")
-	LiteLLMOutputCostKey           = attribute.Key("litellm.cost.output")
-	LiteLLMCacheReadCostKey        = attribute.Key("litellm.cost.cache_read")
-	LiteLLMCacheWriteCostKey       = attribute.Key("litellm.cost.cache_creation")
+	HookBlockReasonKey                   = attribute.Key("gram.hook.block_reason")
+	IdentityFoldCanonicalGroupsKey       = attribute.Key("gram.identity_fold.canonical_groups")
+	IdentityFoldCostDeltaKey             = attribute.Key("gram.identity_fold.cost_delta")
+	IdentityFoldLiteralGroupsKey         = attribute.Key("gram.identity_fold.literal_groups")
+	IdentityFoldNewKeysKey               = attribute.Key("gram.identity_fold.new_keys")
+	IdentityFoldOrderChangedKey          = attribute.Key("gram.identity_fold.order_changed")
+	IdentityFoldTruncatedKey             = attribute.Key("gram.identity_fold.truncated")
+	IdentityFoldTokenDeltaKey            = attribute.Key("gram.identity_fold.token_delta")
+	IdentityMapEntryCountKey             = attribute.Key("gram.identity_map.entry_count")
+	TenantDimensionOrganizationCountKey  = attribute.Key("gram.tenant_dimensions.organization_count")
+	TenantDimensionProjectCountKey       = attribute.Key("gram.tenant_dimensions.project_count")
+	TenantDimensionOrphanProjectCountKey = attribute.Key("gram.tenant_dimensions.orphan_project_count")
+	LiteLLMInstanceIDKey                 = attribute.Key("gram.litellm.instance_id")
+	LiteLLMCallIDKey                     = attribute.Key("gram.litellm.call_id")
+	LiteLLMTraceIDKey                    = attribute.Key("gram.litellm.trace_id")
+	LiteLLMUserIDKey                     = attribute.Key("gram.litellm.user_id")
+	LiteLLMUserEmailKey                  = attribute.Key("gram.litellm.user_email")
+	LiteLLMTeamIDKey                     = attribute.Key("gram.litellm.team_id")
+	LiteLLMTeamAliasKey                  = attribute.Key("gram.litellm.team_alias")
+	LiteLLMEndUserIDKey                  = attribute.Key("gram.litellm.end_user_id")
+	LiteLLMOrganizationIDKey             = attribute.Key("gram.litellm.org_id")
+	LiteLLMAPIKeyHashKey                 = attribute.Key("gram.litellm.api_key_hash")
+	LiteLLMAPIKeyAliasKey                = attribute.Key("gram.litellm.api_key_alias")
+	LiteLLMInputCostKey                  = attribute.Key("litellm.cost.input")
+	LiteLLMOutputCostKey                 = attribute.Key("litellm.cost.output")
+	LiteLLMCacheReadCostKey              = attribute.Key("litellm.cost.cache_read")
+	LiteLLMCacheWriteCostKey             = attribute.Key("litellm.cost.cache_creation")
 	// MCPMatchKey carries the server-level identifier the matcher resolved
 	// for a hook-time MCP tool call — an HTTP/SSE URL, a stdio command, or
 	// (as fallback) the `mcp__<server>__` prefix from the tool name. Set on
@@ -707,6 +770,10 @@ const (
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
 	RemoteMCPServerURLKey              = attribute.Key("gram.remote_mcp_server.url")
 	TunneledMCPServerIDKey             = attribute.Key("gram.tunneled_mcp_server.id")
+	// TunnelPublicRejectionReasonKey names why the anonymous public tunnel
+	// path rejected a request before proxying. Closed set, see
+	// mcpmetrics.TunnelPublicRejectReason.
+	TunnelPublicRejectionReasonKey = attribute.Key("gram.tunnel_public.rejection_reason")
 	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Gram-minted
 	// anonymous tunnel session id. The raw id is bearer-like and must never
 	// be logged.
@@ -731,11 +798,16 @@ const (
 	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
 	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
 	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
+
+	MeteringStripeExportDispositionKey = attribute.Key("gram.metering.stripe_export.disposition")
 )
 
 const (
 	VisibilityInternalValue = "internal"
 )
+
+func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
+func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
@@ -960,6 +1032,27 @@ func SlogIdentityFoldTokenDelta(v int64) slog.Attr {
 func IdentityMapEntryCount(v int) attribute.KeyValue { return IdentityMapEntryCountKey.Int(v) }
 func SlogIdentityMapEntryCount(v int) slog.Attr      { return slog.Int(string(IdentityMapEntryCountKey), v) }
 
+func TenantDimensionOrganizationCount(v int) attribute.KeyValue {
+	return TenantDimensionOrganizationCountKey.Int(v)
+}
+func SlogTenantDimensionOrganizationCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrganizationCountKey), v)
+}
+
+func TenantDimensionProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionProjectCountKey.Int(v)
+}
+func SlogTenantDimensionProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionProjectCountKey), v)
+}
+
+func TenantDimensionOrphanProjectCount(v int) attribute.KeyValue {
+	return TenantDimensionOrphanProjectCountKey.Int(v)
+}
+func SlogTenantDimensionOrphanProjectCount(v int) slog.Attr {
+	return slog.Int(string(TenantDimensionOrphanProjectCountKey), v)
+}
+
 func HookHasPluginAuth(v bool) attribute.KeyValue { return HookHasPluginAuthKey.Bool(v) }
 func SlogHookHasPluginAuth(v bool) slog.Attr      { return slog.Bool(string(HookHasPluginAuthKey), v) }
 
@@ -995,6 +1088,107 @@ func SlogUserID(v string) slog.Attr      { return slog.String(string(UserIDKey),
 
 func ExternalUserID(v string) attribute.KeyValue { return ExternalUserIDKey.String(v) }
 func SlogExternalUserID(v string) slog.Attr      { return slog.String(string(ExternalUserIDKey), v) }
+
+func RequestAuthAccountType(v string) attribute.KeyValue { return RequestAuthAccountTypeKey.String(v) }
+func SlogRequestAuthAccountType(v string) slog.Attr {
+	return slog.String(string(RequestAuthAccountTypeKey), v)
+}
+
+func RequestAuthAPIKeyID(v string) attribute.KeyValue { return RequestAuthAPIKeyIDKey.String(v) }
+func SlogRequestAuthAPIKeyID(v string) slog.Attr {
+	return slog.String(string(RequestAuthAPIKeyIDKey), v)
+}
+
+func RequestAuthOrganizationID(v string) attribute.KeyValue {
+	return RequestAuthOrganizationIDKey.String(v)
+}
+func SlogRequestAuthOrganizationID(v string) slog.Attr {
+	return slog.String(string(RequestAuthOrganizationIDKey), v)
+}
+
+func RequestAuthOrganizationSlug(v string) attribute.KeyValue {
+	return RequestAuthOrganizationSlugKey.String(v)
+}
+func SlogRequestAuthOrganizationSlug(v string) slog.Attr {
+	return slog.String(string(RequestAuthOrganizationSlugKey), v)
+}
+
+func RequestAuthProjectID(v string) attribute.KeyValue { return RequestAuthProjectIDKey.String(v) }
+func SlogRequestAuthProjectID(v string) slog.Attr {
+	return slog.String(string(RequestAuthProjectIDKey), v)
+}
+
+func RequestAuthProjectSlug(v string) attribute.KeyValue { return RequestAuthProjectSlugKey.String(v) }
+func SlogRequestAuthProjectSlug(v string) slog.Attr {
+	return slog.String(string(RequestAuthProjectSlugKey), v)
+}
+
+func RequestAuthSessionScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeSessionKey.Bool(matched)
+}
+func SlogRequestAuthSessionScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeSessionKey), matched)
+}
+func RequestAuthProjectScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeProjectKey.Bool(matched)
+}
+func SlogRequestAuthProjectScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeProjectKey), matched)
+}
+func RequestAuthAPIKeyScheme(matched bool) attribute.KeyValue {
+	return RequestAuthSchemeAPIKeyKey.Bool(matched)
+}
+func SlogRequestAuthAPIKeyScheme(matched bool) slog.Attr {
+	return slog.Bool(string(RequestAuthSchemeAPIKeyKey), matched)
+}
+
+func RequestAuthUserEmail(v string) attribute.KeyValue { return RequestAuthUserEmailKey.String(v) }
+func SlogRequestAuthUserEmail(v string) slog.Attr {
+	return slog.String(string(RequestAuthUserEmailKey), v)
+}
+
+func RequestAuthUserID(v string) attribute.KeyValue { return RequestAuthUserIDKey.String(v) }
+func SlogRequestAuthUserID(v string) slog.Attr      { return slog.String(string(RequestAuthUserIDKey), v) }
+
+func RequestAuthUserExternalID(v string) attribute.KeyValue {
+	return RequestAuthUserExternalIDKey.String(v)
+}
+func SlogRequestAuthUserExternalID(v string) slog.Attr {
+	return slog.String(string(RequestAuthUserExternalIDKey), v)
+}
+
+func RequestAuthSchemeAPIKeyError(v string) attribute.KeyValue {
+	return RequestAuthSchemeAPIKeyErrorKey.String(v)
+}
+func SlogRequestAuthSchemeAPIKeyError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeAPIKeyErrorKey), v)
+}
+
+func RequestAuthSchemeSessionError(v string) attribute.KeyValue {
+	return RequestAuthSchemeSessionErrorKey.String(v)
+}
+func SlogRequestAuthSchemeSessionError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeSessionErrorKey), v)
+}
+
+func RequestAuthSchemeProjectSlugError(v string) attribute.KeyValue {
+	return RequestAuthSchemeProjectSlugErrorKey.String(v)
+}
+func SlogRequestAuthSchemeProjectSlugError(v string) slog.Attr {
+	return slog.String(string(RequestAuthSchemeProjectSlugErrorKey), v)
+}
+
+func RequestCustomDomainID(v string) attribute.KeyValue { return RequestCustomDomainIDKey.String(v) }
+func SlogRequestCustomDomainID(v string) slog.Attr {
+	return slog.String(string(RequestCustomDomainIDKey), v)
+}
+
+func RequestCustomDomainName(v string) attribute.KeyValue {
+	return RequestCustomDomainNameKey.String(v)
+}
+func SlogRequestCustomDomainName(v string) slog.Attr {
+	return slog.String(string(RequestCustomDomainNameKey), v)
+}
 
 func APIKeyID(v string) attribute.KeyValue { return APIKeyIDKey.String(v) }
 func SlogAPIKeyID(v string) slog.Attr      { return slog.String(string(APIKeyIDKey), v) }
@@ -1107,9 +1301,6 @@ func SlogAuthProjectSlug(v string) slog.Attr      { return slog.String(string(Au
 func AuthScheme(v string) attribute.KeyValue { return AuthSchemeKey.String(v) }
 func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSchemeKey), v) }
 
-func AuthSessionID(v string) attribute.KeyValue { return AuthSessionIDKey.String(v) }
-func SlogAuthSessionID(v string) slog.Attr      { return slog.String(string(AuthSessionIDKey), v) }
-
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
 
@@ -1209,6 +1400,8 @@ func SlogComponent(v string) slog.Attr      { return slog.String(string(Componen
 
 func DBDeletedRowsCount(v int64) attribute.KeyValue { return DBDeletedRowsCountKey.Int64(v) }
 func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(DBDeletedRowsCountKey), v) }
+func DBUpdatedRowsCount(v int64) attribute.KeyValue { return DBUpdatedRowsCountKey.Int64(v) }
+func SlogDBUpdatedRowsCount(v int64) slog.Attr      { return slog.Int64(string(DBUpdatedRowsCountKey), v) }
 
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
@@ -1386,6 +1579,48 @@ func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParam
 func IngressName(v string) attribute.KeyValue { return IngressNameKey.String(v) }
 func SlogIngressName(v string) slog.Attr      { return slog.String(string(IngressNameKey), v) }
 
+func NetworkIngressID(v string) attribute.KeyValue { return NetworkIngressIDKey.String(v) }
+func SlogNetworkIngressID(v string) slog.Attr      { return slog.String(string(NetworkIngressIDKey), v) }
+
+func NetworkSurface[V ~string](v V) attribute.KeyValue {
+	return NetworkSurfaceKey.String(string(v))
+}
+func SlogNetworkSurface[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkSurfaceKey), string(v))
+}
+
+func NetworkIngressOperation[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressOperationKey.String(string(v))
+}
+func SlogNetworkIngressOperation[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressOperationKey), string(v))
+}
+
+func NetworkIngressResult[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressResultKey.String(string(v))
+}
+func SlogNetworkIngressResult[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressResultKey), string(v))
+}
+
+func NetworkIngressReason[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressReasonKey.String(string(v))
+}
+func SlogNetworkIngressReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressReasonKey), string(v))
+}
+
+func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressErrorCodeKey.String(string(v))
+}
+func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
+	return slog.Duration(string(NetworkIngressDurationKey), v)
+}
+
 func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 	return CustomDomainProvisionerKindKey.String(v)
 }
@@ -1515,6 +1750,7 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
@@ -1549,6 +1785,9 @@ func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthReq
 
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
+
+func OAuthScopeAdded(v string) attribute.KeyValue { return OAuthScopeAddedKey.String(v) }
+func SlogOAuthScopeAdded(v string) slog.Attr      { return slog.String(string(OAuthScopeAddedKey), v) }
 
 func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
 func SlogOAuthTokenEndpoint(v string) slog.Attr {
@@ -1616,6 +1855,26 @@ func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
 
 func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
 	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
+
+func EmbeddingInputCount(v int) attribute.KeyValue {
+	return EmbeddingInputCountKey.Int(v)
+}
+func SlogEmbeddingInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingInputCountKey), v)
+}
+func EmbeddingFallbackStrategy(v string) attribute.KeyValue {
+	return EmbeddingFallbackStrategyKey.String(v)
+}
+func SlogEmbeddingFallbackStrategy(v string) slog.Attr {
+	return slog.String(string(EmbeddingFallbackStrategyKey), v)
+}
+
+func EmbeddingTruncatedInputCount(v int) attribute.KeyValue {
+	return EmbeddingTruncatedInputCountKey.Int(v)
+}
+func SlogEmbeddingTruncatedInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingTruncatedInputCountKey), v)
 }
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
@@ -1726,17 +1985,11 @@ func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
 	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
 }
 
-func OutboxID(v int64) attribute.KeyValue { return OutboxIDKey.Int64(v) }
-func SlogOutboxID(v int64) slog.Attr      { return slog.Int64(string(OutboxIDKey), v) }
+func SlogOutboxID(v int64) slog.Attr { return slog.Int64(string(OutboxIDKey), v) }
 
-func OutboxPublicID(v string) attribute.KeyValue { return OutboxPublicIDKey.String(v) }
-func SlogOutboxPublicID(v string) slog.Attr      { return slog.String(string(OutboxPublicIDKey), v) }
+func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPublicIDKey), v) }
 
 func OutboxBatchSize(v int) attribute.KeyValue { return OutboxBatchSizeKey.Int(v) }
-func SlogOutboxBatchSize(v int) slog.Attr      { return slog.Int(string(OutboxBatchSizeKey), v) }
-
-func OutboxNoopRows(v int) attribute.KeyValue { return OutboxNoopRowsKey.Int(v) }
-func SlogOutboxNoopRows(v int) slog.Attr      { return slog.Int(string(OutboxNoopRowsKey), v) }
 
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
@@ -1765,6 +2018,10 @@ func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
 
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
 func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
+
+func MeteringStripeExportDisposition[V ~string](v V) attribute.KeyValue {
+	return MeteringStripeExportDispositionKey.String(string(v))
+}
 
 func PackageName(v string) attribute.KeyValue { return PackageNameKey.String(v) }
 func SlogPackageName(v string) slog.Attr      { return slog.String(string(PackageNameKey), v) }
@@ -1835,6 +2092,13 @@ func SlogRemoteSessionRevokeDroppedCount(v int) slog.Attr {
 	return slog.Int(string(RemoteSessionRevokeDroppedCountKey), v)
 }
 
+func RemoteSessionAccessExpiresAt(v time.Time) attribute.KeyValue {
+	return RemoteSessionAccessExpiresAtKey.String(v.UTC().Format(time.RFC3339))
+}
+func SlogRemoteSessionAccessExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(RemoteSessionAccessExpiresAtKey), v)
+}
+
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return UserSessionClientMigratedCountKey.Int64(v)
 }
@@ -1854,6 +2118,9 @@ func SlogRemoteMCPServerURL(v string) slog.Attr {
 }
 
 func TunneledMCPServerID(v string) attribute.KeyValue { return TunneledMCPServerIDKey.String(v) }
+func TunnelPublicRejectionReason(v string) attribute.KeyValue {
+	return TunnelPublicRejectionReasonKey.String(v)
+}
 func SlogTunneledMCPServerID(v string) slog.Attr {
 	return slog.String(string(TunneledMCPServerIDKey), v)
 }
@@ -1900,6 +2167,39 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 
 func RiskPolicyType(v string) attribute.KeyValue { return RiskPolicyTypeKey.String(v) }
 func SlogRiskPolicyType(v string) slog.Attr      { return slog.String(string(RiskPolicyTypeKey), v) }
+
+func RiskPolicyAction(v string) attribute.KeyValue { return RiskPolicyActionKey.String(v) }
+func SlogRiskPolicyAction(v string) slog.Attr      { return slog.String(string(RiskPolicyActionKey), v) }
+
+// RiskPolicyScopeFold names what the legacy-policy-scope migration did to one
+// policy: preserved, cleared, or noop.
+func RiskPolicyScopeFold(v string) attribute.KeyValue { return RiskPolicyScopeFoldKey.String(v) }
+func SlogRiskPolicyScopeFold(v string) slog.Attr {
+	return slog.String(string(RiskPolicyScopeFoldKey), v)
+}
+
+// RiskPolicyScopeFoldRemaining counts policies still carrying a legacy scope
+// after a fold pass; RiskPolicyScopeFoldAttempt numbers that pass.
+func RiskPolicyScopeFoldRemaining(v int64) attribute.KeyValue {
+	return RiskPolicyScopeFoldRemainingKey.Int64(v)
+}
+func SlogRiskPolicyScopeFoldRemaining(v int64) slog.Attr {
+	return slog.Int64(string(RiskPolicyScopeFoldRemainingKey), v)
+}
+
+func RiskPolicyScopeFoldAttempt(v int64) attribute.KeyValue {
+	return RiskPolicyScopeFoldAttemptKey.Int64(v)
+}
+func SlogRiskPolicyScopeFoldAttempt(v int64) slog.Attr {
+	return slog.Int64(string(RiskPolicyScopeFoldAttemptKey), v)
+}
+
+func RiskPolicyDetectionScopes(v string) attribute.KeyValue {
+	return RiskPolicyDetectionScopesKey.String(v)
+}
+func SlogRiskPolicyDetectionScopes(v string) slog.Attr {
+	return slog.String(string(RiskPolicyDetectionScopesKey), v)
+}
 
 func RiskMessageType(v string) attribute.KeyValue { return RiskMessageTypeKey.String(v) }
 func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(RiskMessageTypeKey), v) }
@@ -1959,6 +2259,37 @@ func RiskScanGateReason[V ~string](v V) attribute.KeyValue {
 func SlogRiskScanGateReason(v string) slog.Attr {
 	return slog.String(string(RiskScanGateReasonKey), v)
 }
+
+func RiskFindingID(v string) attribute.KeyValue { return RiskFindingIDKey.String(v) }
+func SlogRiskFindingID(v string) slog.Attr      { return slog.String(string(RiskFindingIDKey), v) }
+
+func RiskPolicyVersion(v int64) attribute.KeyValue { return RiskPolicyVersionKey.Int64(v) }
+func SlogRiskPolicyVersion(v int64) slog.Attr {
+	return slog.Int64(string(RiskPolicyVersionKey), v)
+}
+
+func RiskConfidence(v float64) attribute.KeyValue { return RiskConfidenceKey.Float64(v) }
+func SlogRiskConfidence(v float64) slog.Attr {
+	return slog.Float64(string(RiskConfidenceKey), v)
+}
+
+func RiskTags(v []string) attribute.KeyValue { return RiskTagsKey.StringSlice(v) }
+func SlogRiskTags(v []string) slog.Attr      { return slog.Any(string(RiskTagsKey), v) }
+
+func RiskSurface(v string) attribute.KeyValue { return RiskSurfaceKey.String(v) }
+func SlogRiskSurface(v string) slog.Attr      { return slog.String(string(RiskSurfaceKey), v) }
+
+func RiskField(v string) attribute.KeyValue { return RiskFieldKey.String(v) }
+func SlogRiskField(v string) slog.Attr      { return slog.String(string(RiskFieldKey), v) }
+
+func RiskPath(v string) attribute.KeyValue { return RiskPathKey.String(v) }
+func SlogRiskPath(v string) slog.Attr      { return slog.String(string(RiskPathKey), v) }
+
+func RiskStartPos(v int64) attribute.KeyValue { return RiskStartPosKey.Int64(v) }
+func SlogRiskStartPos(v int64) slog.Attr      { return slog.Int64(string(RiskStartPosKey), v) }
+
+func RiskEndPos(v int64) attribute.KeyValue { return RiskEndPosKey.Int64(v) }
+func SlogRiskEndPos(v int64) slog.Attr      { return slog.Int64(string(RiskEndPosKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
@@ -2043,8 +2374,12 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
 
-func MetaMcpServerID(v string) attribute.KeyValue { return MetaMcpServerIDKey.String(v) }
-func SlogMetaMcpServerID(v string) slog.Attr      { return slog.String(string(MetaMcpServerIDKey), v) }
+func MetaMcpServerID(v string) attribute.KeyValue   { return MetaMcpServerIDKey.String(v) }
+func SlogMetaMcpServerID(v string) slog.Attr        { return slog.String(string(MetaMcpServerIDKey), v) }
+func MetaMemberBackend(v string) attribute.KeyValue { return MetaMemberBackendKey.String(v) }
+func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
+	return MetaDispatchOutcomeKey.String(string(v))
+}
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
@@ -2526,4 +2861,23 @@ func SlogResiliencePartition(v string) slog.Attr {
 func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.String(v) }
 func SlogResilienceSubset(v string) slog.Attr {
 	return slog.String(string(ResilienceSubsetKey), v)
+}
+
+func SlogAuthorizationOrganizationID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOrganizationIDKey), v)
+}
+func SlogAuthorizationActorType(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorTypeKey), v)
+}
+func SlogAuthorizationActorID(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorIDKey), v)
+}
+func SlogAuthorizationAPIKeyID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAPIKeyIDKey), v)
+}
+func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAuthorizerUserIDKey), v)
+}
+func SlogAuthorizationOwnerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOwnerUserIDKey), v)
 }

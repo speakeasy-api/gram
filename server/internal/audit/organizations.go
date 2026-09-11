@@ -25,6 +25,7 @@ const (
 
 	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
 	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
+	ActionOrganizationSetupTaskUpdated       Action = "organization:setup_task_updated"
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
@@ -38,6 +39,76 @@ const (
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
 )
+
+type LogOrganizationSetupTaskUpdatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+	TaskKey          string
+
+	SetupTaskSnapshotBefore *OrganizationSetupTaskSnapshot
+	SetupTaskSnapshotAfter  *OrganizationSetupTaskSnapshot
+}
+
+type OrganizationSetupTaskAssigneeSnapshot struct {
+	UserID   *string `json:"user_id,omitempty"`
+	Email    string  `json:"email"`
+	Name     *string `json:"name,omitempty"`
+	PhotoURL *string `json:"photo_url,omitempty"`
+}
+
+type OrganizationSetupTaskSnapshot struct {
+	Key         string                                 `json:"key"`
+	Title       string                                 `json:"title"`
+	Description string                                 `json:"description"`
+	Status      string                                 `json:"status"`
+	Assignee    *OrganizationSetupTaskAssigneeSnapshot `json:"assignee,omitempty"`
+	BlockedBy   []string                               `json:"blocked_by"`
+	Hidden      bool                                   `json:"hidden"`
+}
+
+func (l *Logger) LogOrganizationSetupTaskUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationSetupTaskUpdatedEvent) error {
+	metadata, err := marshalAuditPayload(map[string]string{"task_key": event.TaskKey})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", ActionOrganizationSetupTaskUpdated, err)
+	}
+	beforeSnapshot, err := marshalAuditPayload(event.SetupTaskSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationSetupTaskUpdated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.SetupTaskSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationSetupTaskUpdated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationSetupTaskUpdated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationSetupTaskV1})
+}
 
 type LogOrganizationInviteCreateEvent struct {
 	OrganizationID string

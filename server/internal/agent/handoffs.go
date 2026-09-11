@@ -257,7 +257,7 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read handoff document").LogError(r.Context(), s.logger)
 	}
-	defer o11y.LogDefer(r.Context(), s.logger, func() error { return rdr.Close() })
+	defer o11y.LogDefer(r.Context(), s.logger, "failed to close handoff document reader", func() error { return rdr.Close() })
 
 	// no-store on a single-use document: any cache replaying it would defeat
 	// burn-after-read; noindex belt-and-braces against crawler ingestion.

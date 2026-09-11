@@ -4,7 +4,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 
-export type EmployeeStatus = "enrolled" | "not_enrolled";
+type EmployeeStatus = "enrolled" | "not_enrolled";
 
 // One linked AI account for an employee. Identity is (provider, email): the same
 // email on two providers is two distinct accounts, so provider is always shown.
@@ -19,6 +19,8 @@ export type EmployeeAccount = {
 };
 
 export type Employee = {
+  // Set only for identities returned by the registered-agent inventory.
+  registeredAgentId?: string;
   id: string;
   name: string;
   email: string;
@@ -36,6 +38,14 @@ export type Employee = {
   mostRecentAccount: EmployeeAccount | null;
   // Convenience flag: any account is personal. Drives the account-type filter.
   hasPersonalAccount: boolean;
+  // Role IDs from the member row, for filtering by role without re-parsing the
+  // display string above. Empty for an identity with no member row.
+  roleIds: string[];
+  // Identity-provider profile, when a directory is connected and knows them:
+  // the department it reports, and the directory groups they belong to (the
+  // "team" a person would name). Empty otherwise.
+  department: string;
+  teams: string[];
 };
 
 // Maps a user summary's linked accounts (from the directory) into the display
@@ -295,6 +305,9 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+      roleIds: member.roleIds,
+      department: member.department ?? "",
+      teams: member.groups ?? [],
     };
   });
 
@@ -317,6 +330,11 @@ export function buildEmployees(
       accounts,
       mostRecentAccount: mostRecentAccount(accounts),
       hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+      // Usage the directory matched to nobody: no member row, so no roles and
+      // no directory profile to read either.
+      roleIds: [],
+      department: "",
+      teams: [],
     };
   });
 

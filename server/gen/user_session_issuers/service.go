@@ -59,7 +59,8 @@ type CreateUserSessionIssuerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Project-unique slug.
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string

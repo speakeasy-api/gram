@@ -25,6 +25,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -40,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const dispositionAssistants = "assistants"
@@ -121,6 +125,7 @@ type Service struct {
 	billing              billing.Repository
 	cancelSubsScheduler  AssistantsSubscriptionCancelScheduler
 	posthog              *posthog.Posthog
+	growth               *growthsignals.Emitter
 	nonceStore           cache.Cache
 	supportHandoffs      *supporthandoff.Store
 	supportHandoffIssuer *supporthandoff.Issuer
@@ -152,6 +157,7 @@ func NewService(
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
+	growthEmitter *growthsignals.Emitter,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
@@ -177,6 +183,7 @@ func NewService(
 		billing:              billingRepo,
 		cancelSubsScheduler:  cancelSubsScheduler,
 		posthog:              posthogClient,
+		growth:               growthEmitter,
 		nonceStore:           nonceStore,
 		supportHandoffs:      supportHandoffs,
 		supportHandoffIssuer: supporthandoff.NewIssuer(supportHandoffs),
@@ -213,8 +220,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// context so validateAuthNonce() can verify it.
 	server.Callback = callbackNonceBindingMiddleware(server.Callback)
 
-	// Wrap Logout handler: have the browser drop the origin's cached data,
-	// cookies, and client-side storage once the session has been invalidated server-side.
+	// Wrap Logout handler: have the browser drop the origin's cookies and
+	// client-side storage once the session has been invalidated server-side.
 	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
 
 	srv.Mount(mux, server)
@@ -363,10 +370,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
-	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
+	upsertResult, err := s.identity.UpsertUserFromIDPWithResult(ctx, idpUser)
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
+	userID := upsertResult.UserID
 
 	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
 	if err != nil {
@@ -381,7 +389,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	if supportOrgID == "" && idpUser.Sub != "" {
-		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
+		syncMemberships := s.identity.SyncMembershipsFromWorkOS
+		if upsertResult.Reactivated {
+			syncMemberships = s.identity.SyncMembershipsFromWorkOSPreservingExisting
+		}
+		if err := syncMemberships(ctx, userID, idpUser.Sub); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
 		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
@@ -513,6 +525,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
+	if upsertResult.Reactivated && intent != nil && intent.OrgName != "" {
+		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
+		if err != nil {
+			return s.redirectSignupError(ctx, payload, err)
+		}
+	}
+
 	session.ActiveOrganizationID = activeOrgID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
@@ -580,6 +599,25 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
+
+	// Reported only once the membership is durable. An invitation that was
+	// accepted but whose role sync failed has not produced a member yet, and
+	// the early returns above leave before this point.
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityMemberJoinedOrganization,
+		OrganizationID: invite.OrganizationID,
+		ProjectID:      uuid.Nil,
+		ActorID:        gramUserID,
+		ActorType:      urn.PrincipalTypeUser,
+		ActorEmail:     inviteeEmail,
+		ActorName:      "",
+		SubjectName:    inviteeEmail,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{growthsignals.PropertyRole: conv.FromPGTextOrEmpty[string](invite.RoleSlug)},
+	})
+
 	return nil
 }
 
@@ -1102,6 +1140,37 @@ func loadTrial(
 	}
 }
 
+// applySignupWhitelist keeps the book-a-demo gate off for a signup that
+// reused a Gram identity. Prefer an already-whitelisted membership; otherwise
+// whitelist the org the session is about to activate.
+func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
+	if orgMetadata.Whitelisted {
+		return activeOrgID, orgMetadata, nil
+	}
+
+	for _, org := range organizations {
+		meta, err := s.orgRepo.GetOrganizationMetadata(ctx, org.ID)
+		if err != nil {
+			return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("get organization metadata: %w", err)
+		}
+		if meta.Whitelisted {
+			return org.ID, meta, nil
+		}
+	}
+
+	whitelisted, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgMetadata.ID,
+		Name:        orgMetadata.Name,
+		Slug:        orgMetadata.Slug,
+		WorkosID:    orgMetadata.WorkosID,
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	if err != nil {
+		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
+	}
+	return whitelisted.ID, whitelisted, nil
+}
+
 // orgProvisionOptions carries the per-caller choices for a new organization.
 // The choices are a struct rather than positional booleans because every call
 // site then names what it asks for, and exhaustruct forces a new field to be
@@ -1382,7 +1451,31 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set signup created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
+
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityOrganizationCreated,
+		OrganizationID: org.ID,
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      "",
+		SubjectName:    orgName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{createdViaProperty: createdViaSignup},
+	})
 }
+
+// createdViaProperty says which flow produced an organization. It is the same
+// tag the onboarding funnel already carries, repeated on the activity so a
+// Slack reader can tell a self-serve signup from a platform-admin invite
+// without opening PostHog.
+const (
+	createdViaProperty = "created_via"
+	createdViaSignup   = "signup"
+)
 
 func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {
 	parsed, err := url.Parse(s.destinationFromState(payload))

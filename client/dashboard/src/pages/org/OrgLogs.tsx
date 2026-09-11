@@ -13,7 +13,6 @@ import {
   ENABLE_LOGS_PAGE_DESCRIPTION,
   EnableLogsSetting,
 } from "./EnableLogsSetting";
-import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
@@ -285,8 +284,6 @@ function OrgLogsInner({
           </Stack>
         </Stack>
       </div>
-
-      <OtelForwardingSection />
     </SettingsPage>
   );
 }

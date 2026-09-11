@@ -5,16 +5,13 @@
 // mutation that updates the server and leaves the table showing the old row.
 
 import {
-  infiniteQueryOptions,
   queryOptions,
-  type InfiniteData,
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
-  getOrganizationFeatures,
   getOrganizationStats,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -22,7 +19,6 @@ import {
   getStripeSubscription,
   getProject,
   getSession,
-  listOrganizationActivity,
   listOrganizationMembers,
   listOrganizationProjects,
   listOrganizations,
@@ -31,16 +27,15 @@ import {
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
-  type AdminOrganizationFeatures,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
-  type ListOrganizationActivityResult,
   type ListOrganizationMembersResult,
   type ListOrganizationProjectsResult,
   type ListOrganizationsParams,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
+import { organizationActivityQuery } from "@/lib/gramAdminClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
 // `typescript/explicit-module-boundary-types` demands. Writing the shape out by
@@ -98,46 +93,13 @@ export function organizationQuery(
   });
 }
 
-type OrganizationActivityQuery = ReturnType<
-  typeof infiniteQueryOptions<
-    ListOrganizationActivityResult,
-    Error,
-    InfiniteData<ListOrganizationActivityResult, string | undefined>,
-    readonly ["gram-admin-organization-activity", string],
-    string | undefined
-  >
->;
-
-export function organizationActivityQuery(
-  organizationID: string,
-): OrganizationActivityQuery {
-  return infiniteQueryOptions({
-    queryKey: ["gram-admin-organization-activity", organizationID] as const,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      listOrganizationActivity(organizationID, pageParam),
-    getNextPageParam: (lastPage) => lastPage.next_cursor,
-  });
-}
-
 export function invalidateOrganizationActivity(
   qc: QueryClient,
   organizationID: string,
 ): void {
   void qc.invalidateQueries({
     queryKey: organizationActivityQuery(organizationID).queryKey,
-  });
-}
-
-export function organizationFeaturesQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminOrganizationFeatures,
-  readonly ["gram-admin-organization-features", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-organization-features", organizationID] as const,
-    queryFn: () => getOrganizationFeatures(organizationID),
+    exact: true,
   });
 }
 

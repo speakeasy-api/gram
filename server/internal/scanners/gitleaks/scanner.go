@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
 // Source labels findings produced by this scanner. The shared Finding topic
@@ -154,13 +155,17 @@ type Scanner struct {
 	// detectors is a fixed-capacity free list. A nil slot is one whose detector
 	// has not been created yet; a non-nil slot is a warm, reusable detector.
 	// Its capacity caps both the live detector count and Scan concurrency.
-	detectors chan *detect.Detector
+	detectors   chan *detect.Detector
+	stokenCodec *stokens.Codec
 }
 
 // NewScanner creates a new Scanner with a warm detector set sized to NumCPU.
 func NewScanner() *Scanner {
 	n := runtime.NumCPU()
-	s := &Scanner{detectors: make(chan *detect.Detector, n)}
+	s := &Scanner{
+		detectors:   make(chan *detect.Detector, n),
+		stokenCodec: stokens.NewCodec(),
+	}
 	for range n {
 		s.detectors <- nil
 	}
@@ -200,10 +205,11 @@ func (s *Scanner) Prime() error {
 // Scan scans a single message with a detector checked out from the warm set,
 // blocking until a slot is free. Safe for concurrent use: each call holds its
 // detector exclusively until it returns it.
-func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding, error) {
+func (s *Scanner) Scan(ctx context.Context, content string) (scanners.Result, error) {
+	stokenCount, countErr := s.stokenCodec.Count(ctx, content)
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("abort: %w", ctx.Err())
+		return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, fmt.Errorf("abort: %w", ctx.Err())
 	default:
 		// carry on
 	}
@@ -216,7 +222,7 @@ func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding,
 	var d *detect.Detector
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("abort: %w", ctx.Err())
+		return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, fmt.Errorf("abort: %w", ctx.Err())
 	case d = <-s.detectors:
 	}
 	if d == nil {
@@ -224,35 +230,39 @@ func (s *Scanner) Scan(ctx context.Context, content string) ([]scanners.Finding,
 		d, err = newDetector()
 		if err != nil {
 			s.detectors <- nil // leave the slot uncreated for a later retry
-			return nil, err
+			return scanners.Result{Findings: nil, STokens: int64(stokenCount), Completed: false}, err
 		}
 	}
 	defer func() { s.detectors <- d }()
 
-	return convertFindings(content, d.DetectString(content)), nil
+	return scanners.Result{
+		Findings:  convertFindings(content, d.DetectString(content)),
+		STokens:   int64(stokenCount),
+		Completed: countErr == nil,
+	}, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([][]scanners.Finding, error) {
+func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([]scanners.Result, error) {
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(runtime.NumCPU())
 
-	findings := make([][]scanners.Finding, len(contents))
+	results := make([]scanners.Result, len(contents))
 	for i, content := range contents {
 		g.Go(func() error {
-			f, err := s.Scan(ctx, content)
+			result, err := s.Scan(ctx, content)
+			results[i] = result
 			if err != nil {
 				return fmt.Errorf("scan content: %w", err)
 			}
-			findings[i] = f
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return [][]scanners.Finding{}, fmt.Errorf("errgroup: %w", err)
+		return results, fmt.Errorf("errgroup: %w", err)
 	}
 
-	return findings, nil
+	return results, nil
 }
 
 // convertFindings converts raw gitleaks findings to domain Findings. Rule ids

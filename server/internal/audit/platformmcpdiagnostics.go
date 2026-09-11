@@ -17,7 +17,8 @@ const (
 	// diagnosis. Every other Platform MCP diagnostic answers about a project or
 	// a server; this one answers about a person, so it is audited on its own
 	// rather than left inside the aggregate reads.
-	ActionPlatformMcpDiagnosticsUserStatusRead Action = "platform-mcp-diagnostics:user_status_read"
+	ActionPlatformMcpDiagnosticsUserStatusRead  Action = "platform-mcp-diagnostics:user_status_read"
+	ActionPlatformMcpDiagnosticsAttributionRead Action = "platform-mcp-diagnostics:attribution_read"
 )
 
 // LogPlatformMcpDiagnosticsUserStatusReadEvent records that an administrator
@@ -73,5 +74,48 @@ func (l *Logger) LogPlatformMcpDiagnosticsUserStatusRead(ctx context.Context, db
 		Metadata:       metadata,
 	}
 
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PlatformMcpDiagnosticsV1})
+}
+
+type LogPlatformMcpDiagnosticsAttributionReadEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Actor          urn.Principal
+	TargetKind     string
+	Target         string
+	MaskedIdentity string
+	Window         string
+}
+
+func (l *Logger) LogPlatformMcpDiagnosticsAttributionRead(ctx context.Context, dbtx repo.DBTX, event LogPlatformMcpDiagnosticsAttributionReadEvent) error {
+	action := ActionPlatformMcpDiagnosticsAttributionRead
+	metadata, err := marshalAuditPayload(map[string]string{
+		"target_kind":     event.TargetKind,
+		"masked_identity": event.MaskedIdentity,
+		"window":          event.Window,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	typeOfSubject := subjectTypeMcpServer
+	if event.TargetKind == "skill" {
+		typeOfSubject = subjectTypeSkill
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(nil),
+		ActorSlug:          conv.PtrToPGTextEmpty(nil),
+		Action:             string(action),
+		SubjectID:          event.Target,
+		SubjectType:        string(typeOfSubject),
+		SubjectDisplayName: conv.PtrToPGTextEmpty(nil),
+		SubjectSlug:        conv.PtrToPGTextEmpty(nil),
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
+		Metadata:           metadata,
+	}
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PlatformMcpDiagnosticsV1})
 }

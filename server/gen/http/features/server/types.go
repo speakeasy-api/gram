@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -83,6 +84,9 @@ type GetProductFeaturesResponseBody struct {
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
 	SessionPortabilityEnabled bool `form:"session_portability_enabled" json:"session_portability_enabled" xml:"session_portability_enabled"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -654,27 +658,28 @@ type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
 
 // NewGetProductFeaturesResponseBody builds the HTTP response body from the
 // result of the "getProductFeatures" endpoint of the "features" service.
-func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
+func NewGetProductFeaturesResponseBody(res *featuresviews.ProductFeaturesView) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                             res.LogsEnabled,
-		ToolIoLogsEnabled:                       res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:                   res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled:            res.AuthzChallengeLoggingEnabled,
-		SsoEnabled:                              res.SsoEnabled,
-		ScimEnabled:                             res.ScimEnabled,
-		HooksBrowserLoginEnabled:                res.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:                    res.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:                  res.CustomModelKeysEnabled,
-		SkillsEnabled:                           res.SkillsEnabled,
-		SkillCaptureMetadataOnly:                res.SkillCaptureMetadataOnly,
-		AiPlatformPushIntegrationsEnabled:       res.AiPlatformPushIntegrationsEnabled,
-		PlatformMcpEnabled:                      res.PlatformMcpEnabled,
-		CustomerManagedEncryptionKeysEnabled:    res.CustomerManagedEncryptionKeysEnabled,
-		RemoteSessionAutoRefreshEnabled:         res.RemoteSessionAutoRefreshEnabled,
-		RemoteSessionAutoRefreshEnforcedEnabled: res.RemoteSessionAutoRefreshEnforcedEnabled,
-		ConsentToolFilteringEnabled:             res.ConsentToolFilteringEnabled,
-		SessionPortabilityEnabled:               res.SessionPortabilityEnabled,
-		DeviceAgent:                             res.DeviceAgent,
+		LogsEnabled:                             *res.LogsEnabled,
+		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            *res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              *res.SsoEnabled,
+		ScimEnabled:                             *res.ScimEnabled,
+		HooksBrowserLoginEnabled:                *res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    *res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  *res.CustomModelKeysEnabled,
+		SkillsEnabled:                           *res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                *res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       *res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      *res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
 }
@@ -1137,7 +1142,7 @@ func NewGetProductFeaturesPayload(organizationID string, sessionToken *string) *
 func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
 		OrganizationID: *body.OrganizationID,
-		FeatureName:    *body.FeatureName,
+		FeatureName:    features.ProductFeatureName(*body.FeatureName),
 		Enabled:        *body.Enabled,
 	}
 	v.SessionToken = sessionToken
@@ -1170,8 +1175,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress"}))
 		}
 	}
 	if body.FeatureName != nil {

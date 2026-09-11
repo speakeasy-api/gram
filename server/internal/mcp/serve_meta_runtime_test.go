@@ -590,6 +590,55 @@ func setToolsetMcpPrivate(t *testing.T, ctx context.Context, ti *testInstance, t
 	require.NoError(t, err)
 }
 
+func setToolsetMcpDisabled(t *testing.T, ctx context.Context, ti *testInstance, toolsetID uuid.UUID, projectID uuid.UUID) {
+	t.Helper()
+	repo := toolsets_repo.New(ti.conn)
+	toolset, err := repo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+		ID:        toolsetID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	_, err = repo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            toolset.McpIsPublic,
+		McpEnabled:             false,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+}
+
+// A hosted member whose toolset has MCP turned off is not servable through
+// the gateway, matching the toolset's own endpoint.
+func TestServePublic_MetaEndpoint_HostedMember_McpDisabledNotServable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	setToolsetMcpDisabled(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
+
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "not currently servable")
+
+	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+	text, isError = metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "not currently servable")
+}
+
 // Snapshot RBAC: a private-visibility member is invisible without
 // mcp:connect and visible with it.
 func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testing.T) {

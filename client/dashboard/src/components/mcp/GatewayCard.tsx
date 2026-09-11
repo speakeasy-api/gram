@@ -1,16 +1,48 @@
 import { Badge } from "@/components/ui/Badge";
+import { useIconConfetti } from "@/components/icon-confetti";
 import { Card } from "@/components/ui/Card";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { useRoutes } from "@/routes";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { ArrowRight, Network } from "lucide-react";
-import { GatewayStatusIndicator } from "./MCPStatusIndicator";
 
 // The gateway's cargo is its member servers, so the icon rail shows their
 // logos (up to four, then a +N tile) instead of a generic glyph.
+/**
+ * The servers a gateway puts behind one URL, named.
+ *
+ * A gateway has no description of its own, and its name rarely says what is
+ * inside it — which is the only question worth answering on a card.
+ */
+function GatewayMemberSummary({
+  metaMcpServerId,
+}: {
+  metaMcpServerId: string;
+}): JSX.Element | null {
+  const { data } = useMetaMcpMembers({ metaMcpServerId }, undefined, {
+    throwOnError: false,
+    staleTime: 60 * 1000,
+  });
+  const members = data?.members ?? [];
+  if (members.length === 0) return null;
+
+  const named = members.map(
+    (member) => member.mcpServerName || member.mcpServerSlug || "Untitled",
+  );
+  const shown = named.slice(0, 2);
+  const rest = named.length - shown.length;
+  const text =
+    rest > 0 ? `${shown.join(", ")} and ${rest} more` : shown.join(", ");
+
+  return (
+    <Text small muted className="mt-1 truncate" title={named.join(", ")}>
+      Fronts {text}
+    </Text>
+  );
+}
+
 function GatewayMemberIcons({
   metaMcpServerId,
 }: {
@@ -63,71 +95,55 @@ function GatewayMemberIcons({
 // listing grid, alongside MCPCard (toolsets) and MCPServerCard (mcp_servers).
 export function GatewayCard({
   gateway,
-  url,
 }: {
   gateway: MetaMcpServer;
-  /** Canonical address, when the gateway has one. */
-  url: string | undefined;
 }): JSX.Element {
   const routes = useRoutes();
+  const { canvasRef, start, stop } = useIconConfetti();
 
   return (
-    // Clickable div rather than a link, as MCPCard is: an <a> may not nest the
-    // copy button below.
-    <Card.Entity
-      className="focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
-      icon={<GatewayMemberIcons metaMcpServerId={gateway.id} />}
-    >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <Text
-          variant="subheading"
-          as="div"
-          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
-          title={gateway.name}
-        >
-          {gateway.name}
-        </Text>
-        <Badge variant="neutral" className="bg-card">
-          <Badge.Text>
-            {`${gateway.memberCount ?? 0} ${gateway.memberCount === 1 ? "member" : "members"}`}
-          </Badge.Text>
-        </Badge>
-      </div>
-
-      {url ? (
-        <div
-          className="flex items-center gap-1"
-          // Card.Entity turns Enter/Space into navigation; leave them to the
-          // copy button when it holds focus.
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <Text muted className="truncate font-mono text-xs">
-            {url.replace(/^https?:\/\//, "")}
-          </Text>
-          <CopyButton text={url} size="xs" tooltip="Copy URL" />
-        </div>
-      ) : (
-        <Text muted className="text-xs">
-          No address yet
-        </Text>
-      )}
-
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="neutral">
-            <Badge.Text>Gateway</Badge.Text>
-          </Badge>
-          <GatewayStatusIndicator
-            visibility={gateway.visibility}
-            requiresSignIn={!!gateway.userSessionIssuerId}
+    <div onMouseEnter={start} onMouseLeave={stop} className="h-full">
+      {/* Clickable div rather than a link, as MCPCard is: an <a> may not nest
+          the copy button below. */}
+      <Card.Entity
+        className="focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
+        iconRailClassName="isolate"
+        iconTileClassName="icon-hover-pulse"
+        overlay={
+          <canvas
+            ref={canvasRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10 size-full"
           />
+        }
+        icon={<GatewayMemberIcons metaMcpServerId={gateway.id} />}
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <Text
+            variant="subheading"
+            as="div"
+            className="text-md group-hover:text-primary flex-1 truncate transition-colors"
+            title={gateway.name}
+          >
+            {gateway.name}
+          </Text>
         </div>
-        <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-          <span>Open</span>
-          <ArrowRight className="h-3.5 w-3.5" />
+
+        <GatewayMemberSummary metaMcpServerId={gateway.id} />
+
+        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="neutral">
+              <Badge.Text>Gateway</Badge.Text>
+            </Badge>
+          </div>
+          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+            <span>Open</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </div>
         </div>
-      </div>
-    </Card.Entity>
+      </Card.Entity>
+    </div>
   );
 }

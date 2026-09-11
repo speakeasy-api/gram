@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
   "/guide",
-  "/talk-to-us",
+  "/trial-ended",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -67,6 +68,23 @@ const SLUG_EXEMPT_PATHS = [
 // deeper paths (e.g. /explore-demo/projects/x) through the gate.
 function isPath(pathname: string, path: string): boolean {
   return pathname === path || pathname === `${path}/`;
+}
+
+/**
+ * Whether an org-relative path is one of the org's own routes. Route paths
+ * carry dynamic segments ("setup/:taskSlug"), so a string comparison would
+ * miss "setup/idp" and hand it to the legacy project redirect for any org
+ * that also has a project slugged "setup".
+ */
+function matchesOrgRoutePath(routePath: string, actual: string): boolean {
+  const route = routePath.split("/");
+  const parts = actual.split("/");
+  return (
+    route.length === parts.length &&
+    route.every(
+      (segment, index) => segment.startsWith(":") || segment === parts[index],
+    )
+  );
 }
 
 export const AuthProvider = ({
@@ -86,6 +104,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const { session, error, status } = useSessionData();
+  const trialNow = useTrialNow(session?.trial);
   const isPlatformAdminRef = useIsPlatformAdminRef();
 
   const isLoading = status === "pending";
@@ -154,14 +173,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // Past this point the upgrade gate has to render, or the redirect below
-    // sends the user to a route that bounces them straight back to it.
-    if (!isPath(location.pathname, "/talk-to-us")) {
-      // An org that never trialed (or is still mid-trial) falls through to the
-      // cold-signup gate.
-      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-        return <Navigate to="/talk-to-us" replace />;
+    const trialLifecycle = getTrialLifecycleFromDates(session.trial, trialNow);
+
+    if (trialLifecycle === "expired") {
+      if (!isPath(location.pathname, "/trial-ended")) {
+        return <Navigate to="/trial-ended" replace />;
       }
+    } else {
       return <BookDemo />;
     }
   }
@@ -197,25 +215,23 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   const pathParts = location.pathname.split("/").filter(Boolean);
 
-  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to /:orgSlug/projects/:projectSlug/...
-  // If the second segment is a known project slug (and not "projects" or an org-level route),
-  // redirect to the new URL structure.
-  // Derived from org route structure so new org routes are automatically excluded from project slug redirects
+  // Backwards-compat: redirect old /:orgSlug/:projectSlug/... URLs to
+  // /:orgSlug/projects/:projectSlug/... while preserving exact org routes.
   const ORG_ROUTE_PATHS = ["projects", ...orgRoutePaths];
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
-  // Redirect if: (1) it's a project slug and not an org route, OR
-  // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
-  // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
+  const orgRelativePath = pathParts.slice(1).join("/");
+  const isExactOrgRoutePath = ORG_ROUTE_PATHS.some((routePath) =>
+    matchesOrgRoutePath(routePath, orgRelativePath),
+  );
   if (
     !isSlugExempt &&
     pathParts.length >= 2 &&
     pathParts[0] === session.organization?.slug &&
     pathParts[1] !== "projects" &&
     isProjectSlug &&
-    (!isOrgRoutePath || pathParts.length >= 3)
+    !isExactOrgRoutePath
   ) {
     const rest = pathParts.slice(2).join("/");
     const newPath = `/${pathParts[0]}/projects/${pathParts[1]}${rest ? `/${rest}` : ""}`;

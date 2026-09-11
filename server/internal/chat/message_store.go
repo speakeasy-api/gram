@@ -594,9 +594,19 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	return 1, nil
 }
 
+// jsonNULEscape is the JSON spelling of U+0000, which jsonb rejects.
+var jsonNULEscape = []byte(`\u` + "0000")
+
 // WriteExternal inserts imported provider messages idempotently and notifies
 // observers when at least one new row is stored.
 func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite) (int64, error) {
+	return w.WriteExternalWithContentParts(ctx, projectID, writes, nil)
+}
+
+// WriteExternalWithContentParts commits each imported message and its content
+// parts together. Parts are keyed by the parent's explicit message ID. A retry
+// that conflicts with an existing message also skips its parts and metering.
+func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite, parts map[uuid.UUID][]repo.CreateChatContentPartParams) (int64, error) {
 	if len(writes) == 0 {
 		return 0, nil
 	}
@@ -623,6 +633,15 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		}
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
+		}
+		// Postgres rejects NUL in text and jsonb. Strip it from the text columns;
+		// the raw copy is optional and readers fall back to content, so drop it.
+		param.Content = conv.StripNUL(param.Content)
+		param.ExternalUserID.String = conv.StripNUL(param.ExternalUserID.String)
+		param.ExternalMessageID.String = conv.StripNUL(param.ExternalMessageID.String)
+		param.UserAgent.String = conv.StripNUL(param.UserAgent.String)
+		if bytes.Contains(param.ContentRaw, jsonNULEscape) || bytes.IndexByte(param.ContentRaw, 0) >= 0 {
+			param.ContentRaw = nil
 		}
 		readings, err := w.meterMessage(ctx, meterMessageInput{
 			organizationID:        organizationID,
@@ -668,6 +687,16 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 				return false, nil
 			} else if err != nil {
 				return false, fmt.Errorf("create external chat message: %w", err)
+			}
+			if attached := parts[param.ID]; len(attached) > 0 {
+				for _, part := range attached {
+					if part.ProjectID != projectID || part.ChatID != param.ChatID || !part.ParentChatMessageID.Valid || part.ParentChatMessageID.UUID != param.ID {
+						return false, fmt.Errorf("external content part does not match its parent message")
+					}
+				}
+				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
+					return false, fmt.Errorf("create external message content parts: %w", err)
+				}
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)

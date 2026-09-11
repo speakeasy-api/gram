@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/ext"
@@ -165,6 +166,19 @@ type ChallengeFilters struct {
 // ChallengeListFilters controls which rows ListChallenges returns.
 type ChallengeListFilters struct {
 	ChallengeFilters
+
+	// From and To bound the window on the challenge timestamp, half-open
+	// ([From, To)) so consecutive ranges neither double-count a row nor drop
+	// one that lands exactly on a boundary. A nil bound is no bound, which is
+	// what a caller listing the whole history sends.
+	//
+	// The window lives here rather than on the shared ChallengeFilters because
+	// the bucket summary carries first_seen/last_seen aggregate states instead
+	// of a row timestamp, and filtering those before the GROUP BY would report
+	// a bucket's whole lifetime for a window it only partly overlaps.
+	From *time.Time
+	To   *time.Time
+
 	Limit          uint64
 	Offset         uint64
 	SkipPagination bool // when true, omit LIMIT/OFFSET (used when resolved filter requires post-join pagination)
@@ -203,6 +217,15 @@ func challengeDimensionWhere(sb squirrel.SelectBuilder, f ChallengeFilters) squi
 // challengeWhere applies ChallengeListFilters to raw challenge rows.
 func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
 	sb = challengeDimensionWhere(sb, f.ChallengeFilters)
+	// timestamp is DateTime64(9), and clickhouse-go's positional binding
+	// truncates a time.Time to whole seconds — enough to move a bound off the
+	// instant the caller asked for. Bind nanos and rebuild the value in-query.
+	if f.From != nil {
+		sb = sb.Where("timestamp >= fromUnixTimestamp64Nano(?)", f.From.UTC().UnixNano())
+	}
+	if f.To != nil {
+		sb = sb.Where("timestamp < fromUnixTimestamp64Nano(?)", f.To.UTC().UnixNano())
+	}
 	if f.MemberUserIDs != nil {
 		// Keep non-user principals (user_id IS NULL) plus active org members.
 		// squirrel.Eq with an empty slice renders as a false predicate, so an

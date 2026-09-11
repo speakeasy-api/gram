@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -46,6 +47,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -467,7 +469,7 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
 		return inmem
 	}
-	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+	defer o11y.LogDefer(ctx, logger, "failed to close local feature flags csv file", func() error { return file.Close() })
 
 	rdr := csv.NewReader(file)
 	rdr.FieldsPerRecord = -1
@@ -603,7 +605,7 @@ func newStripeMeterEventClient(
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
-	if !c.Bool(stripeTUMMeterStreamingFlagName) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) && !c.Bool(stripeMeterEventExportFlagName) {
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	}
 
@@ -621,6 +623,7 @@ func newStripeMeterEventClient(
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 	tumMeterEventName := c.String("stripe-meter-event-name")
 	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
+	meterExportEnabled := c.Bool(stripeMeterEventExportFlagName)
 	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
 		switch definition {
 		case metering.AgentSessionStorage():
@@ -631,6 +634,70 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", errors.New("stripe TUM meter event name is not configured")
 			}
 			return tumMeterEventName, nil
+		case metering.MCPBandwidthIngress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-ingress"), nil
+		case metering.MCPBandwidthEgress():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		case metering.RiskGitleaks():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-gitleaks")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPresidio():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-presidio")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptInjection():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-injection")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptPolicy():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-policy")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCustomRules():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-custom-rules")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCLIDestructive():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}
@@ -640,7 +707,7 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's mock-workos emulator without changing any wiring.
+// the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint: c.String("workos-endpoint"),
@@ -649,30 +716,24 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 }
 
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
-	apiKey := c.String("idp-client-secret")
+	idpClientSecret := c.String("idp-client-secret")
 
-	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
-	// use it so the access role provider proxies through dev-idp to real WorkOS.
-	// Otherwise fall back to the mock-workos emulator or a stub.
+	// Local callers authenticate to dev-idp with its client secret; dev-idp owns
+	// any upstream WorkOS API key needed by the selected backend.
 	if c.String("environment") == "local" {
-		haveRealKey := apiKey != "" && apiKey != "unset"
 		opts := workosClientOpts(c)
 
-		if haveRealKey {
-			logger.InfoContext(ctx, "using real WorkOS API key as access role provider")
-			return workos.NewClient(guardianPolicy, apiKey, opts), nil
-		}
-		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
-			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
+		if opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset" {
+			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
+			return workos.NewClient(guardianPolicy, idpClientSecret, opts), nil
 		}
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
 		return workos.NewStubClient(), nil
 	}
 
 	switch {
-	case apiKey != "" && apiKey != "unset":
-		return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), nil
+	case idpClientSecret != "" && idpClientSecret != "unset":
+		return workos.NewClient(guardianPolicy, idpClientSecret, workosClientOpts(c)), nil
 	default:
 		return nil, errors.New("WorkOS API key not provided")
 	}
@@ -691,8 +752,12 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)
+	idpClientSecret := c.String("idp-client-secret")
 
 	switch {
+	case c.String("environment") == "local" && opts.Endpoint != "" && idpClientSecret != "" && idpClientSecret != "unset":
+		logger.InfoContext(ctx, "using dev-idp to create organizations")
+		return workos.NewClient(guardianPolicy, idpClientSecret, opts)
 	case haveRealKey:
 		logger.InfoContext(ctx, "using real WorkOS API key to create organizations")
 		return workos.NewClient(guardianPolicy, apiKey, opts)
@@ -700,8 +765,8 @@ func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger,
 		logger.ErrorContext(ctx, "organization creation is unavailable: no WorkOS API key configured")
 		return orgprovision.Unavailable{}
 	case opts.Endpoint != "":
-		logger.InfoContext(ctx, "using dev-idp mock-workos to create organizations")
-		return workos.NewClient(guardianPolicy, "dev-idp-mock", opts)
+		logger.ErrorContext(ctx, "organization creation is unavailable: no dev-idp client secret configured")
+		return orgprovision.Unavailable{}
 	default:
 		logger.WarnContext(ctx, "organization creation is unavailable: WorkOS not configured")
 		return orgprovision.Unavailable{}
@@ -756,22 +821,28 @@ func newAdminOpenRouter(
 
 func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *workos.Client, workosAvailable bool, err error) {
 	env := c.String("environment")
-	apiKey := c.String("idp-client-secret")
+	credential := c.String("idp-client-secret")
 
-	haveAPIKey := apiKey != "" && apiKey != "unset"
-	if env != "local" && !haveAPIKey {
+	haveCredential := credential != "" && credential != "unset"
+	if env != "local" && !haveCredential {
 		return nil, false, errors.New("WorkOS API key not provided")
 	}
 
-	return workos.NewClient(guardianPolicy, apiKey, workosClientOpts(c)), haveAPIKey, nil
+	available := haveCredential
+	if env == "local" {
+		available = c.String("devidp-backend") == "workos"
+	}
+	return workos.NewClient(guardianPolicy, credential, workosClientOpts(c)), available, nil
 }
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
-// scoped to the IDP application key. Returns nil only when the key is empty.
-// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
-// the mock endpoint accepts it.
+// scoped to the IDP application key. Returns nil when the key is unset, which
+// is both an empty value and the "unset" sentinel mise defaults it to — a
+// checkout that never configured a key would otherwise look configured.
+// Under the local backend any other non-empty string works, because the
+// dev-idp endpoint accepts whatever key it is handed.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
-	if apiKey == "" {
+	if apiKey == "" || apiKey == "unset" {
 		return nil
 	}
 
@@ -1227,9 +1298,9 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "riskFindings", pub: riskFindings})
 
-	// The telemetry shadow dual-write is best-effort and must stay bounded
-	// during a Pub/Sub outage: cap how long a publish may take and fail fast
-	// at enqueue once the buffer fills, instead of buffering unboundedly.
+	// Request-path telemetry and meter publishing must stay bounded during a
+	// Pub/Sub outage: cap how long a publish may take and fail fast at enqueue
+	// once the buffer fills instead of buffering unboundedly.
 	telemetryPublishSettings := pubsub.DefaultPublishSettings
 	telemetryPublishSettings.Timeout = 10 * time.Second
 	telemetryPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
@@ -1243,6 +1314,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for telemetry logs: %w", err)
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
+
+	meterReadings, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for meter readings: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "meterReadings", pub: meterReadings})
 
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
@@ -1317,6 +1396,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		PromptPolicyAnalysis:    promptPolicyAnalysis,
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
+		MeterReadings:           meterReadings,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
 		OTELMetrics:             otelMetrics,
@@ -1385,4 +1465,16 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		}
 		return client, nil
 	}, nil
+}
+
+// newGrowthSignalsEmitter builds the emitter that reports notable moments to
+// PostHog.
+//
+// It enriches against the read replica. The lookups are display names for an
+// ops notification, not authority for anything, and a miss degrades the event
+// by omitting a property rather than dropping it — so replication lag costs at
+// most a missing slug on a very fresh row, which is not worth the primary's
+// capacity.
+func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
+	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }

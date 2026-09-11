@@ -1,5 +1,11 @@
 package mcpmetrics
 
+import (
+	"context"
+
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+)
+
 // Surface identifies which inbound MCP serving surface observed a request.
 // The values match the policy boundaries mcpversions draws: arbitrary
 // third-party clients versus the assistant-token-only platform surface. The
@@ -26,3 +32,18 @@ const (
 	// than the hosting surface.
 	SurfaceMeta Surface = "meta"
 )
+
+type NetworkSurface string
+
+const (
+	NetworkSurfacePublic  NetworkSurface = "public"
+	NetworkSurfacePrivate NetworkSurface = "private"
+)
+
+func NetworkSurfaceFromContext(ctx context.Context) NetworkSurface {
+	origin, ok := requestorigin.FromContext(ctx)
+	if ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		return NetworkSurfacePrivate
+	}
+	return NetworkSurfacePublic
+}

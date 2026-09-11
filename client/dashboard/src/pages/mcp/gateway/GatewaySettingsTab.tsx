@@ -195,20 +195,12 @@ function GatewayAuthenticationSection({
       <SettingsSection.Header>
         <SettingsSection.Title>Authentication</SettingsSection.Title>
         <SettingsSection.Description>
-          Configure user sessions for clients connecting to this gateway.
-          Without an issuer the gateway serves anonymously.
+          Who may connect to this gateway and how they sign in. Changes take
+          effect on new connections. Without an identity provider it serves
+          anonymously.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <AuthenticationSectionBody target={target} />
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Authentication changes apply to new client connections.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+      <AuthenticationSectionBody target={target} />
     </SettingsSection>
   );
 }

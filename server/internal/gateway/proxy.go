@@ -945,6 +945,7 @@ func (tp *ToolProxy) doExternalMCP(
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
 	opts := &externalmcp.ClientOptions{
+		Metrics:          nil,
 		Authorization:    "",
 		Headers:          headers,
 		DisableRetries:   false,
@@ -956,10 +957,10 @@ func (tp *ToolProxy) doExternalMCP(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
-	defer o11y.LogDefer(ctx, logger, client.Close)
+	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
 
 	// Call the tool on the external MCP server
-	callResult, err := client.CallTool(ctx, toolName, arguments)
+	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
@@ -1109,7 +1110,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)
 	}
 
-	defer o11y.LogDefer(ctx, opts.Logger, func() error {
+	defer o11y.LogDefer(ctx, opts.Logger, "failed to close proxied response body", func() error {
 		return resp.Body.Close()
 	})
 

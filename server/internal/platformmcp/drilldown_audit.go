@@ -47,3 +47,32 @@ func (a *postgresDrilldownAuditor) RecordUserMCPStatusRead(ctx context.Context, 
 	}
 	return nil
 }
+
+func (a *postgresDrilldownAuditor) RecordUsageAttributionRead(ctx context.Context, principal Principal, projectID, targetKind, target, maskedIdentity, window string) error {
+	if a == nil || a.db == nil {
+		return fmt.Errorf("platform mcp drilldown auditor unavailable")
+	}
+	project, err := uuid.Parse(projectID)
+	if err != nil {
+		return fmt.Errorf("parse audited project id: %w", err)
+	}
+	if targetKind == "mcp" {
+		mcpServer, err := uuid.Parse(target)
+		if err != nil {
+			return fmt.Errorf("parse audited mcp id: %w", err)
+		}
+		target = mcpServer.String()
+	}
+	if err := audit.NewLogger().LogPlatformMcpDiagnosticsAttributionRead(ctx, a.db, audit.LogPlatformMcpDiagnosticsAttributionReadEvent{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project,
+		Actor:          urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+		TargetKind:     targetKind,
+		Target:         target,
+		MaskedIdentity: maskedIdentity,
+		Window:         window,
+	}); err != nil {
+		return fmt.Errorf("record platform mcp attribution audit event: %w", err)
+	}
+	return nil
+}

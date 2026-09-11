@@ -44,6 +44,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -71,7 +72,8 @@ type Service struct {
 	pluginsGitHubEnabled bool
 	assets               *assets.Service
 	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
-	revoker *remotesessions.UpstreamRevoker
+	revoker                  *remotesessions.UpstreamRevoker
+	networkAccessEligibility networkaccess.EligibilityChecker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -89,21 +91,23 @@ func NewService(
 	pluginsGitHubEnabled bool,
 	assetsService *assets.Service,
 	revoker *remotesessions.UpstreamRevoker,
+	networkAccessEligibility networkaccess.EligibilityChecker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
 	return &Service{
-		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
-		logger:               logger,
-		db:                   db,
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		authz:                authzEngine,
-		audit:                auditLogger,
-		temporalEnv:          temporalEnv,
-		dispositionCache:     dispositionCache,
-		pluginsGitHubEnabled: pluginsGitHubEnabled,
-		assets:               assetsService,
-		revoker:              revoker,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
+		logger:                   logger,
+		db:                       db,
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		dispositionCache:         dispositionCache,
+		pluginsGitHubEnabled:     pluginsGitHubEnabled,
+		assets:                   assetsService,
+		revoker:                  revoker,
+		networkAccessEligibility: networkAccessEligibility,
 	}
 }
 
@@ -156,12 +160,23 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, err
 	}
 
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.Storage(networkaccess.ModePublicOnly))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
+		return nil, err
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -177,6 +192,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ActorEmail:            authCtx.Email,
 		Name:                  name,
 		Visibility:            string(payload.Visibility),
+		NetworkAccessMode:     mode,
 		EnvironmentID:         ids.EnvironmentID,
 		RemoteMCPServerID:     ids.RemoteMcpServerID,
 		TunneledMCPServerID:   ids.TunneledMcpServerID,
@@ -340,19 +356,22 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 // unauthorized member cannot contend server-lifecycle locks. It keys on a
 // non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
 // locked row, which is authoritative if the backing changes concurrently.
-func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) error {
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
 	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+			return repo.McpServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String()))
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+		return repo.McpServer{}, err
+	}
+	return server, nil
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
@@ -605,7 +624,19 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	unlocked, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
+		return nil, err
+	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
 		return nil, err
 	}
 
@@ -615,6 +646,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
 
 	if payload.Visibility == VisibilityDisabled {
@@ -647,6 +681,17 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
 			return nil, err
 		}
+	}
+
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, existing.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server network access mode changed concurrently; retry the update")
 	}
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
@@ -694,6 +739,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ServerID:              serverID,
 		Name:                  payload.Name,
 		Visibility:            string(payload.Visibility),
+		NetworkAccessMode:     networkAccessModeUpdate(payload.NetworkAccessMode, mode),
 		EnvironmentID:         ids.EnvironmentID,
 		UserSessionIssuerID:   issuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
@@ -738,9 +784,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// remote MCP flow pre-stages an endpoint while the server is parked
 	// disabled for auth configuration, so enabling is what completes
 	// publishability there).
-	pluginCreated := false
+	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
 		if err != nil {
 			return nil, err
 		}
@@ -750,7 +796,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
+	// A server that was already enabled is already a Default-plugin member, so
+	// renaming it (its display name is generated into the package) or disabling
+	// it (it drops out of the package) has to publish too — not just the
+	// enable transition this block attaches. A server disabled before and
+	// after contributes nothing either way and stays silent.
+	s.triggerPluginPublish(ctx, authCtx, attached || existing.Visibility != VisibilityDisabled, pluginCreated)
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
@@ -764,20 +815,22 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // publishability check: a server with no live endpoint isn't publishable and
 // is skipped (mcpendpoints.CreateMcpEndpoint attaches it later when it gets
 // its first endpoint while enabled). Already-attached servers are an
-// idempotent no-op. Returns pluginCreated=true if this call lazily created
-// the Default plugin (project predates the feature) — callers should enqueue
-// an initial publish for it, but only after their own transaction commits,
-// since this runs pre-commit and the DB writes could still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, error) {
+// idempotent no-op. Returns attached=true when the server is now a member of
+// the Default plugin (so a publish is worth enqueuing) and pluginCreated=true
+// if this call lazily created that plugin (project predates the feature) —
+// callers should enqueue the publish for it, but only after their own
+// transaction commits, since this runs pre-commit and the DB writes could
+// still roll back.
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
+		return false, false, oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
 	}
 	if len(endpoints) == 0 {
-		return false, nil
+		return false, false, nil
 	}
 
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
@@ -788,32 +841,54 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		DisplayName:    ServerDisplayName(server),
 	})
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
+		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
-	return pluginCreated, nil
+	return true, pluginCreated, nil
 }
 
-// triggerInitialPublishIfNeeded enqueues the first-time GitHub marketplace
-// publish for a project whose Default plugin was just lazily created. Must
-// only be called after the triggering transaction has committed — enqueuing
-// before commit risks Temporal running against state that a later failure
-// in the same transaction rolls back. Best-effort: a non-cancelable ctx
-// since the request returning shouldn't drop the enqueue.
-func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *contextvalues.AuthContext, pluginCreated bool) {
-	if !pluginCreated || !s.pluginsGitHubEnabled {
+// triggerPluginPublish enqueues the marketplace publish for the project whose
+// Default plugin membership just changed. attached is false when the mutation
+// could not have changed generated plugin output (a Meta-MCP endpoint, a
+// non-MCP toolset, a disabled or endpointless server): those paths must not
+// enqueue at all, since a project with no GitHub connection yet treats any
+// publish as its first and would get a marketplace repo it has no packages
+// for.
+func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalues.AuthContext, attached, pluginCreated bool) {
+	if !attached || !s.pluginsGitHubEnabled {
 		return
 	}
 
-	enqueueCtx := context.WithoutCancel(ctx)
-	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
-		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "Initial marketplace publish",
-		SkipIfUnchanged: false,
-	}); err != nil {
-		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
+	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
+}
+
+func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkaccess.Mode) *networkaccess.Mode {
+	if requested == nil {
+		return nil
 	}
+	return &mode
+}
+
+func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) (networkaccess.AdmissionFinalizer, error) {
+	if mode.IsPublicOnly() {
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
+	}
+	if unproxied {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	if s.networkAccessEligibility == nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
+	if err != nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+		}
+		return nil
+	}), nil
 }
 
 // ServerDisplayName derives a default plugin-server display name from an
@@ -841,7 +916,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
 		return err
 	}
 
@@ -1000,6 +1075,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
+		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, deleted.UserSessionIssuerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server issuer for owner binding").LogError(ctx, logger)
+		}
 		// Lock the issuer row before the ownership check. A concurrent meta
 		// MCP attach holds this same row lock while writing its reference, so
 		// the statements below see any newly committed owner. A missing

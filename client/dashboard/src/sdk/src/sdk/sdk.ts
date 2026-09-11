@@ -10,6 +10,7 @@ import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
 import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
+import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
@@ -20,6 +21,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -44,13 +46,14 @@ import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
+import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
 import { Otel } from "./otel.js";
-import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
@@ -128,6 +131,11 @@ export class Gram extends ClientSDK {
     return (this._agent ??= new Agent(this._options));
   }
 
+  private _agents?: Agents;
+  get agents(): Agents {
+    return (this._agents ??= new Agents(this._options));
+  }
+
   private _aiIntegrations?: AiIntegrations;
   get aiIntegrations(): AiIntegrations {
     return (this._aiIntegrations ??= new AiIntegrations(this._options));
@@ -176,6 +184,11 @@ export class Gram extends ClientSDK {
   private _cliAuth?: CliAuth;
   get cliAuth(): CliAuth {
     return (this._cliAuth ??= new CliAuth(this._options));
+  }
+
+  private _dataExports?: DataExports;
+  get dataExports(): DataExports {
+    return (this._dataExports ??= new DataExports(this._options));
   }
 
   private _deployments?: Deployments;
@@ -295,6 +308,11 @@ export class Gram extends ClientSDK {
     return (this._modelKeys ??= new ModelKeys(this._options));
   }
 
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
+  }
+
   private _organizationAssets?: OrganizationAssets;
   get organizationAssets(): OrganizationAssets {
     return (this._organizationAssets ??= new OrganizationAssets(this._options));
@@ -319,14 +337,15 @@ export class Gram extends ClientSDK {
     ));
   }
 
+  private _organizationUserSessionIssuers?: OrganizationUserSessionIssuers;
+  get organizationUserSessionIssuers(): OrganizationUserSessionIssuers {
+    return (this._organizationUserSessionIssuers ??=
+      new OrganizationUserSessionIssuers(this._options));
+  }
+
   private _organizations?: Organizations;
   get organizations(): Organizations {
     return (this._organizations ??= new Organizations(this._options));
-  }
-
-  private _otelForwarding?: OtelForwarding;
-  get otelForwarding(): OtelForwarding {
-    return (this._otelForwarding ??= new OtelForwarding(this._options));
   }
 
   private _packages?: Packages;

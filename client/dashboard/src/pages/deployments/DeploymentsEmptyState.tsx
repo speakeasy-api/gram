@@ -13,7 +13,7 @@ export function DeploymentsEmptyState(): JSX.Element {
       description="Connect an MCP server from the catalog to create your first deployment and generate tools."
       action={
         <Button asChild size="sm">
-          <Link to={routes.catalog.href()}>Browse catalog</Link>
+          <Link to={routes.mcp.add.catalog.href()}>Browse catalog</Link>
         </Button>
       }
     />

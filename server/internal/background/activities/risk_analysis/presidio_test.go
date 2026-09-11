@@ -18,28 +18,28 @@ import (
 
 func TestPresidio_DetectsPersonName(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My name is John Smith and I live in New York",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	findings := results[0]
+	findings := results[0].Findings
 	ruleIDs := findingRuleIDs(findings)
 	assert.Contains(t, ruleIDs, "pii.person", "expected PERSON entity")
 }
 
 func TestPresidio_DetectsEmail(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please contact me at john.smith@globex.com for details",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	findings := results[0]
+	findings := results[0].Findings
 	ruleIDs := findingRuleIDs(findings)
 	assert.Contains(t, ruleIDs, "pii.email_address", "expected EMAIL_ADDRESS entity")
 
@@ -54,7 +54,7 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 
 func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 
 	messages := make([]string, 75)
 	emails := make([]string, len(messages))
@@ -67,7 +67,8 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, len(messages))
 
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		var got string
 		for _, f := range findings {
 			if f.RuleID == "pii.email_address" {
@@ -81,7 +82,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 
 func TestPresidio_DetectsCreditCard(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"My credit card number is 4111111111111111",
 		"Card: 5500-0000-0000-0004",
@@ -90,7 +91,8 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		ruleIDs := findingRuleIDs(findings)
 		assert.Contains(t, ruleIDs, "pii.credit_card", "expected CREDIT_CARD for message %d", i)
 	}
@@ -98,7 +100,7 @@ func TestPresidio_DetectsCreditCard(t *testing.T) {
 
 func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Please call my phone number 425-882-8080 to confirm the appointment",
 		"My phone is +44 20 7946 0958",
@@ -108,7 +110,8 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 
 	// Phone detection varies by format; check at least one is detected
 	anyDetected := false
-	for _, findings := range results {
+	for _, result := range results {
+		findings := result.Findings
 		ruleIDs := findingRuleIDs(findings)
 		for _, id := range ruleIDs {
 			if id == "pii.phone_number" {
@@ -121,14 +124,14 @@ func TestPresidio_DetectsPhoneNumber(t *testing.T) {
 
 func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Patient Jane Doe (jane.doe@hospital.org) has credit card 4111111111111111. Call 555-123-4567.",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
-	findings := results[0]
+	findings := results[0].Findings
 	ruleIDs := findingRuleIDs(findings)
 	assert.Contains(t, ruleIDs, "pii.person")
 	assert.Contains(t, ruleIDs, "pii.email_address")
@@ -139,14 +142,15 @@ func TestPresidio_DetectsMultiplePIIInSingleMessage(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnVersionNumbers(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Version 1.234.567.890 was released",
 		"API v2.0.0-beta.1 is now available",
 		"Build number: 20260423-001",
 	}, nil, 0, nil)
 	require.NoError(t, err)
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		highConfidence := filterHighConfidence(findings, 0.7)
 		assert.Empty(t, highConfidence, "expected no high-confidence PII findings for version string message %d, got: %v", i, highConfidence)
 	}
@@ -154,13 +158,14 @@ func TestPresidio_NoFalsePositiveOnVersionNumbers(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnUUIDs(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"Transaction ID: 550e8400-e29b-41d4-a716-446655440000",
 		"Session: a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 	}, nil, 0, nil)
 	require.NoError(t, err)
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		highConfidence := filterHighConfidence(findings, 0.7)
 		assert.Empty(t, highConfidence, "expected no high-confidence PII findings for UUID message %d, got: %v", i, highConfidence)
 	}
@@ -168,14 +173,15 @@ func TestPresidio_NoFalsePositiveOnUUIDs(t *testing.T) {
 
 func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		`func main() { fmt.Println("hello world") }`,
 		`SELECT * FROM users WHERE id = 12345`,
 		`const API_ENDPOINT = "https://api.example.com/v1"`,
 	}, nil, 0, nil)
 	require.NoError(t, err)
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		piiFindings := filterBySource(findings, "presidio")
 		highConfidence := filterHighConfidence(piiFindings, 0.8)
 		for _, f := range highConfidence {
@@ -189,7 +195,7 @@ func TestPresidio_NoFalsePositiveOnCodeSnippets(t *testing.T) {
 
 func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
 		"The deployment completed successfully.",
 		"Please review the pull request when you get a chance.",
@@ -197,7 +203,8 @@ func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 		"The API response time improved by 30% after the optimization.",
 	}, nil, 0, nil)
 	require.NoError(t, err)
-	for i, findings := range results {
+	for i, result := range results {
+		findings := result.Findings
 		highConfidence := filterHighConfidence(findings, 0.7)
 		assert.Empty(t, highConfidence, "expected no high-confidence findings for clean message %d", i)
 	}
@@ -207,18 +214,18 @@ func TestPresidio_CleanMessagesProduceNoFindings(t *testing.T) {
 
 func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 
 	// Message with both a secret (AWS key) and PII (email)
 	content := "Here is my AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd and my email is alice@globex.com"
 
-	gitleaksFindings, err := gitleaks.NewScanner().Scan(t.Context(), content)
+	gitleaksResult, err := gitleaks.NewScanner().Scan(t.Context(), content)
 	require.NoError(t, err)
 
 	presidioResults, err := client.AnalyzeBatch(t.Context(), []string{content}, nil, 0, nil)
 	require.NoError(t, err)
 
-	allFindings := slices.Concat(gitleaksFindings, presidioResults[0])
+	allFindings := slices.Concat(gitleaksResult.Findings, presidioResults[0].Findings)
 
 	sources := map[string]bool{}
 	for _, f := range allFindings {
@@ -232,7 +239,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 
 func TestPresidio_StressBatch(t *testing.T) {
 	t.Parallel()
-	client := infra.NewPresidioClient(t)
+	client := newPresidioClient(t)
 
 	messages := make([]string, 200)
 	for i := range messages {
@@ -259,7 +266,8 @@ func TestPresidio_StressBatch(t *testing.T) {
 
 	// Count findings by type
 	counts := map[string]int{}
-	for _, findings := range results {
+	for _, result := range results {
+		findings := result.Findings
 		for _, f := range findings {
 			counts[f.RuleID]++
 		}

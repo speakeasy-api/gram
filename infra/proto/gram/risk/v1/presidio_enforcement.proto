@@ -1,0 +1,49 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+message PresidioEnforcement {
+  string request_id = 1;
+  string chat_message_id = 2;
+  string project_id = 3;
+  string organization_id = 4;
+  string risk_policy_id = 5;
+  int64 risk_policy_version = 6;
+  string created_at = 7; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+
+  // The reply address travels as transport metadata (see
+  // requestreply.ReplyURNAttribute), never in the payload.
+  reserved 8;
+  reserved reply_urn;
+  string content = 9;
+  string content_part_id = 10;
+
+  repeated string entities = 11;
+  // Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
+  // emitted. Zero/unset means the consumer applies its default threshold.
+  double score_threshold = 12;
+  string chat_id = 13;
+  string parent_chat_message_id = 14;
+  string origin_risk_policy_id = 15;
+  int64 origin_risk_policy_version = 16;
+  string message_link_reason = 17;
+  string execution_path = 18;
+  string tool_call_id = 19;
+  string tool_name = 20;
+  string hook_source = 21;
+  string user_id = 22;
+  string message_type = 23;
+  bytes meter_reading = 24;
+  // Reason no policy initiated this scan; excludes origin_risk_policy_id.
+  string policy_link_reason = 25;
+  // Raw external conversation ID; independent of the persisted Gram chat_id.
+  string external_conversation_id = 26;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 600}
+  };
+}

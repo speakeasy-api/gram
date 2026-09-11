@@ -72,6 +72,11 @@ type SetOpenRouterSpendCapArgs struct {
 	ActorDisplayName *string
 	// BypassPolicy is false for existing and customer-initiated workflows.
 	BypassPolicy bool
+	// ActingSurface is the surface the scheduling request was acting through,
+	// captured at schedule time because this activity runs in a worker with
+	// none of that request's context. Empty on payloads created before the
+	// field existed.
+	ActingSurface string
 }
 
 type setOpenRouterSpendCapHeartbeat struct {
@@ -83,7 +88,19 @@ type setOpenRouterSpendCapHeartbeat struct {
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
-	if args.BypassPolicy {
+	// The scheduling request's surface is carried in the payload, because this
+	// activity runs in a worker where that request's context no longer exists.
+	// BypassPolicy is not a substitute: it separates an admin override from
+	// normal billing policy, and usage.SetSpendCap schedules this same workflow
+	// with it false, so keying the surface off it would stamp customer changes
+	// as admin work.
+	switch {
+	case args.ActingSurface != "":
+		ctx = contextvalues.SetActingSurface(ctx, args.ActingSurface)
+	case args.BypassPolicy:
+		// Payload predates ActingSurface. Only the admin entry point sets
+		// BypassPolicy, so this keeps in-flight admin workflows attributed
+		// across the deploy rather than dropping them to unknown.
 		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdmin))
 	}
 

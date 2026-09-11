@@ -441,7 +441,8 @@ var _ = Service("plugins", func() {
 		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
 
 		Payload(func() {
-			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.")
+			Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -641,6 +642,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("last_published_at", String, func() {
@@ -656,11 +658,12 @@ var PublishPluginsResult = Type("PublishPluginsResult", func() {
 })
 
 var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
-	Required("default_name", "effective_name")
+	Required("default_name", "effective_name", "observability_enabled")
 
 	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
 	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
 	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+	Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.")
 })
 
 var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {

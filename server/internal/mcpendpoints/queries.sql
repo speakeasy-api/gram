@@ -60,6 +60,18 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListAddressableMCPEndpointsByMCPServerID :many
+SELECT sqlc.embed(e), cd.domain AS custom_domain
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+WHERE e.project_id = @project_id
+  AND e.mcp_server_id = @mcp_server_id::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
 -- name: ListMCPEndpointsByMetaMCPServerID :many
 SELECT *
 FROM mcp_endpoints

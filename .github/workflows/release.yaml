@@ -33,8 +33,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-github-v1
@@ -75,6 +76,7 @@ jobs:
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           title: "chore: version packages"
+          version: mise exec -- aube exec changeset -- version
           publish: mise exec --env viteprod -- aube exec changeset -- publish
           setupGitUser: false
         env:
