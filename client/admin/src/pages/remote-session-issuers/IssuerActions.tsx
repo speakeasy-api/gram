@@ -46,6 +46,7 @@ export function IssuerActions({
         setOpen(false);
         await onDeleted?.();
       } else {
+        setRefreshWarnings([]);
         const result = await adminRefreshGlobalIssuerMetadata({
           id: record.issuer.id,
         });

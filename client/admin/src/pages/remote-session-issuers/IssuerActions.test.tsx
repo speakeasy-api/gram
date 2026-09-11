@@ -22,7 +22,46 @@ vi.mock("@/lib/gramAdminClient", () => ({
   adminDeleteGlobalIssuer: api.remove,
   adminRefreshGlobalIssuerMetadata: api.refresh,
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.resetAllMocks();
+});
+
+it("clears previous refresh warnings while retrying and after failure", async () => {
+  const warning = "Previous discovery warning";
+  let rejectRefresh!: (reason: Error) => void;
+  const pendingRefresh = new Promise<never>((_, reject) => {
+    rejectRefresh = reject;
+  });
+  api.refresh
+    .mockResolvedValueOnce({ discoveryWarnings: [warning] })
+    .mockReturnValueOnce(pendingRefresh);
+  const record = {
+    issuer: { id: "target", name: "Example provider" },
+    globalClientCount: 0,
+    tenantClientCount: 0,
+  } as GlobalRemoteSessionIssuer;
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <IssuerActions record={record} />
+    </QueryClientProvider>,
+  );
+  const refresh = screen.getByRole("button", { name: "Refresh metadata" });
+  fireEvent.click(refresh);
+  expect(await screen.findByText(warning)).toBeTruthy();
+  await waitFor(() =>
+    expect((refresh as HTMLButtonElement).disabled).toBe(false),
+  );
+  fireEvent.click(refresh);
+  expect(api.refresh).toHaveBeenCalledTimes(2);
+  expect((refresh as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByText(warning)).toBeNull();
+  rejectRefresh(new Error("New refresh failure"));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "New refresh failure",
+  );
+  expect(screen.queryByText(warning)).toBeNull();
+});
 it("retains deletion errors and identity inside the retryable dialog", async () => {
   api.remove.mockRejectedValue(new Error("Clients appeared"));
   const record = {
