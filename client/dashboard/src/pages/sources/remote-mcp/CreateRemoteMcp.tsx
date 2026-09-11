@@ -7,14 +7,18 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Loader2, Plug } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 
 // Both backends are, to the administrator, the same thing: a server that lives
 // at a URL somewhere else. The only difference is whether Gram sits in the
@@ -28,13 +32,22 @@ export default function CreateRemoteMcp(): JSX.Element {
 
 function CreateRemoteMcpForm() {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateIdentity =
+    !rbacLoading && hasScope("project:write", project.id);
   const createRemote = useCreateRemoteMcpSource();
   const createUnproxied = useCreateUnproxiedMcpSource();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<ProxyMode>("proxied");
+  const [identityMode, setIdentityMode] =
+    useState<RemoteMcpCreationIdentity>("none");
+  const [identityChoiceTouched, setIdentityChoiceTouched] = useState(false);
+  const [agentToken, setAgentToken] = useState("");
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
@@ -53,6 +66,20 @@ function CreateRemoteMcpForm() {
   // The verify result is cleared whenever the URL changes (see
   // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
   const isVerified = verify.result?.verified === true;
+
+  useEffect(() => {
+    if (!verify.result) {
+      setIdentityChoiceTouched(false);
+      setIdentityMode("none");
+      setAgentToken("");
+      return;
+    }
+    if (!identityChoiceTouched && verify.result.verified) {
+      setIdentityMode(
+        verify.result.outcome === "authentication_required" ? "user" : "none",
+      );
+    }
+  }, [identityChoiceTouched, verify.result]);
 
   const handleVerify = () => {
     setTouched(true);
@@ -84,18 +111,30 @@ function CreateRemoteMcpForm() {
         return;
       }
 
-      const { authAutoConfig, mcpServer } = await createRemote.mutateAsync({
-        name: trimmedName === "" ? undefined : trimmedName,
-        url: url.trim(),
-      });
-      if (authAutoConfig.status === "configured") {
-        toast.success("MCP server added and authentication configured");
-      } else {
-        toast.success("MCP server added");
-        if (authAutoConfig.warn) {
-          toast.warning(authAutoConfig.message);
-        }
+      const { identityConfiguration, mcpServer } =
+        await createRemote.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+          identityMode,
+          agentAuthorization:
+            identityMode === "agent"
+              ? `Bearer ${agentToken.trim()}`
+              : undefined,
+        });
+      if (identityConfiguration.status === "setup-required") {
+        toast.warning(
+          `MCP server added but kept disabled. ${identityConfiguration.message}`,
+        );
+        void navigate(
+          `${routes.mcp.x.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
+        );
+        return;
       }
+      toast.success(
+        identityMode === "none"
+          ? "MCP server added"
+          : "MCP server added and identity configured",
+      );
       routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
@@ -206,6 +245,69 @@ function CreateRemoteMcpForm() {
             </Stack>
           )}
 
+          {mode === "proxied" && isVerified ? (
+            <Stack gap={2}>
+              <label className="text-sm leading-none font-medium">
+                Identity
+              </label>
+              <RadioGroup
+                value={identityMode}
+                onValueChange={(value) => {
+                  setIdentityChoiceTouched(true);
+                  setIdentityMode(value as RemoteMcpCreationIdentity);
+                }}
+              >
+                <IdentityChoice
+                  value="user"
+                  label="User Identity"
+                  description="Each user authorizes with their own upstream account."
+                  disabled={!canCreateIdentity}
+                />
+                <IdentityChoice
+                  value="agent"
+                  label="Agent Identity"
+                  description="Every request uses one shared bearer token."
+                />
+                <IdentityChoice
+                  value="none"
+                  label="No Identity"
+                  description="Send no static upstream Authorization credential."
+                />
+              </RadioGroup>
+              {identityMode === "agent" ? (
+                <Stack gap={1} className="ml-7">
+                  <label
+                    htmlFor="remote-mcp-agent-token"
+                    className="text-sm leading-none font-medium"
+                  >
+                    Bearer token
+                  </label>
+                  <Input
+                    id="remote-mcp-agent-token"
+                    type="password"
+                    value={agentToken}
+                    onChange={setAgentToken}
+                    placeholder="Paste bearer token"
+                  />
+                </Stack>
+              ) : null}
+              {identityMode === "none" &&
+              verify.result?.outcome === "authentication_required" ? (
+                <Alert variant="warning" dismissible={false}>
+                  This server requires authentication. No Identity may leave it
+                  unable to serve requests.
+                </Alert>
+              ) : null}
+              {identityMode === "user" && !rbacLoading && !canCreateIdentity ? (
+                <Alert variant="warning" dismissible={false}>
+                  User Identity creates a provider or OAuth client and requires
+                  project:write. Choose another identity mode or ask a project
+                  administrator.
+                </Alert>
+              ) : null}
+            </Stack>
+          ) : null}
+
           {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
               {createError.message}
@@ -220,7 +322,19 @@ function CreateRemoteMcpForm() {
             <Button
               type="submit"
               variant="primary"
-              disabled={!urlUsable || verify.isPending || isPending}
+              disabled={
+                !urlUsable ||
+                verify.isPending ||
+                isPending ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "agent" &&
+                  agentToken.trim() === "") ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "user" &&
+                  !canCreateIdentity)
+              }
             >
               {verify.isPending || isPending ? (
                 <Button.LeftIcon>
@@ -263,5 +377,29 @@ function CreateRemoteMcpForm() {
         </Stack>
       </form>
     </FormPage>
+  );
+}
+
+function IdentityChoice({
+  value,
+  label,
+  description,
+  disabled = false,
+}: {
+  value: RemoteMcpCreationIdentity;
+  label: string;
+  description: string;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <label className="flex items-start gap-2.5">
+      <RadioGroupItem value={value} className="mt-0.5" disabled={disabled} />
+      <span className="flex flex-col gap-0.5">
+        <span className="text-sm">{label}</span>
+        <Text muted small>
+          {description}
+        </Text>
+      </span>
+    </label>
   );
 }

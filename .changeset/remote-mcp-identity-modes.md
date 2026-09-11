@@ -3,4 +3,4 @@
 "server": patch
 ---
 
-Add User, Agent, and No Identity modes for Remote MCP servers, including managed Authorization credentials and identity status in server details.
+Add User, Agent, and No Identity modes for Remote MCP servers, including identity selection during creation, managed Authorization credentials, and editable Remote Identity Provider setup.

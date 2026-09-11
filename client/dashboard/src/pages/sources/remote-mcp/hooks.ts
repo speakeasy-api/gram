@@ -1,4 +1,3 @@
-import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
@@ -19,19 +18,22 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  autoConfigureRemoteMcpAuth,
-  type AutoConfigureAuthResult,
-} from "./autoConfigureAuth";
+  configureCreatedRemoteMcpIdentity,
+  type ConfigureCreatedIdentityResult,
+  type RemoteMcpCreationIdentity,
+} from "./configureCreatedIdentity";
 
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization?: string;
 };
 
 export type CreateRemoteMcpSourceData = {
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
-  authAutoConfig: AutoConfigureAuthResult;
+  identityConfiguration: ConfigureCreatedIdentityResult;
 };
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
@@ -40,12 +42,11 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceVariables
 > {
   const client = useSdkClient();
-  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
 
   return useMutation({
-    mutationFn: async ({ name, url }) => {
+    mutationFn: async ({ name, url, identityMode, agentAuthorization }) => {
       const { remoteMcpServer, mcpServer } =
         await client.remoteMcp.createServerAndMcpServer({
           createServerForm: {
@@ -55,15 +56,16 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           },
         });
 
-      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
         client,
-        authedFetch,
         remoteMcpServer,
         mcpServer,
+        identityMode,
+        agentAuthorization,
       });
       const configuredMcpServer =
-        authAutoConfig.status === "configured"
-          ? authAutoConfig.mcpServer
+        identityConfiguration.status === "configured"
+          ? identityConfiguration.mcpServer
           : mcpServer;
 
       // Pre-stage a default endpoint so the user doesn't have to create one
@@ -77,10 +79,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       return {
         remoteMcpServer,
         mcpServer: configuredMcpServer,
-        authAutoConfig,
+        identityConfiguration,
       };
     },
-    onSuccess: async ({ authAutoConfig }) => {
+    onSuccess: async ({ identityConfiguration }) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
@@ -95,7 +97,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       // The issuer/client caches only change when auto-configuration actually
       // ran to completion; a skipped run leaves them untouched, so don't force
       // those extra refetches on the common no-OAuth path.
-      if (authAutoConfig.status === "configured") {
+      if (identityConfiguration.userIdentity?.status) {
         invalidations.push(
           invalidateAllRemoteSessionIssuers(queryClient, {
             refetchType: "all",
