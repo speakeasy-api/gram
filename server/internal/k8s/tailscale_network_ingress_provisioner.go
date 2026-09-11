@@ -18,6 +18,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,21 +30,24 @@ import (
 )
 
 const (
-	tailscaleAPIGroup                = "tailscale.com"
-	tailscaleAPIVersion              = "v1alpha1"
-	networkIngressManagedBy          = "gram-network-ingress"
-	networkIngressAppLabel           = "app.kubernetes.io/name"
-	networkIngressIDLabel            = "gram.ai/network-ingress-id"
-	tailscaleParentResourceType      = "tailscale.com/parent-resource-type"
-	tailscaleParentResource          = "tailscale.com/parent-resource"
-	tailscaleProxyGroupAnnotation    = "tailscale.com/proxy-group"
-	tailscaleTagsAnnotation          = "tailscale.com/tags"
-	tailscaleIngressClass            = "tailscale"
-	networkIngressAttestorPort       = 8080
-	networkIngressAttestorHealthPort = 8081
-	networkIngressTokenAudience      = "gram-netingress"             // #nosec G101 -- Kubernetes TokenReview audience, not a credential.
-	networkIngressTokenPath          = "/var/run/secrets/gram/token" // #nosec G101 -- projected token path, not token material.
-	networkIngressCAPath             = "/var/run/secrets/gram/upstream/ca.crt"
+	tailscaleAPIGroup                    = "tailscale.com"
+	tailscaleAPIVersion                  = "v1alpha1"
+	networkIngressManagedBy              = "gram-network-ingress"
+	networkIngressAppLabel               = "app.kubernetes.io/name"
+	networkIngressIDLabel                = "gram.ai/network-ingress-id"
+	tailscaleParentResourceType          = "tailscale.com/parent-resource-type"
+	tailscaleParentResource              = "tailscale.com/parent-resource"
+	tailscaleProxyGroupAnnotation        = "tailscale.com/proxy-group"
+	tailscaleTagsAnnotation              = "tailscale.com/tags"
+	tailscaleIngressClass                = "tailscale"
+	networkIngressAttestorPort           = 8080
+	networkIngressAttestorHealthPort     = 8081
+	networkIngressTokenAudience          = "gram-netingress"             // #nosec G101 -- Kubernetes TokenReview audience, not a credential.
+	networkIngressTokenPath              = "/var/run/secrets/gram/token" // #nosec G101 -- projected token path, not token material.
+	networkIngressCAPath                 = "/var/run/secrets/gram/upstream/ca.crt"
+	networkIngressWorkerServiceAccount   = "gram-network-ingress-worker"
+	networkIngressAttestorManagerRole    = "gram-network-ingress-attestor-manager"
+	networkIngressAttestorManagerBinding = "gram-network-ingress-attestor-manager"
 )
 
 var (
@@ -59,6 +63,7 @@ type TailscaleCredentials struct {
 
 type TailscaleNetworkIngressConfig struct {
 	OperatorNamespace string
+	WorkerNamespace   string
 	BackendNamespace  string
 	BackendPodLabels  map[string]string
 	ProxyTag          string
@@ -89,7 +94,7 @@ func NewTailscaleNetworkIngressProvisioner(clientset kubernetes.Interface, dynam
 }
 
 func (config TailscaleNetworkIngressConfig) validateApply() error {
-	if config.BackendNamespace == "" || len(config.BackendPodLabels) == 0 || config.ProxyTag == "" || config.ServiceTag == "" || config.AttestorCASecret == "" {
+	if config.WorkerNamespace == "" || config.BackendNamespace == "" || len(config.BackendPodLabels) == 0 || config.ProxyTag == "" || config.ServiceTag == "" || config.AttestorCASecret == "" {
 		return fmt.Errorf("%w: Tailscale provisioner configuration is incomplete", ErrNetworkIngressInvalidDesiredState)
 	}
 	if config.KubernetesAPICIDR != "" {
@@ -124,6 +129,9 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	if err := p.applyNamespace(ctx, desired); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
+	if err := p.applyAttestorManagerBinding(ctx, desired); err != nil {
+		return p.applyError(NetworkIngressErrorKubernetes, err)
+	}
 	if err := p.applyNetworkPolicies(ctx, desired); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
@@ -143,6 +151,9 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
 	if err := p.applyAttestorCASecret(ctx, desired); err != nil {
+		return p.applyError(NetworkIngressErrorKubernetes, err)
+	}
+	if err := p.verifyAttestorNetworkPolicy(ctx, desired); err != nil {
 		return p.applyError(NetworkIngressErrorKubernetes, err)
 	}
 	expectedHost, err := p.existingIngressHostname(ctx, desired.Resources)
@@ -279,6 +290,21 @@ func deleteOwnedDynamic(ctx context.Context, client dynamic.ResourceInterface, n
 	)
 }
 
+func deleteWithoutReadConfirmation(ctx context.Context, name, kind string, remove func(context.Context, string, metav1.DeleteOptions) error) error {
+	propagation := metav1.DeletePropagationForeground
+	options := metav1.DeleteOptions{PropagationPolicy: &propagation}
+	for range 2 {
+		err := remove(ctx, name, options)
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("delete %s: %w", kind, err)
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrNetworkIngressDeletionPending, kind)
+}
+
 func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resources NetworkIngressResourceNames) error {
 	if err := resources.Validate(); err != nil {
 		return err
@@ -333,11 +359,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 		},
 		func() error {
 			client := p.clientset.CoreV1().Secrets(p.config.OperatorNamespace)
-			return deleteOwnedResource(ctx, resources.CredentialsSecret, ownerID, "OAuth Secret", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
+			// Admission validates the old object's ownership. Repeat DELETE until
+			// NotFound without granting read access to operator Secrets.
+			return deleteWithoutReadConfirmation(ctx, resources.CredentialsSecret, "OAuth Secret", client.Delete)
 		},
 		func() error {
 			client := p.clientset.CoreV1().Secrets(resources.Namespace)
@@ -371,6 +395,9 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 				return client.Delete(ctx, name, options)
 			})
 		},
+		// The RoleBinding must remain until namespace deletion completes. Removing
+		// it explicitly would revoke the worker's access on a retry before it can
+		// confirm that namespaced resources are absent. Namespace GC removes it.
 		func() error {
 			client := p.clientset.CoreV1().Namespaces()
 			return deleteOwnedResource(ctx, resources.Namespace, ownerID, "namespace", func(ctx context.Context, name string) (metav1.Object, error) {
@@ -472,22 +499,50 @@ func (p *TailscaleNetworkIngressProvisioner) applyNamespace(ctx context.Context,
 }
 
 //nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+func (p *TailscaleNetworkIngressProvisioner) applyAttestorManagerBinding(ctx context.Context, desired NetworkIngressDesired) error {
+	binding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: desired.Resources.Namespace, Labels: resourceOwnerLabels(desired.ID.String())},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: networkIngressAttestorManagerRole},
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: networkIngressWorkerServiceAccount, Namespace: p.config.WorkerNamespace}},
+	}
+	client := p.clientset.RbacV1().RoleBindings(desired.Resources.Namespace)
+	existing, err := client.Get(ctx, binding.Name, metav1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		_, err = client.Create(ctx, binding, metav1.CreateOptions{})
+		return wrapKubernetesMutation("create attestor manager RoleBinding", err)
+	}
+	if err != nil {
+		return fmt.Errorf("get attestor manager RoleBinding: %w", err)
+	}
+	if err := ensureResourceOwned(existing.Labels, desired.ID.String()); err != nil {
+		return fmt.Errorf("refuse to adopt attestor manager RoleBinding: %w", err)
+	}
+	if existing.RoleRef != binding.RoleRef {
+		return fmt.Errorf("refuse unexpected attestor manager RoleBinding role")
+	}
+	if reflect.DeepEqual(existing.Subjects, binding.Subjects) {
+		return nil
+	}
+	binding.ResourceVersion = existing.ResourceVersion
+	_, err = client.Update(ctx, binding, metav1.UpdateOptions{})
+	return wrapKubernetesMutation("update attestor manager RoleBinding subjects", err)
+}
+
+// applyCredentialsSecret intentionally has no read path. RBAC grants CREATE and
+// UPDATE only; fail-closed admission validates old ownership and the complete
+// replacement shape. Kubernetes Secrets allow an unconditional UPDATE with an
+// empty resourceVersion, which keeps unrelated operator Secrets unreadable.
+//
+//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyCredentialsSecret(ctx context.Context, resources NetworkIngressResourceNames, credentials TailscaleCredentials) error {
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: resources.CredentialsSecret, Namespace: p.config.OperatorNamespace, Labels: resourceOwnerLabels(resources.OwnerID.String())}, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"client_id": []byte(credentials.ClientID), "client_secret": []byte(credentials.ClientSecret)}}
 	client := p.clientset.CoreV1().Secrets(p.config.OperatorNamespace)
-	existing, err := client.Get(ctx, secret.Name, metav1.GetOptions{})
-	if k8serrors.IsNotFound(err) {
-		_, err = client.Create(ctx, secret, metav1.CreateOptions{})
+	if _, err := client.Create(ctx, secret, metav1.CreateOptions{}); err == nil {
+		return nil
+	} else if !k8serrors.IsAlreadyExists(err) {
 		return wrapKubernetesMutation("create OAuth Secret", err)
 	}
-	if err != nil {
-		return fmt.Errorf("get OAuth Secret: %w", err)
-	}
-	if err := ensureResourceOwned(existing.Labels, resources.OwnerID.String()); err != nil {
-		return fmt.Errorf("refuse to adopt OAuth Secret: %w", err)
-	}
-	secret.ResourceVersion = existing.ResourceVersion
-	_, err = client.Update(ctx, secret, metav1.UpdateOptions{})
+	_, err := client.Update(ctx, secret, metav1.UpdateOptions{})
 	return wrapKubernetesMutation("update OAuth Secret", err)
 }
 
@@ -556,12 +611,23 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           desired.Resources.AttestorServiceAccount,
 					AutomountServiceAccountToken: new(false),
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: new(true),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{{
 						Name: "attestor", Image: desired.AttestorImage, ImagePullPolicy: corev1.PullIfNotPresent,
 						Args:           []string{"netingress-attestor", "--upstream-url=https://" + desired.BackendService + "." + p.config.BackendNamespace + ".svc.cluster.local:" + strconv.Itoa(int(desired.BackendPort)), "--upstream-ca-file=" + networkIngressCAPath, "--expected-host=" + expectedHost, "--token-path=" + networkIngressTokenPath},
 						Ports:          []corev1.ContainerPort{{Name: "http", ContainerPort: networkIngressAttestorPort}, {Name: "health", ContainerPort: networkIngressAttestorHealthPort}},
 						ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("health")}}},
-						VolumeMounts:   []corev1.VolumeMount{{Name: "attestation-token", MountPath: "/var/run/secrets/gram", ReadOnly: true}, {Name: "upstream-ca", MountPath: "/var/run/secrets/gram/upstream", ReadOnly: true}},
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: new(false),
+							ReadOnlyRootFilesystem:   new(true),
+							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+						},
+						VolumeMounts: []corev1.VolumeMount{{Name: "attestation-token", MountPath: "/var/run/secrets/gram", ReadOnly: true}, {Name: "upstream-ca", MountPath: "/var/run/secrets/gram/upstream", ReadOnly: true}},
 					}},
 					Volumes: []corev1.Volume{
 						{Name: "attestation-token", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Path: "token", Audience: networkIngressTokenAudience, ExpirationSeconds: new(int64(600))}}}}}},
@@ -649,6 +715,21 @@ func (p *TailscaleNetworkIngressProvisioner) applyNetworkPolicies(ctx context.Co
 		return err
 	}
 	return upsertNetworkPolicy(ctx, p.clientset, p.proxyNetworkPolicy(desired))
+}
+
+func (p *TailscaleNetworkIngressProvisioner) verifyAttestorNetworkPolicy(ctx context.Context, desired NetworkIngressDesired) error {
+	expected := p.attestorNetworkPolicy(desired)
+	actual, err := p.clientset.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(ctx, expected.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("confirm attestor NetworkPolicy: %w", err)
+	}
+	if err := ensureResourceOwned(actual.Labels, desired.ID.String()); err != nil {
+		return fmt.Errorf("refuse unexpected attestor NetworkPolicy: %w", err)
+	}
+	if !reflect.DeepEqual(actual.Spec, expected.Spec) {
+		return fmt.Errorf("attestor NetworkPolicy does not match desired isolation")
+	}
+	return nil
 }
 
 func (p *TailscaleNetworkIngressProvisioner) attestorNetworkPolicy(desired NetworkIngressDesired) *networkingv1.NetworkPolicy {
