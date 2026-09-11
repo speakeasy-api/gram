@@ -123,6 +123,23 @@ func (q *Queries) ClearWorkosOrgID(ctx context.Context, id string) error {
 	return err
 }
 
+const countBlockedSetupTaskUpdatesFixture = `-- name: CountBlockedSetupTaskUpdatesFixture :one
+SELECT count(*)
+FROM pg_catalog.pg_stat_activity
+WHERE datname = current_database()
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND query LIKE '-- name: LockOrganizationForSetupTaskUpdate %'
+`
+
+// Test-only synchronization counts actual setup-task lock waiters in this test database.
+func (q *Queries) CountBlockedSetupTaskUpdatesFixture(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countBlockedSetupTaskUpdatesFixture)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,
@@ -529,6 +546,39 @@ func (q *Queries) GetOrganizationNameByWorkosID(ctx context.Context, workosID pg
 	var name string
 	err := row.Scan(&name)
 	return name, err
+}
+
+const getOrganizationOnboardingSelection = `-- name: GetOrganizationOnboardingSelection :many
+SELECT om.onboarding_preset, task.task_key, task.hidden_at
+FROM organization_metadata om
+LEFT JOIN organization_setup_tasks task ON task.organization_id = om.id
+WHERE om.id = $1
+`
+
+type GetOrganizationOnboardingSelectionRow struct {
+	OnboardingPreset pgtype.Text
+	TaskKey          pgtype.Text
+	HiddenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetOrganizationOnboardingSelection(ctx context.Context, organizationID string) ([]GetOrganizationOnboardingSelectionRow, error) {
+	rows, err := q.db.Query(ctx, getOrganizationOnboardingSelection, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetOrganizationOnboardingSelectionRow
+	for rows.Next() {
+		var i GetOrganizationOnboardingSelectionRow
+		if err := rows.Scan(&i.OnboardingPreset, &i.TaskKey, &i.HiddenAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getOrganizationRelationshipForUser = `-- name: GetOrganizationRelationshipForUser :one
@@ -1700,6 +1750,22 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 	return i, err
 }
 
+const setOrganizationOnboardingPreset = `-- name: SetOrganizationOnboardingPreset :exec
+UPDATE organization_metadata
+SET onboarding_preset = $1, updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type SetOrganizationOnboardingPresetParams struct {
+	Preset         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) SetOrganizationOnboardingPreset(ctx context.Context, arg SetOrganizationOnboardingPresetParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationOnboardingPreset, arg.Preset, arg.OrganizationID)
+	return err
+}
+
 const setOrganizationRelationshipWorkOSCursor = `-- name: SetOrganizationRelationshipWorkOSCursor :exec
 UPDATE organization_user_relationships
 SET workos_updated_at = $1,
@@ -1723,6 +1789,26 @@ func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, a
 		arg.OrganizationID,
 		arg.UserID,
 	)
+	return err
+}
+
+const setOrganizationSetupTaskVisibility = `-- name: SetOrganizationSetupTaskVisibility :exec
+INSERT INTO organization_setup_tasks (organization_id, task_key, status, hidden_at)
+VALUES ($1, $2, 'todo', CASE WHEN $3::boolean THEN clock_timestamp() ELSE NULL END)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+WHERE (organization_setup_tasks.hidden_at IS NOT NULL) IS DISTINCT FROM $3::boolean
+`
+
+type SetOrganizationSetupTaskVisibilityParams struct {
+	OrganizationID string
+	TaskKey        string
+	Hidden         bool
+}
+
+func (q *Queries) SetOrganizationSetupTaskVisibility(ctx context.Context, arg SetOrganizationSetupTaskVisibilityParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationSetupTaskVisibility, arg.OrganizationID, arg.TaskKey, arg.Hidden)
 	return err
 }
 

@@ -115,6 +115,10 @@ type Service interface {
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
 	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
+	// GetOrganizationOnboarding implements getOrganizationOnboarding.
+	GetOrganizationOnboarding(context.Context, *GetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
+	// SetOrganizationOnboarding implements setOrganizationOnboarding.
+	SetOrganizationOnboarding(context.Context, *SetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
 	// Create a global remote_session_issuer (project_id NULL, organization_id
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -206,7 +210,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage"}
+var MethodNames = [49]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -304,6 +308,28 @@ type AdminListOrganizationsResult struct {
 	NextCursor *string
 	// Number of organizations matching the filters, before paging.
 	Total int64
+}
+
+// AdminOnboardingConfiguration is the result type of the admin service
+// getOrganizationOnboarding method.
+type AdminOnboardingConfiguration struct {
+	OrganizationID string
+	// Absent for legacy organizations.
+	Preset  *string
+	Tasks   []*AdminOnboardingTask
+	Presets []*AdminOnboardingPreset
+}
+
+type AdminOnboardingPreset struct {
+	Key             string
+	VisibleTaskKeys []string
+}
+
+type AdminOnboardingTask struct {
+	Key         string
+	Title       string
+	Description string
+	Hidden      bool
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -753,6 +779,13 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationOnboardingPayload is the payload type of the admin service
+// getOrganizationOnboarding method.
+type GetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -1184,6 +1217,17 @@ type SetOrganizationFeaturePayload struct {
 	OrganizationID    string
 	FeatureName       ProductFeatureName
 	Enabled           bool
+}
+
+// SetOrganizationOnboardingPayload is the payload type of the admin service
+// setOrganizationOnboarding method.
+type SetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string
+	// Omit to preserve the saved preset. Null/reset is not supported.
+	Preset *string
 }
 
 // SetStripeCustomerPayload is the payload type of the admin service

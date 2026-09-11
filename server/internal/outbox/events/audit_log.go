@@ -58,6 +58,7 @@ var (
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationSetupTaskV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_setup_task_event_v1", "Emitted when an organization setup task is changed")
+	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelDestinationV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_destination_event_v1", "Emitted when changes to OTEL destinations are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")

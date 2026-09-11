@@ -1562,6 +1562,160 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.onboarding:
+        get:
+            operationId: adminGetOrganizationOnboarding
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getOrganizationOnboarding admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: AdminOrganizationOnboarding
+        post:
+            operationId: adminSetOrganizationOnboarding
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetOrganizationOnboardingRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setOrganizationOnboarding admin
+            tags:
+                - admin
+            x-speakeasy-react-hook:
+                name: SetAdminOrganizationOnboarding
     /admin/organization.open-dashboard:
         post:
             tags:
@@ -71308,6 +71462,60 @@ components:
             required:
                 - organizations
                 - total
+        AdminOnboardingConfiguration:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                preset:
+                    type: string
+                    description: Absent for legacy organizations.
+                    enum:
+                        - gateway
+                        - security
+                presets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingPreset'
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminOnboardingTask'
+            required:
+                - organization_id
+                - tasks
+                - presets
+        AdminOnboardingPreset:
+            type: object
+            properties:
+                key:
+                    type: string
+                    enum:
+                        - gateway
+                        - security
+                visible_task_keys:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - key
+                - visible_task_keys
+        AdminOnboardingTask:
+            type: object
+            properties:
+                description:
+                    type: string
+                hidden:
+                    type: boolean
+                key:
+                    type: string
+                title:
+                    type: string
+            required:
+                - key
+                - title
+                - description
+                - hidden
         AdminOpenRouterKey:
             type: object
             properties:
@@ -91091,6 +91299,25 @@ components:
                 - organization_id
                 - feature_name
                 - enabled
+        SetOrganizationOnboardingRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                preset:
+                    type: string
+                    description: Omit to preserve the saved preset. Null/reset is not supported.
+                    enum:
+                        - gateway
+                        - security
+                visible_task_keys:
+                    type: array
+                    items:
+                        type: string
+                    description: Complete explicit selection; an empty array selects no tasks.
+            required:
+                - organization_id
+                - visible_task_keys
         SetOrganizationWhitelistRequestBody:
             type: object
             properties:

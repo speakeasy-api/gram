@@ -78,6 +78,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
     update:
       x-speakeasy-name-override: getOrganizationFeatures
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationOnboarding']
+    update:
+      x-speakeasy-name-override: getOrganizationOnboarding
   - target: $.paths.*[?@.operationId=='adminGetOrganizationStats']
     update:
       x-speakeasy-name-override: getOrganizationStats
@@ -126,6 +129,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminSetOrganizationFeature']
     update:
       x-speakeasy-name-override: setOrganizationFeature
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationOnboarding']
+    update:
+      x-speakeasy-name-override: setOrganizationOnboarding
   - target: $.paths.*[?@.operationId=='adminSetStripeCustomer']
     update:
       x-speakeasy-name-override: setStripeCustomer
