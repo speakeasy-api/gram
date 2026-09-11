@@ -180,8 +180,9 @@ function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
 
   if (hasPreservedStorageBackup()) return readPreservedStorageBackup();
 
-  // An impersonated session's current store is not the admin's prefs.
-  if (sessionIsImpersonating) return [];
+  // Impersonated or not-yet-classified: do not live-capture. Session-expiry
+  // cleanup can run on an impersonation document before auth.info returns.
+  if (sessionIsImpersonating || !sessionClassified) return [];
   return capturePreservedStorage();
 }
 
@@ -191,10 +192,8 @@ function snapshotForRestore(preserved?: PreservedStorage): PreservedStorage {
  * localStorage, so a customer org's keys cannot replace the admin's.
  */
 export function capturePreservedStorageIfSafe(): PreservedStorage {
-  if (sessionIsImpersonating) {
-    return lastCaptured.length > 0
-      ? lastCaptured
-      : readPreservedStorageBackup();
+  if (sessionIsImpersonating || !sessionClassified) {
+    return hasSnapshot ? lastCaptured : readPreservedStorageBackup();
   }
   return capturePreservedStorage();
 }

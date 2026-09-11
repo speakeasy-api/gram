@@ -462,6 +462,22 @@ describe("clearStorageForLogout", () => {
     ).toBeNull();
   });
 
+  it("does not live-capture while the session is unclassified", () => {
+    resetPreservedStorageCapture();
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
+    window.localStorage.setItem(
+      "gram:org-favorites:<CUSTOMER_ORG_ID>",
+      '["<CUSTOMER_PROJECT_ID>"]',
+    );
+
+    clearStorageForLogout();
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem("gram:org-favorites:<CUSTOMER_ORG_ID>"),
+    ).toBeNull();
+  });
+
   it("does not live-capture impersonated storage when no snapshot exists", () => {
     setPreservedStorageImpersonating(true);
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
