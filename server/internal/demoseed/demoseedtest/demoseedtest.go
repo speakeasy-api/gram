@@ -99,6 +99,66 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 	return snap, nil
 }
 
+// ProjectOrganizationMismatchCounts reports seeded project rows whose
+// denormalized organization_id does not match the owning project. It checks
+// every public table that carries both tenant columns so new seeded row types
+// are covered automatically.
+func ProjectOrganizationMismatchCounts(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	projectIDs []string,
+) (map[string]int64, error) {
+	rows, err := db.Query(ctx, `
+		SELECT c.table_name
+		FROM information_schema.columns c
+		JOIN information_schema.tables t
+		  ON t.table_schema = c.table_schema
+		 AND t.table_name = c.table_name
+		WHERE c.table_schema = 'public'
+		  AND t.table_type = 'BASE TABLE'
+		  AND c.column_name IN ('project_id', 'organization_id')
+		GROUP BY c.table_name
+		HAVING count(*) = 2
+		ORDER BY c.table_name`)
+	if err != nil {
+		return nil, fmt.Errorf("list project and organization scoped postgres tables: %w", err)
+	}
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return nil, fmt.Errorf("scan project and organization scoped postgres table: %w", err)
+		}
+		tables = append(tables, table)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project and organization scoped postgres tables: %w", err)
+	}
+
+	mismatches := map[string]int64{}
+	for _, table := range tables {
+		q := fmt.Sprintf(`
+			SELECT count(*)
+			FROM %s AS seeded
+			JOIN projects AS project ON project.id = seeded.project_id
+			WHERE project.id::text = ANY($1::text[])
+			  AND seeded.organization_id IS DISTINCT FROM project.organization_id`,
+			pgx.Identifier{"public", table}.Sanitize())
+
+		var count int64
+		if err := db.QueryRow(ctx, q, projectIDs).Scan(&count); err != nil {
+			return nil, fmt.Errorf("count project organization mismatches in %s: %w", table, err)
+		}
+		if count > 0 {
+			mismatches[table] = count
+		}
+	}
+
+	return mismatches, nil
+}
+
 // ClickHouseTableState captures one table's demo/non-demo split. Rows are
 // classified by the table's organization_id / gram_project_id columns; tables
 // with neither column treat every row as outside the demo scope.
