@@ -1,4 +1,4 @@
-h1:JISje20lvk8IjCW1MNs60yJgs9NFayVVF+D8ObVjQb4=
+h1:b0wxscKTrwYZnrjhfnQKA31Wmq4Dr2XoWBziZz70RJs=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -106,3 +106,4 @@ h1:JISje20lvk8IjCW1MNs60yJgs9NFayVVF+D8ObVjQb4=
 20260907100756_include-supported-chat-surfaces.up.sql h1:QtoqiWXGECI0f5kwzsV79kKL9EIGx9prQFB0aRSPGw0=
 20260908155707_preserve-trace-tool-name.up.sql h1:fsOD0y5BjF6BclA2dK+eXU+xuOtML1dtFcdVvl7qwPY=
 20260909194428_add-inference-hook-surfaces.up.sql h1:opToxCEIvOGzUxIuWodGaU6ebfJfBML4ENt2+eDwCok=
+20260911115549_billing-meter-readings-by-time.up.sql h1:BpusCwWsRhsYCezp3Nhcy+euH2nNwkT32iLSeQDmqVI=

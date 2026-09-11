@@ -1,4 +1,4 @@
-h1:M8zKjDb68wyOG/D+DIWS1ptBR+BqV9/MPjbwsEDHvwo=
+h1:XkMG/lPdzyCoaOx+wFTGZzS3OyHghfnuUEoSaV9WWr8=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -111,3 +111,4 @@ h1:M8zKjDb68wyOG/D+DIWS1ptBR+BqV9/MPjbwsEDHvwo=
 20260907100751_include-supported-chat-surfaces.sql h1:6pnN3qJzcm3/XYQwrWy6NpI04jDhmQNSdXETwuvRAM0=
 20260908155637_preserve-trace-tool-name.sql h1:6z9m9qCCpkuca8FXPQPKHM6a+7o4zJ7Bv/43AG3PCXA=
 20260909194424_add-inference-hook-surfaces.sql h1:SDenjiEJOlce8TzyLc1MDnhkyvcUmT0GGqqmFb67bCE=
+20260911115544_billing-meter-readings-by-time.sql h1:BG0kYDMAzAnXW+z9gPZi6jmrVYNMtE9DtrwZeUr7YM8=
