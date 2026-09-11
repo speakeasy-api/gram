@@ -723,13 +723,16 @@ function scopeOptions({
   // an annotation expresses it without a catalogue: it keeps covering tools
   // added later, so it is offered on every server rather than only the ones
   // that publish their tools.
+  // Both forms rewrite the whole block, so neither is offered while another
+  // restriction is standing there — the shortcut would take that restriction
+  // away without saying so. "Specific tools…" edits those rows instead.
   if (state.granted) {
-    if (ownDestructiveBlock(row)) {
+    if (ownDestructiveBlockOnly(row)) {
       options.push({
         label: "Allow destructive tools",
         onSelect: onAllowDestructive,
       });
-    } else if (!destructiveBlock(row)) {
+    } else if (!destructiveBlock(row) && !row.cells.use.ownBlock) {
       options.push({
         label: "Block destructive tools",
         onSelect: onBlockDestructive,
@@ -749,14 +752,20 @@ function destructiveBlock(row: AccessRow) {
   );
 }
 
-/** That block, when it is the rule this page owns and can therefore lift. */
-function ownDestructiveBlock(row: AccessRow) {
-  const block = destructiveBlock(row);
-  return block &&
-    block.principalUrn === row.principalUrn &&
-    block.appliesTo === "resource"
-    ? block
-    : undefined;
+/**
+ * Whether this row's own block is exactly "no destructive tools" and nothing
+ * else. A principal holds one block per level, so lifting it lifts everything
+ * it names — fine when destructive is all it names, and a silent widening when
+ * it names anything more.
+ */
+function ownDestructiveBlockOnly(row: AccessRow): boolean {
+  const own = row.cells.use.ownBlock;
+  if (!own) return false;
+  return (
+    (own.tools ?? []).length === 0 &&
+    (own.dispositions ?? []).length === 1 &&
+    (own.dispositions ?? []).includes("destructive")
+  );
 }
 
 /** What kind of thing a row names, so a role does not read as a person. */

@@ -1,6 +1,10 @@
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
-import { narrowingLabel, type AudienceLevel } from "./serverAudience";
+import {
+  isUnnarrowed,
+  narrowingLabel,
+  type AudienceLevel,
+} from "./serverAudience";
 
 /**
  * One row per principal, with a line for each of the three things it can be
@@ -49,15 +53,9 @@ export const BLOCK_LEVEL: Record<ScopeKey, AudienceLevel> = {
   manage: "blocked_manage",
 };
 
-/** A rule that grants rather than subtracts, and covers the whole server. */
-export function isUnnarrowed(entry: {
-  tools?: string[];
-  dispositions?: string[];
-}): boolean {
-  return (
-    (entry.tools ?? []).length === 0 && (entry.dispositions ?? []).length === 0
-  );
-}
+// Defined next to the reach resolution it is part of, and re-exported here so
+// the two surfaces cannot drift when the selector fields change.
+export { isUnnarrowed } from "./serverAudience";
 
 /** The scope a block level was written for, or null if it is not a block. */
 function blockedScope(level: AudienceLevel): ScopeKey | null {

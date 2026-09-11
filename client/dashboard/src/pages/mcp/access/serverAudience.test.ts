@@ -61,3 +61,25 @@ describe("blockingRules", () => {
     expect(blockingRules(reaching)).toEqual([]);
   });
 });
+
+describe("blockingRules names only the blocks that took something away", () => {
+  // The mcp:blocked_* scopes are independent. A block on a capability nobody
+  // was granted changed nothing, and naming it sends an administrator to a
+  // role that is not the reason.
+  it("ignores a block on a capability the grants never opened", () => {
+    const reaching = [
+      gtmGrant,
+      adminBlock,
+      entry({
+        principalUrn: "role:organization:ops",
+        displayName: "Ops",
+        level: "blocked_manage",
+        appliesTo: "resource",
+      }),
+    ];
+
+    expect(blockingRules(reaching).map((rule) => rule.displayName)).toEqual([
+      "Admin",
+    ]);
+  });
+});

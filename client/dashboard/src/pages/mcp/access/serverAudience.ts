@@ -104,13 +104,21 @@ function isBlock(entry: { level: AudienceLevel }): boolean {
   return BLOCKED_CAPABILITY[entry.level] !== undefined;
 }
 
-function isNarrowedRule(entry: {
+/** A rule covering the whole server rather than a slice of it. */
+export function isUnnarrowed(entry: {
   tools?: string[];
   dispositions?: string[];
 }): boolean {
   return (
-    (entry.tools ?? []).length > 0 || (entry.dispositions ?? []).length > 0
+    (entry.tools ?? []).length === 0 && (entry.dispositions ?? []).length === 0
   );
+}
+
+function isNarrowedRule(entry: {
+  tools?: string[];
+  dispositions?: string[];
+}): boolean {
+  return !isUnnarrowed(entry);
 }
 
 /**
@@ -119,12 +127,27 @@ function isNarrowedRule(entry: {
  * `effectiveReach`, and an absence explains nothing: a reader counting eleven
  * faces on a role and four people underneath needs the rule that took the other
  * seven away, by name.
+ *
+ * Only the blocks that took something away are named. The mcp:blocked_* scopes
+ * are independent, so a block on a capability nobody was granted changed
+ * nothing, and naming it sends an administrator to a role that is not the
+ * reason.
  */
 export function blockingRules(
   reaching: ResourceAudienceEntry[],
 ): ResourceAudienceEntry[] {
   if (reaching.length === 0 || effectiveReach(reaching) !== null) return [];
-  return reaching.filter((entry) => isBlock(entry) && !isNarrowedRule(entry));
+  const granted = new Set(
+    reaching
+      .filter((entry) => !isBlock(entry))
+      .flatMap((entry) => capabilitiesOf(entry.level)),
+  );
+  return reaching.filter(
+    (entry) =>
+      isBlock(entry) &&
+      !isNarrowedRule(entry) &&
+      granted.has(BLOCKED_CAPABILITY[entry.level]!),
+  );
 }
 
 export function effectiveReach(

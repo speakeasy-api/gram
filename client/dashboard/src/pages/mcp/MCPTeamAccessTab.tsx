@@ -330,10 +330,11 @@ export function MCPTeamAccessTab({
                 <Heading variant="h4">Conflicting roles</Heading>
               </div>
               <Text muted small className="mt-1">
-                These people are granted access through one role and blocked by
-                another role they are also in. A block outranks every grant, so
-                they cannot reach this server. To fix it, remove them from the
-                role that blocks access on that role&rsquo;s page.
+                These people are granted access through one rule and blocked by
+                another. A block outranks every grant, so they cannot reach this
+                server. To fix it, remove the block: on the blocking
+                role&rsquo;s page, or from the list above when it names the
+                person directly.
               </Text>
             </div>
             <Table columns={conflictColumns}>

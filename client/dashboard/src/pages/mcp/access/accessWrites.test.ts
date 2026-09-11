@@ -641,3 +641,31 @@ describe("an annotation choice is stored as a block", () => {
     ]);
   });
 });
+
+describe("subtracting by name without a catalogue", () => {
+  // An empty catalogue makes the complement unknowable. Computing it anyway
+  // gave an empty block, which read as "block nothing" and fell through to an
+  // allow — lifting the block that was the only thing restricting the row.
+  it("leaves the standing block alone rather than widening to every tool", () => {
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({ principalUrn: "user:1", level: "blocked", tools: ["delete"] }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    const written = narrowWrite(
+      direct,
+      person,
+      { tools: ["search"], dispositions: [] },
+      undefined,
+    ).entries;
+
+    expect(written).toContainEqual(
+      expect.objectContaining({ level: "blocked", tools: ["delete"] }),
+    );
+    expect(
+      written.some((e) => e.level === "use" && (e.tools ?? []).length === 0),
+    ).toBe(false);
+  });
+});

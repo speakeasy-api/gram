@@ -208,6 +208,21 @@ export function narrowWrite(
     };
   }
 
+  // Subtracting by name needs the catalogue to say what to take away, and
+  // without one the complement is unknowable — an empty one would read as
+  // "block nothing" and fall through to an allow, lifting whatever block is
+  // already standing. So the block is left exactly as it is and only this
+  // row's own grant is rewritten, which cannot widen anything.
+  if ((toolCatalog ?? []).length === 0) {
+    return {
+      entries: withRule(direct, row.principalUrn, "use", {
+        tools: next.tools,
+        dispositions: [],
+      }),
+      message: reachMessage(row, server, `call ${label} on`),
+    };
+  }
+
   // Subtracting by name. A block with nothing named would take the whole
   // server away, so a choice covering everything reachable is the same as
   // asking for all tools.
