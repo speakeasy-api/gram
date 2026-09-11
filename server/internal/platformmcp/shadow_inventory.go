@@ -284,9 +284,11 @@ func (s *ShadowInventoryService) GetReview(ctx context.Context, principal Princi
 	}
 	output := GetShadowMCPReviewOutput{Project: riskProject(project), Target: target, Evidence: emptyShadowEvidence(), DistributionAdmission: nil}
 	if s.distributionAdmissionRead != nil {
-		distributionAdmission := s.distributionAdmissionRead.NotApplicable(ctx, principal.OrganizationID, project.ID)
+		var distributionAdmission DistributionAdmission
 		if targetKind == shadowTargetKindServerURL {
 			distributionAdmission = s.distributionAdmissionRead.ForTarget(ctx, principal.OrganizationID, project.ID, targetKey)
+		} else {
+			distributionAdmission = s.distributionAdmissionRead.NotApplicable(ctx, principal.OrganizationID, project.ID)
 		}
 		output.DistributionAdmission = &distributionAdmission
 	}

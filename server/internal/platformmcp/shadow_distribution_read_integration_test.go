@@ -30,7 +30,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	target := inventory[0]
 	remote, err := remoterepo.New(conn).GetServerByID(ctx, remoterepo.GetServerByIDParams{ID: target.RemoteMcpServerID.UUID, ProjectID: project.ID})
 	require.NoError(t, err)
-	remote, err = remoterepo.New(conn).UpdateServer(ctx, remoterepo.UpdateServerParams{Name: pgtype.Text{}, Slug: pgtype.Text{}, TransportType: remote.TransportType, Url: "https://cohort.example.test/", ID: remote.ID, ProjectID: project.ID})
+	remote, err = remoterepo.New(conn).UpdateServer(ctx, remoterepo.UpdateServerParams{Name: pgtype.Text{}, Slug: pgtype.Text{}, TransportType: remote.TransportType, Url: "HTTPS://COHORT.EXAMPLE.TEST:443/?tenant=reviewed#fragment", ID: remote.ID, ProjectID: project.ID})
 	require.NoError(t, err)
 	canonicalTarget, ok := shadowmcp.CanonicalizeInventoryURL(remote.Url)
 	require.True(t, ok)

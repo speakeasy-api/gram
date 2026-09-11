@@ -17,14 +17,13 @@ import (
 )
 
 const (
-	DistributionAdmissionNotApplicable    = "not_applicable"
-	DistributionAdmissionNotDistributed   = "not_distributed"
-	DistributionAdmissionEmptyAudience    = "empty_audience"
-	DistributionAdmissionNotRequired      = "not_required"
-	DistributionAdmissionCovered          = "covered"
-	DistributionAdmissionApprovalRequired = "approval_required"
-	DistributionAdmissionRepairRequired   = "repair_required"
-	DistributionAdmissionUnavailable      = "unavailable"
+	DistributionAdmissionNotApplicable  = "not_applicable"
+	DistributionAdmissionNotDistributed = "not_distributed"
+	DistributionAdmissionEmptyAudience  = "empty_audience"
+	DistributionAdmissionNotRequired    = "not_required"
+	DistributionAdmissionCovered        = "covered"
+	DistributionAdmissionRepairRequired = "repair_required"
+	DistributionAdmissionUnavailable    = "unavailable"
 )
 
 type DistributionAdmission struct {
@@ -99,26 +98,45 @@ func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizat
 		return s.unavailable()
 	}
 	return s.read(ctx, organizationID, projectID, DistributionAdmissionNotDistributed, func(ctx context.Context, tx pgx.Tx) ([]distributionAdmissionTarget, error) {
-		rows, err := platformrepo.New(tx).ListDirectRemoteAdmissionAudiencesForTarget(ctx, platformrepo.ListDirectRemoteAdmissionAudiencesForTargetParams{OrganizationID: organizationID, ProjectID: projectID, TargetBaseUrl: canonical.CanonicalURL})
+		q := platformrepo.New(tx)
+		candidates, err := q.ListDirectRemoteAdmissionTargetCandidates(ctx, platformrepo.ListDirectRemoteAdmissionTargetCandidatesParams{OrganizationID: organizationID, ProjectID: projectID})
 		if err != nil {
-			return nil, fmt.Errorf("list target distribution audiences: %w", err)
+			return nil, fmt.Errorf("list target distribution candidates: %w", err)
 		}
-		if len(rows) == 0 {
-			return nil, nil
+		if len(candidates) > 100 {
+			return nil, fmt.Errorf("target distribution candidates are incomplete")
 		}
-		audience := make([]string, 0, len(rows))
-		seen := make(map[string]struct{}, len(rows))
-		for _, row := range rows {
-			if !row.PrincipalUrn.Valid {
+
+		result := make([]distributionAdmissionTarget, 0, len(candidates))
+		for _, candidate := range candidates {
+			stored, ok := shadowmcp.CanonicalizeInventoryURL(candidate.RemoteUrl)
+			if !ok {
 				continue
 			}
-			if _, duplicate := seen[row.PrincipalUrn.String]; duplicate {
+			if stored.CanonicalURL != canonical.CanonicalURL {
 				continue
 			}
-			seen[row.PrincipalUrn.String] = struct{}{}
-			audience = append(audience, row.PrincipalUrn.String)
+			rows, err := q.ListDirectRemoteAdmissionAudiencesForMCPServer(ctx, platformrepo.ListDirectRemoteAdmissionAudiencesForMCPServerParams{OrganizationID: organizationID, ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: candidate.McpServerID, Valid: true}})
+			if err != nil {
+				return nil, fmt.Errorf("list target distribution audiences: %w", err)
+			}
+			audiences := make(map[uuid.UUID][]string)
+			for _, row := range rows {
+				if !row.PluginID.Valid {
+					continue
+				}
+				if _, exists := audiences[row.PluginID.UUID]; !exists {
+					audiences[row.PluginID.UUID] = nil
+				}
+				if row.PrincipalUrn.Valid {
+					audiences[row.PluginID.UUID] = append(audiences[row.PluginID.UUID], row.PrincipalUrn.String)
+				}
+			}
+			for _, audience := range audiences {
+				result = append(result, distributionAdmissionTarget{url: canonical.CanonicalURL, audience: audience})
+			}
 		}
-		return []distributionAdmissionTarget{{url: canonical.CanonicalURL, audience: audience}}, nil
+		return result, nil
 	})
 }
 

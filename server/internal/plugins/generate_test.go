@@ -2946,9 +2946,8 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 		"get_shadow_mcp_review",
 		"decide_shadow_mcp_access",
 		"get_shadow_mcp_review",
-		"inspect_mcp_candidate",
-		"register_remote_mcp",
-		"attach_platform_mcp_identity_provider",
+		"find_mcp",
+		"get_mcp",
 		"get_mcp_readiness",
 		"list_plugins",
 		"get_plugin",
@@ -2962,10 +2961,13 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 	}
 	for _, guardrail := range []string{
 		"Never widen an audience to Everyone",
-		"fresh `expected_version`",
+		"project discovery is incomplete",
+		"obtain confirmation again",
+		"immediately preceding `expected_version`",
 		"a fresh idempotency key",
 		"`confirmed: true`",
-		"Ask for a separate explicit confirmation",
+		"never reconstruct either",
+		"hand off to the AICP dashboard",
 		"changes who receives every MCP server in that plugin, not only this target",
 		"Confirm this exact distribution",
 		"denial or conflict",
@@ -2986,6 +2988,8 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 		"Gram",
 		"list_shadow_mcp_audiences",
 		"get_shadow_mcp_audience",
+		"inspect_mcp_candidate",
+		"register_remote_mcp",
 	} {
 		require.NotContains(t, workflow, forbidden)
 	}
