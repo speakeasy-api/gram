@@ -278,3 +278,22 @@ func TestHandle_RedeliveryPublishesStableUsageIdentity(t *testing.T) {
 	require.Equal(t, (*readings)[0].GetOperationId(), (*readings)[1].GetOperationId())
 	require.Equal(t, (*readings)[0].GetId(), (*readings)[1].GetId())
 }
+
+// A batch request scanned over the composed scan surface says so, and the
+// published findings carry that surface so reveal slices the same text.
+func TestHandle_HonoursRequestFindingSurface(t *testing.T) {
+	t.Parallel()
+
+	pub, published := capturingPub(t)
+	h := gitleaks.NewHandler(testenv.NewLogger(t), pub, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
+	req := newRequest("\n{\"command\":\"export AWS_SECRET_ACCESS_KEY=" + fakeSecret + " AWS_ACCESS_KEY_ID=" + fakeAccessKeyID + "\"}")
+	req.SetFindingSurface("scan_surface")
+	require.NoError(t, h.Handle(t.Context(), req, gcp.MessageMetadata{}))
+
+	require.NotEmpty(t, *published)
+	for _, f := range *published {
+		require.Equal(t, "scan_surface", f.GetSurface())
+		require.Equal(t, f.GetMatch(), req.GetContent()[f.GetStartPos():f.GetEndPos()])
+	}
+}

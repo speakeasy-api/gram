@@ -33,6 +33,8 @@ message GitleaksAnalysis {
   string policy_link_reason = 22;
   // Raw external conversation ID; independent of the persisted Gram chat_id.
   string external_conversation_id = 23;
+  // Stored text surface indexed by finding offsets; unset means content.
+  string finding_surface = 24;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

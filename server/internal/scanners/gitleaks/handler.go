@@ -65,6 +65,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Surface:           m.GetFindingSurface(),
 	}, findings)
 
 	published := 0
