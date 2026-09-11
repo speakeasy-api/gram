@@ -5942,13 +5942,6 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
-  message_types TEXT[],
-  -- Fine-grained applicability as CEL boolean expressions over message fields
-  -- (see internal/risk/celenv). A policy applies when scope_include is true (or
-  -- NULL = all) AND scope_exempt is not true. scope_include generalizes
-  -- message_types; NULL falls back to those cards.
-  scope_include TEXT,
-  scope_exempt TEXT,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   -- Default disposition for shadow MCP blocking policies (action = 'block'

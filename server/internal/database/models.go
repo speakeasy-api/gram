@@ -2391,9 +2391,6 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
-	MessageTypes         []string
-	ScopeInclude         pgtype.Text
-	ScopeExempt          pgtype.Text
 	Action               string
 	AudienceType         string
 	ShadowMcpDisposition pgtype.Text
