@@ -82,7 +82,6 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 		Name:           name,
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   messageTypes,
 		Enabled:        true,
 		Action:         "block",
 		AudienceType:   "everyone",
@@ -175,25 +174,6 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load(), "judge must run for non-tool-call messages the policy applies to")
-}
-
-// TestScanner_PromptBasedPolicyRespectsMessageTypes verifies a prompt_based
-// policy restricted to tool_request is not judged for other message types.
-func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
-	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
-
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, ""))
-	require.NoError(t, err)
-	require.Nil(t, res)
-	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run for a message type the policy excludes")
 }
 
 // TestScanner_PromptBasedPolicyNoMatch verifies a nil verdict (no match /

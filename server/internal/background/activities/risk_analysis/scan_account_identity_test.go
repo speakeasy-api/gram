@@ -48,7 +48,6 @@ func seedAccountIdentityPolicyScoped(t *testing.T, conn *pgxpool.Pool, td testDa
 		Sources:        []string{"account_identity"},
 		AnalyzerConfig: analyzerConfig,
 		DisabledRules:  disabledRules,
-		ScopeExempt:    pgtype.Text{String: scopeExempt, Valid: scopeExempt != ""},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -173,7 +172,6 @@ func runAccountIdentityBatch(t *testing.T, ab *risk_analysis.AnalyzeBatch, td te
 		PolicyVersion:  policyVersion,
 		MessageIDs:     messageIDs,
 		Sources:        []string{"account_identity"},
-		MessageTypes:   messageTypes,
 	})
 	require.NoError(t, err)
 }

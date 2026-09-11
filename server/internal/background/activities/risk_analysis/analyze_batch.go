@@ -157,7 +157,6 @@ type AnalyzeBatchArgs struct {
 	MessageIDs       []uuid.UUID
 	ContentPartIDs   []uuid.UUID
 	Sources          []string
-	MessageTypes     []string
 	PresidioEntities []string
 	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
 	// (0.0-1.0). Do derives it from the refetched policy's analyzer_config, so it
@@ -237,7 +236,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterBatchMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
 
 	exclusions := NewExclusionSet(nil)
@@ -272,15 +270,13 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	findings := make([][]scanners.Finding, len(messages))
 	if len(messages) > 0 {
-		scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-		if err != nil {
-			return nil, fmt.Errorf("compile policy scope: %w", err)
-		}
 		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
 		if err != nil {
 			return nil, fmt.Errorf("compile detection scopes: %w", err)
 		}
-		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, a.metrics)
+		// No policy-level scope survives; detection scopes are the only surface.
+		policyScope := CompiledScope{eng: nil, include: nil, exempt: nil, includeCEL: "", exemptCEL: ""}
+		categoryScopes := NewCategoryScopes(policyScope, a.recommended, specified, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {

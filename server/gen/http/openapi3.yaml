@@ -88728,11 +88728,6 @@ components:
                     type: string
                     description: The risk policy ID.
                     format: uuid
-                message_types:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -88773,12 +88768,6 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
-                scope_exempt:
-                    type: string
-                    description: Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
-                scope_include:
-                    type: string
-                    description: Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
                 score:
                     type: number
                     description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
