@@ -52,6 +52,29 @@ func TestCreateRequest_ServerURL(t *testing.T) {
 	require.Equal(t, "needed for oncall", *detail.Requesters[0].Note)
 }
 
+// A server an LLM proxy saw only by its namespaced tool names is inventoried
+// under the synthetic mcp-tool://<server> identity. Nothing is reachable at
+// that key, but a decision on the row is a decision of record — the same
+// posture as a stdio command — so the review is admitted as a server_url
+// target and converges on the inventory's canonical key.
+func TestCreateRequest_ToolNamespaceIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRequest(ctx, createPayload("server_url", "mcp-tool://GitHub", "seen via the LLM proxy"))
+	require.NoError(t, err)
+
+	require.Equal(t, "server_url", created.TargetKind)
+	require.Equal(t, "mcp-tool://github", created.TargetRaw)
+	require.Equal(t, "requested", created.Status)
+
+	// The same namespace asked for again is one review, not a second one.
+	again, err := ti.service.CreateRequest(ctx, createPayload("server_url", "mcp-tool://github", "asked twice"))
+	require.NoError(t, err)
+	require.Equal(t, created.ID, again.ID)
+}
+
 // Identity resolution runs at intake, so evidence has an identity to hang off
 // by the time an admin looks.
 func TestCreateRequest_ResolvesIdentity(t *testing.T) {

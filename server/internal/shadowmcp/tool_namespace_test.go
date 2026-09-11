@@ -48,8 +48,8 @@ func TestToolNamespaceServer(t *testing.T) {
 
 	require.Equal(t, "github", shadowmcp.ToolNamespaceServer("mcp-tool://github"))
 	require.Equal(t, "github", shadowmcp.ToolNamespaceServer("mcp-tool://GitHub"))
-	require.Equal(t, "", shadowmcp.ToolNamespaceServer("https://github.com"))
-	require.Equal(t, "", shadowmcp.ToolNamespaceServer(""))
+	require.Empty(t, shadowmcp.ToolNamespaceServer("https://github.com"))
+	require.Empty(t, shadowmcp.ToolNamespaceServer(""))
 }
 
 // The identity must survive every URL-keyed inventory layer unchanged and must
