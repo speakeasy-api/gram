@@ -876,9 +876,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        nil,
-		MessageTypes:         []string{message.Assistant},
-		ScopeInclude:         pgtype.Text{},
-		ScopeExempt:          pgtype.Text{},
 		Enabled:              true,
 		Action:               "flag",
 		AudienceType:         "everyone",
@@ -920,7 +917,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{messages[0].ID}, fetched.MessageIDs)
 	require.Len(t, fetched.Policies, 1)
-	require.Equal(t, []string{message.Assistant}, fetched.Policies[0].MessageTypes)
 
 	customRules, err := customruleanalyzer.NewScanner(ti.conn)
 	require.NoError(t, err)
@@ -965,7 +961,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		MessageIDs:             fetched.MessageIDs,
 		ContentPartIDs:         nil,
 		Sources:                policy.Sources,
-		MessageTypes:           policy.MessageTypes,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,

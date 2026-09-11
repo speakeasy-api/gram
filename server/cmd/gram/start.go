@@ -298,6 +298,10 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+// probeDrainTimeout bounds the wait for automatic remote-session verifications
+// after the HTTP drain; each probe is already bounded by its ValidationTimeout.
+const probeDrainTimeout = 20 * time.Second
+
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 	dbClose := func() {}
@@ -1136,6 +1140,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("initialize remote session id token key resolver: %w", err)
 			}
 			idTokenVerifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -1150,6 +1155,9 @@ func newStartCommand() *cli.Command {
 					return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
 				}),
 				remotesessions.WithIDTokenVerifier(idTokenVerifier),
+				remotesessions.WithIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithSessionEnricher(remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
+					ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
@@ -1197,7 +1205,6 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				ragService,
 				triggerApp,
-				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
 				shadowMCPClient,
@@ -1222,6 +1229,8 @@ func newStartCommand() *cli.Command {
 				},
 				mcp.MetaRuntimeConfig{
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
+					ValidationTimeout: 0,
+					AutoVerifyWait:    0,
 				},
 			)
 			if err != nil {
@@ -1689,7 +1698,7 @@ func newStartCommand() *cli.Command {
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier)), productFeatures)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
@@ -2056,6 +2065,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:             telemetryrepo.New(chDB),
 						TriggersApp:               triggerApp,
 						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+						IssuerMetadataRefresher:   issuerMetadataRefresher,
 						EmailService:              emailService,
 						AssistantsCore:            assistantsCore,
 						TemporalEnv:               temporalEnv,
@@ -2109,8 +2119,8 @@ func newStartCommand() *cli.Command {
 				}
 				shutdownGroup.Wait()
 
-				// A successful Shutdown has quiesced the HTTP handlers that produce
-				// realtime recordings. Closing scanner admission here also makes the
+				// HTTP shutdown has quiesced handlers that produce realtime
+				// recordings. Closing scanner admission here also makes the
 				// timeout path safe, then drains recordings before runShutdown stops
 				// the shared meter publisher.
 				if err := riskScanner.Shutdown(graceCtx); err != nil {
@@ -2135,6 +2145,17 @@ func newStartCommand() *cli.Command {
 				if err := identityMapRefreshSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending identity map refresh triggers", attr.SlogError(err))
 				}
+
+				// The callbacks that start automatic remote-session verifications are
+				// drained; the probes they detached still write verdicts and close
+				// upstream sessions, so drain them before runShutdown closes the pool.
+				// Keep their separate budget after graceCtx users so probe waiting
+				// cannot consume time reserved for realtime recording flushes.
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), probeDrainTimeout)
+				if err := mcpService.Shutdown(drainCtx); err != nil {
+					logger.ErrorContext(ctx, "drain automatic remote session verifications", attr.SlogError(err))
+				}
+				cancelDrain()
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
@@ -2200,6 +2221,10 @@ func newStartCommand() *cli.Command {
 			// so cancelling it here would cancel every in-flight request mid-drain
 			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			// Both HTTP and Temporal share this detached refresher. A producer the
+			// drain timed out on may still reach NoteUse, so close admission and
+			// drain the work in flight before the DB closes.
+			issuerMetadataRefresher.Shutdown()
 			cancel()
 
 			return nil

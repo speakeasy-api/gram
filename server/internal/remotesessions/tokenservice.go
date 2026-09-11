@@ -178,8 +178,9 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	// Rebinds sess to the row the token came from, so a refresh that backfilled
-	// a legacy NULL resource routes on this same request.
-	tok, sess, err := m.validateAndRefresh(ctx, sess, resource)
+	// a legacy NULL resource routes on this same request. resolvedFromUpdatedAt
+	// remains the original snapshot only when this resolution won the refresh.
+	tok, sess, resolvedFromUpdatedAt, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
@@ -216,9 +217,12 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	return UpstreamToken{
-		Token:                 tok,
-		Resource:              conv.FromPGTextOrEmpty[string](sess.Resource),
-		RemoteSessionClientID: clientID,
+		Token:                              tok,
+		Resource:                           conv.FromPGTextOrEmpty[string](sess.Resource),
+		RemoteSessionClientID:              clientID,
+		RemoteSessionID:                    sess.ID,
+		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
+		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
 	}, nil
 }
 
@@ -307,6 +311,16 @@ type UpstreamToken struct {
 	// RemoteSessionClientID is the remote_session_client the credential
 	// belongs to.
 	RemoteSessionClientID uuid.UUID
+
+	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact grant row
+	// this token came from. Callers use the pair as a CAS snapshot when
+	// persisting outcomes from work performed with this credential.
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
+
+	// RemoteSessionResolvedFromUpdatedAt identifies the grant snapshot loaded
+	// before token resolution refreshed it.
+	RemoteSessionResolvedFromUpdatedAt time.Time
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It
@@ -446,10 +460,10 @@ func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (string, remotesessions_repo.RemoteSession, error) {
+) (string, remotesessions_repo.RemoteSession, time.Time, error) {
 	now := time.Now()
 	if !authorizationUsable(sess, now) {
-		return "", sess, ErrNoValidToken
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
 	hasRefresh := hasRefreshToken(sess)
@@ -460,13 +474,13 @@ func (m *ChallengeManager) validateAndRefresh(
 	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
-			return "", sess, fmt.Errorf("decrypt access token: %w", err)
+			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token: %w", err)
 		}
-		return plain, sess, nil
+		return plain, sess, sess.UpdatedAt.Time, nil
 	}
 
 	if !hasRefresh {
-		return "", sess, ErrNoValidToken
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
@@ -478,18 +492,20 @@ func (m *ChallengeManager) validateAndRefresh(
 		// nobody is sent to reconnect while holding a token that still works.
 		// Past the deadline there is nothing to fall back to.
 		if !accessTokenLive(sess, time.Now()) {
-			return "", sess, err
+			return "", sess, sess.UpdatedAt.Time, err
 		}
 		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if derr != nil {
-			return "", sess, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
+			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
 		}
 		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
-		return plain, sess, nil
+		return plain, sess, sess.UpdatedAt.Time, nil
 	}
+	// SourceUpdatedAt comes from the post-lock snapshot actually refreshed. An
+	// adopted concurrent winner instead identifies its final snapshot.
 	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
-	return res.AccessToken, res.Session, nil
+	return res.AccessToken, res.Session, res.SourceUpdatedAt, nil
 }
 
 // refreshFailureAttrs is the attribute set a failed request-path refresh is
@@ -508,6 +524,7 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 		code = refreshErr.UpstreamCode()
 	}
 	args := []any{
+		attr.SlogRemoteSessionID(sess.ID.String()),
 		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 		attr.SlogOAuthFailureReason(reason),
@@ -610,8 +627,11 @@ func (s *RefreshService) refreshSessionTokens(
 	if err != nil {
 		return zero, noToken, fmt.Errorf("encrypt new access token: %w", err)
 	}
+	// An echoed refresh token keeps its stored ciphertext: re-encrypting it
+	// would read as a rotation to anything comparing the columns.
 	newRefreshEnc := sess.RefreshTokenEncrypted
-	if tok.RefreshToken != "" {
+	refreshRotated := tok.RefreshToken != "" && tok.RefreshToken != refreshToken
+	if refreshRotated {
 		v, eerr := s.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
 			return zero, noToken, fmt.Errorf("encrypt new refresh token: %w", eerr)
@@ -651,6 +671,7 @@ func (s *RefreshService) refreshSessionTokens(
 		RefreshTokenEncrypted:  newRefreshEnc,
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
+		RefreshTokenRotated:    refreshRotated,
 		Scopes:                 scopes,
 		BackfillResource:       conv.ToPGTextEmpty(resource), // the query's COALESCE/NULLIF keeps a stored binding and rejects an empty stamp
 		ExpectedUpdatedAt:      sess.UpdatedAt,
@@ -705,7 +726,7 @@ func (s *RefreshService) restateIdentity(
 			identity = &verified
 		}
 	}
-	enrichment, err := buildEnrichment(tok, identity)
+	enrichment, err := buildEnrichment(tok, identity, nil)
 	if err != nil {
 		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
 	}
@@ -715,6 +736,7 @@ func (s *RefreshService) restateIdentity(
 
 	cols := identity.columns()
 	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		OverwritableSources:   overwritableIdentitySources(cols.Source.String),
 		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
@@ -755,7 +777,7 @@ func (s *RefreshService) postRefreshGrant(
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	doer, err := upstreamHTTPDoer(s.policy.PooledClient(), s.tunnels, client.TunneledMcpServerID)
+	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
 	if err != nil {
 		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
 	}

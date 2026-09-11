@@ -41,6 +41,10 @@ type RefreshResult struct {
 	Session     remotesessions_repo.RemoteSession
 	AccessToken string
 
+	// SourceUpdatedAt is the session snapshot this caller actually refreshed.
+	// Adopted concurrent winners identify their final snapshot instead.
+	SourceUpdatedAt time.Time
+
 	// Outcome is the same closed set the upstream-refresh metric records, so
 	// a caller's log line and the metric series always agree.
 	Outcome remotesessionmetrics.RefreshOutcome
@@ -88,6 +92,9 @@ type RefreshService struct {
 	// identity is restated.
 	idTokens IDTokenVerifier
 
+	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
+	issuerMetadata *IssuerMetadataRefresher
+
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
 }
@@ -107,17 +114,23 @@ func WithRefreshIDTokenVerifier(verifier IDTokenVerifier) RefreshOption {
 	return func(s *RefreshService) { s.idTokens = verifier }
 }
 
+// WithRefreshIssuerMetadataRefresher refreshes the issuer's metadata on use when a session is refreshed.
+func WithRefreshIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) RefreshOption {
+	return func(s *RefreshService) { s.issuerMetadata = refresher }
+}
+
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
-		logger:       logger.With(attr.SlogComponent("remotesessions_refresh")),
-		db:           db,
-		enc:          enc,
-		policy:       policy,
-		tunnels:      tunnels,
-		locks:        locks,
-		metrics:      remotesessionmetrics.NewRefresh(logger, meterProvider),
-		idTokens:     NoIDTokenVerifier(),
-		restatements: sync.WaitGroup{},
+		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
+		db:             db,
+		enc:            enc,
+		policy:         policy,
+		tunnels:        tunnels,
+		locks:          locks,
+		metrics:        remotesessionmetrics.NewRefresh(logger, meterProvider),
+		idTokens:       NoIDTokenVerifier(),
+		issuerMetadata: nil,
+		restatements:   sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -196,6 +209,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		s.metrics.Record(ctx, "", trigger, outcome)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
+	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
 	result, postLockIssuerURL, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := conv.Default(postLockIssuerURL, client.IssuerUrl)
@@ -333,7 +347,7 @@ func (s *RefreshService) refresh(
 		// Revoked while we were acquiring. Refreshing anyway would rotate
 		// tokens upstream that nothing will ever hold.
 		var inactive remotesessions_repo.RemoteSession
-		return RefreshResult{Session: inactive, AccessToken: "", Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, "", nil, nil
+		return RefreshResult{Session: inactive, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, "", nil, nil
 	case currentErr != nil:
 		// Whatever broke this read breaks the write below too, and a refresh we
 		// cannot persist leaves the stored token dead upstream.
@@ -348,7 +362,7 @@ func (s *RefreshService) refresh(
 			if err != nil {
 				return zero, "", nil, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
 			}
-			return RefreshResult{Session: current, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, "", nil, nil
+			return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, "", nil, nil
 		}
 	}
 	if !hasRefreshToken(current) {
@@ -395,7 +409,7 @@ func (s *RefreshService) refresh(
 				attr.SlogOAuthResource(updated.Resource.String),
 			)
 		}
-		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, client.IssuerUrl, &identityRestatement{client: client, tok: tok}, nil
+		return RefreshResult{Session: updated, AccessToken: accessToken, SourceUpdatedAt: sess.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, client.IssuerUrl, &identityRestatement{client: client, tok: tok}, nil
 	}
 
 	var tokenRefreshErr *TokenRefreshError
@@ -438,7 +452,7 @@ func (s *RefreshService) refresh(
 		return zero, client.IssuerUrl, nil, refreshErr
 	}
 
-	return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, client.IssuerUrl, nil, nil
+	return RefreshResult{Session: latest, AccessToken: plain, SourceUpdatedAt: latest.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, client.IssuerUrl, nil, nil
 }
 
 // AccessTokenExpirySkew is the window before access_expires_at within which a
@@ -535,6 +549,6 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false
 		}
 
-		return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, true
+		return RefreshResult{Session: latest, AccessToken: plain, SourceUpdatedAt: latest.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, true
 	}
 }
