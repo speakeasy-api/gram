@@ -70,6 +70,10 @@ func TestDiscoverProtectedResourceMetadata_HappyPath(t *testing.T) {
 		ScopesSupported:        []string{"read"},
 		BearerMethodsSupported: []string{"header"},
 		ResourceDocumentation:  "https://docs.example.com",
+		ResourceName:           "",
+		ResourcePolicyURI:      "",
+		ResourceTosURI:         "",
+		Raw:                    nil,
 	}
 	server := oauthtest.LaunchProtectedResourceServer(t, oauthtest.ProtectedResourceServerOpts{
 		Metadata:   metadata,
@@ -223,6 +227,10 @@ func TestDiscoverProtectedResourceMetadata_DiscoveryWarnings(t *testing.T) {
 			ScopesSupported:        nil,
 			BearerMethodsSupported: nil,
 			ResourceDocumentation:  "",
+			ResourceName:           "",
+			ResourcePolicyURI:      "",
+			ResourceTosURI:         "",
+			Raw:                    nil,
 		},
 		StatusCode: 0,
 		Body:       nil,

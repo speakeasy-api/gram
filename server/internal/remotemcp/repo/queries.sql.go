@@ -248,6 +248,39 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (R
 	return i, err
 }
 
+const getServerByIDForUpdate = `-- name: GetServerByIDForUpdate :one
+SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
+FROM remote_mcp_servers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetServerByIDForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// GetServerByID holding a row lock until the transaction ends, so a
+// concurrent UpdateServer waits and a probe result is applied against the
+// URL that is current at write time.
+func (q *Queries) GetServerByIDForUpdate(ctx context.Context, arg GetServerByIDForUpdateParams) (RemoteMcpServer, error) {
+	row := q.db.QueryRow(ctx, getServerByIDForUpdate, arg.ID, arg.ProjectID)
+	var i RemoteMcpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.TransportType,
+		&i.Url,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getServerBySlug = `-- name: GetServerBySlug :one
 SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers

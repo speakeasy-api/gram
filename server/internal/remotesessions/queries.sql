@@ -551,6 +551,22 @@ VALUES (
 )
 RETURNING *;
 
+-- name: UpdateRemoteSessionClientResourceDisplay :one
+-- RFC 9728 display members of the one resource this client was registered
+-- for; resource_identifier records which document they were read from.
+UPDATE remote_session_clients
+SET
+    resource_identifier = @resource_identifier,
+    resource_name = NULLIF(@resource_name::text, ''),
+    resource_documentation = NULLIF(@resource_documentation::text, ''),
+    resource_policy_uri = NULLIF(@resource_policy_uri::text, ''),
+    resource_tos_uri = NULLIF(@resource_tos_uri::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: AttachRemoteSessionClientToUserSessionIssuer :exec
 INSERT INTO remote_session_client_user_session_issuers (
     remote_session_client_id,
@@ -1378,6 +1394,11 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
@@ -1472,10 +1493,18 @@ SELECT
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
     c.legacy_callback_url                  AS legacy_callback_url,
+    c.resource_identifier                  AS resource_identifier,
+    c.resource_name                        AS resource_name,
+    c.resource_documentation               AS resource_documentation,
+    c.resource_policy_uri                  AS resource_policy_uri,
+    c.resource_tos_uri                     AS resource_tos_uri,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.logo_asset_id                        AS issuer_logo_asset_id,
+    i.service_documentation                AS issuer_service_documentation,
+    i.op_policy_uri                        AS issuer_op_policy_uri,
+    i.op_tos_uri                           AS issuer_op_tos_uri,
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,

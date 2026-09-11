@@ -106,6 +106,10 @@ func Test_writeOAuthProtectedResourceMetadataResponse_Success(t *testing.T) {
 		ScopesSupported:        []string{"offline_access"},
 		BearerMethodsSupported: nil,
 		ResourceDocumentation:  "",
+		ResourceName:           "",
+		ResourcePolicyURI:      "",
+		ResourceTosURI:         "",
+		Raw:                    nil,
 	}
 
 	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
@@ -138,6 +142,10 @@ func Test_writeOAuthProtectedResourceMetadataResponse_OmitsOptionalFields(t *tes
 		ScopesSupported:        []string{"offline_access"},
 		BearerMethodsSupported: nil,
 		ResourceDocumentation:  "",
+		ResourceName:           "",
+		ResourcePolicyURI:      "",
+		ResourceTosURI:         "",
+		Raw:                    nil,
 	}
 
 	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
@@ -151,6 +159,9 @@ func Test_writeOAuthProtectedResourceMetadataResponse_OmitsOptionalFields(t *tes
 	require.JSONEq(t, expected, w.Body.String())
 	require.NotContains(t, w.Body.String(), "bearer_methods_supported")
 	require.NotContains(t, w.Body.String(), "resource_documentation")
+	require.NotContains(t, w.Body.String(), "resource_name")
+	require.NotContains(t, w.Body.String(), "resource_policy_uri")
+	require.NotContains(t, w.Body.String(), "resource_tos_uri")
 }
 
 // Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields asserts that
@@ -169,6 +180,10 @@ func Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields(t *testing.
 		ScopesSupported:        []string{"offline_access", "read"},
 		BearerMethodsSupported: []string{"header"},
 		ResourceDocumentation:  "https://docs.example.test",
+		ResourceName:           "Example MCP",
+		ResourcePolicyURI:      "https://example.test/policy",
+		ResourceTosURI:         "https://example.test/tos",
+		Raw:                    json.RawMessage(`{"never":"served"}`),
 	}
 
 	err := writeOAuthProtectedResourceMetadataResponse(t.Context(), logger, w, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/foo", nil), metadata)
@@ -179,7 +194,10 @@ func Test_writeOAuthProtectedResourceMetadataResponse_EmitsAllFields(t *testing.
 		"authorization_servers": ["https://example.test/oauth/foo"],
 		"scopes_supported": ["offline_access", "read"],
 		"bearer_methods_supported": ["header"],
-		"resource_documentation": "https://docs.example.test"
+		"resource_documentation": "https://docs.example.test",
+		"resource_name": "Example MCP",
+		"resource_policy_uri": "https://example.test/policy",
+		"resource_tos_uri": "https://example.test/tos"
 	}`
 	require.JSONEq(t, expected, w.Body.String())
 }

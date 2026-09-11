@@ -382,6 +382,32 @@
                         >{{.AuthorizationExpiresIn}}</time
                       >.</span
                     >
+                    {{end}} {{if $panel.ShowLinks}}
+                    {{/* The resource's own links (RFC 9728) for an attachment issuer, the authorization server's otherwise. */}}
+                    <span
+                      class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"
+                      data-issuer-links
+                    >
+                      {{if .IssuerDocumentationURL}}<a
+                        href="{{.IssuerDocumentationURL}}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="underline"
+                        >Documentation</a
+                      >{{end}} {{if .IssuerPolicyURL}}<a
+                        href="{{.IssuerPolicyURL}}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="underline"
+                        >Policy</a
+                      >{{end}} {{if .IssuerTosURL}}<a
+                        href="{{.IssuerTosURL}}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="underline"
+                        >Terms</a
+                      >{{end}}
+                    </span>
                     {{end}}
                   </div>
                 </details>

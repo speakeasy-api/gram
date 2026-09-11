@@ -326,6 +326,11 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// After the commit so the probe never sits inside the transaction.
+	if updatedServer.Url != existingServer.Url {
+		s.refreshProtectedResourceDisplay(ctx, logger, authCtx, updatedServer.ID, existingServer.Url, updatedServer.Url)
+	}
+
 	return afterView, nil
 }
 

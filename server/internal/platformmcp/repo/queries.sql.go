@@ -4072,6 +4072,47 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
+const listPlatformMCPCatalogRegistrationsByRemoteMcpServer = `-- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
+SELECT id, user_session_issuer_id
+FROM platform_mcp_catalog_registrations
+WHERE remote_mcp_server_id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams struct {
+	RemoteMcpServerID uuid.NullUUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+type ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow struct {
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+func (q *Queries) ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx context.Context, arg ListPlatformMCPCatalogRegistrationsByRemoteMcpServerParams) ([]ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPCatalogRegistrationsByRemoteMcpServer, arg.RemoteMcpServerID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
+	for rows.Next() {
+		var i ListPlatformMCPCatalogRegistrationsByRemoteMcpServerRow
+		if err := rows.Scan(&i.ID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPClientConnectionsForUpdate = `-- name: ListPlatformMCPClientConnectionsForUpdate :many
 SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
 FROM platform_mcp_connections

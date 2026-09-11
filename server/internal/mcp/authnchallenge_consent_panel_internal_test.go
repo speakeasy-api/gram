@@ -40,6 +40,14 @@ func TestRemoteSessionCardPanel(t *testing.T) {
 			c.Connected, c.Rejected, c.ConnectedAs, c.AccountChips = true, true, "", nil
 		}), want: cardPanel{}},
 		{name: "connected with nothing to say", card: remoteSessionCard{Connected: true}, want: cardPanel{GrantLive: true}},
+		{name: "links only, not connected", card: remoteSessionCard{IssuerDocumentationURL: "https://docs.example.com"}, want: cardPanel{ShowLinks: true, ShowDetails: true}},
+		{name: "links only, connected", card: remoteSessionCard{Connected: true, IssuerTosURL: "https://example.com/tos"}, want: cardPanel{GrantLive: true, ShowLinks: true, ShowDetails: true}},
+		{name: "inactive with links", card: with(func(c *remoteSessionCard) {
+			c.Connected, c.Inactive, c.IssuerPolicyURL = true, true, "https://example.com/policy"
+		}), want: cardPanel{ShowIdentity: true, ShowAccountContext: true, ShowLinks: true, ShowDetails: true}},
+		{name: "rejected without an account, with links", card: with(func(c *remoteSessionCard) {
+			c.Connected, c.Rejected, c.ConnectedAs, c.IssuerDocumentationURL = true, true, "", "https://docs.example.com"
+		}), want: cardPanel{ShowAccountContext: true, ShowLinks: true, ShowDetails: true}},
 	}
 	for _, tc := range cases {
 		require.Equal(t, tc.want, tc.card.Panel(), tc.name)
