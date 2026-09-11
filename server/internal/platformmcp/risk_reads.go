@@ -207,7 +207,6 @@ type RiskPolicyDetail struct {
 	PresidioScoreThreshold *float64             `json:"presidio_score_threshold,omitempty"`
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DisabledRules          []string             `json:"disabled_rules"`
-	MessageTypes           []string             `json:"message_types"`
 	DetectionScopes        []RiskDetectionScope `json:"detection_scopes"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Prompt                 *string              `json:"prompt,omitempty"`
@@ -428,7 +427,6 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions
 		PresidioScoreThreshold: policy.PresidioScoreThreshold,
 		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),
 		DisabledRules:          allowlisted(policy.DisabledRules, s.catalog.DisabledRules),
-		MessageTypes:           allowlisted(policy.MessageTypes, s.catalog.PolicyMessageTypes),
 		DetectionScopes:        detectionScopes,
 		UserMessage:            policy.UserMessage,
 		Prompt:                 nil,
@@ -459,17 +457,34 @@ func (s *RiskReadService) policyUnsupported(policy policycore.Policy) []string {
 		unsupported = append(unsupported, "shadow_mcp_url_decisions")
 	}
 	_, scopesSupported := s.projectDetectionScopes(policy)
-	if policy.ScopeInclude != nil || policy.ScopeExempt != nil || !scopesSupported {
+	if policy.ScopeInclude != nil || policy.ScopeExempt != nil || s.legacyMessageTypesRestrict(policy) || !scopesSupported {
 		unsupported = append(unsupported, "raw_scope")
 	}
 	if policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) > 4000 {
 		unsupported = append(unsupported, "prompt_too_long")
 	}
-	if hasUnknown(policy.Sources, s.catalog.Sources) || hasUnknown(policy.PresidioEntities, s.catalog.PresidioEntities) || hasUnknown(policy.DisabledRules, s.catalog.DisabledRules) || hasUnknown(policy.MessageTypes, s.catalog.PolicyMessageTypes) || len(policy.PromptInjectionRules) > 0 {
+	if hasUnknown(policy.Sources, s.catalog.Sources) || hasUnknown(policy.PresidioEntities, s.catalog.PresidioEntities) || hasUnknown(policy.DisabledRules, s.catalog.DisabledRules) || len(policy.PromptInjectionRules) > 0 {
 		unsupported = append(unsupported, "unknown_detector_value")
 	}
 	slices.Sort(unsupported)
 	return slices.Compact(unsupported)
+}
+
+// legacyMessageTypesRestrict reports whether the policy-level message_types
+// column still narrows the policy. Platform MCP no longer exposes that column,
+// so a narrowing value is hidden scope until the legacy-policy-scope migration
+// folds it into detection scopes.
+func (s *RiskReadService) legacyMessageTypesRestrict(policy policycore.Policy) bool {
+	return legacyMessageTypesNarrow(policy.MessageTypes, s.catalog)
+}
+
+// legacyMessageTypesNarrow is true when a stored message_types value scans
+// fewer kinds than an unscoped policy. NULL or the full catalog narrows nothing.
+func legacyMessageTypesNarrow(messageTypes []string, catalog policycatalog.Catalog) bool {
+	if len(messageTypes) == 0 {
+		return false
+	}
+	return !slices.Equal(canonicalStrings(messageTypes), canonicalStrings(catalog.PolicyMessageTypes))
 }
 
 func (s *RiskReadService) policyActionSupported(policy policycore.Policy) bool {

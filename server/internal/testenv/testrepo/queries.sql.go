@@ -2177,6 +2177,16 @@ func (q *Queries) RedemoteTrialLifecycleFixture(ctx context.Context, organizatio
 	return err
 }
 
+const rejectAgentPolicyGrantAuditWritesFixture = `-- name: RejectAgentPolicyGrantAuditWritesFixture :exec
+ALTER TABLE audit_logs ADD CONSTRAINT reject_agent_policy_grant_audit_fixture CHECK (action <> 'agent:policy_grant_create') NOT VALID
+`
+
+// Allow agent creation audit, then fail after the policy grant has been persisted.
+func (q *Queries) RejectAgentPolicyGrantAuditWritesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectAgentPolicyGrantAuditWritesFixture)
+	return err
+}
+
 const rejectPublishOutboxWritesFixture = `-- name: RejectPublishOutboxWritesFixture :exec
 ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID
 `

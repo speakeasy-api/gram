@@ -274,6 +274,96 @@ describe("hasBlockingSecretsPolicy", () => {
   it("handles an unread list", () => {
     expect(hasBlockingSecretsPolicy(undefined)).toBe(false);
   });
+
+  // The guide scopes its policy with a `secrets` category scope now. Failing
+  // to recognize that shape makes the guide create a second policy on every
+  // reload, so this is the shape it actually writes.
+  it("matches the category-scoped policy the guide writes today", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("rejects a secrets scope narrowed to different kinds", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            { category: "secrets", scopeInclude: 'kind in ["user_message"]' },
+          ],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  // The scanner intersects the legacy list with the category scope, so a list
+  // missing one of the guide's kinds leaves the policy narrower than the guide's.
+  it("rejects a scoped policy whose legacy list narrows it further", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("accepts a scoped policy whose legacy list admits both kinds", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response", "user_message"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("rejects a secrets scope carrying an exemption", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          detectionScopes: [
+            {
+              category: "secrets",
+              scopeInclude: 'kind in ["tool_request","tool_response"]',
+              scopeExempt: 'kind == "assistant_message"',
+            },
+          ],
+        }),
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe("hasDefaultPluginServer", () => {

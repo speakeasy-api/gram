@@ -1102,3 +1102,113 @@ WHERE NOT EXISTS (
 -- SELECT DISTINCT only permits ORDER BY over selected columns, and
 -- skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 ORDER BY cs.display_name, cs.name;
+-- Agent role membership. Agents have no WorkOS identity, so these assignments
+-- are local only and are never reconciled outward. The role joins mirror the
+-- member queries above so a deleted role stops granting membership the moment
+-- it is deleted, without a foreign key on role_urn.
+
+-- name: ListAgentRoleAssignments :many
+SELECT
+  ara.agent_id,
+  ara.role_urn::text AS principal_urn,
+  COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = @organization_id
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn, ara.agent_id;
+
+-- name: ListAgentRolePrincipals :many
+-- The role principals one agent holds. Used on the request path to widen an
+-- agent's own policy with the grants of the roles it belongs to.
+SELECT ara.role_urn::text AS principal_urn
+FROM agent_role_assignments AS ara
+LEFT JOIN organization_roles
+  ON ara.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ara.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ara.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+JOIN agents
+  ON agents.organization_id = ara.organization_id
+  AND agents.id = ara.agent_id
+  AND agents.deleted IS FALSE
+WHERE ara.organization_id = @organization_id
+  AND ara.agent_id = @agent_id
+  AND ara.deleted_at IS NULL
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+ORDER BY principal_urn;
+
+-- name: ListAssignableAgents :many
+-- Agents that may be named in a role or resource audience. Suspended and
+-- revoked agents keep the assignments they already hold, but cannot be given
+-- new ones, so lifecycle is filtered here rather than at the call site.
+SELECT id, name
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND suspended_at IS NULL
+  AND revoked_at IS NULL
+ORDER BY LOWER(name), id;
+
+-- name: UpsertAgentRoleAssignment :execrows
+INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+SELECT @organization_id, agents.id, sqlc.arg(role_urn)::text
+FROM agents
+WHERE agents.organization_id = @organization_id
+  AND agents.id = @agent_id
+  AND agents.deleted IS FALSE
+ON CONFLICT (organization_id, agent_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
+  updated_at = clock_timestamp();
+
+-- name: SoftDeleteAgentRoleAssignmentsExcept :exec
+-- Removes the role from every agent not in the retained set, so one write can
+-- express the complete agent membership of a role.
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND deleted_at IS NULL
+  AND NOT (agent_id = ANY(@retained_agent_ids::uuid[]));
+
+-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
+UPDATE agent_role_assignments
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND role_urn = sqlc.arg(role_urn)::text
+  AND deleted_at IS NULL;
+
+-- name: ListAgentNames :many
+-- Every agent a rule or assignment can still name, including suspended and
+-- revoked ones. Those keep the access they already hold, so a surface that
+-- resolved names from the assignable set alone would render them as deleted.
+SELECT id, name
+FROM agents
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY LOWER(name), id;
+
+-- name: LockAgentRoleAssignments :exec
+-- Serializes agent membership writes for one role, so a read-then-replace
+-- cannot interleave with another administrator's. Held until the transaction
+-- ends. The role row lock is not enough on its own: a system role lives in
+-- global_roles and has no per-organization row to lock.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));

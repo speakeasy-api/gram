@@ -35,6 +35,13 @@ import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
+import {
+  agentPolicyGrantsFromDraft,
+  invalidateAgentPolicy,
+  type AgentPolicyDraft,
+} from "./agent-policy-grants";
+import { AgentPolicyEditor } from "./AgentPolicyEditor";
+import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
 export default function AgentsPage(): JSX.Element {
@@ -67,6 +74,9 @@ export default function AgentsPage(): JSX.Element {
   if (!agentID && searchParams.get("create") === "true") {
     return (
       <CreateAgent
+        // Switching any of these would otherwise submit a name and permissions
+        // chosen in a different context.
+        key={`${organization.id}:${session.user.id}:${isDemo}`}
         disabled={isDemo}
         onCreated={(id) => {
           setSearchParams({ id });
@@ -204,24 +214,45 @@ function CreateAgent({
   onCreated: (id: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [draft, setDraft] = useState<AgentPolicyDraft>({});
+  const [error, setError] = useState<string | null>(null);
   const organization = useOrganization();
+  const { user } = useSession();
   const queryClient = useQueryClient();
   const create = useCreateAgentMutation({
     onSuccess: (agent) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["managed-agents", organization.id],
-      });
+      void invalidateAgentPolicy(
+        queryClient,
+        organization.id,
+        user.id,
+        agent.id,
+      );
       toast.success("Agent created");
       onCreated(agent.id);
     },
-    onError: (error) => toast.error(error.message || "Unable to create agent"),
+    // The create is one transaction, so a failure leaves no agent behind and
+    // the draft is still exactly what to retry.
+    onError: (error) =>
+      setError(
+        error.message ||
+          "Unable to create agent. Your name and permissions have been kept.",
+      ),
   });
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
-    create.mutate({ request: { createAgentForm: { name: trimmedName } } });
+    const policyGrants = agentPolicyGrantsFromDraft(draft);
+    setError(null);
+    create.mutate({
+      request: {
+        createAgentForm: {
+          name: trimmedName,
+          ...(policyGrants.length > 0 ? { policyGrants } : {}),
+        },
+      },
+    });
   }
 
   return (
@@ -255,6 +286,25 @@ function CreateAgent({
             autoFocus
           />
         </div>
+        <div className="mt-6 space-y-2">
+          <Label>Permissions</Label>
+          <Text muted small>
+            The most this agent may ever be delegated. An agent with no
+            permissions can hold API keys, but they will not authorize anything.
+            Each key is narrowed again at issuance, against your live
+            permissions and the owner's.
+          </Text>
+          <AgentPolicyEditor
+            draft={draft}
+            onChange={setDraft}
+            disabled={disabled || create.isPending}
+          />
+        </div>
+        {error && (
+          <p role="alert" className="mt-4 text-sm">
+            {error}
+          </p>
+        )}
         <div className="mt-6 flex justify-end">
           <Button
             type="submit"
@@ -263,7 +313,9 @@ function CreateAgent({
             <Button.LeftIcon>
               <Plus className="size-4" />
             </Button.LeftIcon>
-            <Button.Text>Create agent</Button.Text>
+            <Button.Text>
+              {create.isPending ? "Creating\u2026" : "Create agent"}
+            </Button.Text>
           </Button>
         </div>
       </form>
@@ -334,6 +386,10 @@ function AgentSettings({
         key={`identity-${agentQuery.data.id}`}
         agent={agentQuery.data}
         refresh={refresh}
+      />
+      <AgentPolicySection
+        key={`policy-${agentQuery.data.id}`}
+        agent={agentQuery.data}
       />
       <AgentAPIKeys agent={agentQuery.data} />
       <ManagedAgentSessions

@@ -248,7 +248,7 @@ export class Access extends ClientSDK {
    * listAudienceOptions access
    *
    * @remarks
-   * List the principals that can be given access: everyone, roles, and people.
+   * List the principals that can be given access: everyone, roles, people, and agents.
    */
   async listAudienceOptions(
     request?: ListAudienceOptionsRequest | undefined,

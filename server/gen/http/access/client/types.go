@@ -23,6 +23,9 @@ type CreateRoleRequestBody struct {
 	Grants []*RoleGrantRequestBody `form:"grants" json:"grants" xml:"grants"`
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
@@ -41,6 +44,10 @@ type UpdateRoleRequestBody struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -142,9 +149,11 @@ type GetRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateRoleResponseBody is the type of the "access" service "createRole"
@@ -165,9 +174,11 @@ type CreateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
@@ -188,9 +199,11 @@ type UpdateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
@@ -5032,9 +5045,11 @@ type RoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
-	MemberCount *int    `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RoleGrantResponseBody is used to define fields on response body types.
@@ -5100,6 +5115,10 @@ type ScopeDefinitionResponseBody struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible *bool `form:"agent_eligible,omitempty" json:"agent_eligible,omitempty" xml:"agent_eligible,omitempty"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -5296,7 +5315,7 @@ type ResourceAudienceEntryResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// How many people the principal reaches, when known.
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo *string `form:"applies_to,omitempty" json:"applies_to,omitempty" xml:"applies_to,omitempty"`
@@ -5304,6 +5323,9 @@ type ResourceAudienceEntryResponseBody struct {
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
@@ -5313,7 +5335,10 @@ type ResourceAudienceEntryResponseBody struct {
 type SetResourceAudienceEntryRequestBody struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level string `form:"level" json:"level" xml:"level"`
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
@@ -5507,6 +5532,12 @@ func NewCreateRoleRequestBody(p *access.CreateRolePayload) *CreateRoleRequestBod
 			body.MemberIds[i] = val
 		}
 	}
+	if p.AgentIds != nil {
+		body.AgentIds = make([]string, len(p.AgentIds))
+		for i, val := range p.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5542,6 +5573,12 @@ func NewUpdateRoleRequestBody(p *access.UpdateRolePayload) *UpdateRoleRequestBod
 		body.MemberIds = make([]string, len(p.MemberIds))
 		for i, val := range p.MemberIds {
 			body.MemberIds[i] = val
+		}
+	}
+	if p.AgentIds != nil {
+		body.AgentIds = make([]string, len(p.AgentIds))
+		for i, val := range p.AgentIds {
+			body.AgentIds[i] = val
 		}
 	}
 	return body
@@ -5838,6 +5875,12 @@ func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 
 	return v
 }
@@ -6009,6 +6052,12 @@ func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 			continue
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
 	}
 
 	return v
@@ -6185,6 +6234,12 @@ func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 			continue
 		}
 		v.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
 	}
 
 	return v
@@ -16619,6 +16674,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.AgentEligible == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_eligible", "body"))
+	}
 	if body.Slug != nil {
 		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "skill:read" || *body.Slug == "skill:blocked_read" || *body.Slug == "skill:write" || *body.Slug == "skill:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass" || *body.Slug == "risk_policy:block" || *body.Slug == "chat:read" || *body.Slug == "chat:write" || *body.Slug == "agent:read" || *body.Slug == "agent:write" || *body.Slug == "agent:authorize" || *body.Slug == "agent:transfer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer"}))
@@ -16988,19 +17046,22 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("applies_to", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute" || *body.Kind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "directory_group", "directory_attribute", "unknown"}))
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "agent" || *body.Kind == "directory_group" || *body.Kind == "directory_attribute" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown"}))
 		}
 	}
 	if body.Level != nil {
-		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked"}))
+		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked" || *body.Level == "blocked_view" || *body.Level == "blocked_manage") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 		}
 	}
 	if body.AppliesTo != nil {
 		if !(*body.AppliesTo == "resource" || *body.AppliesTo == "all_resources") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.applies_to", *body.AppliesTo, []any{"resource", "all_resources"}))
 		}
+	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	for _, e := range body.Dispositions {
 		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
@@ -17013,8 +17074,8 @@ func ValidateResourceAudienceEntryResponseBody(body *ResourceAudienceEntryRespon
 // ValidateSetResourceAudienceEntryRequestBody runs the validations defined on
 // SetResourceAudienceEntryRequestBody
 func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryRequestBody) (err error) {
-	if !(body.Level == "use" || body.Level == "view" || body.Level == "manage" || body.Level == "blocked") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "view", "manage", "blocked"}))
+	if !(body.Level == "use" || body.Level == "view" || body.Level == "manage" || body.Level == "blocked" || body.Level == "blocked_view" || body.Level == "blocked_manage") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 	}
 	for _, e := range body.Dispositions {
 		if !(e == "read_only" || e == "destructive" || e == "idempotent" || e == "open_world") {
@@ -17037,8 +17098,8 @@ func ValidateAudienceOptionResponseBody(body *AudienceOptionResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user"}))
+		if !(*body.Kind == "everyone" || *body.Kind == "role" || *body.Kind == "user" || *body.Kind == "agent") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"everyone", "role", "user", "agent"}))
 		}
 	}
 	return

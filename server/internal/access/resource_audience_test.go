@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -365,6 +366,101 @@ func TestService_SetResourceAudience_BlockSubtractsOrganizationWideAccess(t *tes
 	require.ElementsMatch(t, []string{string(authz.ScopeMCPConnect), string(authz.ScopeMCPBlockedConnect)}, scopes)
 }
 
+func TestService_SetResourceAudience_BlocksOneScopeOfAnOrganizationWideRule(t *testing.T) {
+	t.Parallel()
+
+	// Narrowing a role for one server is a subtraction, and each scope has
+	// its own exclusion: taking manage away here leaves the role's connect
+	// and view intact, and every other server untouched.
+	//
+	// The mcp:blocked_* scopes do not satisfy one another, so each block
+	// stands alone — see scopeExpansions in authz/scopes.go.
+	for _, tt := range []struct {
+		name  string
+		level string
+		scope authz.Scope
+	}{
+		{name: "manage", level: "blocked_manage", scope: authz.ScopeMCPBlockedWrite},
+		{name: "view", level: "blocked_view", scope: authz.ScopeMCPBlockedRead},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+			seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, workos.Role{
+				ID:          uuid.NewString(),
+				Name:        "Contractors",
+				Slug:        "contractors",
+				Description: "Fixed-term staff",
+				Type:        "OrganizationRole",
+				CreatedAt:   "2026-01-01T00:00:00Z",
+				UpdatedAt:   "2026-01-01T00:00:00Z",
+			})
+			rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "contractors")
+
+			// An organization-wide rule this surface does not own.
+			seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPWrite, authz.WildcardResource)
+
+			result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind: "mcp",
+				ResourceID:   serverID,
+				Entries: []*gen.SetResourceAudienceEntry{
+					{PrincipalUrn: rolePrincipal.String(), Level: tt.level},
+				},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.NoError(t, err)
+
+			var blocked *gen.ResourceAudienceEntry
+			for _, entry := range result.Entries {
+				if entry.Level == tt.level {
+					blocked = entry
+				}
+			}
+			require.NotNil(t, blocked, "the block is reported as a rule on this resource")
+			require.Equal(t, "resource", blocked.AppliesTo)
+
+			scopes := make([]string, 0, 2)
+			for _, grant := range listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal) {
+				scopes = append(scopes, grant.Scope)
+			}
+			require.ElementsMatch(t, []string{string(authz.ScopeMCPWrite), string(tt.scope)}, scopes)
+		})
+	}
+}
+
+func TestService_SetResourceAudience_AllowsBlockingOwnConnect(t *testing.T) {
+	t.Parallel()
+
+	// Connecting to a server and administering it are different jobs, so an
+	// administrator may take their own connect away and keep managing it.
+	// mcp:blocked_connect leaves the read that renders this page alone.
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestService_SetResourceAudience_RejectsUnknownPrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -498,7 +594,7 @@ func TestService_SetResourceAudience_RequiresOrgAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
+func TestService_SetResourceAudience_RefusesBlockingOwnView(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -513,7 +609,7 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: userPrincipal.String(), Level: "blocked"},
+			{PrincipalUrn: userPrincipal.String(), Level: "blocked_view"},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,
@@ -526,7 +622,7 @@ func TestService_SetResourceAudience_RefusesSelfLockout(t *testing.T) {
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
-func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
+func TestService_SetResourceAudience_RefusesBlockingEveryonesView(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -540,7 +636,7 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 		ResourceKind: "mcp",
 		ResourceID:   serverID,
 		Entries: []*gen.SetResourceAudienceEntry{
-			{PrincipalUrn: "*", Level: "blocked"},
+			{PrincipalUrn: "*", Level: "blocked_view"},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,
@@ -551,6 +647,73 @@ func TestService_SetResourceAudience_RefusesBlockingEveryone(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// Restricting a server to one team is written as "everyone else: no access",
+// which stores a block — and a block outranks every grant. Naming the
+// administrator role there takes the server's own access page away from every
+// administrator, including the ones who would undo it, so it is refused at all
+// three block levels rather than only the one covering the caller.
+func TestService_SetResourceAudience_RefusesBlockingTheAdminRole(t *testing.T) {
+	t.Parallel()
+
+	for _, level := range []string{"blocked", "blocked_view", "blocked_manage"} {
+		t.Run(level, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", authz.SystemRoleAdmin))
+			adminPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.SystemRoleAdmin)
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+			_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind: "mcp",
+				ResourceID:   serverID,
+				Entries: []*gen.SetResourceAudienceEntry{
+					{PrincipalUrn: adminPrincipal.String(), Level: level},
+				},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.Error(t, err)
+
+			var oopsErr *oops.ShareableError
+			require.ErrorAs(t, err, &oopsErr)
+			require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+		})
+	}
+}
+
+// Taking a team off a server is what this surface is for, so every role other
+// than admin is still blockable.
+func TestService_SetResourceAudience_AllowsBlockingANonAdminRole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_gtm", "GTM", "gtm", "Go to market"))
+	gtmPrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "gtm")
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	result, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: gtmPrincipal.String(), Level: "blocked"},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Entries, 1)
+	require.Equal(t, "blocked", result.Entries[0].Level)
 }
 
 func TestService_SetResourceAudience_NarrowsToTools(t *testing.T) {
@@ -626,6 +789,123 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 				Tools:        []string{"search"},
 				Dispositions: []string{"read_only"},
 			},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// A suspended agent keeps the access it already had, and nothing more. The
+// guard matches the rule, not just the principal: otherwise a tool-limited
+// grant could be rewritten as an unrestricted one, widening what the agent
+// gets back when it resumes.
+func TestService_SetResourceAudience_SuspendedAgentKeepsButCannotWidenAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Release assistant",
+	})
+	require.NoError(t, err)
+	agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+
+	// While active, the agent is given connect on two named tools.
+	narrowed := []*gen.SetResourceAudienceEntry{
+		{PrincipalUrn: agentURN, Level: "use", Tools: []string{"search", "fetch"}, Dispositions: nil},
+	}
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         narrowed,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	// Saving the same rule back is allowed: nothing changed.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         narrowed,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	// Dropping the tool narrowing would widen it, so it is refused.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: agentURN, Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	// Removing it entirely stays available: the rule is simply left out.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
+// A suspended agent that holds no rule on this server cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support triage",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,

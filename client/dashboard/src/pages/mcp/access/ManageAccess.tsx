@@ -1,56 +1,99 @@
-import { AccessListRow, InlineChoice } from "@/components/access/AccessListRow";
+import {
+  InlineChoice,
+  type InlineChoiceOption,
+} from "@/components/access/AccessListRow";
 import { IdentityLink } from "@/components/identity-link";
+import {
+  MemberFacepile,
+  type FacepileMember,
+} from "@/components/member-facepile";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Card } from "@/components/ui/Card";
 import {
-  PageTabsList,
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-} from "@/components/ui/Tabs";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { useNavigate } from "react-router";
-import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
+import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useMemo, useState, type JSX } from "react";
+import {
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  PencilOff,
+  Plus,
+  Trash2,
+  User,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+import { cn } from "@/lib/utils";
+import { useMemo, useState, type ComponentProps, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
+import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
 import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
+import { pageCount, pageOf } from "./manageAccessState";
 import {
-  pageCount,
-  pageOf,
-  withAdded,
-  withLevel,
-  withNarrowing,
-  withoutRules,
-  ruleId,
-} from "./manageAccessState";
+  accessSummary,
+  buildAccessRows,
+  reachableTools,
+  inheritedGrants,
+  scopeState,
+  SCOPE_ROWS,
+  type AccessRow,
+  type ScopeKey,
+} from "./accessRows";
 import {
-  narrowingLabel,
-  GRANTABLE_LEVELS,
-  LEVEL_DESCRIPTION,
-  LEVEL_LABEL,
-  LEVEL_MENU_LABEL,
-  LEVEL_VERB,
-  ownRules,
-  type AudienceLevel,
-} from "./serverAudience";
+  addPrincipalsWrite,
+  allowDestructiveWrite,
+  allowWrite,
+  blockDestructiveWrite,
+  narrowingSeed,
+  narrowWrite,
+  revokeRowWrite,
+  revokeScopeWrite,
+  type AudienceWrite,
+} from "./accessWrites";
+import { RoleLink } from "./RoleLink";
+import { ownRules, LEVEL_VERB } from "./serverAudience";
 
-type AddTarget = "people" | "groups" | null;
+/** Narrowing the tool dialog is currently editing, and the row it belongs to. */
+interface NarrowingTarget {
+  row: AccessRow;
+  tools: string[];
+  dispositions: string[];
+  /** The tools this row could reach, when something caps it below the whole
+   * catalogue. Offering the rest would let an administrator pick tools the
+   * server will refuse anyway. */
+  catalog?: ToolSelectionTool[];
+  /** The principal whose block caps it, for the dialog to name. */
+  limitedBy?: string;
+}
 
 /**
- * Manage access for one resource: the rules naming it, editable in place, and
- * the organization-wide rules it inherits. Direct rules are the only ones this
- * surface writes, so the two tabs mirror the two places a rule can be owned.
+ * Manage access for one resource. One list, one row per principal — a person,
+ * everyone, or a role — and inside each row a line for every scope the server
+ * has: connect, view and manage. Rules naming this resource are written here;
+ * an organization-wide rule is narrowed by subtracting from it, which is the
+ * only per-server edit that leaves every other server alone.
  */
 export function ManageAccess({
   resourceId,
@@ -77,36 +120,58 @@ export function ManageAccess({
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
-  const [tab, setTab] = useState("people");
   const [page, setPage] = useState(0);
-  const [adding, setAdding] = useState<AddTarget>(null);
-  const [narrowing, setNarrowing] = useState<ResourceAudienceEntry | null>(
-    null,
-  );
+  // Which kind of principal the picker is open for. People and agents are
+  // different enough — one is a person in the directory, one is a credentialed
+  // agent — that the button asks first rather than mixing them in one list.
+  const [adding, setAdding] = useState<"user" | "agent" | null>(null);
+  const [narrowing, setNarrowing] = useState<NarrowingTarget | null>(null);
+  // The row whose removal is waiting to be confirmed, when the write is not
+  // the plain deletion the button looks like.
+  const [removing, setRemoving] = useState<AccessRow | null>(null);
+
+  // The organization's members, so a role row can show who it reaches. The
+  // audience entries carry ids; the names and photos live here.
+  const { data: membersData } = useMembers();
+  const facesById = useMemo(() => {
+    const members = membersData?.members ?? [];
+    return new Map(
+      members.map((member) => [
+        member.id,
+        {
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+        },
+      ]),
+    );
+  }, [membersData]);
 
   const direct = useMemo(() => ownRules(entries), [entries]);
-  // "Everyone" is people too — every member of the organization — and a rule
-  // naming them here is this page's to edit, unlike a role's.
-  const people = useMemo(
-    () =>
-      entries.filter(
-        (entry) => entry.kind === "user" || entry.kind === "everyone",
-      ),
-    [entries],
-  );
-  const roles = useMemo(
-    () =>
-      entries.filter(
-        (entry) => entry.kind !== "user" && entry.kind !== "everyone",
-      ),
-    [entries],
-  );
+  const rows = useMemo(() => buildAccessRows(entries), [entries]);
+  // People a block already reaches, named by the block itself rather than
+  // read off the rows: someone with no rule of their own here has no row,
+  // and granting them access would write a rule the block cancels.
+  const cancelled = useMemo(() => {
+    const byUser = new Map<string, string>();
+    for (const entry of entries) {
+      if (entry.level !== "blocked") continue;
+      if ((entry.tools ?? []).length || (entry.dispositions ?? []).length) {
+        continue;
+      }
+      for (const memberId of entry.memberIds ?? []) {
+        if (!byUser.has(memberId)) byUser.set(memberId, entry.displayName);
+      }
+    }
+    return byUser;
+  }, [entries]);
+
   // Rules covering every server, which a rule added here cannot narrow.
   const orgWide = useMemo(
     () => entries.filter((entry) => entry.appliesTo !== "resource"),
     [entries],
   );
-  const rows = tab === "people" ? people : roles;
 
   const visible = pageOf(rows, page);
   const pages = pageCount(rows.length);
@@ -116,7 +181,15 @@ export function ManageAccess({
       await invalidateAllResourceAudience(queryClient);
       setAdding(null);
     },
-    onError: () => toast.error("Could not save access. Please try again."),
+    // The server refuses some writes for a reason worth reading — blocking
+    // your own access, or a list that changed underneath this one — so its
+    // message is shown rather than a generic failure.
+    onError: (error) =>
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not save access. Please try again.",
+      ),
   });
 
   const save = (next: SetResourceAudienceEntry[], message: string) => {
@@ -141,144 +214,165 @@ export function ManageAccess({
     );
   };
 
-  const changeLevel = (entry: ResourceAudienceEntry, level: AudienceLevel) => {
-    // Changing an inherited rule writes a direct one for the same principal:
-    // this surface only ever owns rules naming the resource, so the
-    // organization-wide rule it inherits is left exactly as it was.
-    save(
-      withLevel(direct, ruleId(entry), level),
-      `${entry.displayName}: ${LEVEL_LABEL[level].toLowerCase()}.`,
-    );
-  };
-
-  // "All tools" is a reset, so it writes an unnarrowed rule rather than
-  // reopening the picker on the selection it is meant to clear.
-  const widen = (entry: ResourceAudienceEntry) => {
-    save(
-      withNarrowing(direct, ruleId(entry), { tools: [], dispositions: [] }),
-      `${entry.displayName}: all tools.`,
-    );
-  };
-
-  const removeRules = (ids: string[]) => {
-    const names = ids.length === 1 ? "the rule" : "the rules";
-    save(withoutRules(direct, ids), `Removed ${names}.`);
-  };
+  const applyWrite = (write: AudienceWrite) =>
+    save(write.entries, write.message);
 
   const changeNarrowing = (
-    entry: ResourceAudienceEntry,
+    target: NarrowingTarget,
     next: { tools: string[]; dispositions: string[] },
   ) => {
-    save(
-      withNarrowing(direct, ruleId(entry), {
-        tools: next.tools,
-        // The annotation values and the stored dispositions are the same
-        // strings; the generated union just types them more tightly.
-        dispositions:
-          next.dispositions as SetResourceAudienceEntry["dispositions"],
-      }),
-      `${entry.displayName}: ${narrowingLabel(next).toLowerCase()}.`,
-    );
     setNarrowing(null);
+    applyWrite(
+      narrowWrite(direct, target.row, next, toolCatalog, resourceName),
+    );
   };
 
-  // An inherited rule belongs to the role that holds it.
-  const editRole = (entry: ResourceAudienceEntry) => {
-    const roleId = entry.principalUrn.split(":").pop();
+  const openNarrowing = (row: AccessRow) => {
+    // A block this row cannot lift caps what it can reach, so the picker
+    // leaves those tools out rather than accepting a choice that does
+    // nothing — and it opens on what the row reaches today, so saving
+    // without touching anything cannot widen access.
+    const cell = row.cells.use;
+    const capped = scopeState(row, "use", toolCatalog ?? []).capped;
+    const reachable = capped
+      ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
+      : null;
+    const limitedBy = capped
+      ? cell.blocks.find(
+          (block) =>
+            block.principalUrn !== row.principalUrn ||
+            block.appliesTo !== "resource",
+        )?.displayName
+      : undefined;
+
+    setNarrowing({
+      row,
+      ...narrowingSeed(row, toolCatalog),
+      ...(reachable
+        ? {
+            catalog: (toolCatalog ?? []).filter((tool) =>
+              reachable.has(tool.name),
+            ),
+            limitedBy,
+          }
+        : {}),
+    });
+  };
+
+  // An organization-wide rule belongs to the role that holds it.
+  const editRole = (row: AccessRow) => {
+    const roleId = row.principalUrn.split(":").pop();
     if (!roleId) return;
     void navigate(`${orgRoutes.access.roles.href()}/${roleId}/edit`);
   };
 
+  // Removing a rule this page owns is what the button says it is. Removing a
+  // principal an organization-wide rule still reaches is not: it writes a
+  // block, which outranks every grant. Only that case is worth a dialog.
+  const removeRow = (row: AccessRow) => {
+    if (inheritedGrants(row).length === 0) {
+      applyWrite(revokeRowWrite(direct, row, resourceName));
+      return;
+    }
+    setRemoving(row);
+  };
+
+  const confirmRemove = () => {
+    if (!removing) return;
+    applyWrite(revokeRowWrite(direct, removing, resourceName));
+    setRemoving(null);
+  };
+
   const addPrincipals = (principalUrns: string[]) => {
-    // What you just granted is a person, so show the list it lands in.
-    setTab("people");
     setPage(0);
-    save(
-      withAdded(direct, principalUrns),
-      principalUrns.length === 1
-        ? "Access granted."
-        : `${principalUrns.length} added.`,
-    );
+    applyWrite(addPrincipalsWrite(direct, principalUrns, resourceName));
   };
 
   if (isLoading) return <SkeletonTable />;
 
   return (
     <div>
-      <div className="mb-4">
-        <Heading variant="h4">Manage access</Heading>
-      </div>
-
-      <div className="border-border border">
-        <Tabs
-          className="gap-0"
-          value={tab}
-          onValueChange={(next) => {
-            setTab(next);
-            setPage(0);
-          }}
-        >
-          <div className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 border-b px-4">
-            <PageTabsList>
-              <PageTabsTrigger value="people">People</PageTabsTrigger>
-              <PageTabsTrigger value="roles">Roles</PageTabsTrigger>
-            </PageTabsList>
-
-            <RequireScope
-              scope="org:admin"
-              level="component"
-              reason="Only organization admins can change access."
-            >
-              {/* The bar behind it is tinted, so the button keeps its own
-                  surface rather than dissolving into the header. */}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="bg-background"
-                onClick={() => setAdding("people")}
+      <Card.Dashboard
+        title="Manage access to this server"
+        // Rows run edge to edge under the header, like the dashboard's other
+        // list cards, and the title bar sits tight above them.
+        bodyClassName="p-0"
+        headerClassName="py-2.5"
+        action={
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Only organization admins can change access."
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm">
+                  <Button.LeftIcon>
+                    <Plus className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Grant access</Button.Text>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                // The menu belongs to the button above it, so it takes the
+                // trigger's width rather than sizing itself to its rows. Set
+                // as a style so it cannot be merged away by the content's own
+                // min-width.
+                className="min-w-0"
+                style={{ width: "var(--radix-dropdown-menu-trigger-width)" }}
               >
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Grant access</Button.Text>
-              </Button>
-            </RequireScope>
+                <DropdownMenuItem onSelect={() => setAdding("user")}>
+                  <User className="h-4 w-4" />
+                  Person
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("agent")}>
+                  <Bot className="h-4 w-4" />
+                  Agent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </RequireScope>
+        }
+      >
+        {visible.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <Text muted small>
+              Nobody reaches {resourceName ?? "this server"} yet.
+            </Text>
           </div>
-
-          <TabsContent value={tab} forceMount>
-            {visible.length === 0 ? (
-              <div className="px-4 py-12 text-center">
-                <Text muted small>
-                  {tab === "people" ? (
-                    <>
-                      Nobody has been given access to{" "}
-                      {resourceName ?? "this server"} directly.
-                    </>
-                  ) : (
-                    "No role reaches this server."
-                  )}
-                </Text>
-              </div>
-            ) : (
-              <div className="divide-border divide-y">
-                {visible.map((entry) => (
-                  <AccessRow
-                    key={`${entry.appliesTo}-${ruleId(entry)}`}
-                    entry={entry}
-                    onChangeLevel={(level) => changeLevel(entry, level)}
-                    onNarrow={() => setNarrowing(entry)}
-                    onWiden={() => widen(entry)}
-                    onRemove={() => removeRules([ruleId(entry)])}
-                    onEditRole={() => editRole(entry)}
-                    canManage={canManage}
-                    pending={setAudience.isPending}
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+        ) : (
+          <div className="grid grid-cols-[minmax(0,18rem)_minmax(0,1fr)_auto_auto]">
+            {visible.map((row) => (
+              <PrincipalRow
+                key={row.principalUrn}
+                row={row}
+                faces={row.memberIds
+                  .map((id) => facesById.get(id))
+                  .filter((member) => member !== undefined)}
+                catalog={toolCatalog ?? []}
+                onAllow={(scope) =>
+                  applyWrite(allowWrite(direct, row, scope, resourceName))
+                }
+                onRevokeScope={(scope) =>
+                  applyWrite(revokeScopeWrite(direct, row, scope, resourceName))
+                }
+                onNarrow={() => openNarrowing(row)}
+                onBlockDestructive={() =>
+                  applyWrite(blockDestructiveWrite(direct, row, resourceName))
+                }
+                onAllowDestructive={() =>
+                  applyWrite(allowDestructiveWrite(direct, row, resourceName))
+                }
+                onRevoke={() => removeRow(row)}
+                onEditRole={() => editRole(row)}
+                canManage={canManage}
+                pending={setAudience.isPending}
+              />
+            ))}
+          </div>
+        )}
+      </Card.Dashboard>
 
       {pages > 1 && (
         <div className="mt-4 flex items-center justify-center gap-4">
@@ -314,24 +408,43 @@ export function ManageAccess({
         <ToolNarrowingDialog
           serverId={resourceId}
           serverName={resourceName}
-          catalog={toolCatalog}
-          tools={narrowing.tools ?? []}
-          dispositions={narrowing.dispositions ?? []}
+          catalog={narrowing.catalog ?? toolCatalog}
+          limitedBy={narrowing.limitedBy}
+          tools={narrowing.tools}
+          dispositions={narrowing.dispositions}
           pending={setAudience.isPending}
           onSave={(next) => changeNarrowing(narrowing, next)}
           onClose={() => setNarrowing(null)}
         />
       )}
 
+      {removing && (
+        <RemoveAudienceDialog
+          row={removing}
+          serverName={resourceName}
+          pending={setAudience.isPending}
+          onConfirm={confirmRemove}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+
       {adding && (
         <AddAudienceDialog
-          title="Grant access"
-          description={`Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`}
-          kinds={["user"]}
+          title={adding === "agent" ? "Grant agent access" : "Grant access"}
+          description={
+            adding === "agent"
+              ? `Give agents access to ${resourceName ?? "this server"} only. An agent still cannot do more here than its own policy and its owner allow.`
+              : `Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`
+          }
+          kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
           // — so say what it already has instead of offering a no-op.
+          blockedFrom={[...cancelled].map(([userId, by]) => ({
+            principalUrn: `user:${userId}`,
+            reason: `Blocked by ${by} on this server`,
+          }))}
           alreadyReaches={orgWide
             // A narrowed organization rule leaves room to grant more here, so
             // only unrestricted ones make a principal unaddable.
@@ -353,141 +466,432 @@ export function ManageAccess({
   );
 }
 
-function AccessRow({
-  entry,
-  onChangeLevel,
+/**
+ * One principal, as a row in the list's shared column grid: what it is, what
+ * it can do here, who it reaches, and the controls. Columns line up down the
+ * list, so an administrator compares rows by reading straight down rather
+ * than re-parsing a sentence each time.
+ */
+function PrincipalRow({
+  row,
+  faces,
+  catalog,
+  onAllow,
+  onRevokeScope,
   onNarrow,
-  onWiden,
-  onRemove,
+  onBlockDestructive,
+  onAllowDestructive,
+  onRevoke,
   onEditRole,
   canManage,
   pending,
 }: {
-  entry: ResourceAudienceEntry;
-  onChangeLevel: (level: AudienceLevel) => void;
+  row: AccessRow;
+  /** The people a role reaches, for the facepile on its row. */
+  faces: FacepileMember[];
+  /** The server's tools, for resolving what a rule and a block leave. */
+  catalog: ToolSelectionTool[];
+  onAllow: (scope: ScopeKey) => void;
+  onRevokeScope: (scope: ScopeKey) => void;
   onNarrow: () => void;
-  onWiden: () => void;
-  onRemove: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+  onRevoke: () => void;
   onEditRole: () => void;
   canManage: boolean;
   pending: boolean;
 }): JSX.Element {
+  // Collapsed by default: an administrator scanning the list wants to know
+  // who reaches the server, and only opens the row they came to change.
+  const [open, setOpen] = useState(false);
   const userId =
-    entry.kind === "user" ? entry.principalUrn.replace(/^user:/, "") : null;
-  // Editable here only when the rule names this server and belongs to people
-  // — a person, or everyone in the organization. A role is an organization
-  // object: its rule belongs to the role editor, whether it covers one server
-  // or all of them.
-  const ownRule =
-    entry.appliesTo === "resource" &&
-    (entry.kind === "user" || entry.kind === "everyone");
-
-  // An inherited rule is not this page's to edit: its level and narrowing
-  // belong to the role that holds it, and a direct rule alongside it would
-  // only widen access — grants add, they never subtract. So the row reads,
-  // and sends you to the role when you want to change it.
-  if (!ownRule) {
-    return (
-      <AccessListRow
-        title={entry.displayName}
-        // Two lines, like a direct row: who it is, then how far it reaches.
-        // Who it is, then how far it reaches — which is now the thing the two
-        // read-only cases differ by.
-        description={[
-          entry.description,
-          `${
-            entry.level === "use"
-              ? `Can connect to ${narrowingLabel(entry)}`
-              : `Can ${LEVEL_VERB[entry.level]}`
-          } on ${
-            entry.appliesTo === "resource" ? "this server" : "every server"
-          }`,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        meta={
-          entry.kind === "role" ? (
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={onEditRole}
-              className="hover:bg-transparent h-auto shrink-0 self-center px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
-            >
-              <Button.Text className="font-sans normal-case tracking-normal">
-                Edit role
-              </Button.Text>
-            </Button>
-          ) : undefined
-        }
-        removeLabel={`Remove ${entry.displayName}`}
-      />
-    );
-  }
+    row.kind === "user" ? row.principalUrn.replace(/^user:/, "") : null;
+  const reaches = inheritedGrants(row).length > 0;
+  // Removing a row something else still reaches is written as blocks, and an
+  // agent cannot hold those, so the control explains itself rather than
+  // writing a rule nothing would enforce.
+  const canRemove = canManage && (row.kind !== "agent" || !reaches);
+  const showFaces = row.kind === "role" && faces.length > 0;
 
   return (
-    <AccessListRow
-      title={
-        userId ? (
-          <IdentityLink identifier={{ userId }}>
-            {entry.displayName}
-          </IdentityLink>
-        ) : (
-          entry.displayName
-        )
-      }
-      description={entry.description}
-      onRemove={onRemove}
-      removeLabel={`Remove ${entry.displayName}`}
-      removeDisabled={pending || !canManage}
-      removeReason="Only organization admins can change access."
-    >
-      <RequireScope
-        scope="org:admin"
-        level="component"
-        reason="Only organization admins can change access."
+    <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
+      <div className="col-span-full grid grid-cols-subgrid items-center gap-x-6 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <PrincipalBadge kind={row.kind} />
+          <span className="truncate font-medium">
+            {userId ? (
+              <IdentityLink identifier={{ userId }}>
+                {row.displayName}
+              </IdentityLink>
+            ) : row.kind === "role" ? (
+              <RoleLink principalUrn={row.principalUrn}>
+                {row.displayName}
+              </RoleLink>
+            ) : (
+              row.displayName
+            )}
+          </span>
+        </div>
+
+        <Text muted small className="min-w-0 truncate">
+          {accessSummary(row, catalog)}
+        </Text>
+
+        {/* Who a role reaches, as the faces themselves: an administrator
+            checks that before changing what the role can do, and "2 members"
+            does not answer it. */}
+        <div className="text-muted-foreground text-sm">
+          {showFaces ? <MemberFacepile members={faces} maxFaces={5} /> : "—"}
+        </div>
+
+        <div className="flex items-center justify-end gap-1">
+          <IconAction
+            label={open ? "Done editing" : "Edit access"}
+            onClick={() => setOpen((was) => !was)}
+            expanded={open}
+          >
+            {/* A pencil says the row is editable, and the struck-through
+                pencil says the editing is what stops. */}
+            {open ? (
+              <PencilOff className="h-4 w-4" />
+            ) : (
+              <Pencil className="h-4 w-4" />
+            )}
+          </IconAction>
+          <IconAction
+            // A role reached by an organization-wide rule is not removed
+            // here, it is subtracted — so the label says what it does.
+            label={
+              !canManage
+                ? "Only organization admins can change access."
+                : !canRemove
+                  ? `${row.displayName} is reached by another rule, and an agent cannot be blocked. Remove that rule instead.`
+                  : reaches
+                    ? `Remove ${row.displayName} from this server`
+                    : `Remove ${row.displayName}`
+            }
+            onClick={onRevoke}
+            disabled={pending || !canRemove}
+          >
+            <Trash2 className="h-4 w-4" />
+          </IconAction>
+        </div>
+      </div>
+
+      {/* Animated by rows rather than height, so the panel can size itself
+          and still slide. Collapsed it is inert, so its controls are not
+          reachable by keyboard or read out. */}
+      <div
+        className={cn(
+          "col-span-full grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+        inert={!open}
+        aria-hidden={!open}
       >
-        <InlineChoice
-          lead="Can"
-          value={LEVEL_VERB[entry.level]}
-          disabled={pending}
-          // Blocking is off the menu: the server writes and enforces one, and
-          // a row already holding a block says so in its own value, so
-          // offering it again is a no-op write that can fail on the version
-          // check or the lockout guardrail.
-          options={GRANTABLE_LEVELS.map((level) => ({
-            label: LEVEL_MENU_LABEL[level],
-            description: LEVEL_DESCRIPTION[level],
-            onSelect: () => onChangeLevel(level),
-          }))}
-        />
-      </RequireScope>
-      {/* Connect reaches individual tools, and a block is the only rule that
-          takes one away, so both can be narrowed. View and manage are about
-          the server itself and have nothing to narrow. */}
-      {(entry.level === "use" || entry.level === "blocked") && (
+        <div className="overflow-hidden">
+          <div className="border-border bg-muted/15 mx-4 mb-3 flex items-end justify-between gap-6 border p-4">
+            <div className="space-y-3">
+              {SCOPE_ROWS.map(({ key, label, hint }) => (
+                <ScopeLine
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  row={row}
+                  scope={key}
+                  catalog={catalog}
+                  onAllow={() => onAllow(key)}
+                  onRevoke={() => onRevokeScope(key)}
+                  onNarrow={onNarrow}
+                  onBlockDestructive={onBlockDestructive}
+                  onAllowDestructive={onAllowDestructive}
+                  pending={pending}
+                />
+              ))}
+            </div>
+            {row.kind === "role" && (
+              // The rule this row edits lives on the role; the link out sits
+              // with the controls, out of the way of the lines being read.
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={onEditRole}
+                className="hover:bg-transparent h-auto shrink-0 px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+              >
+                <Button.Text className="font-sans normal-case tracking-normal">
+                  Edit in Role Manager
+                </Button.Text>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScopeLine({
+  label,
+  hint,
+  row,
+  scope,
+  catalog,
+  onAllow,
+  onRevoke,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+  pending,
+}: {
+  label: string;
+  /** What this scope lets the principal do, in one line. */
+  hint: string;
+  row: AccessRow;
+  scope: ScopeKey;
+  /** The server's tools, for resolving what a rule and a block leave. */
+  catalog: ToolSelectionTool[];
+  onAllow: () => void;
+  onRevoke: () => void;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+  pending: boolean;
+}): JSX.Element {
+  const state = scopeState(row, scope, catalog);
+  const options = scopeOptions({
+    row,
+    scope,
+    catalog,
+    onAllow,
+    onRevoke,
+    onNarrow,
+    onBlockDestructive,
+    onAllowDestructive,
+  });
+
+  return (
+    <div className="flex items-baseline gap-2">
+      <div className="w-44 shrink-0">
+        <Text small>{label}</Text>
+        <Text as="div" muted small className="text-xs">
+          {hint}
+        </Text>
+      </div>
+      {options.length === 0 ? (
+        <Text small className="px-1">
+          {state.value}
+        </Text>
+      ) : (
         <RequireScope
           scope="org:admin"
           level="component"
           reason="Only organization admins can change access."
         >
           <InlineChoice
-            lead="to"
-            value={
-              entry.level === "blocked" && narrowingLabel(entry) === "all tools"
-                ? "any tool"
-                : narrowingLabel(entry)
-            }
+            value={state.value}
             disabled={pending}
-            options={[
-              {
-                label: entry.level === "blocked" ? "Any tool" : "All tools",
-                onSelect: onWiden,
-              },
-              { label: "Specific tools…", onSelect: onNarrow },
-            ]}
+            options={options}
           />
         </RequireScope>
       )}
-    </AccessListRow>
+      {state.via && (
+        <Text muted small>
+          {state.granted ? "via " : "blocked by "}
+          {state.viaPrincipalUrn?.startsWith("role:") ? (
+            <RoleLink principalUrn={state.viaPrincipalUrn}>
+              {state.via}
+            </RoleLink>
+          ) : (
+            state.via
+          )}
+        </Text>
+      )}
+      {state.note && (
+        <Text muted small>
+          {state.granted ? state.note : `blocked ${state.note}`}
+        </Text>
+      )}
+    </div>
   );
 }
+
+/**
+ * What one scope line can be changed to. Every line an administrator can act
+ * on offers a choice, whatever wrote the rule behind it: a grant covering
+ * every server is edited here by subtracting from it for this server alone.
+ */
+function scopeOptions({
+  row,
+  scope,
+  catalog,
+  onAllow,
+  onRevoke,
+  onNarrow,
+  onBlockDestructive,
+  onAllowDestructive,
+}: {
+  row: AccessRow;
+  scope: ScopeKey;
+  catalog: ToolSelectionTool[];
+  onAllow: () => void;
+  onRevoke: () => void;
+  onNarrow: () => void;
+  onBlockDestructive: () => void;
+  onAllowDestructive: () => void;
+}): InlineChoiceOption[] {
+  const state = scopeState(row, scope, catalog);
+  // A block this row cannot lift closes the line, and nothing granted here
+  // would survive it: the change has to be made where the block is.
+  if (!state.granted && state.capped) return [];
+
+  // An agent cannot hold the "blocked_" scopes. They are registered but not
+  // agent-runtime-safe, so a block written against an agent is dropped the
+  // moment its policy loads. Any change that has to be written as a
+  // subtraction is withheld here rather than offered and silently ignored.
+  const canSubtract = row.kind !== "agent" || !state.subtracts;
+
+  if (scope !== "use") {
+    // View and manage cover the server itself; there is nothing inside one
+    // to narrow, so the line is on or off.
+    if (state.granted) {
+      return canSubtract ? [{ label: "No access", onSelect: onRevoke }] : [];
+    }
+    return [{ label: "Allowed", onSelect: onAllow }];
+  }
+
+  // Widening to every tool is only on offer when nothing above this line
+  // caps it: a block on the role this person is in is not ours to lift.
+  const options: InlineChoiceOption[] = state.capped
+    ? []
+    : [{ label: "All tools", onSelect: onAllow }];
+  // Narrowing here is written as a block when something other than this row's
+  // own rule grants the line, so it is withheld from an agent that cannot
+  // hold one.
+  if (canSubtract) {
+    options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
+  }
+  // Keeping someone off the destructive tools is the common restriction, and
+  // an annotation expresses it without a catalogue: it keeps covering tools
+  // added later, so it is offered on every server rather than only the ones
+  // that publish their tools.
+  // Both forms rewrite the whole block, so neither is offered while another
+  // restriction is standing there — the shortcut would take that restriction
+  // away without saying so. "Specific tools…" edits those rows instead.
+  if (state.granted) {
+    if (ownDestructiveBlockOnly(row)) {
+      options.push({
+        label: "Allow destructive tools",
+        onSelect: onAllowDestructive,
+      });
+    } else if (
+      canSubtract &&
+      !destructiveBlock(row) &&
+      !row.cells.use.ownBlock
+    ) {
+      options.push({
+        label: "Block destructive tools",
+        onSelect: onBlockDestructive,
+      });
+    }
+  }
+  if (state.canRevoke && canSubtract) {
+    options.push({ label: "No access", onSelect: onRevoke });
+  }
+  return options;
+}
+
+/** A block on this row's connect line that names the destructive annotation. */
+function destructiveBlock(row: AccessRow) {
+  return row.cells.use.blocks.find((block) =>
+    (block.dispositions ?? []).includes("destructive"),
+  );
+}
+
+/**
+ * Whether this row's own block is exactly "no destructive tools" and nothing
+ * else. A principal holds one block per level, so lifting it lifts everything
+ * it names — fine when destructive is all it names, and a silent widening when
+ * it names anything more.
+ */
+function ownDestructiveBlockOnly(row: AccessRow): boolean {
+  const own = row.cells.use.ownBlock;
+  if (!own) return false;
+  return (
+    (own.tools ?? []).length === 0 &&
+    (own.dispositions ?? []).length === 1 &&
+    (own.dispositions ?? []).includes("destructive")
+  );
+}
+
+/** What kind of thing a row names, so a role does not read as a person. */
+const PRINCIPAL_BADGE: Record<
+  string,
+  { label: string; variant: ComponentProps<typeof Badge>["variant"] }
+> = {
+  role: { label: "Role", variant: "warning" },
+  user: { label: "Person", variant: "information" },
+  agent: { label: "Agent", variant: "information" },
+  everyone: { label: "Everyone", variant: "neutral" },
+  directory_group: { label: "Group", variant: "neutral" },
+  directory_attribute: { label: "Attribute", variant: "neutral" },
+};
+
+function PrincipalBadge({
+  kind,
+}: {
+  kind: AccessRow["kind"];
+}): JSX.Element | null {
+  const badge = PRINCIPAL_BADGE[kind];
+  if (!badge) return null;
+  return (
+    <Badge variant={badge.variant} size="sm">
+      {badge.label}
+    </Badge>
+  );
+}
+
+/**
+ * An icon-only row control. The icon carries the whole label, so the tooltip
+ * opens without a delay — a reader hovering to find out what a button does
+ * should not have to wait to be told.
+ */
+function IconAction({
+  label,
+  onClick,
+  disabled,
+  expanded,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  expanded?: boolean;
+  children: JSX.Element;
+}): JSX.Element {
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        {/* A disabled button fires no pointer events, so the tooltip needs a
+            wrapper to hover — which is exactly when the label matters most. */}
+        <span>
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            aria-expanded={expanded}
+            aria-label={label}
+          >
+            <Button.LeftIcon>{children}</Button.LeftIcon>
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * A role name that goes to the role. The rule behind a line often lives on a
+ * role, and the name is what a reader reaches for to go and change it.
+ */

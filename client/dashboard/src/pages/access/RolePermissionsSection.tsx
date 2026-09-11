@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   Command,
@@ -44,6 +45,8 @@ export function RolePermissionsSection({
   disabled,
   onToggleScope,
   renderScopeRule,
+  subjectLabel = "this role",
+  markAgentIneligible = false,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
@@ -51,6 +54,15 @@ export function RolePermissionsSection({
   onToggleScope: (scope: Scope) => void;
   /** Right-hand side of a row: the rule chips that narrow this permission. */
   renderScopeRule: (scope: ScopeDefinition) => ReactNode;
+  /** What the empty states call the thing being given permissions. */
+  subjectLabel?: string;
+  /**
+   * Mark the permissions agents cannot hold. A role's permissions are shared
+   * by everything assigned to it, but an agent's policy is filtered against
+   * the agent runtime allowlist every time it loads, so these are dropped for
+   * its agent members rather than granted. Set once the role has any.
+   */
+  markAgentIneligible?: boolean;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -158,8 +170,8 @@ export function RolePermissionsSection({
                 </Text>
                 <Text muted small className="mt-1">
                   {tab === "mcp"
-                    ? "Add a permission to let this role reach MCP servers and their tools."
-                    : "Add a permission to let this role work with projects, environments and skills."}
+                    ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
+                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
                 </Text>
               </div>
             ) : (
@@ -172,12 +184,20 @@ export function RolePermissionsSection({
                       className="flex items-start gap-3 px-4 py-3"
                     >
                       <div className="min-w-0 flex-1">
-                        <Text
-                          variant="body"
-                          className="font-mono text-sm font-medium"
-                        >
-                          {scope.slug}
-                        </Text>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Text
+                            variant="body"
+                            className="font-mono text-sm font-medium"
+                          >
+                            {scope.slug}
+                          </Text>
+                          {markAgentIneligible &&
+                            scope.agentEligible === false && (
+                              <Badge variant="neutral" size="sm">
+                                Not available to agents
+                              </Badge>
+                            )}
+                        </div>
                         <Text muted small>
                           {scope.description}
                         </Text>

@@ -5986,6 +5986,12 @@ func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 		}
 		res.Grants[i] = unmarshalRoleGrantResponseBodyToAccessRoleGrant(val)
 	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
+		}
+	}
 
 	return res
 }
@@ -6113,6 +6119,7 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 		Description:    *v.Description,
 		ResourceType:   *v.ResourceType,
 		Visibility:     *v.Visibility,
+		AgentEligible:  *v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
 	}
 
@@ -6356,6 +6363,12 @@ func unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry(v *
 		res.MemberIds = make([]string, len(v.MemberIds))
 		for i, val := range v.MemberIds {
 			res.MemberIds[i] = val
+		}
+	}
+	if v.AgentIds != nil {
+		res.AgentIds = make([]string, len(v.AgentIds))
+		for i, val := range v.AgentIds {
+			res.AgentIds[i] = val
 		}
 	}
 	if v.Dispositions != nil {

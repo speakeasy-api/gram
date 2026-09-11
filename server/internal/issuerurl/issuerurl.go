@@ -1,4 +1,4 @@
-package remotesessions
+package issuerurl
 
 import (
 	"fmt"
@@ -39,9 +39,9 @@ import (
 // self-declared issuer against the URL Gram asked for, which is a trust check on
 // a discovery response, and it stays strict on purpose. Widening it would let an
 // upstream claim an identity it does not have. Keep the two separate.
-type canonicalIssuerURL struct {
+type Canonical struct {
 	// raw is the caller-supplied spelling with surrounding whitespace trimmed.
-	// Kept so matchCandidates can probe for a stored row written exactly the way
+	// Kept so MatchCandidates can probe for a stored row written exactly the way
 	// this caller writes it.
 	raw string
 
@@ -55,25 +55,25 @@ type canonicalIssuerURL struct {
 	path string
 }
 
-// parseCanonicalIssuerURL validates raw as an issuer identifier and reduces it
+// Parse validates raw as an issuer identifier and reduces it
 // to its canonical parts.
-func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {
+func Parse(raw string) (Canonical, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url is empty")
+		return Canonical{}, fmt.Errorf("issuer url is empty")
 	}
 
 	u, err := url.Parse(trimmed)
 	if err != nil {
-		return canonicalIssuerURL{}, fmt.Errorf("parse issuer url: %w", err)
+		return Canonical{}, fmt.Errorf("parse issuer url: %w", err)
 	}
 
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url must use http or https, got %q", u.Scheme)
+		return Canonical{}, fmt.Errorf("issuer url must use http or https, got %q", u.Scheme)
 	}
 	if u.User != nil {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url must not carry userinfo")
+		return Canonical{}, fmt.Errorf("issuer url must not carry userinfo")
 	}
 	// Both are checked on the raw string rather than on the parsed fields,
 	// because the parsed fields do not reliably report an empty component:
@@ -83,15 +83,15 @@ func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {
 	// always starts a query or fragment, and an encoded one stays percent-
 	// encoded in the path, so neither check can false-positive.
 	if strings.Contains(trimmed, "?") {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url must not carry a query string")
+		return Canonical{}, fmt.Errorf("issuer url must not carry a query string")
 	}
 	if strings.Contains(trimmed, "#") {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url must not carry a fragment")
+		return Canonical{}, fmt.Errorf("issuer url must not carry a fragment")
 	}
 
 	host := strings.ToLower(u.Hostname())
 	if host == "" {
-		return canonicalIssuerURL{}, fmt.Errorf("issuer url has no host")
+		return Canonical{}, fmt.Errorf("issuer url has no host")
 	}
 	// url.Hostname strips the brackets from an IPv6 literal; put them back so the
 	// canonical form is a URL that can be parsed again.
@@ -106,7 +106,7 @@ func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {
 		port = ""
 	}
 
-	return canonicalIssuerURL{
+	return Canonical{
 		raw:    trimmed,
 		scheme: scheme,
 		host:   host,
@@ -117,7 +117,7 @@ func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {
 
 // String renders the canonical form. It is the advisory-lock key for a resolve,
 // so two spellings that name one upstream also serialize against each other.
-func (c canonicalIssuerURL) String() string {
+func (c Canonical) String() string {
 	authority := c.host
 	if c.port != "" {
 		authority += ":" + c.port
@@ -126,7 +126,7 @@ func (c canonicalIssuerURL) String() string {
 	return c.scheme + "://" + authority + c.path
 }
 
-// matchCandidates returns every literal spelling a stored issuer may carry that
+// MatchCandidates returns every literal spelling a stored issuer may carry that
 // this URL should match.
 //
 // Lookup compares the raw `issuer` column against this set rather than
@@ -151,7 +151,7 @@ func (c canonicalIssuerURL) String() string {
 // them is a combinatorial explosion. If input-side matching ever proves
 // insufficient, the fix is a stored canonical column that normalizes both sides,
 // not a longer candidate list.
-func (c canonicalIssuerURL) matchCandidates() []string {
+func (c Canonical) MatchCandidates() []string {
 	canonical := c.String()
 
 	spellings := []string{canonical, canonical + "/"}
@@ -179,7 +179,7 @@ func (c canonicalIssuerURL) matchCandidates() []string {
 // withDefaultPort renders the canonical form with the scheme's default port
 // written out explicitly, or "" when an explicit non-default port is present
 // (in which case no default-port spelling of this URL exists).
-func (c canonicalIssuerURL) withDefaultPort() string {
+func (c Canonical) withDefaultPort() string {
 	if c.port != "" {
 		return ""
 	}

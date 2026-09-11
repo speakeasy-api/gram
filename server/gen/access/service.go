@@ -72,7 +72,8 @@ type Service interface {
 	// Replace the rules that name one resource. Organization-wide rules are left
 	// untouched.
 	SetResourceAudience(context.Context, *SetResourceAudiencePayload) (res *ResourceAudienceResult, err error)
-	// List the principals that can be given access: everyone, roles, and people.
+	// List the principals that can be given access: everyone, roles, people, and
+	// agents.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
@@ -338,6 +339,9 @@ type CreateRolePayload struct {
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string
 }
 
 // DeleteRolePayload is the payload type of the access service deleteRole
@@ -693,7 +697,7 @@ type ResourceAudienceEntry struct {
 	Description *string
 	// How many people the principal reaches, when known.
 	MemberCount *int64
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level string
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo string
@@ -701,6 +705,9 @@ type ResourceAudienceEntry struct {
 	Tools []string
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string
 }
@@ -733,8 +740,10 @@ type Role struct {
 	Grants []*RoleGrant
 	// Number of members assigned to this role.
 	MemberCount int
-	CreatedAt   string
-	UpdatedAt   string
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string
+	CreatedAt string
+	UpdatedAt string
 }
 
 type RoleGrant struct {
@@ -754,6 +763,10 @@ type ScopeDefinition struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
 }
@@ -779,7 +792,10 @@ type Selector struct {
 type SetResourceAudienceEntry struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level string
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string
@@ -976,6 +992,10 @@ type UpdateRolePayload struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string
 }
 
 // UpdateShadowMCPInventoryServerNamePayload is the payload type of the access

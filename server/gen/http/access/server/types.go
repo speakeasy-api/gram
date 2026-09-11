@@ -25,6 +25,9 @@ type CreateRoleRequestBody struct {
 	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
@@ -43,6 +46,10 @@ type UpdateRoleRequestBody struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -144,9 +151,11 @@ type GetRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateRoleResponseBody is the type of the "access" service "createRole"
@@ -167,9 +176,11 @@ type CreateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
@@ -190,9 +201,11 @@ type UpdateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
@@ -5034,9 +5047,11 @@ type RoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RoleGrantResponseBody is used to define fields on response body types.
@@ -5076,6 +5091,10 @@ type ScopeDefinitionResponseBody struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible bool `form:"agent_eligible" json:"agent_eligible" xml:"agent_eligible"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -5272,7 +5291,7 @@ type ResourceAudienceEntryResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// How many people the principal reaches, when known.
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	// Access this principal has on the resource.
+	// Access this principal has on the resource, or the access a rule takes away.
 	Level string `form:"level" json:"level" xml:"level"`
 	// Whether the rule names this resource or every resource of its kind.
 	AppliesTo string `form:"applies_to" json:"applies_to" xml:"applies_to"`
@@ -5280,6 +5299,9 @@ type ResourceAudienceEntryResponseBody struct {
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
@@ -5475,7 +5497,10 @@ type SelectorRequestBody struct {
 type SetResourceAudienceEntryRequestBody struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	// Access to give the principal on this resource.
+	// Access to give the principal on this resource. The "blocked_" levels take
+	// access away, one scope each and nothing else: "blocked" removes connect,
+	// "blocked_view" removes view, "blocked_manage" removes manage. Taking a
+	// principal off a resource entirely means writing all three.
 	Level *string `form:"level,omitempty" json:"level,omitempty" xml:"level,omitempty"`
 	// Narrow the access to these tool names. Omit for the whole resource.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
@@ -5529,6 +5554,12 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
 	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5558,6 +5589,12 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
 	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5586,6 +5623,12 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 		}
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
+	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
 	}
 	return body
 }
@@ -9688,6 +9731,12 @@ func NewCreateRolePayload(body *CreateRoleRequestBody, apikeyToken *string, sess
 			v.MemberIds[i] = val
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -9725,6 +9774,12 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sess
 		v.MemberIds = make([]string, len(body.MemberIds))
 		for i, val := range body.MemberIds {
 			v.MemberIds[i] = val
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -10033,6 +10088,9 @@ func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
+	}
 	return
 }
 
@@ -10055,6 +10113,9 @@ func ValidateUpdateRoleRequestBody(body *UpdateRoleRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }
@@ -10254,8 +10315,8 @@ func ValidateSetResourceAudienceEntryRequestBody(body *SetResourceAudienceEntryR
 		err = goa.MergeErrors(err, goa.MissingFieldError("level", "body"))
 	}
 	if body.Level != nil {
-		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked"}))
+		if !(*body.Level == "use" || *body.Level == "view" || *body.Level == "manage" || *body.Level == "blocked" || *body.Level == "blocked_view" || *body.Level == "blocked_manage") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.level", *body.Level, []any{"use", "view", "manage", "blocked", "blocked_view", "blocked_manage"}))
 		}
 	}
 	for _, e := range body.Dispositions {
