@@ -25,12 +25,19 @@ interface OnboardingStepperProps {
   steps: Step[];
   currentStep: number;
   onStepClick: (index: number) => void;
+  /**
+   * Rows stop being interactive: no button role, no tab stop, no click.
+   * The wizard sets this while a completion is settling, when a jump would
+   * be overwritten a moment later.
+   */
+  disabled?: boolean;
 }
 
 export function OnboardingStepper({
   steps,
   currentStep,
   onStepClick,
+  disabled = false,
 }: OnboardingStepperProps): JSX.Element {
   return (
     <nav className="flex flex-col" aria-label="Progress">
@@ -39,7 +46,7 @@ export function OnboardingStepper({
         const isCompleted = step.status === "done";
         const isUpcoming = !isCurrent && !isCompleted;
         const isLast = index === steps.length - 1;
-        const canJump = !isCurrent;
+        const canJump = !isCurrent && !disabled;
 
         return (
           // The whole row is the single interactive control for the step. The

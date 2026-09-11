@@ -305,9 +305,11 @@ describe("SetupWizard", () => {
     expect(skip.hasAttribute("disabled")).toBe(true);
     fireEvent.click(previous);
     fireEvent.click(skip);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Set up identity provider/ }),
-    );
+    // Rail rows stop presenting as buttons rather than ignoring clicks.
+    expect(
+      screen.queryByRole("button", { name: /Set up identity provider/ }),
+    ).toBeNull();
+    fireEvent.click(screen.getByText("Set up identity provider"));
     // The nested sub-step list holds too.
     const subStep = screen.getByRole("button", { name: /Confirm traffic/ });
     expect(subStep.hasAttribute("disabled")).toBe(true);
@@ -334,9 +336,10 @@ describe("SetupWizard", () => {
     const skip = screen.getByRole("button", { name: "Skip task" });
     expect(skip.hasAttribute("disabled")).toBe(true);
     fireEvent.click(skip);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Set up identity provider/ }),
-    );
+    expect(
+      screen.queryByRole("button", { name: /Set up identity provider/ }),
+    ).toBeNull();
+    fireEvent.click(screen.getByText("Set up identity provider"));
     expect(mocks.setSearchParams).not.toHaveBeenCalled();
 
     finishInvalidate();

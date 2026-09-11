@@ -129,6 +129,7 @@ function WizardRail({
       <OnboardingStepper
         steps={railSteps}
         currentStep={currentStep === -1 ? 0 : currentStep}
+        disabled={disabled}
         onStepClick={(position) => {
           const task = tasks[position];
           if (task) onPick(task);
