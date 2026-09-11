@@ -1124,6 +1124,14 @@ func TestCreateStripeCheckoutConversionSwitchesRunningEnterpriseTrialToPayg(t *t
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
 	require.Equal(t, string(billing.TierEnterprise), before.Organization["account_type"])
 	require.Equal(t, string(billing.TierPayg), after.Organization["account_type"])
+
+	_, customers, _ := ti.stripe.snapshot()
+	require.Len(t, customers, 1)
+	require.Equal(t, string(billing.TierEnterprise), customers[0].AccountType)
+	updates := ti.stripe.updates()
+	require.Len(t, updates, 1)
+	require.Equal(t, metadata.StripeCustomerID.String, updates[0].CustomerID)
+	require.Equal(t, string(billing.TierPayg), updates[0].AccountType)
 }
 
 func TestCreateStripeCheckoutConversionAuditCapturesAccessChangesPrivately(t *testing.T) {
