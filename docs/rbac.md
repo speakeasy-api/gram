@@ -530,6 +530,8 @@ System roles are seeded when an organization is provisioned, and the first user 
 
 ## Dashboard Grant Reference
 
+Embedded onboarding configuration requires `org:admin` independently of task assignment. Distributing servers additionally requires `project:write` and `mcp:write`; Anthropic observability requires `project:read`. These gates target the SDK request project (the route project, then explicit `projectSlug` query parameter, then `default`), not the preferred project in the sidebar. Missing projects or grants show a handoff message without mounting protected configuration queries. Entitlement checks remain unchanged.
+
 Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, and `skill:write` implies `skill:read`.
 
 Selectors matter. A project-scoped feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.

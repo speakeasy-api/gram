@@ -1,5 +1,8 @@
+export { ConnectIdpStep } from "./connect-idp-step";
+export { DirectorySyncStep } from "./directory-sync-step";
+export { CreateMarketplaceStep } from "./create-marketplace-step";
+export { ConfirmTrafficStep } from "./confirm-traffic-step";
 export { IdentityProviderStep } from "./identity-provider-step";
-export { AnthropicInferenceHooksStep } from "./anthropic-inference-hooks-step";
 export { AnthropicAdminControlsStep } from "./anthropic-admin-controls-step";
 export { InstrumentAgentsStep } from "./instrument-agents-step";
 export { AdditionalAgentConfigStep } from "./additional-agent-config-step";
