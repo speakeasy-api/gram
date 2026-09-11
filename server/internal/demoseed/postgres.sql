@@ -352,8 +352,8 @@ BEGIN
   -- surfaces (Logs page and other EnterpriseGate features). Demo identity is
   -- carried by the fixed org id (constants.DemoOrganizationID) — NOT by
   -- account type, which the auth callback overwrites anyway.
-  INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-  VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE)
+  INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, onboarding_preset)
+  VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE, 'security')
   ON CONFLICT (id) DO UPDATE
     -- whitelisted is repaired, not just set on insert: a developer who logged
     -- in before seeding already has this row, created un-whitelisted by the
@@ -361,7 +361,8 @@ BEGIN
     -- gate.
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type,
-        whitelisted = EXCLUDED.whitelisted;
+        whitelisted = EXCLUDED.whitelisted,
+        onboarding_preset = EXCLUDED.onboarding_preset;
 
   -- Killswitch aggregates retain canonical MCP server keys in immutable
   -- snapshots. Clear every org-scoped aggregate and replay receipt before the
@@ -474,15 +475,24 @@ BEGIN
           workos_id = EXCLUDED.workos_id;
   END LOOP;
 
-  -- Setup board: persisted overrides cover each non-default state while
-  -- catalog-derived rows continue to demonstrate To Do and blocked tasks.
+  -- Customized Security selection: defer Anthropic admin controls and include
+  -- server distribution. Both views read this same explicit selection.
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES
+    (demo_org, 'identity-provider', 'todo', NULL, NULL, now()),
+    (demo_org, 'connect-idp', 'todo', NULL, NULL, NULL),
+    (demo_org, 'directory-sync', 'todo', NULL, NULL, NULL),
+    (demo_org, 'create-marketplace', 'todo', NULL, NULL, NULL),
+    (demo_org, 'distribute-servers', 'todo', NULL, NULL, NULL),
+    (demo_org, 'enable-logging', 'todo', NULL, NULL, NULL),
+    (demo_org, 'anthropic-observability', 'todo', NULL, NULL, NULL),
+    (demo_org, 'confirm-traffic', 'todo', NULL, NULL, NULL),
+    (demo_org, 'anthropic-admin-controls', 'todo', NULL, NULL, now()),
     (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
-    (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
@@ -2117,8 +2127,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
   SELECT count(*) INTO stray FROM organization_setup_tasks
   WHERE organization_id = demo_org;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
+  IF stray <> 13 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 13 setup task selections, found %', stray;
+  END IF;
+  IF (SELECT onboarding_preset FROM organization_metadata WHERE id = demo_org) IS DISTINCT FROM 'security'
+    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 10
+    OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = demo_org
+      AND ((task_key IN ('identity-provider', 'anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
+    RAISE EXCEPTION 'demo seed postflight: expected customized Security onboarding selection';
   END IF;
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
