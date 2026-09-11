@@ -1,11 +1,13 @@
 package access
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -1511,6 +1513,10 @@ func mergeAccessibleServers(rbacRows []repo.ListAccessibleMCPServersForUserRow, 
 	for _, server := range serverMap {
 		result = append(result, server)
 	}
+	// Map iteration is unordered, so restore the query's ORDER BY ms.name.
+	slices.SortFunc(result, func(a, b *gen.AccessibleMCPServer) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))
+	})
 	return result
 }
 
@@ -1565,5 +1571,13 @@ func mergeAccessibleSkills(rbacRows []repo.ListAccessibleSkillsForUserRow, plugi
 	for _, skill := range skillMap {
 		result = append(result, skill)
 	}
+	// Map iteration is unordered, so restore the query's
+	// ORDER BY COALESCE(s.display_name, s.name).
+	slices.SortFunc(result, func(a, b *gen.AccessibleSkill) int {
+		return cmp.Or(
+			cmp.Compare(conv.PtrValOr(a.DisplayName, a.Name), conv.PtrValOr(b.DisplayName, b.Name)),
+			cmp.Compare(a.ID, b.ID),
+		)
+	})
 	return result
 }
