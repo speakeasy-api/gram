@@ -274,7 +274,13 @@ function providerForm(draft: RemoteSessionIssuerDraft, mcpServer: McpServer) {
     responseTypesSupported: draft.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       draft.tokenEndpointAuthMethodsSupported ?? [],
+    codeChallengeMethodsSupported:
+      draft.codeChallengeMethodsSupported ?? undefined,
     clientIdMetadataDocumentSupported: draft.clientIdMetadataDocumentSupported,
+    revocationEndpoint: draft.revocationEndpoint,
+    serviceDocumentation: draft.serviceDocumentation,
+    opPolicyUri: draft.opPolicyUri,
+    opTosUri: draft.opTosUri,
     userinfoEndpoint: draft.userinfoEndpoint,
     introspectionEndpoint: draft.introspectionEndpoint,
     introspectionEndpointAuthMethodsSupported:

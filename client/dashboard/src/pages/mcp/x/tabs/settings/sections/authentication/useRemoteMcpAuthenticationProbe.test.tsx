@@ -15,7 +15,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ remoteMcp: { probeURL: mocks.probe } }),
 }));
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
-  useGetRemoteMcpServer: () => mocks.getSource(),
+  useGetRemoteMcpServer: (...args: unknown[]) => mocks.getSource(...args),
 }));
 
 function wrapper({ children }: { children: ReactNode }): JSX.Element {
@@ -26,7 +26,7 @@ function wrapper({ children }: { children: ReactNode }): JSX.Element {
 
 beforeEach(() => {
   queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, throwOnError: true } },
   });
   mocks.getSource.mockReturnValue({
     data: { url: "https://mcp.example.test" },
@@ -74,5 +74,20 @@ describe("useRemoteMcpAuthenticationProbe", () => {
     );
 
     await waitFor(() => expect(result.current).toBe("unknown"));
+  });
+
+  it("keeps source and probe failures in the inline unknown state", async () => {
+    mocks.probe.mockRejectedValue(new Error("probe failed"));
+    const { result } = renderHook(
+      () => useRemoteMcpAuthenticationProbe("remote-source-1", true),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current).toBe("unknown"));
+    expect(mocks.getSource).toHaveBeenCalledWith(
+      { id: "remote-source-1" },
+      undefined,
+      { enabled: true, throwOnError: false },
+    );
   });
 });

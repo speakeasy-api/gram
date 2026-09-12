@@ -146,4 +146,50 @@ describe("AddServerDialog identity permissions", () => {
       ).disabled,
     ).toBe(false);
   });
+
+  it("does not apply identity permissions to Figma", async () => {
+    const figmaServer = {
+      ...server,
+      registrySpecifier: "com.figma.mcp/mcp",
+    };
+    mocks.workflow.mockReturnValue({
+      ...mocks.workflow(),
+      serverConfigs: [
+        {
+          server: figmaServer,
+          name: "Figma",
+          remotes: figmaServer.remotes,
+          identityMode: "user",
+          agentAuthorization: "",
+          headerValues: {},
+        },
+      ],
+    });
+
+    render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[figmaServer]}
+          open
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add to Project" }),
+      ).toBeDefined(),
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Add to Project",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    expect(screen.queryByRole("radio", { name: "User" })).toBeNull();
+  });
 });

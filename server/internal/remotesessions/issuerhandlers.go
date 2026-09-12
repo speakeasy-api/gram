@@ -319,6 +319,18 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
+	if err := validateRemoteSessionProviderURLs(remoteSessionProviderURLs{
+		issuer:                payload.Issuer,
+		authorizationEndpoint: payload.AuthorizationEndpoint,
+		tokenEndpoint:         payload.TokenEndpoint,
+		revocationEndpoint:    payload.RevocationEndpoint,
+		registrationEndpoint:  payload.RegistrationEndpoint,
+		jwksURI:               payload.JwksURI,
+		userinfoEndpoint:      payload.UserinfoEndpoint,
+		introspectionEndpoint: payload.IntrospectionEndpoint,
+	}); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider URL").LogError(ctx, logger)
+	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
 	// An empty value stays legal: the create query stores it as NULL.
@@ -329,21 +341,6 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
-	}
-
-	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
-	// never crosses a network: tokens are sensitive credentials that must not
-	// be transmitted in plaintext. An empty value stays legal.
-	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	// The userinfo and introspection endpoints receive access tokens, so they
-	// are held to the same transport rule as the revocation endpoint.
-	if v := conv.PtrValOr(payload.UserinfoEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "userinfo_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
-	}
-	if v := conv.PtrValOr(payload.IntrospectionEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "introspection_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -384,10 +381,10 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
 		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
 		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		ScopesSupported:                   orEmptySlice(payload.ScopesSupported),
+		GrantTypesSupported:               orEmptySlice(payload.GrantTypesSupported),
+		ResponseTypesSupported:            orEmptySlice(payload.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported: orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),

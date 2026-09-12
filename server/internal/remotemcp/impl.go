@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -102,7 +103,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
@@ -248,7 +249,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if _, err := s.policy.ValidateHTTPURL(ctx, *payload.URL); err != nil {
+		if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
@@ -345,7 +346,7 @@ func (s *Service) ProbeURL(ctx context.Context, payload *gen.ProbeURLPayload) (*
 	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
 	defer cancel()
 
-	if _, err := s.policy.ValidateHTTPURL(probeCtx, payload.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(probeCtx, s.policy, payload.URL); err != nil {
 		if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) || errors.Is(err, context.DeadlineExceeded) {
 			result := classifyTransportError(probeCtx, err)
 			return &gen.ProbeURLResult{
@@ -383,7 +384,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 

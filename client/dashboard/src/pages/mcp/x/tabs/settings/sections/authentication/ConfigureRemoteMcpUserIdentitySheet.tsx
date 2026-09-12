@@ -78,11 +78,17 @@ export function ConfigureRemoteMcpUserIdentitySheet({
     [provider],
   );
   const automaticType = clientTypes.find((type) => type !== "manual");
-  const { items: providerClients, isLoading: clientsLoading } =
-    useAllRemoteSessionClients(
-      { remoteSessionIssuerId: providerId },
-      { enabled: open && providerId !== "" },
-    );
+  const {
+    items: providerClients,
+    isLoading: clientsLoading,
+    isError: clientsError,
+  } = useAllRemoteSessionClients(
+    { remoteSessionIssuerId: providerId },
+    {
+      enabled: open && providerId !== "",
+      throwOnError: false,
+    },
+  );
   const attachableClients = providerClients.filter(
     (candidate) =>
       !target.userSessionIssuerId ||
@@ -159,7 +165,9 @@ export function ConfigureRemoteMcpUserIdentitySheet({
   const createsClient = !registrationMode.startsWith("existing:");
   const submittable =
     canWriteTarget &&
-    providerId !== "" &&
+    !!provider &&
+    !clientsLoading &&
+    !clientsError &&
     (!createsClient || canWriteProject) &&
     (registrationMode !== "manual" || clientId.trim() !== "");
 
@@ -246,6 +254,12 @@ export function ConfigureRemoteMcpUserIdentitySheet({
                   <Text muted small>
                     Loading existing clients…
                   </Text>
+                ) : null}
+                {clientsError ? (
+                  <Alert variant="error" dismissible={false}>
+                    Existing OAuth clients could not be loaded. Configuration is
+                    unavailable until the list can be refreshed.
+                  </Alert>
                 ) : null}
                 {automaticType ? (
                   <Text muted small>

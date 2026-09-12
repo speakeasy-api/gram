@@ -346,6 +346,15 @@ BEGIN
     RAISE EXCEPTION 'demo seed aborted: demo project id owned by another org';
   END IF;
 
+  IF EXISTS (
+    SELECT 1 FROM remote_session_issuers
+    WHERE id = demo.det_uuid('gram-demo-remote-identity-provider-linear')
+      AND (project_id IS DISTINCT FROM proj_a
+           OR (organization_id IS NOT NULL AND organization_id <> demo_org))
+  ) THEN
+    RAISE EXCEPTION 'demo seed aborted: Remote MCP identity provider id owned by another tenant';
+  END IF;
+
   ------------------------------------------------------------------
   -- Org, projects, features, users, memberships, directory.
   -- projects has ON DELETE RESTRICT from deployments, and toolsets only SET
@@ -1067,12 +1076,12 @@ BEGIN
   -- credential, and GitHub intentionally has no upstream identity. The demo
   -- values are display fixtures only and cannot authenticate to any service.
   INSERT INTO remote_session_issuers
-    (id, project_id, slug, issuer, authorization_endpoint, token_endpoint,
+    (id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint,
      jwks_uri, scopes_supported, grant_types_supported, response_types_supported,
      token_endpoint_auth_methods_supported, code_challenge_methods_supported,
      client_id_metadata_document_supported, name)
   VALUES
-    (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a,
+    (demo.det_uuid('gram-demo-remote-identity-provider-linear'), proj_a, demo_org,
      'example-workspace-identity', 'https://identity.example.com',
      'https://identity.example.com/oauth/authorize',
      'https://identity.example.com/oauth/token',
@@ -1097,6 +1106,27 @@ BEGIN
   VALUES
     (demo.det_uuid('gram-demo-remote-identity-client-linear'),
      demo.det_uuid('gram-demo-issuer-linear'));
+
+  -- Keep the runtime routing key in sync with the client binding above. The
+  -- normal API performs the same derivation in its transaction; the seed writes
+  -- the relationship directly, so it must also populate the denormalized value.
+  UPDATE mcp_servers AS server
+  SET remote_session_issuer_id = demo.det_uuid('gram-demo-remote-identity-provider-linear')
+  WHERE server.id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND server.project_id = proj_a
+    AND server.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND server.deleted IS FALSE
+    AND EXISTS (
+      SELECT 1 FROM projects
+      WHERE id = server.project_id AND organization_id = demo_org
+    )
+    AND EXISTS (
+      SELECT 1 FROM remote_session_issuers provider
+      WHERE provider.id = demo.det_uuid('gram-demo-remote-identity-provider-linear')
+        AND provider.project_id = proj_a
+        AND provider.organization_id = demo_org
+        AND provider.deleted IS FALSE
+    );
 
   INSERT INTO remote_mcp_server_headers
     (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -2729,7 +2759,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_issuers
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND organization_id = demo_org
+    AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP identity provider, found %', stray;
   END IF;
@@ -2743,10 +2774,30 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray
   FROM remote_session_client_user_session_issuers link
+  JOIN remote_session_clients client ON client.id = link.remote_session_client_id
+  JOIN remote_session_issuers provider ON provider.id = client.remote_session_issuer_id
   JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
-  WHERE usi.project_id = proj_a;
+  WHERE client.project_id = proj_a AND client.organization_id = demo_org
+    AND client.deleted IS FALSE
+    AND provider.project_id = proj_a AND provider.organization_id = demo_org
+    AND provider.deleted IS FALSE
+    AND usi.project_id = proj_a AND usi.organization_id = demo_org
+    AND usi.deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP User Identity binding, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM mcp_servers server
+  JOIN projects project ON project.id = server.project_id
+  WHERE server.id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND server.project_id = proj_a
+    AND project.organization_id = demo_org
+    AND server.user_session_issuer_id = demo.det_uuid('gram-demo-issuer-linear')
+    AND server.remote_session_issuer_id = demo.det_uuid('gram-demo-remote-identity-provider-linear')
+    AND server.deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected Linear MCP server Remote Identity routing binding, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray

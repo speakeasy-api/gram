@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -159,6 +160,65 @@ func TestProxy_Post_DisableRedirectsRelaysRedirectWithoutFollowing(t *testing.T)
 	require.Equal(t, http.StatusFound, rr.Code)
 	require.Equal(t, target.URL, rr.Header().Get("Location"))
 	require.Equal(t, int32(0), targetHits.Load())
+}
+
+func TestProxy_Post_RejectsCredentialBearingLegacyHostedHTTP(t *testing.T) {
+	t.Parallel()
+
+	p := newProxyForTest(t, "http://8.8.8.8/mcp")
+	p.Identity.RemoteMCPServerID = "legacy-remote"
+	p.AuthorizationOverride = "user-token"
+	p.Headers = []proxy.ConfiguredHeader{{
+		Name:                   "X-Agent-Credential",
+		StaticValue:            "agent-token",
+		ValueFromRequestHeader: "",
+		IsRequired:             true,
+	}}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	err := p.Post(httptest.NewRecorder(), req)
+	require.Error(t, err)
+	require.ErrorIs(t, err, proxy.ErrInsecureRemoteMCPTransport)
+}
+
+func TestProxy_Post_RejectsHTTPSRedirectToHostedHTTP(t *testing.T) {
+	t.Parallel()
+
+	initialHeaders := make(chan http.Header, 1)
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		initialHeaders <- r.Header.Clone()
+		w.Header().Set("Location", "http://8.8.8.8/mcp")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(upstream.Certificate())
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
+	require.NoError(t, err)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.GuardianPolicy = policy
+	p.Identity.RemoteMCPServerID = "legacy-remote"
+	p.AuthorizationOverride = "user-token"
+	p.Headers = []proxy.ConfiguredHeader{{
+		Name:                   "X-Agent-Credential",
+		StaticValue:            "agent-token",
+		ValueFromRequestHeader: "",
+		IsRequired:             true,
+	}}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	err = p.Post(httptest.NewRecorder(), req)
+	require.Error(t, err)
+	require.ErrorIs(t, err, proxy.ErrInsecureRemoteMCPTransport)
+	headers := <-initialHeaders
+	require.Equal(t, "Bearer user-token", headers.Get("Authorization"))
+	require.Equal(t, "agent-token", headers.Get("X-Agent-Credential"))
 }
 
 func TestProxy_Post_RetriesUpstreamResponseBeforeRelay(t *testing.T) {

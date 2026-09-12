@@ -719,7 +719,10 @@ function ConfigurePhaseContent({
 
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
-    releaseState.serverConfigs.some((config) => config.identityMode === "user");
+    releaseState.serverConfigs.some(
+      (config) =>
+        !isFigmaCatalogServer(config.server) && config.identityMode === "user",
+    );
   const canSubmit =
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&

@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
@@ -10,6 +11,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import {
+  buildGetMcpServerQuery,
   invalidateAllGetMcpServer,
   useGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
@@ -29,6 +31,7 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
@@ -426,8 +429,10 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const canWrite = hasScope("mcp:write", server.toolsetId ?? server.id);
+  const client = useSdkClient();
   const queryClient = useQueryClient();
+  const [fetchingLatest, setFetchingLatest] = useState(false);
   const update = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
       await Promise.all([
@@ -451,27 +456,44 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     },
   });
 
-  const updateVisibility = (next: McpServerVisibility) => {
+  const updateVisibility = async (next: McpServerVisibility) => {
     if (next === server.visibility) return;
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: server.id,
-          name: server.name ?? undefined,
-          remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
-          toolsetId: server.toolsetId ?? undefined,
-          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
-          environmentId: server.environmentId ?? undefined,
-          // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding them keeps stored values intact across a
-          // visibility-only update.
-          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
-          visibility: next,
+    setFetchingLatest(true);
+    try {
+      const latest = await queryClient.fetchQuery({
+        ...buildGetMcpServerQuery(client, { id: server.id }),
+        staleTime: 0,
+      });
+      if (next === latest.visibility) return;
+      update.mutate({
+        request: {
+          updateMcpServerForm: {
+            id: latest.id,
+            name: latest.name ?? undefined,
+            remoteMcpServerId: latest.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: latest.tunneledMcpServerId ?? undefined,
+            toolsetId: latest.toolsetId ?? undefined,
+            unproxiedMcpServerId: latest.unproxiedMcpServerId ?? undefined,
+            environmentId: latest.environmentId ?? undefined,
+            toolVariationsGroupId: latest.toolVariationsGroupId ?? undefined,
+            visibility: next,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update server visibility",
+      );
+    } finally {
+      setFetchingLatest(false);
+    }
   };
 
-  return { canWrite, updateVisibility, updating: update.isPending };
+  return {
+    canWrite,
+    updateVisibility: (visibility) => void updateVisibility(visibility),
+    updating: fetchingLatest || update.isPending,
+  };
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 const (
@@ -90,20 +91,23 @@ type probeObservation struct {
 
 // ProbeRemoteMcpURL issues an MCP initialize request against rawURL and
 // reports a structured outcome. The supplied [guardian.Policy] enforces the
-// SSRF blocklist; rawURL must already have passed
-// [guardian.Policy.ValidateHTTPURL]. The caller is responsible for bounding
-// the overall deadline via ctx.
+// SSRF blocklist and Remote MCP transport requirements. The caller is
+// responsible for bounding the overall deadline via ctx.
 func ProbeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) ProbeResult {
 	return probeRemoteMcpURL(ctx, policy, rawURL).result
 }
 
 func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) probeObservation {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, policy, rawURL); err != nil {
+		return probeObservation{result: classifyTransportError(ctx, err), httpStatus: nil}
+	}
+
 	client := policy.Client()
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) > probeURLMaxRedirects {
 			return fmt.Errorf("stopped after %d redirects", probeURLMaxRedirects)
 		}
-		if _, err := policy.ValidateHTTPURL(req.Context(), req.URL.String()); err != nil {
+		if _, err := proxy.ValidateRemoteMCPURL(req.Context(), policy, req.URL.String()); err != nil {
 			return fmt.Errorf("validate redirect url: %w", err)
 		}
 
@@ -158,6 +162,9 @@ func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 	if status >= 200 && status < 300 {
 		validMCP, err := classifyMCPSuccess(resp)
 		if err != nil {
+			if errors.Is(err, io.ErrUnexpectedEOF) {
+				return probeObservation{result: invalidMCPResponseResult(status), httpStatus: &status}
+			}
 			result := classifyTransportError(ctx, err)
 			result.HTTPStatus = &status
 			return probeObservation{result: result, httpStatus: &status}

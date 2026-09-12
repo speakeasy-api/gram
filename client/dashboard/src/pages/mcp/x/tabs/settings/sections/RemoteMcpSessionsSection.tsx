@@ -14,18 +14,28 @@ export function RemoteMcpSessionsSection({
   const issuerQuery = useUserSessionIssuer(
     { id: userSessionIssuerId },
     undefined,
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const clientsQuery = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+    { enabled: !!userSessionIssuerId, throwOnError: false },
   );
-  const loading = issuerQuery.isLoading || clientsQuery.isLoading;
-  const failed = issuerQuery.isError || clientsQuery.isError;
   const userIdentityConfigured = clientsQuery.items.length > 0;
+  const loading =
+    (!!userSessionIssuerId && !issuerQuery.data && issuerQuery.isLoading) ||
+    (clientsQuery.isLoading && !userIdentityConfigured);
+  const failed =
+    (issuerQuery.isError && !issuerQuery.data) ||
+    (clientsQuery.isError && !userIdentityConfigured);
 
   let content: JSX.Element;
-  if (loading) {
+  if (!userSessionIssuerId) {
+    content = (
+      <Text muted>
+        Session controls apply when User Identity is configured for this server.
+      </Text>
+    );
+  } else if (loading) {
     content = <Text muted>Loading session settings...</Text>;
   } else if (failed || !issuerQuery.data) {
     content = (

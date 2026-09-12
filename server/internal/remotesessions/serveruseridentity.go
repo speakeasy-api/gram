@@ -274,6 +274,18 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	}
 
 	txRepo := repo.New(dbtx)
+	if err := lockUserSessionIssuersForClientBinding(
+		ctx,
+		logger,
+		dbtx,
+		txRepo,
+		*authCtx.ProjectID,
+		authCtx.ActiveOrganizationID,
+		[]uuid.UUID{target.UserSessionIssuerID.UUID},
+	); err != nil {
+		return nil, err
+	}
+
 	providerCreated := false
 	if plan.createProvider != nil {
 		provider, err = txRepo.CreateRemoteSessionIssuer(ctx, createServerUserIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, plan.createProvider, plan.logoAssetID))
@@ -582,6 +594,18 @@ func validateServerUserIdentityProviderForm(form *gen.CreateRemoteSessionIssuerF
 	if strings.TrimSpace(form.Issuer) == "" {
 		return errors.New("issuer is required")
 	}
+	if err := validateRemoteSessionProviderURLs(remoteSessionProviderURLs{
+		issuer:                form.Issuer,
+		authorizationEndpoint: form.AuthorizationEndpoint,
+		tokenEndpoint:         form.TokenEndpoint,
+		revocationEndpoint:    form.RevocationEndpoint,
+		registrationEndpoint:  form.RegistrationEndpoint,
+		jwksURI:               form.JwksURI,
+		userinfoEndpoint:      form.UserinfoEndpoint,
+		introspectionEndpoint: form.IntrospectionEndpoint,
+	}); err != nil {
+		return err
+	}
 	for name, value := range map[string]*string{
 		"client_setup_documentation_url": form.ClientSetupDocumentationURL,
 		"service_documentation":          form.ServiceDocumentation,
@@ -590,16 +614,6 @@ func validateServerUserIdentityProviderForm(form *gen.CreateRemoteSessionIssuerF
 	} {
 		if v := conv.PtrValOr(value, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
 			return fmt.Errorf("%s must be an absolute http(s) URL", name)
-		}
-	}
-	for name, value := range map[string]*string{
-		"revocation_endpoint":    form.RevocationEndpoint,
-		"registration_endpoint":  form.RegistrationEndpoint,
-		"userinfo_endpoint":      form.UserinfoEndpoint,
-		"introspection_endpoint": form.IntrospectionEndpoint,
-	} {
-		if v := conv.PtrValOr(value, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
-			return fmt.Errorf("%s must be an absolute https URL, or http on loopback", name)
 		}
 	}
 	return nil
@@ -646,10 +660,10 @@ func createServerUserIdentityProviderParams(projectID uuid.UUID, organizationID 
 		ServiceDocumentation:              conv.PtrToPGTextEmpty(form.ServiceDocumentation),
 		OpPolicyUri:                       conv.PtrToPGTextEmpty(form.OpPolicyURI),
 		OpTosUri:                          conv.PtrToPGTextEmpty(form.OpTosURI),
-		ScopesSupported:                   form.ScopesSupported,
-		GrantTypesSupported:               form.GrantTypesSupported,
-		ResponseTypesSupported:            form.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: form.TokenEndpointAuthMethodsSupported,
+		ScopesSupported:                   orEmptySlice(form.ScopesSupported),
+		GrantTypesSupported:               orEmptySlice(form.GrantTypesSupported),
+		ResponseTypesSupported:            orEmptySlice(form.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported: orEmptySlice(form.TokenEndpointAuthMethodsSupported),
 		CodeChallengeMethodsSupported:     form.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(form.ClientIDMetadataDocumentSupported, false),
 		UserinfoEndpoint:                  conv.PtrToPGTextEmpty(form.UserinfoEndpoint),

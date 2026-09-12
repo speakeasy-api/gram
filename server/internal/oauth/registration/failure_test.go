@@ -48,6 +48,9 @@ func TestClassifyDCRTransportAndInvalidResponseFailures(t *testing.T) {
 	dnsFailure := ClassifyDCR(&net.DNSError{Err: "no such host", Name: "provider.example"})
 	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonDNSError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, dnsFailure)
 
+	dnsTimeoutFailure := ClassifyDCR(&net.DNSError{Err: "i/o timeout", Name: "provider.example", IsTimeout: true})
+	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTimeout, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, dnsTimeoutFailure)
+
 	tlsFailure := ClassifyDCR(x509.UnknownAuthorityError{})
 	require.Equal(t, Failure{Outcome: OutcomeUnreachable, Reason: ReasonTLSError, Retryable: true, HTTPStatus: nil, ProviderMessage: nil}, tlsFailure)
 

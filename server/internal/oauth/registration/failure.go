@@ -119,8 +119,7 @@ func ClassifyDCR(err error) Failure {
 		return Failure{Outcome: "", Reason: "", Retryable: false, HTTPStatus: nil, ProviderMessage: nil}
 	}
 
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[*HTTPError](err); ok {
 		status := httpErr.StatusCode
 		failure := Failure{
 			Outcome:         OutcomeRefused,
@@ -146,8 +145,7 @@ func ClassifyDCR(err error) Failure {
 		return failure
 	}
 
-	var invalidResponse *InvalidSuccessResponseError
-	if errors.As(err, &invalidResponse) {
+	if invalidResponse, ok := errors.AsType[*InvalidSuccessResponseError](err); ok {
 		return InvalidSuccessResponse(invalidResponse.StatusCode)
 	}
 
@@ -171,8 +169,12 @@ func ClassifyDCR(err error) Failure {
 		return failure
 	}
 
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		failure.Reason = ReasonTimeout
+		return failure
+	}
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		failure.Reason = ReasonDNSError
 		return failure
 	}
@@ -180,13 +182,7 @@ func ClassifyDCR(err error) Failure {
 		failure.Reason = ReasonTLSError
 		return failure
 	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		failure.Reason = ReasonTimeout
-		return failure
-	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if _, ok := errors.AsType[*url.Error](err); ok {
 		failure.Reason = ReasonNetworkError
 	}
 	return failure

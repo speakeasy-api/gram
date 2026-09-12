@@ -29,6 +29,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: {
+      x: { inspect: { href: (id: string) => `/mcp/x/${id}/inspect` } },
+    },
+  }),
   useOrgRoutes: () => ({
     remoteIdentityProviders: {
       href: () => "/org/remote-identity-providers",
@@ -164,7 +169,11 @@ beforeEach(() => {
     isLoading: false,
     isError: false,
   });
-  mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  mocks.issuers.mockReturnValue({
+    data: { result: { items: [] } },
+    isLoading: false,
+    isError: false,
+  });
   mocks.rbac.mockReturnValue({
     isLoading: false,
     hasScope: mocks.hasScope,
@@ -279,6 +288,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .getAttribute("href"),
     ).toBe("/org/providers/provider-1/clients/client-1");
     expect(screen.getByText(/1 connection/)).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Inspect tab" }).getAttribute("href"),
+    ).toBe("/mcp/x/mcp-server-1/inspect");
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     expect(screen.getByRole("dialog")).toBeDefined();
     expect(mocks.configureSheet).toHaveBeenLastCalledWith(
@@ -339,7 +351,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(container.textContent).not.toContain("manual-secret");
   });
 
-  it("blocks Agent Identity and describes legacy pass-through Authorization honestly", () => {
+  it("allows User setup past legacy Authorization while blocking Agent and None", () => {
     mocks.headers.mockReturnValue({
       data: {
         headers: [
@@ -366,13 +378,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .disabled,
     ).toBe(true);
     expect(
-      screen.getByText(/can still send a credential upstream/i),
-    ).toBeDefined();
-    expect(
-      screen.queryByText(
-        "Requests to the upstream server will not include an Authorization credential.",
-      ),
-    ).toBeNull();
+      (screen.getByRole("radio", { name: "None" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "User" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    expect(screen.getByRole("dialog")).toBeDefined();
   });
 
   it("renders query failures as indeterminate instead of No Identity", () => {
@@ -393,6 +404,25 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.queryByText(/will not include an Authorization credential/i),
     ).toBeNull();
+  });
+
+  it("keeps User Identity configuration unavailable when issuers fail", () => {
+    mocks.issuers.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: "User" }));
+
+    expect(
+      screen.getByText(/User Identity configuration is unavailable/i),
+    ).toBeDefined();
+    expect(
+      (screen.getByRole("button", { name: "Configure" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("fails closed without the target-specific mcp:write grant", () => {
@@ -454,6 +484,48 @@ describe("RemoteMcpIdentitySectionBody", () => {
         request: { id: "header-1" },
       }),
     );
+  });
+
+  it("rechecks shared-source read-only state before destructive confirmation", () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    const view = renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: "None" }));
+    mocks.siblings.mockReturnValue({
+      data: {
+        mcpServers: [
+          { id: "mcp-server-1", remoteMcpServerId: "remote-source-1" },
+          { id: "mcp-server-2", remoteMcpServerId: "remote-source-1" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>
+            <RemoteMcpIdentitySectionBody target={target} />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Remove credential",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remove credential" }));
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
 
   it("links shared-source guidance to identity provider management", () => {

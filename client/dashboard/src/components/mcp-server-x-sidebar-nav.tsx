@@ -82,20 +82,12 @@ export function RemoteIdentitySummary({
   loading,
   settingsHref,
 }: {
-  mode: RemoteMcpIdentityMode;
+  mode: RemoteMcpIdentityMode | null;
   passThroughAuthorization: boolean;
   unavailable: boolean;
   loading: boolean;
   settingsHref: string;
 }): React.JSX.Element {
-  let details = remoteIdentityDetails(mode);
-  if (passThroughAuthorization) {
-    details = {
-      label: "Needs cleanup",
-      description: "A legacy pass-through Authorization header is configured.",
-    };
-  }
-
   let status: React.JSX.Element;
   if (unavailable) {
     status = (
@@ -109,7 +101,21 @@ export function RemoteIdentitySummary({
         Loading…
       </Text>
     );
+  } else if (mode === null) {
+    status = (
+      <Text small className="text-destructive">
+        Identity unavailable
+      </Text>
+    );
   } else {
+    let details = remoteIdentityDetails(mode);
+    if (passThroughAuthorization) {
+      details = {
+        label: "Needs cleanup",
+        description:
+          "A legacy pass-through Authorization header is configured.",
+      };
+    }
     status = (
       <>
         <Badge
@@ -171,6 +177,11 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     { enabled: idOrSlug !== "" },
   );
   const mcpServerId = mcpServer?.id ?? "";
+  const mcpResourceId = mcpServer?.toolsetId ?? mcpServer?.id;
+  const canProbeRemoteIdentity =
+    !!mcpResourceId &&
+    (hasScope("mcp:read", mcpResourceId) ||
+      hasScope("mcp:write", mcpResourceId));
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
       enabled: mcpServerId !== "",
@@ -204,25 +215,32 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     isError: isRemoteSessionClientsError,
   } = useAllRemoteSessionClients(
     { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+    {
+      enabled: canProbeRemoteIdentity && !!userSessionIssuerId,
+      throwOnError: false,
+    },
   );
-  const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
   const {
     data: remoteHeadersResult,
     isLoading: isLoadingRemoteHeaders,
     isError: isRemoteHeadersError,
   } = useRemoteMcpServerHeaders({ remoteMcpServerId }, undefined, {
-    enabled: remoteMcpServerId !== "",
+    enabled: canProbeRemoteIdentity && remoteMcpServerId !== "",
+    throwOnError: false,
   });
   const remoteHeaders = remoteHeadersResult?.headers ?? [];
-  const remoteIdentityMode = deriveRemoteMcpIdentityMode(
-    remoteSessionClients.length,
-    remoteHeaders,
-  );
-  const passThroughAuthorization =
-    findPassThroughAuthorizationHeader(remoteHeaders);
   const identityUnavailable =
     isRemoteSessionClientsError || isRemoteHeadersError;
+  const identityLoading =
+    isLoadingRemoteSessionClients || isLoadingRemoteHeaders;
+  const identityResolved =
+    canProbeRemoteIdentity && !identityLoading && !identityUnavailable;
+  const remoteIdentityMode = identityResolved
+    ? deriveRemoteMcpIdentityMode(remoteSessionClients.length, remoteHeaders)
+    : null;
+  const passThroughAuthorization = identityResolved
+    ? findPassThroughAuthorizationHeader(remoteHeaders)
+    : undefined;
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -253,9 +271,14 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (hasRemoteIdentityProvider) {
+  } else if (isRemoteBacked && identityLoading) {
+    authenticationDescription = "Checking the server's identity mode.";
+  } else if (isRemoteBacked && identityUnavailable) {
     authenticationDescription =
-      "A remote identity provider is attached to this server.";
+      "The server's identity mode could not be loaded.";
+  } else if (isRemoteBacked && remoteIdentityMode) {
+    authenticationDescription =
+      remoteIdentityDetails(remoteIdentityMode).description;
   } else if (isTunneledBacked) {
     authenticationDescription =
       "Speakeasy authentication is configured; upstream identity providers are optional.";
@@ -293,7 +316,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: authenticationDescription,
           ready:
             isUnproxied ||
-            hasRemoteIdentityProvider ||
+            (isRemoteBacked && identityResolved) ||
             (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
@@ -407,7 +430,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           mode={remoteIdentityMode}
           passThroughAuthorization={!!passThroughAuthorization}
           unavailable={identityUnavailable}
-          loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
+          loading={identityLoading}
           settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         />
       ) : null}

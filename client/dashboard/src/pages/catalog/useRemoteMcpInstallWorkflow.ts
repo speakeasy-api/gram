@@ -543,7 +543,10 @@ export function useRemoteMcpInstallWorkflow({
       serverConfigs.length > 0 &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
       serverConfigs.every(
-        (c) => c.identityMode !== "agent" || c.agentAuthorization.trim() !== "",
+        (c) =>
+          c.remotes.length === 0 ||
+          c.identityMode !== "agent" ||
+          c.agentAuthorization.trim() !== "",
       ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );

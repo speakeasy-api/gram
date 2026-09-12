@@ -9,10 +9,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
-  useUserSessionIssuer: () => mocks.issuer(),
+  useUserSessionIssuer: (...args: unknown[]) => mocks.issuer(...args),
 }));
 vi.mock("./authentication/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => mocks.clients(),
+  useAllRemoteSessionClients: (...args: unknown[]) => mocks.clients(...args),
 }));
 vi.mock("./authentication/UserIdentitySessionControls", () => ({
   UserIdentitySessionControls: () => (
@@ -70,5 +70,36 @@ describe("RemoteMcpSessionsSection", () => {
     ).toBeDefined();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it("shows the non-User-Identity state when the server has no issuer", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+
+    expect(
+      screen.getByText(/apply when User Identity is configured/i),
+    ).toBeDefined();
+    expect(screen.queryByText(/could not be loaded/i)).toBeNull();
+  });
+
+  it("keeps controls mounted during a background client refetch", () => {
+    mocks.clients.mockReturnValue({
+      items: [{ id: "remote-session-client-1" }],
+      isLoading: true,
+      isError: false,
+    });
+
+    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+
+    expect(screen.getByText("Session length")).toBeDefined();
+    expect(screen.queryByText(/Loading session settings/i)).toBeNull();
+    expect(mocks.issuer).toHaveBeenCalledWith(
+      { id: "user-session-issuer-1" },
+      undefined,
+      { enabled: true, throwOnError: false },
+    );
   });
 });

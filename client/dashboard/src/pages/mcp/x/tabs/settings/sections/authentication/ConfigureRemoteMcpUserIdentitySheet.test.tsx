@@ -39,10 +39,12 @@ vi.mock("@/routes", () => ({
 }));
 
 vi.mock("./useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => ({
-    items: mocks.clients(),
-    isLoading: false,
-  }),
+  useAllRemoteSessionClients: () => {
+    const result = mocks.clients();
+    return Array.isArray(result)
+      ? { items: result, isLoading: false, isError: false }
+      : result;
+  },
 }));
 
 const target: AuthTarget = {
@@ -171,5 +173,29 @@ describe("ConfigureRemoteMcpUserIdentitySheet", () => {
         }),
       }),
     );
+  });
+
+  it("blocks configuration when existing clients cannot be loaded", () => {
+    mocks.clients.mockReturnValue({
+      items: [],
+      isLoading: false,
+      isError: true,
+    });
+    renderSheet();
+
+    expect(
+      screen.getByText(/Existing OAuth clients could not be loaded/i),
+    ).toBeDefined();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Configure User Identity",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure User Identity" }),
+    );
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 });

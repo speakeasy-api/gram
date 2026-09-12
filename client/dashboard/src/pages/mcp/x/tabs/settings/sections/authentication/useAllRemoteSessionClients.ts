@@ -19,7 +19,7 @@ export function useAllRemoteSessionClients(
     ListRemoteSessionClientsRequest,
     "userSessionIssuerId" | "remoteSessionIssuerId"
   >,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; throwOnError?: boolean },
 ): {
   items: RemoteSessionClient[];
   isLoading: boolean;
@@ -28,14 +28,15 @@ export function useAllRemoteSessionClients(
 } {
   const query = useRemoteSessionClientsInfinite(filters, undefined, {
     enabled: options?.enabled,
+    throwOnError: options?.throwOnError,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage) {
+    if (!query.isError && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage();
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [query.isError, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const items = useMemo<RemoteSessionClient[]>(
     () => query.data?.pages.flatMap((page) => page.result.items) ?? [],
@@ -45,7 +46,7 @@ export function useAllRemoteSessionClients(
   // Keep isLoading true while any fetch is in flight or more pages remain. A
   // background refetch can otherwise expose cached pages as complete and let a
   // consumer make decisions from a stale partial list.
-  const isLoading = query.isFetching || hasNextPage;
+  const isLoading = query.isFetching || (!query.isError && hasNextPage);
 
   return { items, isLoading, isError: query.isError, error: query.error };
 }

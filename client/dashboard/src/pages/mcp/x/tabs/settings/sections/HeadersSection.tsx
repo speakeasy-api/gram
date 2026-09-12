@@ -280,7 +280,10 @@ export function HeadersSection({
     isError: clientsError,
   } = useAllRemoteSessionClients(
     { userSessionIssuerId: identityManagement?.userSessionIssuerId },
-    { enabled: !!identityManagement?.userSessionIssuerId },
+    {
+      enabled: !!identityManagement?.userSessionIssuerId,
+      throwOnError: false,
+    },
   );
   const identityError =
     !!identityManagement && (clientsError || headersQuery.isError);

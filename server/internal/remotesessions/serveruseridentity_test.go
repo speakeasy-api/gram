@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestCommitServerUserIdentityConfigurationManualCreatesConfigurationAtomically(t *testing.T) {
@@ -317,6 +319,48 @@ func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t 
 	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
 	require.NoError(t, err)
 	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
+}
+
+func TestCommitServerUserIdentityConfigurationLocksUserSessionIssuerBeforeReplacingBindings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "replace-binding-lock")
+	providerID := createServerIdentityProvider(t, ctx, ti, "replace-binding-lock-provider", "", false, []string{"none"})
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectIDFromContext(t, ctx)),
+		OrganizationID:        conv.ToPGText(activeOrganizationID(t, ctx)),
+		RemoteSessionIssuerID: providerID,
+		ClientID:              "replace-binding-lock-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+			SessionToken:        nil,
+			ApikeyToken:         nil,
+			ProjectSlugInput:    nil,
+			McpServerID:         targetID.String(),
+			ProviderID:          conv.PtrEmpty(providerID.String()),
+			CreateProvider:      nil,
+			ClientMode:          "existing",
+			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
+			ClientConfiguration: nil,
+		})
+		done <- err
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"atomic configuration completed while another transaction held the user-session-issuer binding lock")
+	require.NoError(t, tx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"atomic configuration did not complete after the user-session-issuer binding lock was released")
+	require.NoError(t, <-done)
 }
 
 func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInstance, slug string) (uuid.UUID, uuid.UUID) {

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 func TestUpdateServer_ServerFields(t *testing.T) {
@@ -138,15 +139,22 @@ func TestUpdateServer_InvalidURL_MissingHost(t *testing.T) {
 	_ = requireUpdateServerInvalidURL(t, "https://")
 }
 
-func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
+func TestUpdateServer_RejectsHostedHTTP(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	err := requireUpdateServerInvalidURL(t, "http://8.8.8.8")
+	require.ErrorIs(t, err, remotemcpproxy.ErrInsecureRemoteMCPTransport)
+}
+
+func TestUpdateServer_AllowsLoopbackHTTPWithDevelopmentPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceWithPolicy(t, newPermissivePolicy(t))
 
 	created, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		URL:              "https://mcp.example.com",
+		URL:              "https://127.0.0.1/mcp",
 		TransportType:    "streamable-http",
 	})
 	require.NoError(t, err)
@@ -155,10 +163,10 @@ func TestUpdateServer_AllowsPublicIPLiteral(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		ID:               created.ID,
-		URL:              new("http://8.8.8.8"),
+		URL:              new("http://localhost:8080/mcp"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "http://8.8.8.8", updated.URL)
+	require.Equal(t, "http://localhost:8080/mcp", updated.URL)
 }
 
 func TestUpdateServer_NameSet(t *testing.T) {

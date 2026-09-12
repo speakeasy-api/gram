@@ -17,7 +17,7 @@ export function useRemoteMcpAuthenticationProbe(
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
-    { enabled: enabled && remoteMcpServerId !== "" },
+    { enabled: enabled && remoteMcpServerId !== "", throwOnError: false },
   );
   const url = sourceQuery.data?.url;
   const probeQuery = useQuery({
@@ -31,6 +31,7 @@ export function useRemoteMcpAuthenticationProbe(
     enabled: enabled && !!url,
     retry: false,
     staleTime: 5 * 60 * 1000,
+    throwOnError: false,
   });
 
   if (!enabled || remoteMcpServerId === "") return "idle";

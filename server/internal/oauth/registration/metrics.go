@@ -27,7 +27,7 @@ type PostRegistrationCommitFailureRecorder interface {
 }
 
 // Metrics records automatic client-registration failures without tenant,
-// provider, client, message, credential, or request dimensions.
+// provider, client, message, credential, or request data.
 type Metrics struct {
 	logger                         *slog.Logger
 	failures                       metric.Int64Counter
@@ -109,11 +109,6 @@ func (m *Metrics) RecordFailure(ctx context.Context, method Method, failure Fail
 	}
 	if failure.HTTPStatus != nil {
 		logAttributes = append(logAttributes, attr.SlogHTTPResponseStatusCode(*failure.HTTPStatus))
-	}
-	if failure.ProviderMessage != nil {
-		if message := SanitizeProviderMessage(*failure.ProviderMessage); message != "" {
-			logAttributes = append(logAttributes, attr.SlogOAuthErrorDescription(message))
-		}
 	}
 	m.logger.LogAttrs(ctx, slog.LevelWarn, "oauth client registration failed", logAttributes...)
 }

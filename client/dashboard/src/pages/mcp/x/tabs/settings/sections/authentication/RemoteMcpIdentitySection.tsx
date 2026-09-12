@@ -10,7 +10,7 @@ import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import { IssuerLink } from "@/pages/remote-identity-providers/IssuerLink";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -69,12 +69,13 @@ export function RemoteMcpIdentitySectionBody({
   const remoteMcpServerId = target.remoteMcpServerId ?? "";
   const queryClient = useQueryClient();
   const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite = !rbacLoading && hasScope("mcp:write", target.resourceId);
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const {
     items: clients,
@@ -83,12 +84,14 @@ export function RemoteMcpIdentitySectionBody({
     error: clientsQueryError,
   } = useAllRemoteSessionClients(
     { userSessionIssuerId: target.userSessionIssuerId ?? undefined },
-    { enabled: !!target.userSessionIssuerId },
+    { enabled: !!target.userSessionIssuerId, throwOnError: false },
   );
-  const { data: issuersResult, isLoading: issuersLoading } =
-    useRemoteSessionIssuers();
+  const issuersQuery = useRemoteSessionIssuers(undefined, undefined, {
+    throwOnError: false,
+  });
   const siblingsQuery = useMcpServers({ remoteMcpServerId }, undefined, {
     enabled: remoteMcpServerId !== "",
+    throwOnError: false,
   });
   const linkedServers = (siblingsQuery.data?.mcpServers ?? []).filter(
     (server) => server.remoteMcpServerId === remoteMcpServerId,
@@ -141,7 +144,11 @@ export function RemoteMcpIdentitySectionBody({
 
   const handleModeChange = (next: string) => {
     const mode = next as RemoteMcpIdentityMode;
-    if (actualMode === "user" || identityReadOnly || passThroughAuthorization) {
+    if (
+      actualMode === "user" ||
+      identityReadOnly ||
+      (passThroughAuthorization && mode !== "user")
+    ) {
       return;
     }
     if (actualMode === "agent" && mode === "none") {
@@ -152,7 +159,9 @@ export function RemoteMcpIdentitySectionBody({
   };
 
   const removeAgentCredential = async () => {
-    if (!authorizationHeader || !canWrite || rbacLoading) return;
+    if (!authorizationHeader || !canWrite || rbacLoading || identityReadOnly) {
+      return;
+    }
     try {
       await deleteHeader.mutateAsync({
         request: { id: authorizationHeader.id },
@@ -175,7 +184,7 @@ export function RemoteMcpIdentitySectionBody({
     }
   };
 
-  const allIssuers = issuersResult?.result.items ?? [];
+  const allIssuers = issuersQuery.data?.result.items ?? [];
   const associatedIssuerIds = new Set(
     clients.map((client) => client.remoteSessionIssuerId),
   );
@@ -216,6 +225,13 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="error" dismissible={false}>
                 Could not determine the current identity configuration
                 {identityError?.message ? `: ${identityError.message}` : "."}
+              </Alert>
+            ) : null}
+
+            {issuersQuery.isError ? (
+              <Alert variant="error" dismissible={false}>
+                Remote identity providers could not be loaded. User Identity
+                configuration is unavailable.
               </Alert>
             ) : null}
 
@@ -291,7 +307,11 @@ export function RemoteMcpIdentitySectionBody({
                       >
                         Every user shares one static Authorization credential.
                       </RadioCard>
-                      <RadioCard value="none" title="None">
+                      <RadioCard
+                        value="none"
+                        disabled={!!passThroughAuthorization}
+                        title="None"
+                      >
                         Connect without a static upstream identity.
                       </RadioCard>
                     </RadioCardGroup>
@@ -305,10 +325,12 @@ export function RemoteMcpIdentitySectionBody({
                 configured={actualMode === "user"}
                 issuers={associatedIssuers}
                 clients={clients}
-                isLoading={issuersLoading}
-                disabled={identityReadOnly}
+                isLoading={issuersQuery.isLoading}
+                isError={issuersQuery.isError}
+                disabled={identityReadOnly || issuersQuery.isError}
                 onConfigure={() => setUserIdentitySheetOpen(true)}
                 manageHref={orgRoutes.remoteIdentityProviders.href()}
+                inspectHref={routes.mcp.x.inspect.href(target.resourceId)}
                 clientHref={(issuerId, clientId) =>
                   orgRoutes.remoteIdentityProviders.clientDetail.href(
                     issuerId,
@@ -357,7 +379,7 @@ export function RemoteMcpIdentitySectionBody({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={saving || !canWrite || rbacLoading}
+              disabled={saving || identityReadOnly}
               onClick={() => void removeAgentCredential()}
             >
               {saving ? (
@@ -421,18 +443,22 @@ function UserIdentityDetails({
   issuers,
   clients,
   isLoading,
+  isError,
   disabled,
   onConfigure,
   manageHref,
+  inspectHref,
   clientHref,
 }: {
   configured: boolean;
   issuers: RemoteSessionIssuer[];
   clients: RemoteSessionClient[];
   isLoading: boolean;
+  isError: boolean;
   disabled: boolean;
   onConfigure: () => void;
   manageHref: string;
+  inspectHref: string;
   clientHref: (issuerId: string, clientId: string) => string;
 }): JSX.Element {
   if (!configured) {
@@ -511,7 +537,11 @@ function UserIdentityDetails({
             </div>
           );
         })}
-        {isLoading ? (
+        {isError ? (
+          <Text small className="text-destructive">
+            Remote identity providers could not be loaded.
+          </Text>
+        ) : isLoading ? (
           <Text muted small>
             Loading identity provider…
           </Text>
@@ -521,7 +551,11 @@ function UserIdentityDetails({
           </Text>
         ) : null}
         <Text muted small>
-          Try it: Connect on the Inspect tab. Manage this configuration in{" "}
+          Try it: Connect on the{" "}
+          <Link className="text-primary hover:underline" to={inspectHref}>
+            Inspect tab
+          </Link>
+          . Manage this configuration in{" "}
           <Link className="text-primary hover:underline" to={manageHref}>
             Remote Identity Providers
           </Link>

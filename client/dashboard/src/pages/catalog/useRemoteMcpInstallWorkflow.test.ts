@@ -277,6 +277,33 @@ describe("useRemoteMcpInstallWorkflow", () => {
     );
   });
 
+  it("does not let an endpoint-less Agent config block the rest of a batch", () => {
+    const servers = [
+      makeServer({ title: "No Endpoint", remotes: [] }),
+      makeServer({
+        title: "Good",
+        remotes: [remote("https://good.example/mcp")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    if (result.current.phase !== "configure") {
+      throw new Error("unexpected phase");
+    }
+
+    act(() => {
+      if (result.current.phase !== "configure") return;
+      result.current.updateServerConfig(0, { identityMode: "agent" });
+    });
+
+    expect(result.current.phase).toBe("configure");
+    if (result.current.phase !== "configure") {
+      throw new Error("unexpected phase");
+    }
+    expect(result.current.canInstall).toBe(true);
+  });
+
   // -------------------------------------------------------------------------
   // multi-remote partitioning
   // -------------------------------------------------------------------------

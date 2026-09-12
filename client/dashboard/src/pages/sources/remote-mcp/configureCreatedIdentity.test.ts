@@ -48,6 +48,11 @@ beforeEach(() => {
     tokenEndpoint: "https://id.example.com/token",
     registrationEndpoint: "https://id.example.com/register",
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    codeChallengeMethodsSupported: ["S256"],
+    revocationEndpoint: "https://id.example.com/revoke",
+    serviceDocumentation: "https://id.example.com/docs",
+    opPolicyUri: "https://id.example.com/policy",
+    opTosUri: "https://id.example.com/terms",
   });
   mocks.getIssuer.mockRejectedValue(
     Object.assign(new Error("not found"), { statusCode: 404 }),
@@ -145,6 +150,11 @@ describe("configureCreatedRemoteMcpIdentity", () => {
           clientMode: "auto",
           createProvider: expect.objectContaining({
             issuer: "https://id.example.com",
+            codeChallengeMethodsSupported: ["S256"],
+            revocationEndpoint: "https://id.example.com/revoke",
+            serviceDocumentation: "https://id.example.com/docs",
+            opPolicyUri: "https://id.example.com/policy",
+            opTosUri: "https://id.example.com/terms",
           }),
           clientConfiguration: expect.objectContaining({
             scope: ["resource.read"],

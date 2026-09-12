@@ -94,7 +94,8 @@ func TestMetricsRecordStableBoundedAttributes(t *testing.T) {
 	require.Equal(t, "rate_limited", event["gram.oauth.registration_reason"])
 	require.Equal(t, true, event["gram.oauth.registration_retryable"])
 	require.EqualValues(t, status, event["http.response.status_code"])
-	require.Equal(t, registration.SanitizeProviderMessage(providerMessage), event["gram.oauth.error_description"])
+	require.NotContains(t, event, "gram.oauth.error_description")
+	require.NotContains(t, logs.String(), "provider message")
 }
 
 func TestMetricsRejectUnboundedValues(t *testing.T) {

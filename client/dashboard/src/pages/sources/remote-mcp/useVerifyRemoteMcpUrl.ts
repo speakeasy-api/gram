@@ -93,7 +93,7 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
           }
           setResult({
             verified: false,
-            message: `MCP endpoint returned an invalid response${status}`,
+            message: `Remote server did not return a valid MCP response${status}`,
           });
           break;
         case "unreachable": {

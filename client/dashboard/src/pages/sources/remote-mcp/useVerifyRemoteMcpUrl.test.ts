@@ -51,7 +51,7 @@ describe("useVerifyRemoteMcpUrl", () => {
     },
   );
 
-  it("omits an unknown HTTP status from invalid-response copy", async () => {
+  it("uses neutral malformed-response copy without an unknown HTTP status", async () => {
     mocks.probe.mockResolvedValue({ outcome: "invalid_mcp_response" });
     const hook = renderHook(() =>
       useVerifyRemoteMcpUrl("https://mcp.example.com/mcp"),
@@ -63,7 +63,25 @@ describe("useVerifyRemoteMcpUrl", () => {
 
     expect(hook.result.current.result).toEqual({
       verified: false,
-      message: "MCP endpoint returned an invalid response",
+      message: "Remote server did not return a valid MCP response",
     });
+  });
+
+  it("retains a 404 hint in malformed-response copy", async () => {
+    mocks.probe.mockResolvedValue({
+      outcome: "invalid_mcp_response",
+      httpStatus: 404,
+    });
+    const hook = renderHook(() =>
+      useVerifyRemoteMcpUrl("https://mcp.example.com/mcp"),
+    );
+
+    await act(async () => {
+      await hook.result.current.trigger();
+    });
+
+    expect(hook.result.current.result?.message).toBe(
+      "Remote server did not return a valid MCP response (HTTP 404)",
+    );
   });
 });

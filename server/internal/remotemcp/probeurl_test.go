@@ -2,6 +2,7 @@ package remotemcp_test
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -89,6 +91,23 @@ func TestProbeURL_InvalidURL(t *testing.T) {
 	})
 
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestProbeURL_RejectsHostedHTTP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPWrite})
+
+	_, err := ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		URL:              "http://8.8.8.8/mcp",
+	})
+
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorIs(t, err, remotemcpproxy.ErrInsecureRemoteMCPTransport)
 }
 
 func TestProbeURL_BlockedHost(t *testing.T) {
@@ -339,6 +358,24 @@ func TestProbeRemoteMcpURL_EmptyJSONResponse(t *testing.T) {
 
 	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
 	require.Equal(t, http.StatusNoContent, requireValue(t, result.HTTPStatus))
+}
+
+func TestProbeRemoteMcpURL_TruncatedSuccessfulResponseIsInvalidMCP(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", "128")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+
+	require.Equal(t, remotemcp.ProbeOutcomeInvalidMCPResponse, result.Outcome)
+	require.Equal(t, http.StatusOK, requireValue(t, result.HTTPStatus))
+	require.Nil(t, result.Reason)
 }
 
 func TestProbeRemoteMcpURL_RejectsOversizedJSONResponse(t *testing.T) {
@@ -627,6 +664,27 @@ func TestProbeRemoteMcpURL_RejectsFourthRedirect(t *testing.T) {
 	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
 	require.Equal(t, remotemcp.ProbeReasonTransportError, requireValue(t, result.Reason))
 	require.Equal(t, int32(4), requestCount.Load())
+}
+
+func TestProbeRemoteMcpURL_RejectsHTTPSRedirectToHostedHTTP(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "http://8.8.8.8/mcp")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	roots := x509.NewCertPool()
+	roots.AddCert(upstream.Certificate())
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
+	require.NoError(t, err)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), policy, upstream.URL)
+
+	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
+	require.Equal(t, remotemcp.ProbeReasonTransportError, requireValue(t, result.Reason))
+	require.Nil(t, result.HTTPStatus)
 }
 
 // TestProbeRemoteMcpURL_RedirectToBlockedHost exercises validation of every
