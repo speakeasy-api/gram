@@ -89,6 +89,7 @@ function themeInitPlugin(): Plugin {
 // serving and what it has checked out. Baked in as constants that are empty in
 // production builds, where the readout is compiled out.
 const DEV_BRANCH_EVENT = "gram:dev-branch";
+const DEV_BRANCH_ASK = "gram:dev-branch:ask";
 
 function git(args: string[]): string {
   try {
@@ -124,6 +125,13 @@ function devReadoutPlugin(): Plugin {
     name: "gram-dev-readout",
     apply: "serve",
     configureServer(server) {
+      // The constant a client starts from was baked when this server started,
+      // so a checkout since then has already made it stale for every page
+      // loaded afterwards. Answer the asking client, not the whole room.
+      server.hot.on(DEV_BRANCH_ASK, (_data, client) => {
+        client.send(DEV_BRANCH_EVENT, currentBranch());
+      });
+
       const gitDir = git(["rev-parse", "--absolute-git-dir"]);
       if (!gitDir) return;
 
@@ -300,7 +308,8 @@ export default defineConfig(async (env) => {
       __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
       __GRAM_DEV_WORKTREE__: JSON.stringify(isDev ? currentWorktree() : ""),
       __GRAM_DEV_BRANCH__: JSON.stringify(isDev ? currentBranch() : ""),
-      __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(DEV_BRANCH_EVENT),
+      __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(isDev ? DEV_BRANCH_EVENT : ""),
+      __GRAM_DEV_BRANCH_ASK__: JSON.stringify(isDev ? DEV_BRANCH_ASK : ""),
     },
     build: {
       sourcemap: true,

@@ -37,7 +37,12 @@ export function DevWorktreeReadout({
   );
 }
 
-/** One line of the readout. Exported so local slots can match the style. */
+/**
+ * One line of the readout. Exported so local slots can match the style —
+ * nothing in a stock checkout imports it, hence the tag for knip.
+ *
+ * @public
+ */
 export function ReadoutLine({
   Icon,
   value,
@@ -60,6 +65,10 @@ export function ReadoutLine({
  * The branch is the one value that moves while the dev server runs, so the
  * plugin pushes a fresh one over HMR whenever HEAD changes rather than letting
  * the baked-in constant go stale after a checkout.
+ *
+ * That constant is baked when the dev server starts, so it is already stale for
+ * any page loaded after a checkout — a mounting client asks the plugin for the
+ * current branch instead of waiting for HEAD to move again.
  */
 function useGitBranch(): string {
   const [branch, setBranch] = useState(__GRAM_DEV_BRANCH__);
@@ -69,6 +78,7 @@ function useGitBranch(): string {
     if (!hot) return;
     const onBranch = (next: string) => setBranch(next);
     hot.on(__GRAM_DEV_BRANCH_EVENT__, onBranch);
+    hot.send(__GRAM_DEV_BRANCH_ASK__);
     return () => hot.off(__GRAM_DEV_BRANCH_EVENT__, onBranch);
   }, []);
 

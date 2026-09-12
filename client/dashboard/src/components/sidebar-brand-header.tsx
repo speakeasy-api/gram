@@ -17,13 +17,16 @@ const devSlots = import.meta.glob<{ DevSlot: () => React.ReactNode }>(
   { eager: true },
 );
 
-// Tests always render the stock logo. The readout and any local slot are
-// dev-server affordances, so they must not change what the suite asserts — and
-// a local slot's build-time constants come from that developer's
-// vite.config.local.ts, which vitest does not load.
+// Production builds and tests always render the stock logo. The readout and any
+// local slot are dev-server affordances, so they must not reach a production
+// artifact and must not change what the suite asserts — and a local slot's
+// build-time constants come from that developer's vite.config.local.ts, which
+// neither a production build nor vitest loads.
 const isTest = import.meta.env.MODE === "test";
-const LocalDevSlot = isTest ? undefined : Object.values(devSlots)[0]?.DevSlot;
-const showReadout = import.meta.env.DEV && !isTest;
+const isDevBrandRow = import.meta.env.DEV && !isTest;
+const LocalDevSlot = isDevBrandRow
+  ? Object.values(devSlots)[0]?.DevSlot
+  : undefined;
 
 /**
  * The brand row shared by the project and org sidebars: logo plus the collapse
@@ -53,7 +56,7 @@ export function SidebarBrandHeader({
 
 function BrandSlot({ homeHref }: { homeHref: string }) {
   if (LocalDevSlot) return <LocalDevSlot />;
-  if (showReadout) return <DevWorktreeReadout />;
+  if (isDevBrandRow) return <DevWorktreeReadout />;
   return (
     <Link
       to={homeHref}

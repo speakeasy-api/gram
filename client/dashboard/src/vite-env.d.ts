@@ -10,6 +10,7 @@ declare const __GRAM_API_URL__: string | undefined;
 declare const __GRAM_DEV_WORKTREE__: string;
 declare const __GRAM_DEV_BRANCH__: string;
 declare const __GRAM_DEV_BRANCH_EVENT__: string;
+declare const __GRAM_DEV_BRANCH_ASK__: string;
 
 interface ViteTypeOptions {
   // By adding this line, you can make the type of ImportMetaEnv strict
