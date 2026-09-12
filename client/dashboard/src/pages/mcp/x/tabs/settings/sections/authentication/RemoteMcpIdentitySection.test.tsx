@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   refetchHeaders: vi.fn(),
   authenticationProbe: vi.fn(),
   protectedResourceMetadata: vi.fn(),
+  fetchMetadata: vi.fn(),
   commit: vi.fn(),
 }));
 
@@ -58,7 +59,7 @@ vi.mock("@/routes", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessions: { commitServerUserIdentityConfiguration: mocks.commit },
-    remoteSessionIssuers: { fetchMetadata: vi.fn() },
+    remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
   }),
 }));
 
@@ -296,6 +297,40 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("opens the provider and registration menus on click", () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    // Both triggers render under <PopoverTrigger asChild>, so the props Radix
+    // clones onto them have to survive. aria-expanded flipping is the proof
+    // that the click handler and state actually reached the button.
+    for (const name of ["Identity provider", "Registration"]) {
+      const trigger = screen.getByLabelText(name);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    }
+  });
+
   it("offers the discovered provider as one that will be created", () => {
     mocks.protectedResourceMetadata.mockReturnValue({
       status: "available",
@@ -308,6 +343,32 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Will be created")).toBeDefined();
     // The derived name and the host read the same for a bare issuer URL.
     expect(screen.getAllByText("auth.linear.app").length).toBeGreaterThan(0);
+  });
+
+  it("does not offer Auto-Configure for a provider that cannot register", async () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://github.com/login/oauth"] },
+    });
+    // GitHub publishes no registration endpoint and no CIMD document — it can
+    // only be set up by hand, and says so through service_documentation.
+    mocks.fetchMetadata.mockResolvedValue({
+      clientIdMetadataDocumentSupported: false,
+      registrationEndpoint: undefined,
+      serviceDocumentation: "https://docs.github.com/apps",
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    await waitFor(() => expect(screen.getByText("New client")).toBeDefined());
+    expect(screen.queryByText("Auto-Configure")).toBeNull();
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: /Open registration guide/i })
+        .getAttribute("href"),
+    ).toBe("https://docs.github.com/apps");
   });
 
   it("warns when the structured probe says No Identity cannot authenticate", () => {
@@ -477,6 +538,29 @@ describe("RemoteMcpIdentitySectionBody", () => {
       (screen.getByLabelText("Header value") as HTMLInputElement).type,
     ).toBe("password");
     expect(container.textContent).not.toContain("manual-secret");
+  });
+
+  it("keeps password managers out of the credential fields", () => {
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+
+    // A username next to a password is exactly the shape a manager treats as a
+    // login form, but these are credentials for the upstream service.
+    for (const label of ["Username", "Password"]) {
+      const field = screen.getByLabelText(label);
+      expect(field.getAttribute("data-1p-ignore")).toBe("true");
+      expect(field.getAttribute("data-lpignore")).toBe("true");
+      expect(field.getAttribute("data-bwignore")).toBe("true");
+      expect(field.getAttribute("data-form-type")).toBe("other");
+    }
+    // Browsers ignore autocomplete="off" on password inputs.
+    expect(screen.getByLabelText("Password").getAttribute("autocomplete")).toBe(
+      "new-password",
+    );
+    expect(screen.getByLabelText("Username").getAttribute("autocomplete")).toBe(
+      "off",
+    );
   });
 
   it("keeps Client Credentials visible but unselectable", () => {

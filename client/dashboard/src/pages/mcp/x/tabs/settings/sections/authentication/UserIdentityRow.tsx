@@ -327,6 +327,7 @@ export function UserIdentityRow({
                 placeholder={`from ${selected.name}`}
                 disabled={disabled}
                 aria-label="Client ID"
+                noAutofill
               />
             </div>
             <div className="space-y-1">
@@ -340,6 +341,7 @@ export function UserIdentityRow({
                 placeholder="Optional"
                 disabled={disabled}
                 aria-label="Client secret"
+                noAutofill
               />
             </div>
           </div>

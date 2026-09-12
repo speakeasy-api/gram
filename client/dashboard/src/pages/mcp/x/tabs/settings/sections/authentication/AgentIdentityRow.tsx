@@ -58,6 +58,7 @@ export function AgentIdentityRow({
               placeholder="Bearer"
               disabled={disabled}
               aria-label="Prefix"
+              noAutofill
             />
           </div>
           <div className="space-y-1">
@@ -71,6 +72,7 @@ export function AgentIdentityRow({
               placeholder="Paste the token"
               disabled={disabled}
               aria-label="Token"
+              noAutofill
             />
           </div>
         </div>
@@ -88,6 +90,7 @@ export function AgentIdentityRow({
               placeholder="service-account"
               disabled={disabled}
               aria-label="Username"
+              noAutofill
             />
           </div>
           <div className="space-y-1">
@@ -100,6 +103,7 @@ export function AgentIdentityRow({
               reveal
               disabled={disabled}
               aria-label="Password"
+              noAutofill
             />
           </div>
         </div>
@@ -117,6 +121,7 @@ export function AgentIdentityRow({
             placeholder="Token abc123"
             disabled={disabled}
             aria-label="Header value"
+            noAutofill
           />
         </div>
       ) : null}
