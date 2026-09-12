@@ -319,7 +319,7 @@ describe("useStartTrial", () => {
     // repaints rather than refetching.
     qc.setQueryData<ListOrganizationsResult>(
       organizationsListQuery({ trial_states: ["none"] }).queryKey,
-      { organizations: [NONE_ORG] },
+      { total: 1, organizations: [NONE_ORG] },
     );
     return qc;
   }
@@ -343,6 +343,7 @@ describe("useStartTrial", () => {
       days: 14,
     });
     expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
       organizations: [STARTED_ORG],
     });
     expect(qc.getQueryState(listKey)?.isInvalidated).toBe(false);
@@ -383,6 +384,7 @@ describe("useStartTrial", () => {
       expect(result.current.isError).toBe(true);
     });
     expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
       organizations: [NONE_ORG],
     });
   });
