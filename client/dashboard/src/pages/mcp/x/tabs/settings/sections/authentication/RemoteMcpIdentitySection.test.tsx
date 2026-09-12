@@ -14,6 +14,7 @@ import type { AuthTarget } from "./authTarget";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
+  sessions: vi.fn(),
   clients: vi.fn(),
   siblings: vi.fn(),
   issuers: vi.fn(),
@@ -86,6 +87,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 
 vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
   invalidateAllRemoteSessionClients: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/remoteSessions.js", () => ({
+  useRemoteSessions: () => mocks.sessions(),
 }));
 
 vi.mock("./useAllRemoteSessionClients", () => ({
@@ -201,6 +206,9 @@ beforeEach(() => {
     isError: false,
   });
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  mocks.sessions.mockReturnValue({
+    data: { result: { items: [{ id: "s-1" }] } },
+  });
   mocks.protectedResourceMetadata.mockReturnValue({
     status: "idle",
     metadata: null,
@@ -366,6 +374,52 @@ describe("RemoteMcpIdentitySectionBody", () => {
       "remote-source-1",
       false,
     );
+  });
+
+  it("reports a linked client only when nobody has connected through it", () => {
+    const linked = {
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+    mocks.clients.mockReturnValue(linked);
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+            },
+          ],
+        },
+      },
+    });
+
+    // A client people already use says nothing beyond its connection count.
+    renderIdentity();
+    expect(screen.queryByText(/No one has connected yet/i)).toBeNull();
+    expect(screen.queryByText("Linked")).toBeNull();
+    cleanup();
+
+    // One nobody has signed in through links to where they would.
+    mocks.sessions.mockReturnValue({ data: { result: { items: [] } } });
+    renderIdentity();
+    expect(
+      screen
+        .getByRole("link", { name: /No one has connected yet/i })
+        .getAttribute("href"),
+    ).toBe("/mcp/x/remote-server/inspect");
   });
 
   it("previews the Authorization header without revealing the credential", async () => {

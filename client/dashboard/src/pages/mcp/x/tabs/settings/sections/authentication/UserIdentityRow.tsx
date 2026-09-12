@@ -119,12 +119,12 @@ export function UserIdentityRow({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="relative flex min-w-0 items-center gap-3">
           <div className="bg-card flex size-10 shrink-0 items-center justify-center border">
             <KeyRound aria-hidden="true" className="size-4" />
           </div>
-          <div className="min-w-0">
+          <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center gap-2">
               <Popover open={providerOpen} onOpenChange={setProviderOpen}>
                 <PopoverTrigger asChild>
@@ -133,7 +133,7 @@ export function UserIdentityRow({
                     ariaLabel="Identity provider"
                     className={cn(
                       "gap-1.5",
-                      selected && "text-foreground font-medium",
+                      selected && "text-foreground text-base font-medium",
                     )}
                   >
                     {selected ? selected.name : "Choose an identity provider"}
@@ -198,16 +198,21 @@ export function UserIdentityRow({
         </div>
 
         {selected ? (
-          <div className="min-w-0">
+          <div className="relative flex shrink-0 flex-col items-end gap-0.5">
             <Popover open={clientOpen} onOpenChange={setClientOpen}>
               <PopoverTrigger asChild>
                 <ScopeTrigger disabled={disabled} ariaLabel="Registration">
                   {!draft.existingClient && !draft.manualNeeded ? (
-                    <Sparkles aria-hidden="true" className="size-3.5" />
+                    // text-default-success is green-700 — so dark next to
+                    // muted body text that it reads as olive. The success
+                    // fill token is the brighter mark green, and it flips to
+                    // a legible shade in dark mode.
+                    <Sparkles
+                      aria-hidden="true"
+                      className="size-3.5 text-[var(--fill-success-default)]"
+                    />
                   ) : null}
-                  <span className="text-foreground text-sm">
-                    {draft.clientLabel}
-                  </span>
+                  <span className="text-sm">{draft.clientLabel}</span>
                   <ChevronDown aria-hidden="true" className="size-3.5" />
                 </ScopeTrigger>
               </PopoverTrigger>
@@ -280,9 +285,22 @@ export function UserIdentityRow({
                 </Command>
               </PopoverContent>
             </Popover>
-            <Text muted variant="small" className="block text-xs">
-              {draft.clientCaption}
-            </Text>
+            {draft.clientHasSessions === false ? (
+              <Link
+                to={inspectHref}
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs"
+              >
+                <span
+                  aria-hidden="true"
+                  className="bg-muted-foreground/50 size-1.5 shrink-0 rounded-full"
+                />
+                No one has connected yet
+              </Link>
+            ) : (
+              <Text muted variant="small" className="block text-xs">
+                {draft.clientCaption}
+              </Text>
+            )}
           </div>
         ) : null}
       </div>
@@ -357,23 +375,6 @@ export function UserIdentityRow({
             Registering with {selected?.name ?? "the provider"}…
           </Text>
         </div>
-      ) : null}
-
-      {status.kind === "done" ? (
-        <Alert variant="success" dismissible={false}>
-          <span className="flex flex-wrap items-center gap-2">
-            <Badge variant="success">
-              <Badge.Text>{status.label}</Badge.Text>
-            </Badge>
-            <span>
-              Try it:{" "}
-              <Link className="underline underline-offset-2" to={inspectHref}>
-                Connect on the Inspect tab
-              </Link>
-              .
-            </span>
-          </span>
-        </Alert>
       ) : null}
 
       {status.kind === "refused" ? (

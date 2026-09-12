@@ -9,6 +9,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
@@ -50,7 +51,7 @@ export type ClientOption = {
 export type UserIdentityStatus =
   | { kind: "idle" }
   | { kind: "pending" }
-  | { kind: "done"; label: "Registered" | "Linked" }
+  | { kind: "done" }
   | { kind: "refused"; message: string | null }
   | { kind: "unreachable"; message: string | null };
 
@@ -97,6 +98,8 @@ export type UserIdentityDraft = {
   clientOptions: ClientOption[];
   clientsLoading: boolean;
   existingClient: ClientOption | null;
+  /** null while unknown. False means nobody has signed in through it yet. */
+  clientHasSessions: boolean | null;
   selectClient: (id: string | null) => void;
   clientLabel: string;
   clientCaption: string;
@@ -274,6 +277,18 @@ export function useUserIdentityDraft({
   const existingClient =
     clientOptions.find((candidate) => candidate.id === selectedClientId) ??
     null;
+  const sessionsQuery = useRemoteSessions(
+    { remoteSessionClientId: existingClient?.id ?? "", limit: 1 },
+    undefined,
+    { enabled: enabled && !!existingClient },
+  );
+  // null while unknown: a client nobody has connected through yet is worth a
+  // nudge, but a loading query must not render as one.
+  const clientHasSessions: boolean | null = !existingClient
+    ? null
+    : sessionsQuery.data
+      ? sessionsQuery.data.result.items.length > 0
+      : null;
 
   // A provider that publishes neither a CIMD-capable document nor a
   // registration endpoint cannot register this server on its own.
@@ -365,10 +380,7 @@ export function useUserIdentityDraft({
         setLocalStatus({ kind: "idle" });
         return;
       }
-      setLocalStatus({
-        kind: "done",
-        label: result.status === "linked" ? "Linked" : "Registered",
-      });
+      setLocalStatus({ kind: "done" });
       setClientId("");
       setClientSecret("");
       await Promise.all([
@@ -390,7 +402,7 @@ export function useUserIdentityDraft({
   if (isPending) {
     status = { kind: "pending" };
   } else if (localStatus.kind === "idle" && configured && !touched) {
-    status = { kind: "done", label: "Linked" };
+    status = { kind: "done" };
   }
 
   const canSave =
@@ -419,6 +431,7 @@ export function useUserIdentityDraft({
     clientOptions,
     clientsLoading,
     existingClient,
+    clientHasSessions,
     selectClient: (id: string | null): void => {
       setClientPick(id);
       setLocalStatus({ kind: "idle" });
