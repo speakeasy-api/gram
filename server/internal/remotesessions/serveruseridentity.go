@@ -391,7 +391,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		client = existing.RemoteSessionClient
 		userIssuerIDs = existing.UserSessionIssuerIds
 	} else {
-		if _, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, provider.ID, []uuid.UUID{target.UserSessionIssuerID.UUID}); err != nil {
+		if _, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, provider.ID, []uuid.UUID{target.UserSessionIssuerID.UUID}); err != nil {
 			return nil, err
 		}
 		now := conv.ToPGTimestamptz(time.Now().UTC())
