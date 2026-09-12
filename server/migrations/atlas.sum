@@ -1,4 +1,4 @@
-h1:3r74moLIFxM22T4BHrCwKCNlRz3iEygSrtR2Rg0kplY=
+h1:vPUpx0SJI9XJvNGwwy1AuOdr0mSmz9aPOl4OpPO6XXQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -400,3 +400,4 @@ h1:3r74moLIFxM22T4BHrCwKCNlRz3iEygSrtR2Rg0kplY=
 20260910185215_add_workload_identity_admissions.sql h1:RoBbWHsyGZxnR5a+04dSoe5T9xjpJEd61v6CakRJK9w=
 20260910213144_user-session-issuer-trusted-remote-issuer.sql h1:pqfLDrzOYI3IiCow5/HpUL9DbDxKE1caOW3T7fF4QU0=
 20260911154450_remote-session-clients-add-token-endpoint-auth-audience-format.sql h1:Yf7Fb4nRpuklUEOLKEZOjL1f6QiAjZj32rnUgJNeeKw=
+20260911201356_aim-206-remote-session-client-resource-display.sql h1:qHpdW2BAaWkcK5wOfAbtRLq1xD6iQMmXqgNAn3GoaTg=
