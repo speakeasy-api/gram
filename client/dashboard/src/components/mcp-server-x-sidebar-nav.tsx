@@ -211,36 +211,40 @@ export function SidebarUrlRow({
     <div className="flex flex-col gap-1">
       <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
       <div className="flex items-start gap-1">
-        {/* No delay: this is a reveal of text already on screen, not a
+        <div className="min-w-0 flex-1">
+          {/* No delay: this is a reveal of text already on screen, not a
             disclosure of extra information. */}
-        <HoverCard openDelay={0}>
-          <HoverCardTrigger asChild>
-            <span className="min-w-0 flex-1">
-              <Text
-                variant="small"
-                muted
-                data-slot="sidebar-url-line"
-                className="block truncate font-mono text-xs"
-              >
-                {display}
-              </Text>
-            </span>
-          </HoverCardTrigger>
-          {/* Offsets pull the card back over the line it belongs to, so the
-              full URL appears where the clipped one was rather than below it:
-              back up by the line box plus the card's own padding, and left by
-              that padding, which lands text exactly on text. */}
-          <HoverCardContent
-            align="start"
-            side="bottom"
-            sideOffset={-24}
-            alignOffset={-8}
-            data-slot="sidebar-url-full"
-            className="w-auto max-w-none p-2 font-mono text-xs whitespace-nowrap duration-75"
-          >
-            {display}
-          </HoverCardContent>
-        </HoverCard>
+          <HoverCard openDelay={0}>
+            <HoverCardTrigger asChild>
+              {/* The padding belongs to the trigger, not the text inside it:
+                the card aligns to the trigger's box, and matching insets are
+                what land the two texts on each other. The negative margin
+                cancels the indent so the URL stays flush with its label. */}
+              <span className="-mx-2 block px-2 py-1">
+                <Text
+                  variant="small"
+                  muted
+                  data-slot="sidebar-url-line"
+                  className="block truncate font-mono text-xs"
+                >
+                  {display}
+                </Text>
+              </span>
+            </HoverCardTrigger>
+            {/* The card carries the same insets as the line, so aligning their
+              boxes aligns their text: pull up by exactly the trigger's height
+              and the two land on each other. */}
+            <HoverCardContent
+              align="start"
+              side="bottom"
+              sideOffset={-24}
+              data-slot="sidebar-url-full"
+              className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+            >
+              {display}
+            </HoverCardContent>
+          </HoverCard>
+        </div>
         <CopyButton
           text={url}
           size="xs"
