@@ -18,7 +18,6 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
 import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
@@ -32,9 +31,10 @@ import { useRevokeLiteLLMInstanceMutation } from "@gram/client/react-query/revok
 import { useRotateLiteLLMInstanceKeyMutation } from "@gram/client/react-query/rotateLiteLLMInstanceKey.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "../remote-identity-providers/ConfirmDialog";
+import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";
 import {
   buildLiteLLMEnvironment,
   buildLiteLLMGuardrailConfig,
@@ -44,14 +44,7 @@ import {
 type FailurePosture = LiteLLMInstance["failurePosture"];
 
 export function LiteLLMIntegrationRow(): JSX.Element {
-  const organization = useOrganization();
-  const projects = useMemo(
-    () =>
-      [...organization.projects].sort((a, b) => a.name.localeCompare(b.name)),
-    [organization.projects],
-  );
-  const defaultProject =
-    projects.find((project) => project.slug === "default") ?? projects[0];
+  const { projects, defaultProject } = useLiteLLMInstanceProjects();
   const [expanded, setExpanded] = useState(false);
   const [projectSlug, setProjectSlug] = useState(defaultProject?.slug ?? "");
   const selectedProjectSlug = projectSlug || defaultProject?.slug || "";
@@ -379,12 +372,15 @@ export function CreateInstanceDialog({
   projects,
   initialProjectSlug,
   onProjectCreated,
+  onInstanceCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projects: Array<{ id: string; name: string; slug: string }>;
   initialProjectSlug: string;
   onProjectCreated: (projectSlug: string) => void;
+  /** The created instance itself, for a caller that renders its setup. */
+  onInstanceCreated?: (instance: LiteLLMInstance) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [projectSlug, setProjectSlug] = useState(initialProjectSlug);
@@ -396,6 +392,7 @@ export function CreateInstanceDialog({
     onSuccess: (data) => {
       void invalidateAllLiteLLMInstances(queryClient);
       onProjectCreated(data.instance.project.slug);
+      onInstanceCreated?.(data.instance);
     },
   });
 
@@ -699,7 +696,7 @@ export function RevokeInstanceDialog({
   );
 }
 
-function SetupContent({
+export function SetupContent({
   instance: instanceProp,
   result,
 }: {
@@ -788,7 +785,11 @@ function SetupSection({
   );
 }
 
-function HealthBadge({ instance }: { instance: LiteLLMInstance }): JSX.Element {
+export function HealthBadge({
+  instance,
+}: {
+  instance: LiteLLMInstance;
+}): JSX.Element {
   if (!instance.active) return <Badge variant="neutral">Revoked</Badge>;
   switch (instance.diagnostics.status) {
     case "success":

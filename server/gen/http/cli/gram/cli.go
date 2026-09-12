@@ -21307,7 +21307,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-activity: Lists activity belonging to an organization for admin operators.`)
-	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
+	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
 	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
 	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
@@ -21748,7 +21748,7 @@ func adminListOrganizationsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists organizations for admin operations with optional search and filters.`)
+	fmt.Fprintln(os.Stderr, `Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -q STRING: `)

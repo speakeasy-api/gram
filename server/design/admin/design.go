@@ -670,7 +670,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("listOrganizations", func() {
-		Description("Lists organizations for admin operations with optional search and filters.")
+		Description("Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -681,10 +681,10 @@ var _ = Service("admin", func() {
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_states", ArrayOf(String), "Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.")
-			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
-			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.")
-			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.")
+			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
+			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.")
 			Attribute("page", Int, "1-based page number for offset paging (default 1). Supplying it selects offset paging.")
 		})
 
