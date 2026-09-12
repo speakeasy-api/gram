@@ -1,8 +1,16 @@
 import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
-import { defineConfig, normalizePath, type Plugin } from "vite";
+import {
+  defineConfig,
+  mergeConfig,
+  normalizePath,
+  type ConfigEnv,
+  type Plugin,
+  type UserConfig,
+} from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
@@ -75,6 +83,52 @@ function themeInitPlugin(): Plugin {
   };
 }
 
+// Optional per-developer overrides, the same escape hatch mise.local.toml is:
+// drop a gitignored vite.config.local.ts beside this file to load your own
+// plugins or tweak settings without touching the config everyone shares.
+// Default-export either a UserConfig or a function of the config env; it is
+// merged last, so it wins. Errors in it are deliberately not swallowed — a
+// broken local config should say so rather than silently do nothing.
+const LOCAL_CONFIG_FILE = "vite.config.local.ts";
+
+async function loadLocalConfig(env: ConfigEnv): Promise<UserConfig> {
+  const file = path.resolve(import.meta.dirname, LOCAL_CONFIG_FILE);
+  if (!fs.existsSync(file)) return {};
+
+  // Built at runtime so the config bundler can't statically analyze it: the
+  // file is optional and usually absent, and a literal specifier would make
+  // that a hard dependency. Node strips the TS types on import.
+  //
+  // The mtime query busts Node's ESM cache, which is keyed by URL and lives as
+  // long as the process: a restart re-imports this file in place, so without
+  // the query an edit would restart the server and then quietly re-run the
+  // previous version.
+  const specifier = `${pathToFileURL(file).href}?mtime=${fs.statSync(file).mtimeMs}`;
+  const loaded: unknown = await import(specifier);
+  const local = (loaded as { default?: unknown }).default;
+  const config =
+    typeof local === "function"
+      ? ((await local(env)) as UserConfig)
+      : ((local ?? {}) as UserConfig);
+
+  // Vite only watches config files it bundled, and this one is imported
+  // outside that graph — restart on edits so it behaves like the real config.
+  return mergeConfig(config, {
+    plugins: [
+      {
+        name: "gram-local-config-watch",
+        apply: "serve",
+        configureServer(server) {
+          server.watcher.add(file);
+          server.watcher.on("change", (changed) => {
+            if (changed === file) void server.restart();
+          });
+        },
+      } satisfies Plugin,
+    ],
+  });
+}
+
 function packagePathRegex(packages: string[]): RegExp {
   const alternatives = packages.map((pkg) =>
     pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("/", "[\\\\/]"),
@@ -82,7 +136,8 @@ function packagePathRegex(packages: string[]): RegExp {
   return new RegExp(`node_modules[\\\\/](?:${alternatives.join("|")})[\\\\/]`);
 }
 // https://vite.dev/config/
-export default defineConfig(({ command }) => {
+export default defineConfig(async (env) => {
+  const { command } = env;
   const isDev = command === "serve";
 
   // Dev HTTPS key/cert. Env vars are set repo-wide by mise.toml, but the
@@ -141,7 +196,7 @@ export default defineConfig(({ command }) => {
   //                               prod (no proxy needed). Used only by the
   //                               playground.
 
-  return {
+  const config: UserConfig = {
     experimental: {
       // Static assets can be served through a CDN.
       // The CDN hostname may be env-specific but this build is env-agnostic
@@ -299,4 +354,6 @@ export default defineConfig(({ command }) => {
       },
     },
   };
+
+  return mergeConfig(config, await loadLocalConfig(env));
 });

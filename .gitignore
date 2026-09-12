@@ -6,6 +6,8 @@ PERSONAL_ACCOUNT_*
 .otel-capture/
 mise.local.toml
 mise.*.local.toml
+client/dashboard/vite.config.local.ts
+client/dashboard/src/dev-slot.local.tsx
 flags.local.csv
 *.tsbuildinfo
 .eslintcache
