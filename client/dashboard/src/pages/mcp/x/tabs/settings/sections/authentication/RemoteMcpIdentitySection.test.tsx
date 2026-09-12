@@ -437,6 +437,47 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("links a configured provider and client to their own pages", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+
+    // AIM-230 requires both to reach their management surface, and the row
+    // carries it on text that is already there rather than new chrome.
+    expect(
+      screen.getByRole("link", { name: "id.example" }).getAttribute("href"),
+    ).toBe("/org/providers/provider-1");
+    expect(
+      screen.getByRole("link", { name: "1 connection" }).getAttribute("href"),
+    ).toBe("/org/providers/provider-1/clients/client-1");
+  });
+
   it("reports a linked client only when nobody has connected through it", () => {
     const linked = {
       items: [

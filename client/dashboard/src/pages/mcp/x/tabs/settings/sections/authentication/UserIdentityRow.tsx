@@ -31,6 +31,82 @@ import { Link } from "react-router";
 import type { ProviderOption, UserIdentityDraft } from "./useUserIdentityDraft";
 
 /**
+ * The issuer URL under the provider name, linked to that provider's page when
+ * it is one we hold a record of. A provider that save is about to create has
+ * no page to open yet.
+ */
+function ProviderUrl({
+  selected,
+  providerHref,
+}: {
+  selected: ProviderOption | null;
+  providerHref: (issuerId: string) => string;
+}): JSX.Element {
+  const url = selected?.url ?? "";
+  if (!selected || selected.isNew) {
+    return (
+      <Text muted variant="small" className="block font-mono text-xs">
+        {url}
+      </Text>
+    );
+  }
+  return (
+    <Link
+      to={providerHref(selected.id)}
+      className="text-muted-foreground hover:text-foreground block font-mono text-xs hover:underline hover:underline-offset-2"
+    >
+      {url}
+    </Link>
+  );
+}
+
+/**
+ * One line under the registration control. A linked client nobody has signed
+ * in through points at where they would; otherwise its connection count opens
+ * the client's own page, which is where those connections are listed.
+ */
+function ClientCaption({
+  draft,
+  selected,
+  inspectHref,
+  clientHref,
+}: {
+  draft: UserIdentityDraft;
+  selected: ProviderOption | null;
+  inspectHref: string;
+  clientHref: (issuerId: string, clientId: string) => string;
+}): JSX.Element {
+  const caption = (
+    <Text muted variant="small" className="block text-xs">
+      {draft.clientCaption}
+    </Text>
+  );
+  if (draft.clientHasSessions === false) {
+    return (
+      <Link
+        to={inspectHref}
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs"
+      >
+        <span
+          aria-hidden="true"
+          className="bg-muted-foreground/50 size-1.5 shrink-0 rounded-full"
+        />
+        No one has connected yet
+      </Link>
+    );
+  }
+  if (!draft.existingClient || !selected || selected.isNew) return caption;
+  return (
+    <Link
+      to={clientHref(selected.id, draft.existingClient.id)}
+      className="text-muted-foreground hover:text-foreground block text-xs hover:underline hover:underline-offset-2"
+    >
+      {draft.clientCaption}
+    </Link>
+  );
+}
+
+/**
  * The frameless combobox trigger the provider and registration pickers share.
  * AIM-230 asks for the provider row to read as settled configuration rather
  * than an unanswered form field, so the control carries no border until it is
@@ -102,6 +178,8 @@ export function UserIdentityRow({
   manageHref,
   createHref,
   inspectHref,
+  providerHref,
+  clientHref,
   onSwitchToAgent,
 }: {
   draft: UserIdentityDraft;
@@ -109,6 +187,8 @@ export function UserIdentityRow({
   manageHref: string;
   createHref: string;
   inspectHref: string;
+  providerHref: (issuerId: string) => string;
+  clientHref: (issuerId: string, clientId: string) => string;
   onSwitchToAgent: () => void;
 }): JSX.Element {
   const [providerOpen, setProviderOpen] = useState(false);
@@ -189,9 +269,7 @@ export function UserIdentityRow({
                 </Badge>
               ) : null}
             </div>
-            <Text muted variant="small" className="block font-mono text-xs">
-              {selected?.url ?? ""}
-            </Text>
+            <ProviderUrl selected={selected} providerHref={providerHref} />
           </div>
         </div>
 
@@ -283,22 +361,12 @@ export function UserIdentityRow({
                 </Command>
               </PopoverContent>
             </Popover>
-            {draft.clientHasSessions === false ? (
-              <Link
-                to={inspectHref}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs"
-              >
-                <span
-                  aria-hidden="true"
-                  className="bg-muted-foreground/50 size-1.5 shrink-0 rounded-full"
-                />
-                No one has connected yet
-              </Link>
-            ) : (
-              <Text muted variant="small" className="block text-xs">
-                {draft.clientCaption}
-              </Text>
-            )}
+            <ClientCaption
+              draft={draft}
+              selected={selected}
+              inspectHref={inspectHref}
+              clientHref={clientHref}
+            />
           </div>
         ) : null}
       </div>

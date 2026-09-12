@@ -350,6 +350,15 @@ export function RemoteMcpIdentitySectionBody({
                 manageHref={orgRoutes.remoteIdentityProviders.href()}
                 createHref={orgRoutes.remoteIdentityProviders.href()}
                 inspectHref={mcpServerTabHref(routes, target.slug, "inspect")}
+                providerHref={(issuerId) =>
+                  orgRoutes.remoteIdentityProviders.issuerDetail.href(issuerId)
+                }
+                clientHref={(issuerId, clientId) =>
+                  orgRoutes.remoteIdentityProviders.clientDetail.href(
+                    issuerId,
+                    clientId,
+                  )
+                }
                 onSwitchToAgent={() => setSelectedMode("agent")}
               />
             </AuthRow>
