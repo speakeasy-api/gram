@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -198,6 +199,9 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+
+	registrationTelemetry registration.Recorder
+
 	// privateAuthorityValidator is injected at construction. The callback package
 	// owns state mechanics; the caller owns endpoint resolution.
 	privateAuthorityValidator PrivateAuthorityValidator
@@ -293,6 +297,7 @@ func NewChallengeManager(
 			interceptors.NewGoogle(logger),
 		},
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
@@ -932,6 +937,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			}
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
+		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1169,6 +1175,26 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
 		},
 	}, nil
+}
+
+func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {
+	if m.registrationTelemetry == nil {
+		return
+	}
+
+	clientRow, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: state.OrganizationID,
+	})
+	if err != nil || !clientRow.RemoteSessionClient.ClientIDMetadataUri.Valid {
+		return
+	}
+
+	failure, record := registration.ClassifyCIMDAuthorizationError(code, description)
+	if record {
+		m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
+	}
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.

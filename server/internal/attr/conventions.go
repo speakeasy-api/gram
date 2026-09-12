@@ -421,14 +421,18 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey             = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey             = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey     = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey      = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRequiredKey             = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey              = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey              = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey      = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey       = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey  = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey  = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRegistrationMethodKey    = attribute.Key("gram.oauth.registration_method")
+	OAuthRegistrationOutcomeKey   = attribute.Key("gram.oauth.registration_outcome")
+	OAuthRegistrationReasonKey    = attribute.Key("gram.oauth.registration_reason")
+	OAuthRegistrationRetryableKey = attribute.Key("gram.oauth.registration_retryable")
+	OAuthRequiredKey              = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
 	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
@@ -1776,6 +1780,34 @@ func OAuthRegistrationEndpoint(v string) attribute.KeyValue {
 
 func SlogOAuthRegistrationEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthRegistrationEndpointKey), v)
+}
+
+func OAuthRegistrationMethod[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationMethodKey.String(string(v))
+}
+func SlogOAuthRegistrationMethod[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationMethodKey), string(v))
+}
+
+func OAuthRegistrationOutcome[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationOutcomeKey.String(string(v))
+}
+func SlogOAuthRegistrationOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationOutcomeKey), string(v))
+}
+
+func OAuthRegistrationReason[V ~string](v V) attribute.KeyValue {
+	return OAuthRegistrationReasonKey.String(string(v))
+}
+func SlogOAuthRegistrationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthRegistrationReasonKey), string(v))
+}
+
+func OAuthRegistrationRetryable(v bool) attribute.KeyValue {
+	return OAuthRegistrationRetryableKey.Bool(v)
+}
+func SlogOAuthRegistrationRetryable(v bool) slog.Attr {
+	return slog.Bool(string(OAuthRegistrationRetryableKey), v)
 }
 
 func OAuthRequired(v bool) attribute.KeyValue { return OAuthRequiredKey.Bool(v) }
