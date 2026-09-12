@@ -5,7 +5,7 @@ export type RemoteMcpIdentityMode = "user" | "agent" | "none";
 export const NO_IDENTITY_AUTHORIZATION_ERROR =
   "Switch to Agent Identity to use a static Authorization credential.";
 
-export function isAuthorizationHeader(name: string): boolean {
+function isAuthorizationHeader(name: string): boolean {
   return name.trim().toLowerCase() === "authorization";
 }
 

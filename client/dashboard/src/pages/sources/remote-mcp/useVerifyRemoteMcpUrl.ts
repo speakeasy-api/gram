@@ -1,7 +1,7 @@
 import { useProbeRemoteMcpURLMutation } from "@gram/client/react-query/probeRemoteMcpURL.js";
 import { useEffect, useRef, useState } from "react";
 
-export type VerifyResult = {
+type VerifyResult = {
   verified: boolean;
   message: string;
   outcome?: "mcp_available" | "authentication_required";
