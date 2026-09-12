@@ -4,26 +4,34 @@ import { Link } from "react-router";
 
 import { HatchRule } from "./hatch-rule";
 import { GramLogo } from "./gram-logo";
+import { DevWorktreeReadout } from "./dev-worktree-readout";
 import { SidebarHeader, SidebarTrigger } from "@/components/ui/Sidebar";
 
-// Optional dev-only slot: drop a gitignored src/dev-slot.local.tsx exporting a
-// `DevSlot` component to take over the brand row — handy for labelling which
-// worktree's stack a tab is pointed at. The pattern must be a literal, and it
-// resolves to an empty object when the file is absent, which is every stock
+// In development the brand row shows the worktree readout instead of the logo.
+// A developer can replace it by dropping a gitignored src/dev-slot.local.tsx
+// that exports a `DevSlot` component — the glob pattern must be a literal, and
+// it resolves to an empty object when the file is absent, which is every stock
 // checkout and every CI build, so nothing is imported and nothing is bundled.
 const devSlots = import.meta.glob<{ DevSlot: () => React.ReactNode }>(
   "../dev-slot.local.tsx",
   { eager: true },
 );
-const DevSlot = Object.values(devSlots)[0]?.DevSlot;
+
+// Tests always render the stock logo. The readout and any local slot are
+// dev-server affordances, so they must not change what the suite asserts — and
+// a local slot's build-time constants come from that developer's
+// vite.config.local.ts, which vitest does not load.
+const isTest = import.meta.env.MODE === "test";
+const LocalDevSlot = isTest ? undefined : Object.values(devSlots)[0]?.DevSlot;
+const showReadout = import.meta.env.DEV && !isTest;
 
 /**
  * The brand row shared by the project and org sidebars: logo plus the collapse
  * control on one --header-height row, closed by the crosshatch rule so the
  * divider lines up with the page header's.
  *
- * The logo gives way to a local dev slot when one exists; with no slot, which
- * is every stock checkout and every production build, it renders as always.
+ * In development the logo gives way to the worktree readout, or to a local dev
+ * slot when one exists. Production always renders the logo.
  */
 export function SidebarBrandHeader({
   homeHref,
@@ -33,21 +41,25 @@ export function SidebarBrandHeader({
   return (
     <SidebarHeader className="gap-0 p-0">
       <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-        {DevSlot ? (
-          <DevSlot />
-        ) : (
-          <Link
-            to={homeHref}
-            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
-          >
-            <GramLogo className="w-28" />
-          </Link>
-        )}
+        <BrandSlot homeHref={homeHref} />
         {/* Collapse control sits beside the logo (WorkOS placement); search
             moved out to the page header. */}
         <SidebarTrigger />
       </div>
       <HatchRule />
     </SidebarHeader>
+  );
+}
+
+function BrandSlot({ homeHref }: { homeHref: string }) {
+  if (LocalDevSlot) return <LocalDevSlot />;
+  if (showReadout) return <DevWorktreeReadout />;
+  return (
+    <Link
+      to={homeHref}
+      className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+    >
+      <GramLogo className="w-28" />
+    </Link>
   );
 }

@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
 
 import {
   defineConfig,
@@ -79,6 +80,66 @@ function themeInitPlugin(): Plugin {
           `<script src="/${themeInitChunk.fileName}"></script>`,
         );
       },
+    },
+  };
+}
+
+// Feeds the development readout in the sidebar's brand row
+// (src/components/dev-worktree-readout.tsx): which worktree this dev server is
+// serving and what it has checked out. Baked in as constants that are empty in
+// production builds, where the readout is compiled out.
+const DEV_BRANCH_EVENT = "gram:dev-branch";
+
+function git(args: string[]): string {
+  try {
+    return execFileSync("git", args, {
+      cwd: import.meta.dirname,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function currentBranch(): string {
+  // A detached HEAD has no branch name — name the commit instead.
+  return (
+    git(["branch", "--show-current"]) || git(["rev-parse", "--short", "HEAD"])
+  );
+}
+
+function currentWorktree(): string {
+  const root = git(["rev-parse", "--show-toplevel"]);
+  return root ? path.basename(root) : "";
+}
+
+// Keeps the readout honest across `git checkout` instead of going stale until
+// the next dev-server restart. Vite's own watcher ignores **/.git/**, so watch
+// the git directory with fs.watch. Watching the directory rather than HEAD
+// itself survives git's write-a-lockfile-then-rename update, which replaces the
+// inode a file watch is holding.
+function devReadoutPlugin(): Plugin {
+  return {
+    name: "gram-dev-readout",
+    apply: "serve",
+    configureServer(server) {
+      const gitDir = git(["rev-parse", "--absolute-git-dir"]);
+      if (!gitDir) return;
+
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const watcher = fs.watch(gitDir, (_event, filename) => {
+        if (filename !== "HEAD") return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          server.hot.send(DEV_BRANCH_EVENT, currentBranch());
+        }, 50);
+      });
+      watcher.on("error", () => watcher.close());
+      server.httpServer?.once("close", () => {
+        clearTimeout(timer);
+        watcher.close();
+      });
     },
   };
 }
@@ -237,6 +298,9 @@ export default defineConfig(async (env) => {
       // Default Gram API URL baked into the inlined elements code
       // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
       __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),
+      __GRAM_DEV_WORKTREE__: JSON.stringify(isDev ? currentWorktree() : ""),
+      __GRAM_DEV_BRANCH__: JSON.stringify(isDev ? currentBranch() : ""),
+      __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(DEV_BRANCH_EVENT),
     },
     build: {
       sourcemap: true,
@@ -329,6 +393,7 @@ export default defineConfig(async (env) => {
         },
       },
       themeInitPlugin(),
+      devReadoutPlugin(),
       react(),
       tailwindcss(),
     ],
