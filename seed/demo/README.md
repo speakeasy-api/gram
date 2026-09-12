@@ -12,10 +12,11 @@ directory holds the authoring docs:
   constants; pre/postflight isolation asserts abort the transaction on any
   violation). Deliberately NOT a migration: migrations are append-only and
   the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
-- `server/internal/demoseed/clickhouse.sql` — scoped deletes (source table +
-  every MV target) followed by fresh inserts; MVs repopulate summaries on
-  INSERT. Postflight `throwIf` asserts fail the run on missing or leaked
-  rows. Keep semicolons out of string literals — the runner splits on ';'.
+- `server/internal/demoseed/clickhouse.sql` — scoped deletes of raw/source
+  tables followed by fresh inserts. Postflight `throwIf` asserts fail the run
+  on missing or leaked rows. Keep semicolons out of string literals — the
+  runner splits on ';'. After these scoped mutations, the Go runner performs
+  the same bounded full-generation usage-summary rebuild as the hourly worker.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
 - `verify.md` — the agent-driven page verification playbook.
@@ -30,8 +31,9 @@ directory holds the authoring docs:
 | Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
-rerun regenerates a fresh window, data never goes stale, and no MV backfill is
-ever needed (fresh rows are past every MV date cutoff).
+rerun regenerates a fresh window and data never goes stale. Incremental MVs
+populate their targets on INSERT; billing usage summaries are rebuilt from
+the complete retained raw ledger after every seed run.
 
 ## Tenants
 
@@ -82,6 +84,26 @@ suffixed slug because the seeded row already holds `speakeasy`.
   db-sweeper CronJob as the template): the app IAM DB user has no CREATE
   grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
   proxy as an explicit sidecar with --quitquitquit so the Job completes.
+
+### Billing usage summary publication
+
+The seed and the hourly background pass share
+`pg_try_advisory_lock(hashtext('gram-demo-seed'))` on a dedicated Postgres
+session. The seed holds it across every Postgres and ClickHouse raw mutation
+and the complete summary rebuild. An hourly pass that finds the lock busy
+skips without waiting; the next pass repairs the full retained history.
+
+Each rebuild reads every retained complete day before the UTC cutoff derived
+from its snapshot time, including `FINAL` readings and every supported facet.
+It builds a bounded staging generation and publishes all tenants plus one
+global readiness marker atomically. A failure never exposes the staging
+generation. This is deliberately full-history late-arrival repair on every
+pass, not dirty-day or incremental ingestion.
+
+The queue-scoped Temporal schedule runs hourly with one workflow and one
+activity, without per-reading or per-tenant actions. Cost is approximately
+720 starts + 720 activity attempts = **1,440 Temporal actions/month per
+namespace before retries**.
 
 ## Local-only fixtures
 
@@ -149,8 +171,12 @@ and the test asserts:
 2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
    versions can always roll forward.
 3. **Idempotence** — per-table row counts are identical after every run for
-   plain MergeTree tables; Summing/Aggregating MV targets collapse rows on
-   `now()`-bucketed keys, so they are checked for isolation only.
+   published plain MergeTree tables. The transient
+   `billing_meter_daily_summaries_staging`,
+   `billing_meter_daily_summary_parts`, and
+   `billing_meter_daily_summary_attempt` tables are never treated as tenant
+   state. Summing/Aggregating MV targets collapse rows on `now()`-bucketed
+   keys, so they are checked for isolation only.
 
 What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the

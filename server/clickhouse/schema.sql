@@ -1304,10 +1304,11 @@ ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
 COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
 
--- Complete UTC days are rebuilt hourly from the deduplicated ledger. Each
--- reading is expanded into every retained family facet before aggregation so
--- the stored family total remains independent from every breakdown.
-CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source AS
+-- Complete UTC days are rebuilt from bounded parameterized slices of the
+-- deduplicated ledger. Each reading is expanded into every retained family
+-- facet before aggregation so the stored family total remains independent
+-- from every breakdown.
+CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source_slice AS
 SELECT
     organization_id,
     family,
@@ -1431,7 +1432,25 @@ FROM
             'gram.risk.scan.custom_rules',
             'gram.risk.scan.cli_destructive'
         )
-        AND occurred_at < toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC')
+        AND (
+            {summary_organization_id:String} = ''
+            OR organization_id = {summary_organization_id:String}
+        )
+        AND (
+            {summary_family:String} = ''
+            OR ({summary_family:String} = 'agent_session_storage' AND meter_id = 'gram.agent_session.storage')
+            OR ({summary_family:String} = 'mcp_bandwidth' AND meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'))
+            OR ({summary_family:String} = 'risk_content_scans' AND meter_id IN (
+                'gram.risk.scan.gitleaks',
+                'gram.risk.scan.presidio',
+                'gram.risk.scan.prompt_injection',
+                'gram.risk.scan.prompt_policy',
+                'gram.risk.scan.custom_rules',
+                'gram.risk.scan.cli_destructive'
+            ))
+        )
+        AND occurred_at >= {summary_from:DateTime64(9, 'UTC')}
+        AND occurred_at < {summary_to:DateTime64(9, 'UTC')}
 )
 GROUP BY
     organization_id,
@@ -1448,9 +1467,20 @@ SETTINGS
     max_threads = 2,
     max_final_threads = 2,
     max_block_size = 4096,
-    max_memory_usage = 402653184,
+    max_memory_usage = 536870912,
     max_bytes_before_external_group_by = 134217728,
     max_bytes_ratio_before_external_group_by = 0.5;
+
+-- Unbounded organization/family parameters retain the verification surface
+-- while production builders invoke the slice view with prunable boundaries.
+CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source AS
+SELECT *
+FROM billing_meter_daily_summary_source_slice(
+    summary_organization_id = '',
+    summary_family = '',
+    summary_from = toDateTime64('1900-01-01 00:00:00', 9, 'UTC'),
+    summary_to = toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC')
+);
 
 CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
     organization_id String,
@@ -1484,41 +1514,19 @@ ORDER BY (
 SETTINGS index_granularity = 8192
 COMMENT 'Daily meter family and facet marginals with atomic publication metadata';
 
--- A non-append refresh atomically replaces the target with one generation.
--- The global marker is emitted even when the source has no business rows.
-CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summary_refresh
-REFRESH AFTER 1 HOUR
-TO billing_meter_daily_summaries
-DEFINER = gram SQL SECURITY DEFINER AS
-WITH
-    toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC') AS cutoff,
-    now64(9, 'UTC') AS refreshed_at
-SELECT *
-FROM billing_meter_daily_summary_source
-UNION ALL
-SELECT
-    '' AS organization_id,
-    '' AS family,
-    '' AS reading_kind,
-    '' AS facet,
-    toDate(cutoff) AS day,
-    '' AS series_kind,
-    '' AS series_key,
-    '' AS label,
-    '' AS unit,
-    '' AS measurement_method,
-    toInt128(0) AS quantity,
-    toUInt64(0) AS reading_count,
-    toUInt8(1) AS is_publication,
-    cutoff AS published_before,
-    refreshed_at AS snapshot_at
-SETTINGS
-    max_threads = 2,
-    max_final_threads = 2,
-    max_block_size = 4096,
-    max_memory_usage = 402653184,
-    max_bytes_before_external_group_by = 134217728,
-    max_bytes_ratio_before_external_group_by = 0.5;
+-- The application rebuilds unpublished partials before consolidating a complete
+-- generation into this identical staging twin. EXCHANGE TABLES publishes all
+-- normal rows and the global coverage marker in one metadata operation.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries_staging AS billing_meter_daily_summaries;
+
+-- Oversized organization/family/day slices are divided on immutable occurrence
+-- boundaries and written here. Each completed day is consolidated into staging
+-- before these bounded partials are discarded.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summary_parts AS billing_meter_daily_summaries;
+
+-- One adaptive attempt is isolated here because a failed INSERT SELECT may have
+-- produced output. Only a successful attempt is copied into the day's parts.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summary_attempt AS billing_meter_daily_summaries;
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity

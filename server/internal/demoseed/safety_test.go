@@ -3,15 +3,16 @@
 package demoseed
 
 import (
-	"context"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -117,12 +118,10 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
-	// Publish the fixture tenant's raw meter facts through the production
-	// refresh before taking the outside-tenant baseline.
-	refreshCtx, cancelRefresh := context.WithTimeout(ctx, meterSummaryPublisherTimeout)
-	defer cancelRefresh()
-	require.NoError(t, ch.Exec(refreshCtx, "SYSTEM REFRESH VIEW billing_meter_daily_summary_refresh"))
-	require.NoError(t, ch.Exec(refreshCtx, "SYSTEM WAIT VIEW billing_meter_daily_summary_refresh"))
+	// Publish the fixture tenant's raw meter facts through the same complete
+	// generation rebuild used by production before taking the outside-tenant
+	// baseline.
+	require.NoError(t, chrepo.New(ch).RebuildUsageSummaries(ctx, time.Now().UTC()))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
 

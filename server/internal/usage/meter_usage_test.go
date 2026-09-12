@@ -124,12 +124,7 @@ func newIsolatedMeterClickhouse(t *testing.T) clickhouse.Conn {
 
 func refreshMeterUsageSummary(t *testing.T, conn clickhouse.Conn) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	require.NoError(t, conn.Exec(ctx, "SYSTEM START VIEW billing_meter_daily_summary_refresh"))
-	require.NoError(t, conn.Exec(ctx, "SYSTEM REFRESH VIEW billing_meter_daily_summary_refresh"))
-	require.NoError(t, conn.Exec(ctx, "SYSTEM WAIT VIEW billing_meter_daily_summary_refresh"))
-	require.NoError(t, conn.Exec(ctx, "SYSTEM STOP VIEW billing_meter_daily_summary_refresh"))
+	require.NoError(t, chrepo.New(conn).RebuildUsageSummaries(t.Context(), time.Now().UTC()))
 }
 
 func apiMeterUsageReading(organizationID string, value int64, occurredAt time.Time) chrepo.ReadingRow {

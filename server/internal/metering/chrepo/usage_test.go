@@ -282,7 +282,6 @@ func storageUsageSelection(t *testing.T, breakdown string) chrepo.UsageSelection
 
 func prepareMissingUsagePublication(t *testing.T, conn clickhouse.Conn) {
 	t.Helper()
-	stopUsageSummaryRefresh(t, conn)
 	require.NoError(t, conn.Exec(t.Context(), "TRUNCATE TABLE billing_meter_daily_summaries"))
 }
 

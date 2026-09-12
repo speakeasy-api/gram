@@ -24,10 +24,3 @@ CREATE ROLE IF NOT EXISTS marts_reader SETTINGS
 -- need a Terraform-generated password kept out of logs, outputs, and this repo.
 -- Never relax Cloud authentication policy to reproduce this local shortcut.
 CREATE USER IF NOT EXISTS marts_definer HOST NONE;
-
--- The application principal owns native meter refreshes. Atlas connects as
--- default, so its sandbox also needs the stable definer used by local/CI.
--- These credentials are local-only and never provision a Cloud principal.
-CREATE USER IF NOT EXISTS gram IDENTIFIED BY 'gram';
--- Native non-append refreshes create and exchange a temporary target table.
-GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE ON gram.* TO gram;

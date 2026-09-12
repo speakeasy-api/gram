@@ -113,14 +113,21 @@ type ClickHouseTableState struct {
 	DemoCount uint64
 }
 
-// SnapshotClickHouse captures the state of every MergeTree-family table in the
-// current database. Engines that collapse same-key rows are OPTIMIZE ... FINAL'd
-// first so background merges cannot shift counts between snapshots. Plain
-// MergeTree rows are already stable without merging.
+// SnapshotClickHouse captures every published MergeTree-family table in the
+// current database. The usage-summary staging, parts, and attempt tables hold
+// transient unpublished work and are excluded. Engines that collapse same-key
+// rows are OPTIMIZE ... FINAL'd first so background merges cannot shift counts
+// between snapshots. Plain MergeTree rows are already stable without merging.
 func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, projectIDs []string) (map[string]ClickHouseTableState, error) {
 	rows, err := ch.Query(ctx, `
 		SELECT name, engine FROM system.tables
-		WHERE database = currentDatabase() AND engine LIKE '%MergeTree%'
+		WHERE database = currentDatabase()
+			AND engine LIKE '%MergeTree%'
+			AND name NOT IN (
+				'billing_meter_daily_summaries_staging',
+				'billing_meter_daily_summary_parts',
+				'billing_meter_daily_summary_attempt'
+			)
 		ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list clickhouse tables: %w", err)

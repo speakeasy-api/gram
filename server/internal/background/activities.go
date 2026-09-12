@@ -134,6 +134,7 @@ type Activities struct {
 	deployFunctionRunners           *activities.DeployFunctionRunners
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
+	rebuildUsageSummaries           *activities.RebuildUsageSummaries
 	snapshotBillingCycleUsage       *activities.SnapshotBillingCycleUsage
 	reportTUMUsageToStripe          *activities.ReportTUMUsageToStripe
 	weeklyUsageSummary              *activities.WeeklyUsageSummary
@@ -418,6 +419,7 @@ func NewActivities(
 		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
+		rebuildUsageSummaries:           activities.NewRebuildUsageSummaries(logger, db, chConn),
 		snapshotBillingCycleUsage:       activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
 		reportTUMUsageToStripe:          activities.NewReportTUMUsageToStripe(logger, db, stripeClient, !tumMeterStreamingEnabled),
 		weeklyUsageSummary:              activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
@@ -719,6 +721,10 @@ func (a *Activities) RunDeviceIntegrationSync(ctx context.Context, input string)
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
 	return a.refreshBillingUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) RebuildUsageSummaries(ctx context.Context, snapshotAt time.Time) error {
+	return a.rebuildUsageSummaries.Do(ctx, snapshotAt)
 }
 
 func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
