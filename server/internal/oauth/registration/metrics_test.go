@@ -118,3 +118,31 @@ func TestMetricsRejectUnboundedValues(t *testing.T) {
 	require.Empty(t, rm.ScopeMetrics)
 	require.Empty(t, logs.String())
 }
+
+func TestMetricsRecordPostRegistrationCommitFailureWithMethodOnly(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	var logs bytes.Buffer
+	metrics := registration.NewMetrics(slog.New(slog.NewJSONHandler(&logs, nil)), provider)
+	metrics.RecordPostRegistrationCommitFailure(t.Context(), registration.MethodDCR)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	require.Len(t, rm.ScopeMetrics, 1)
+	require.Len(t, rm.ScopeMetrics[0].Metrics, 1)
+	got := rm.ScopeMetrics[0].Metrics[0]
+	require.Equal(t, "gram.oauth.client_registration.post_registration_commit_failures", got.Name)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, attribute.NewSet(attr.OAuthRegistrationMethod(registration.MethodDCR)), sum.DataPoints[0].Attributes)
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &event))
+	require.Equal(t, "oauth.client_registration.post_registration_commit_failed", event["event"])
+	require.Equal(t, "dcr", event["gram.oauth.registration_method"])
+	require.NotContains(t, event, "http.response.status_code")
+	require.NotContains(t, event, "gram.oauth.error_description")
+}

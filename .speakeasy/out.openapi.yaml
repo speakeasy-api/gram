@@ -45160,6 +45160,111 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateRemoteSessionIssuer
+  /rpc/remoteSessions.commitServerUserIdentityConfiguration:
+    post:
+      description: Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+      operationId: commitServerUserIdentityConfiguration
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitServerUserIdentityConfigurationForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitServerUserIdentityConfigurationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: commitServerUserIdentityConfiguration remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: commitServerUserIdentityConfiguration
+      x-speakeasy-react-hook:
+        name: CommitServerUserIdentityConfiguration
   /rpc/remoteSessions.list:
     get:
       description: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
@@ -70425,6 +70530,84 @@ components:
           type: string
           description: Reason for the decision, shown to the user
       description: Result for Codex hook events
+    CommitServerUserIdentityConfigurationForm:
+      type: object
+      properties:
+        client_configuration:
+          $ref: '#/components/schemas/ServerUserIdentityClientConfiguration'
+        client_mode:
+          type: string
+          description: How to provide the OAuth client.
+          enum:
+            - auto
+            - existing
+            - manual
+        create_provider:
+          $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+        existing_client_id:
+          type: string
+          description: An existing visible remote-session client to link. Required only for existing mode.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The target MCP server. It must be backed directly by a Remote MCP source.
+          format: uuid
+        provider_id:
+          type: string
+          description: An existing Remote Identity Provider visible to the target project.
+          format: uuid
+      description: 'A complete plan for configuring user identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
+      required:
+        - mcp_server_id
+        - client_mode
+    CommitServerUserIdentityConfigurationResult:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/RemoteSessionClient'
+        client_path:
+          type: string
+          description: Organization-relative dashboard path to the client detail surface.
+        client_tier:
+          type: string
+          description: The client ownership tier.
+          enum:
+            - project-specific
+            - organization-level
+        failure:
+          $ref: '#/components/schemas/ServerUserIdentityRegistrationFailure'
+        manual_setup_required:
+          type: boolean
+          description: True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.
+        provider:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        provider_path:
+          type: string
+          description: Organization-relative dashboard path to the Remote Identity Provider detail surface.
+        provider_tier:
+          type: string
+          description: The provider ownership tier.
+          enum:
+            - project-specific
+            - organization-level
+            - platform-level
+        registration_method:
+          type: string
+          description: How the client was obtained. Present on success and registration failure.
+          enum:
+            - cimd
+            - dcr
+            - manual
+            - existing
+        status:
+          type: string
+          description: Successful commit status. Present only after local commit.
+          enum:
+            - registered
+            - linked
+      description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
+      required:
+        - manual_setup_required
     CreateAgentForm:
       type: object
       properties:
@@ -86201,6 +86384,68 @@ components:
         - id
         - raw_server_name
         - display_name
+    ServerUserIdentityClientConfiguration:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        client_id:
+          type: string
+          description: The out-of-band OAuth client identifier. Manual mode only.
+        client_secret:
+          type: string
+          description: The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Each value must be an RFC 6749 scope token.
+        token_endpoint_auth_method:
+          type: string
+          description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+      description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+    ServerUserIdentityRegistrationFailure:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: Optional upstream HTTP status.
+          format: int64
+        outcome:
+          type: string
+          enum:
+            - unreachable
+            - refused
+        provider_message:
+          type: string
+          description: Optional sanitized and truncated provider-controlled message.
+        reason:
+          type: string
+          enum:
+            - dns_error
+            - tls_error
+            - timeout
+            - network_error
+            - rate_limited
+            - upstream_unavailable
+            - authorization_rejected
+            - invalid_success_response
+        retryable:
+          type: boolean
+      description: A completed automatic registration failure using the bounded OAuth registration taxonomy.
+      required:
+        - outcome
+        - reason
+        - retryable
     ServerVariable:
       type: object
       properties:
