@@ -32,6 +32,11 @@ const config: KnipConfig = {
     // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
     // happens to use every part of it today.
     "src/components/ui/**/*",
+    // Dev-only brand-row corner. Most of it is imported normally; what is not
+    // is the seam it holds open for a developer's gitignored slot.local.tsx,
+    // absent in every stock checkout — so the exports meant for that file read
+    // as dead code here.
+    "src/dev/**/*",
     // Page-template layer + its composite widgets: a shared page-shape library
     // (all templates + widgets) whose full API is exposed whether or not every
     // page has migrated onto it yet — same rationale as components/ui above.

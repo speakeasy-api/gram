@@ -31,5 +31,8 @@
     "noUncheckedIndexedAccess": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src", ".storybook/preview.tsx", ".storybook/providers.tsx"]
+  "include": ["src", ".storybook/preview.tsx", ".storybook/providers.tsx"],
+  // A developer's gitignored local files are theirs, and may reach outside this
+  // package for code that does not typecheck under these settings.
+  "exclude": ["src/**/*.local.tsx"]
 }
