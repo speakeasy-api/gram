@@ -109,8 +109,8 @@ if grep -qE "^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*['\"]client_[^'\"]*['\"
 fi
 
 # Fill in per-developer local config added to the main worktree since this one
-# was created. Existing copies here are left alone — see git:worklocal.
-mise run git:worklocal
+# was created. Existing copies here are left alone — see git:workcopy.
+mise run git:workcopy --scope sync
 
 echo "⏳ Syncing port mappings..."
 added=0

@@ -9,41 +9,10 @@
 
 set -e
 
-# Find the source worktree to copy shared files from
-if [ -n "${usage_source:-}" ]; then
-  main_worktree=$(cd "$usage_source" && pwd)
-else
-  main_worktree=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
-fi
-current_worktree=$(git rev-parse --show-toplevel)
-
-if [ -z "$main_worktree" ] || [ "$main_worktree" = "$current_worktree" ]; then
-  echo "Error: this task must be run from a git worktree, not the main working tree."
-  exit 1
-fi
-
-copy_from_main=(
-  ./mise.local.toml
-  ./local
-  ./.vscode
-  ./.cursor
-  ./.claude
-  ./.mise-tasks
-)
-
-for item in "${copy_from_main[@]}"; do
-  src="${main_worktree}/${item}"
-  [ -e "$src" ] || continue
-  if [ -d "$src" ]; then
-    tools/rclone copy --metadata --links --create-empty-src-dirs "$src" "$item"
-  else
-    tools/rclone copyto --metadata --links "$src" "$item"
-  fi
-done
-
-# Per-developer local config (gitignored) lives in its own task so that
-# git:worksync can top up an existing worktree with the same list.
-mise run git:worklocal --force ${usage_source:+--source "$usage_source"}
+# Scaffolding and per-developer config both come from the main worktree;
+# git:workcopy owns the lists so git:worksync can top up the same local config
+# later. It refuses to run outside a worktree, which is this task's guard too.
+mise run git:workcopy --scope init ${usage_source:+--source "$usage_source"}
 
 mise trust
 if ! mise run install:aube --offline; then
