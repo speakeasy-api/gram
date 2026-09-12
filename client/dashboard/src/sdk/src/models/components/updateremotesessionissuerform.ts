@@ -112,6 +112,10 @@ export type UpdateRemoteSessionIssuerForm = {
   tokenEndpoint?: string | undefined;
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
   /**
+   * Set or clear this issuer's MCP tunnel binding. Omission keeps the binding; an empty string clears it; any other value must be a tunneled MCP server in the same project. Platform admins only.
+   */
+  tunneledMcpServerId?: string | undefined;
+  /**
    * Set or clear the OpenID Connect userinfo endpoint. An empty string clears it to NULL; any other value must be an absolute https URL, or http on loopback.
    */
   userinfoEndpoint?: string | undefined;
@@ -149,6 +153,7 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   slug?: string | undefined;
   token_endpoint?: string | undefined;
   token_endpoint_auth_methods_supported?: Array<string> | undefined;
+  tunneled_mcp_server_id?: string | undefined;
   userinfo_endpoint?: string | undefined;
 };
 
@@ -188,6 +193,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     slug: z.optional(z.string()),
     tokenEndpoint: z.optional(z.string()),
     tokenEndpointAuthMethodsSupported: z.optional(z.array(z.string())),
+    tunneledMcpServerId: z.optional(z.string()),
     userinfoEndpoint: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -220,6 +226,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       tokenEndpoint: "token_endpoint",
       tokenEndpointAuthMethodsSupported:
         "token_endpoint_auth_methods_supported",
+      tunneledMcpServerId: "tunneled_mcp_server_id",
       userinfoEndpoint: "userinfo_endpoint",
     });
   }),

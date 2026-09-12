@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -148,6 +149,7 @@ type IssuerMetadataRefresher struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	policy      *guardian.Policy
+	tunnels     *tunnelrouting.HTTPClient
 	auditLogger *audit.Logger
 	metrics     *remotesessionmetrics.IssuerMetadataRefresh
 
@@ -164,11 +166,12 @@ type IssuerMetadataRefresher struct {
 }
 
 // NewIssuerMetadataRefresher wires the on-use refresh. Two replicas may refresh one issuer at once; the row lock and timestamp compare in apply keep the writes consistent, so the duplicate costs one fetch.
-func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, auditLogger *audit.Logger) *IssuerMetadataRefresher {
+func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger) *IssuerMetadataRefresher {
 	return &IssuerMetadataRefresher{
 		logger:      logger.With(attr.SlogComponent("remotesessions_issuer_metadata_refresh")),
 		db:          db,
 		policy:      policy,
+		tunnels:     tunnels,
 		auditLogger: auditLogger,
 		metrics:     remotesessionmetrics.NewIssuerMetadataRefresh(logger, meterProvider),
 		slots:       make(chan struct{}, issuerMetadataRefreshSlots),
@@ -320,7 +323,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
 	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
 
-	params, _, err := refreshIssuerMetadata(ctx, r.policy, existing)
+	params, _, err := refreshIssuerMetadata(ctx, r.policy, r.tunnels, existing)
 	if err != nil {
 		msg, _ := discoveryFailureMessage(err)
 		retryURL := discoveryRetryURL(err)

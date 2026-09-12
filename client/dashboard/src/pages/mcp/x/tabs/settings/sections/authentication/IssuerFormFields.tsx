@@ -214,6 +214,10 @@ export function EndpointsFields({
           onChange={onRegistrationEndpointChange}
           placeholder="https://login.example.com/register"
         />
+        <Text muted small>
+          Used for DCR. Enter it manually when issuer metadata does not
+          advertise one.
+        </Text>
       </Stack>
 
       <Stack gap={2}>

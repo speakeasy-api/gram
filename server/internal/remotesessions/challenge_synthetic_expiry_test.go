@@ -408,11 +408,12 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 		managerOptions...,
 	)
-	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, nil, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
 	// Detached restatements finish before the pool closes.
 	t.Cleanup(mgr.WaitIdentityRestatements)
 	t.Cleanup(refresher.WaitIdentityRestatements)
@@ -512,7 +513,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		mgr:       mgr,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
-			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks, refreshOptions...)
+			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, nil, locks, refreshOptions...)
 			t.Cleanup(r.WaitIdentityRestatements)
 			return r
 		},

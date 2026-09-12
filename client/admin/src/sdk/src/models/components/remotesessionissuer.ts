@@ -129,6 +129,10 @@ export type RemoteSessionIssuer = {
    */
   tokenEndpoint?: string | undefined;
   tokenEndpointAuthMethodsSupported?: Array<string> | undefined;
+  /**
+   * When set, calls to this issuer's OAuth endpoints ride this MCP tunnel instead of dialing directly.
+   */
+  tunneledMcpServerId?: string | undefined;
   updatedAt: Date;
   /**
    * OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
@@ -184,6 +188,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     slug: z.string(),
     token_endpoint: z.optional(z.string()),
     token_endpoint_auth_methods_supported: z.optional(z.array(z.string())),
+    tunneled_mcp_server_id: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -224,6 +229,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "token_endpoint": "tokenEndpoint",
       "token_endpoint_auth_methods_supported":
         "tokenEndpointAuthMethodsSupported",
+      "tunneled_mcp_server_id": "tunneledMcpServerId",
       "updated_at": "updatedAt",
       "userinfo_endpoint": "userinfoEndpoint",
     });

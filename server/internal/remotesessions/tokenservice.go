@@ -777,7 +777,12 @@ func (s *RefreshService) postRefreshGrant(
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := noRedirectClient(s.policy.PooledClient()).Do(req)
+	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
+	if err != nil {
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err)
+	}
+
+	resp, err := doer.Do(req)
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

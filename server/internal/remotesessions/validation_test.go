@@ -44,7 +44,7 @@ func seedValidationFixture(t *testing.T, prefix string) (context.Context, valida
 	require.NoError(t, err)
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, ti.redisCache, serverURL)
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, serverURL)
 
 	return ctx, validationFixture{
 		ti:        ti,

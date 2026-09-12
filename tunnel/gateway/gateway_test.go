@@ -92,6 +92,14 @@ func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
 }
 
+func TestStripUpstreamTunnelError(t *testing.T) {
+	t.Parallel()
+
+	resp := &http.Response{Header: http.Header{wire.HeaderTunnelError: []string{wire.TunnelErrorNoLiveSession}}}
+	require.NoError(t, stripUpstreamTunnelError(resp))
+	require.Empty(t, resp.Header.Get(wire.HeaderTunnelError))
+}
+
 func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 
@@ -329,19 +337,22 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	t.Parallel()
 
 	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_active"})
+	gw.keys = keys
 	session := newYamuxSession(t)
 	var forwarded http.Header
 	captureProxy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		forwarded = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 	})
-	remove := gw.reg.add("tunnel-1", "session-a", "", session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := gw.reg.add("tunnel-1", "session-a", wire.HashKey("gram_tunnel_active"), session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0"}`))
 	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
 	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
 	req.Header.Set(wire.HeaderTunnelAgentSession, "session-a")
 
 	gw.ForwardHandler().ServeHTTP(rec, req)
@@ -351,6 +362,67 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelID))
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelForwardToken))
+	require.Empty(t, forwarded.Get(wire.HeaderTunnelRequireActive))
+}
+
+func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_revoked"})
+	gw.keys = keys
+	session := newYamuxSession(t)
+	forwarded := false
+	captureProxy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded = true
+		w.WriteHeader(http.StatusOK)
+	})
+	remove := gw.reg.add("tunnel-1", "session-a", wire.HashKey("gram_tunnel_revoked"), session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(remove)
+	keys.Revoke("tunnel-1")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader("grant_type=authorization_code"))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Equal(t, wire.TunnelErrorNoLiveSession, rec.Header().Get(wire.HeaderTunnelError))
+	require.False(t, forwarded)
+}
+
+func TestForwardHandlerSkipsRotatedKeySessionForSensitiveRequest(t *testing.T) {
+	t.Parallel()
+
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_current"})
+	gw.keys = keys
+	staleSession := newYamuxSession(t)
+	activeSession := newYamuxSession(t)
+	removeStale := gw.reg.add("tunnel-1", "session-stale", wire.HashKey("gram_tunnel_old"), staleSession, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-stale", Metadata: map[string]string{}})
+	t.Cleanup(removeStale)
+	forwarded := false
+	activeProxy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded = true
+		w.WriteHeader(http.StatusOK)
+	})
+	removeActive := gw.reg.add("tunnel-1", "session-active", wire.HashKey("gram_tunnel_current"), activeSession, activeProxy, route.Connection{GatewaySessionID: "session-active", Metadata: map[string]string{}})
+	t.Cleanup(removeActive)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader("grant_type=authorization_code"))
+	req.Header.Set(wire.HeaderTunnelID, "tunnel-1")
+	req.Header.Set(wire.HeaderTunnelForwardToken, "s3cret")
+	req.Header.Set(wire.HeaderTunnelRequireActive, "1")
+
+	gw.ForwardHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, forwarded)
+	require.Equal(t, "session-active", rec.Header().Get(wire.HeaderTunnelAgentSession))
 }
 
 func TestRegistryAddRejectsAfterDrainBegins(t *testing.T) {

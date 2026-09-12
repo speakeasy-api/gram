@@ -124,6 +124,11 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		auditProjectID = pid
 	}
 
+	tunnelID, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, projectID, payload.TunneledMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -156,6 +161,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		TunneledMcpServerID:               tunnelID,
 		// Discovered fields forwarded from the draft. Omitted fields store NULL
 		// ("not captured"), like code_challenge_methods_supported above.
 		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
@@ -422,6 +428,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 	if payload.Issuer != nil && *payload.Issuer == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
+	tunneledMcpServerID := normalizeOptionalTunnelBinding(payload.TunneledMcpServerID)
+	if tunneledMcpServerID != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
+	}
 
 	// An empty logo asset id stays legal: the update query reads it as the
 	// explicit "clear to NULL" sentinel. Any other value must be a uuid —
@@ -483,16 +493,20 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 	// organization and curated by platform admins.
 	// UpdateOrganizationRemoteSessionIssuer below is org-scoped and would refuse
 	// anyway; opting the pre-read out keeps the refusal a clean 404.
-	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
+		if _, err := resolveIssuerTunnelBinding(ctx, logger, txRepo, authCtx, existing.ProjectID, tunneledMcpServerID); err != nil {
+			return nil, err
+		}
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
@@ -517,6 +531,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
 		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		TunneledMcpServerID:               conv.PtrToPGText(tunneledMcpServerID),
 		UserinfoEndpoint:                  conv.PtrToPGText(payload.UserinfoEndpoint),
 		IntrospectionEndpoint:             conv.PtrToPGText(payload.IntrospectionEndpoint),
 		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
@@ -651,7 +666,7 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.tunnels, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -678,6 +693,9 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if locked.TunneledMcpServerID != existing.TunneledMcpServerID {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -861,16 +879,18 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 	// A platform issuer has no owning organization to re-scope within, and a
 	// tenant must never move one. SetOrganizationRemoteSessionIssuerProject is
 	// org-scoped and would refuse anyway; opting out keeps it a clean 404.
-	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if existing.TunneledMcpServerID.Valid && (!projectID.Valid || existing.ProjectID.UUID != projectID.UUID) {
+		return nil, oops.E(oops.CodeConflict, nil, "clear the identity provider's MCP tunnel binding before moving it out of its project").LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)

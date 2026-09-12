@@ -14,8 +14,42 @@ func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
 	t.Parallel()
 
 	var gotPath string
+	var gotQuery string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	agent, err := New(Config{
+		GatewayURL:     "wss://example.test/connect",
+		APIKey:         "gram_tunnel_test",
+		LocalMCPURL:    upstream.URL + "/mcp?api_key=x",
+		ServiceVersion: "1.0.0",
+		Metadata:       map[string]string{},
+		MinBackoff:     0,
+		MaxBackoff:     0,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/?tenant=y", nil)
+	agent.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "/mcp", gotPath)
+	require.Equal(t, "api_key=x&tenant=y", gotQuery)
+}
+
+func TestAgentPreservesNonRootInboundPathAndQuery(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
@@ -32,11 +66,45 @@ func TestAgentPreservesPinnedRootTargetPath(t *testing.T) {
 	require.NoError(t, err)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token?tenant=x", nil)
 	agent.handler.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "/mcp", gotPath)
+	require.Equal(t, "/oauth/token", gotPath)
+	require.Equal(t, "tenant=x", gotQuery)
+	require.NotEqual(t, "/mcp/oauth/token", gotPath)
+}
+
+func TestAgentPreservesNonRootInboundRawPath(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotRawPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotRawPath = r.URL.RawPath
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	agent, err := New(Config{
+		GatewayURL:     "wss://example.test/connect",
+		APIKey:         "gram_tunnel_test",
+		LocalMCPURL:    upstream.URL + "/mcp",
+		ServiceVersion: "1.0.0",
+		Metadata:       map[string]string{},
+		MinBackoff:     0,
+		MaxBackoff:     0,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/%74oken", nil)
+	agent.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "/oauth/token", gotPath)
+	require.Equal(t, "/oauth/%74oken", gotRawPath)
 }
 
 func TestNormalizeGatewayURLRejectsInsecureNonLocalHosts(t *testing.T) {

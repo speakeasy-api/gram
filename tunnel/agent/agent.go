@@ -224,11 +224,19 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 	baseDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalPath := req.URL.Path
+		originalRawPath := req.URL.RawPath
+		originalRawQuery := req.URL.RawQuery
+		originalForceQuery := req.URL.ForceQuery
 		baseDirector(req)
 		req.Host = target.Host
 		if target.Path != "" && (originalPath == "" || originalPath == "/") {
 			req.URL.Path = target.Path
 			req.URL.RawPath = target.RawPath
+		} else {
+			req.URL.Path = originalPath
+			req.URL.RawPath = originalRawPath
+			req.URL.RawQuery = originalRawQuery
+			req.URL.ForceQuery = originalForceQuery
 		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
