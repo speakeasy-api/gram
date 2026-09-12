@@ -165,6 +165,35 @@ func TestRecheckSweep_ClaimAndRecheckAgree(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the re-read is bound to the organization the claim ran under")
 }
 
+// A short validation interval must not let another sweep reclaim queued probes.
+func TestRecheckSweep_ShortIntervalRetainsQueuedClaims(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	sessionID, _ := seedRecheckSession(t, ctx, ti, "recheck-short-"+uuid.NewString()[:8], pastInterval(recheckSeed{withGramSession: true}))
+	const interval = time.Second
+	now := time.Now()
+	w := recheckWindow{now: now, recheckCutoff: now.Add(-interval), attemptCutoff: now.Add(-remotesessions.RecheckLease(interval))}
+	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, w.claimParams())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, sessionID, rows[0].ID)
+
+	// A second sweep must not reclaim a queued row during a worst-case batch.
+	for _, elapsed := range []time.Duration{time.Second, 3 * time.Minute, 5*time.Minute - time.Second} {
+		later := now.Add(elapsed)
+		w = recheckWindow{now: later, recheckCutoff: later.Add(-interval), attemptCutoff: later.Add(-remotesessions.RecheckLease(interval))}
+		rows, err = repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, w.claimParams())
+		require.NoError(t, err)
+		require.Empty(t, rows, "claim must remain held after %s", elapsed)
+	}
+	later := now.Add(5*time.Minute + time.Second)
+	w = recheckWindow{now: later, recheckCutoff: later.Add(-interval), attemptCutoff: later.Add(-remotesessions.RecheckLease(interval))}
+	rows, err = repo.New(ti.conn).ClaimDueRemoteSessionRecheckCandidates(ctx, w.claimParams())
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "abandoned claims must become eligible after the lease")
+	require.Equal(t, sessionID, rows[0].ID)
+}
+
 // A verdict, or before any the grant itself, older than the interval is due once the lease has lapsed; a recent
 // verdict, a grant connected inside the interval (the connect auto-verify's), or a live lease is not.
 func TestRecheckSweep_DueOnlyPastIntervalAndLease(t *testing.T) {
