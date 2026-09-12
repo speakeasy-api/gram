@@ -3,6 +3,7 @@ package aitargets
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -100,6 +101,47 @@ func Served(entries []Entry) []Target {
 	return targets
 }
 
+// DefaultByID resolves a compiled-in default by id.
+func DefaultByID(id string) (Target, bool) {
+	for _, target := range Defaults() {
+		if target.ID == id {
+			return target, true
+		}
+	}
+	return ZeroTarget(), false
+}
+
+// SameDefinition reports whether two targets describe the same tool, ignoring
+// whether it is served. Enabled is excluded deliberately: switching a built-in
+// off is the one change an organization may make to it, so it is not part of
+// the definition the built-in owns.
+func SameDefinition(a, b Target) bool {
+	a.Enabled, b.Enabled = false, false
+	return reflect.DeepEqual(normalizeForComparison(a), normalizeForComparison(b))
+}
+
+// normalizeForComparison folds the representations that mean the same thing —
+// a nil list and an empty one — so a client that round-trips a built-in
+// through JSON is not accused of editing it.
+func normalizeForComparison(t Target) Target {
+	out := t.Clone()
+	out.Signatures = Signatures{
+		BundleIDs:    orEmpty(out.Signatures.BundleIDs),
+		Binaries:     orEmpty(out.Signatures.Binaries),
+		ConfigDirs:   orEmpty(out.Signatures.ConfigDirs),
+		ProcessNames: orEmpty(out.Signatures.ProcessNames),
+	}
+	out.GatewayClient = GatewayClient{
+		CIMDVendorKeys:  orEmpty(out.GatewayClient.CIMDVendorKeys),
+		OAuthClientIDs:  orEmpty(out.GatewayClient.OAuthClientIDs),
+		ClientInfoNames: orEmpty(out.GatewayClient.ClientInfoNames),
+	}
+	if out.VersionHint != nil && out.VersionHint.PlistKey == "" {
+		out.VersionHint = nil
+	}
+	return out
+}
+
 // ListVersion is the served list_version for an organization whose edit
 // counter is counter.
 func ListVersion(counter int32) int32 {
@@ -124,7 +166,7 @@ func (l *OrganizationList) Entry(id string) (Entry, bool) {
 		}
 	}
 	return Entry{
-		Target:     Target{ID: "", DisplayName: "", Category: "", Signatures: Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil}, VersionHint: nil, Enabled: false},
+		Target:     ZeroTarget(),
 		Source:     "",
 		Customized: false,
 		CreatedAt:  time.Time{},
@@ -135,11 +177,11 @@ func (l *OrganizationList) Entry(id string) (Entry, bool) {
 // LoadOrganizationList reads an organization's rows and edit counter through
 // queries and overlays them on the defaults.
 func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizationID string) (*OrganizationList, error) {
-	rows, err := queries.ListDeviceAgentAIScanTargets(ctx, organizationID)
+	rows, err := queries.ListAIScanTargets(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list ai scan targets: %w", err)
 	}
-	counter, err := queries.GetDeviceAgentAIScanCatalogVersion(ctx, organizationID)
+	counter, err := queries.GetAIScanCatalogVersion(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("get ai scan catalog version: %w", err)
 	}
@@ -156,7 +198,7 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 
 // EntryFromRow converts an organization's row into an Entry. Overlay settles
 // Source and Customized.
-func EntryFromRow(row repo.DeviceAgentAiScanTarget) Entry {
+func EntryFromRow(row repo.AiScanTarget) Entry {
 	var hint *VersionHint
 	if row.VersionPlistKey.Valid && row.VersionPlistKey.String != "" {
 		hint = &VersionHint{PlistKey: row.VersionPlistKey.String}
@@ -173,7 +215,15 @@ func EntryFromRow(row repo.DeviceAgentAiScanTarget) Entry {
 				ProcessNames: orEmpty(row.ProcessNames),
 			},
 			VersionHint: hint,
-			Enabled:     row.Enabled,
+			// Empty matcher lists stay nil rather than becoming empty
+			// slices, so an unlinked target reports IsZero and keeps the
+			// served-list ETag where it was.
+			GatewayClient: GatewayClient{
+				CIMDVendorKeys:  orNil(row.CimdVendorKeys),
+				OAuthClientIDs:  orNil(row.OauthClientIds),
+				ClientInfoNames: orNil(row.ClientInfoNames),
+			},
+			Enabled: row.Enabled,
 		},
 		Source:     SourceOrganization,
 		Customized: false,
@@ -183,12 +233,12 @@ func EntryFromRow(row repo.DeviceAgentAiScanTarget) Entry {
 }
 
 // UpsertParams maps a validated target onto the organization's upsert query.
-func UpsertParams(organizationID string, target Target) repo.UpsertDeviceAgentAIScanTargetParams {
+func UpsertParams(organizationID string, target Target) repo.UpsertAIScanTargetParams {
 	plistKey := pgtype.Text{String: "", Valid: false}
 	if target.VersionHint != nil {
 		plistKey = conv.ToPGTextEmpty(target.VersionHint.PlistKey)
 	}
-	return repo.UpsertDeviceAgentAIScanTargetParams{
+	return repo.UpsertAIScanTargetParams{
 		OrganizationID:  organizationID,
 		ID:              target.ID,
 		DisplayName:     target.DisplayName,
@@ -198,6 +248,9 @@ func UpsertParams(organizationID string, target Target) repo.UpsertDeviceAgentAI
 		ConfigDirs:      orEmpty(target.Signatures.ConfigDirs),
 		ProcessNames:    orEmpty(target.Signatures.ProcessNames),
 		VersionPlistKey: plistKey,
+		CimdVendorKeys:  orEmpty(target.GatewayClient.CIMDVendorKeys),
+		OauthClientIds:  orEmpty(target.GatewayClient.OAuthClientIDs),
+		ClientInfoNames: orEmpty(target.GatewayClient.ClientInfoNames),
 		Enabled:         target.Enabled,
 	}
 }
@@ -206,6 +259,15 @@ func UpsertParams(organizationID string, target Target) repo.UpsertDeviceAgentAI
 func orEmpty(values []string) []string {
 	if values == nil {
 		return []string{}
+	}
+	return values
+}
+
+// orNil is the inverse: an empty column reads back as nil, which is what
+// GatewayClient.IsZero tests.
+func orNil(values []string) []string {
+	if len(values) == 0 {
+		return nil
 	}
 	return values
 }

@@ -12,14 +12,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acquireDeviceAgentAIScanCatalogLock = `-- name: AcquireDeviceAgentAIScanCatalogLock :exec
+const acquireAIScanCatalogLock = `-- name: AcquireAIScanCatalogLock :exec
 
-SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || $1::text, 0))
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_catalog:' || $1::text, 0))
 `
 
 // Serializes an organization's scan target writes. Transaction-scoped.
-func (q *Queries) AcquireDeviceAgentAIScanCatalogLock(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, acquireDeviceAgentAIScanCatalogLock, organizationID)
+func (q *Queries) AcquireAIScanCatalogLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireAIScanCatalogLock, organizationID)
 	return err
 }
 
@@ -38,17 +38,17 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 	return err
 }
 
-const bumpDeviceAgentAIScanCatalogVersion = `-- name: BumpDeviceAgentAIScanCatalogVersion :one
-INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
+const bumpAIScanCatalogVersion = `-- name: BumpAIScanCatalogVersion :one
+INSERT INTO ai_scan_catalogs (organization_id, list_version)
 VALUES ($1, 1)
 ON CONFLICT (organization_id) DO UPDATE
-SET list_version = device_agent_ai_scan_catalogs.list_version + 1
+SET list_version = ai_scan_catalogs.list_version + 1
   , updated_at = clock_timestamp()
 RETURNING list_version
 `
 
-func (q *Queries) BumpDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
-	row := q.db.QueryRow(ctx, bumpDeviceAgentAIScanCatalogVersion, organizationID)
+func (q *Queries) BumpAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpAIScanCatalogVersion, organizationID)
 	var list_version int32
 	err := row.Scan(&list_version)
 	return list_version, err
@@ -91,21 +91,21 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	return blob_url, err
 }
 
-const deleteDeviceAgentAIScanTarget = `-- name: DeleteDeviceAgentAIScanTarget :one
-DELETE FROM device_agent_ai_scan_targets
+const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
 `
 
-type DeleteDeviceAgentAIScanTargetParams struct {
+type DeleteAIScanTargetParams struct {
 	OrganizationID string
 	ID             string
 }
 
-func (q *Queries) DeleteDeviceAgentAIScanTarget(ctx context.Context, arg DeleteDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
-	row := q.db.QueryRow(ctx, deleteDeviceAgentAIScanTarget, arg.OrganizationID, arg.ID)
-	var i DeviceAgentAiScanTarget
+func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTargetParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, deleteAIScanTarget, arg.OrganizationID, arg.ID)
+	var i AiScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
@@ -116,7 +116,89 @@ func (q *Queries) DeleteDeviceAgentAIScanTarget(ctx context.Context, arg DeleteD
 		&i.ConfigDirs,
 		&i.ProcessNames,
 		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
 		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAIScanCatalogVersion = `-- name: GetAIScanCatalogVersion :one
+SELECT COALESCE(
+  (SELECT list_version FROM ai_scan_catalogs WHERE organization_id = $1),
+  0
+)::integer AS list_version
+`
+
+func (q *Queries) GetAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAIScanCatalogVersion, organizationID)
+	var list_version int32
+	err := row.Scan(&list_version)
+	return list_version, err
+}
+
+const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+FROM ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+FOR UPDATE
+`
+
+type GetAIScanTargetForUpdateParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTargetForUpdateParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, getAIScanTargetForUpdate, arg.OrganizationID, arg.ID)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAIToolDecisionForUpdate = `-- name: GetAIToolDecisionForUpdate :one
+SELECT organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
+FROM ai_tool_decisions
+WHERE organization_id = $1
+  AND target_id = $2
+FOR UPDATE
+`
+
+type GetAIToolDecisionForUpdateParams struct {
+	OrganizationID string
+	TargetID       string
+}
+
+func (q *Queries) GetAIToolDecisionForUpdate(ctx context.Context, arg GetAIToolDecisionForUpdateParams) (AiToolDecision, error) {
+	row := q.db.QueryRow(ctx, getAIToolDecisionForUpdate, arg.OrganizationID, arg.TargetID)
+	var i AiToolDecision
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TargetID,
+		&i.Decision,
+		&i.Rationale,
+		&i.DecidedBy,
+		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -307,53 +389,6 @@ func (q *Queries) GetChatTitleForMove(ctx context.Context, arg GetChatTitleForMo
 	return i, err
 }
 
-const getDeviceAgentAIScanCatalogVersion = `-- name: GetDeviceAgentAIScanCatalogVersion :one
-SELECT COALESCE(
-  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = $1),
-  0
-)::integer AS list_version
-`
-
-func (q *Queries) GetDeviceAgentAIScanCatalogVersion(ctx context.Context, organizationID string) (int32, error) {
-	row := q.db.QueryRow(ctx, getDeviceAgentAIScanCatalogVersion, organizationID)
-	var list_version int32
-	err := row.Scan(&list_version)
-	return list_version, err
-}
-
-const getDeviceAgentAIScanTargetForUpdate = `-- name: GetDeviceAgentAIScanTargetForUpdate :one
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
-FROM device_agent_ai_scan_targets
-WHERE organization_id = $1
-  AND id = $2
-FOR UPDATE
-`
-
-type GetDeviceAgentAIScanTargetForUpdateParams struct {
-	OrganizationID string
-	ID             string
-}
-
-func (q *Queries) GetDeviceAgentAIScanTargetForUpdate(ctx context.Context, arg GetDeviceAgentAIScanTargetForUpdateParams) (DeviceAgentAiScanTarget, error) {
-	row := q.db.QueryRow(ctx, getDeviceAgentAIScanTargetForUpdate, arg.OrganizationID, arg.ID)
-	var i DeviceAgentAiScanTarget
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.ID,
-		&i.DisplayName,
-		&i.Category,
-		&i.BundleIds,
-		&i.Binaries,
-		&i.ConfigDirs,
-		&i.ProcessNames,
-		&i.VersionPlistKey,
-		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getDeviceAgentConfiguration = `-- name: GetDeviceAgentConfiguration :one
 SELECT organization_id, schema_version, config, created_at, updated_at
 FROM device_agent_configurations
@@ -494,10 +529,10 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 	return i, err
 }
 
-const listDeviceAgentAIScanTargets = `-- name: ListDeviceAgentAIScanTargets :many
+const listAIScanTargets = `-- name: ListAIScanTargets :many
 
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
-FROM device_agent_ai_scan_targets
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+FROM ai_scan_targets
 WHERE organization_id = $1
 ORDER BY id
 `
@@ -505,15 +540,15 @@ ORDER BY id
 // An organization's Shadow AI scan targets: its own additions and its
 // overrides of the Speakeasy defaults compiled into the server. The served
 // list is built in code by overlaying these rows on the defaults.
-func (q *Queries) ListDeviceAgentAIScanTargets(ctx context.Context, organizationID string) ([]DeviceAgentAiScanTarget, error) {
-	rows, err := q.db.Query(ctx, listDeviceAgentAIScanTargets, organizationID)
+func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) ([]AiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listAIScanTargets, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DeviceAgentAiScanTarget
+	var items []AiScanTarget
 	for rows.Next() {
-		var i DeviceAgentAiScanTarget
+		var i AiScanTarget
 		if err := rows.Scan(
 			&i.OrganizationID,
 			&i.ID,
@@ -524,6 +559,9 @@ func (q *Queries) ListDeviceAgentAIScanTargets(ctx context.Context, organization
 			&i.ConfigDirs,
 			&i.ProcessNames,
 			&i.VersionPlistKey,
+			&i.CimdVendorKeys,
+			&i.OauthClientIds,
+			&i.ClientInfoNames,
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -531,6 +569,78 @@ func (q *Queries) ListDeviceAgentAIScanTargets(ctx context.Context, organization
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAIToolDecisions = `-- name: ListAIToolDecisions :many
+
+SELECT organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
+FROM ai_tool_decisions
+WHERE organization_id = $1
+ORDER BY target_id
+`
+
+// An organization's access decisions for its Shadow AI scan targets: whether
+// a detected tool may reach Gram's MCP gateway. Absent rows read as
+// unreviewed, so the defaults need no backfill.
+func (q *Queries) ListAIToolDecisions(ctx context.Context, organizationID string) ([]AiToolDecision, error) {
+	rows, err := q.db.Query(ctx, listAIToolDecisions, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiToolDecision
+	for rows.Next() {
+		var i AiToolDecision
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.TargetID,
+			&i.Decision,
+			&i.Rationale,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBlockedDeviceAgentAITargetIDs = `-- name: ListBlockedDeviceAgentAITargetIDs :many
+
+SELECT target_id
+FROM ai_tool_decisions
+WHERE organization_id = $1
+  AND decision = 'blocked'
+ORDER BY target_id
+`
+
+// The gateway hot path asks only "does this organization block anything?".
+// Nearly every organization answers with an empty set, and that answer costs
+// one indexed lookup rather than loading the whole scan-target catalog.
+func (q *Queries) ListBlockedDeviceAgentAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listBlockedDeviceAgentAITargetIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var target_id string
+		if err := rows.Scan(&target_id); err != nil {
+			return nil, err
+		}
+		items = append(items, target_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -635,8 +745,8 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
-const upsertDeviceAgentAIScanTarget = `-- name: UpsertDeviceAgentAIScanTarget :one
-INSERT INTO device_agent_ai_scan_targets (
+const upsertAIScanTarget = `-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
   organization_id,
   id,
   display_name,
@@ -646,6 +756,9 @@ INSERT INTO device_agent_ai_scan_targets (
   config_dirs,
   process_names,
   version_plist_key,
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names,
   enabled
 )
 VALUES (
@@ -658,7 +771,10 @@ VALUES (
   $7::text[],
   $8::text[],
   $9,
-  $10
+  $10::text[],
+  $11::text[],
+  $12::text[],
+  $13
 )
 ON CONFLICT (organization_id, id) DO UPDATE
 SET display_name = EXCLUDED.display_name
@@ -668,12 +784,15 @@ SET display_name = EXCLUDED.display_name
   , config_dirs = EXCLUDED.config_dirs
   , process_names = EXCLUDED.process_names
   , version_plist_key = EXCLUDED.version_plist_key
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
   , enabled = EXCLUDED.enabled
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, enabled, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
 `
 
-type UpsertDeviceAgentAIScanTargetParams struct {
+type UpsertAIScanTargetParams struct {
 	OrganizationID  string
 	ID              string
 	DisplayName     string
@@ -683,11 +802,14 @@ type UpsertDeviceAgentAIScanTargetParams struct {
 	ConfigDirs      []string
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
 	Enabled         bool
 }
 
-func (q *Queries) UpsertDeviceAgentAIScanTarget(ctx context.Context, arg UpsertDeviceAgentAIScanTargetParams) (DeviceAgentAiScanTarget, error) {
-	row := q.db.QueryRow(ctx, upsertDeviceAgentAIScanTarget,
+func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, upsertAIScanTarget,
 		arg.OrganizationID,
 		arg.ID,
 		arg.DisplayName,
@@ -697,9 +819,12 @@ func (q *Queries) UpsertDeviceAgentAIScanTarget(ctx context.Context, arg UpsertD
 		arg.ConfigDirs,
 		arg.ProcessNames,
 		arg.VersionPlistKey,
+		arg.CimdVendorKeys,
+		arg.OauthClientIds,
+		arg.ClientInfoNames,
 		arg.Enabled,
 	)
-	var i DeviceAgentAiScanTarget
+	var i AiScanTarget
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.ID,
@@ -710,7 +835,66 @@ func (q *Queries) UpsertDeviceAgentAIScanTarget(ctx context.Context, arg UpsertD
 		&i.ConfigDirs,
 		&i.ProcessNames,
 		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
 		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertAIToolDecision = `-- name: UpsertAIToolDecision :one
+INSERT INTO ai_tool_decisions (
+  organization_id,
+  target_id,
+  decision,
+  rationale,
+  decided_by,
+  decided_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, target_id) DO UPDATE
+SET decision = EXCLUDED.decision
+  , rationale = EXCLUDED.rationale
+  , decided_by = EXCLUDED.decided_by
+  , decided_at = EXCLUDED.decided_at
+  , updated_at = clock_timestamp()
+RETURNING organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
+`
+
+type UpsertAIToolDecisionParams struct {
+	OrganizationID string
+	TargetID       string
+	Decision       string
+	Rationale      pgtype.Text
+	DecidedBy      pgtype.Text
+}
+
+func (q *Queries) UpsertAIToolDecision(ctx context.Context, arg UpsertAIToolDecisionParams) (AiToolDecision, error) {
+	row := q.db.QueryRow(ctx, upsertAIToolDecision,
+		arg.OrganizationID,
+		arg.TargetID,
+		arg.Decision,
+		arg.Rationale,
+		arg.DecidedBy,
+	)
+	var i AiToolDecision
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TargetID,
+		&i.Decision,
+		&i.Rationale,
+		&i.DecidedBy,
+		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -119,6 +119,17 @@ func formatTimeValue(ts time.Time) string {
 	return ts.UTC().Format(time.RFC3339)
 }
 
+// formatOptionalTimeValue renders a timestamp, or nothing for the zero value.
+// Unlike formatTimeValue it distinguishes "never" from "the epoch", which is
+// what an undecided row needs.
+func formatOptionalTimeValue(ts time.Time) *string {
+	if ts.IsZero() {
+		return nil
+	}
+	formatted := ts.UTC().Format(time.RFC3339)
+	return &formatted
+}
+
 // ShadowMCPInventoryReadInput identifies a project-scoped inventory page for a trusted internal caller.
 type ShadowMCPInventoryReadInput struct {
 	OrganizationID string
@@ -136,22 +147,36 @@ type ShadowMCPInventoryTargetInput struct {
 }
 
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
-	ac, err := s.requireOrgAdmin(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
+	// Project read to view, organization admin to see who. The MCP half of
+	// the Shadow AI section is held to the same split as the AI tools half,
+	// or the tabs would 403 for exactly the viewers the section is for.
+	projection, err := s.resolveShadowMCPInventoryProjection(ctx, ac, projectID)
+	if err != nil {
+		return nil, err
+	}
 
-	return s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
+	result, err := s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      projectID,
 		Limit:          payload.Limit,
 		Cursor:         payload.Cursor,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if !projection.Attributed {
+		redactShadowMCPInventoryAttribution(result.Servers)
+	}
+	return result, nil
 }
 
 // ReadShadowMCPInventory composes an inventory page after validating its organization and project boundary.
@@ -375,31 +400,46 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 }
 
 func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.GetShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryServer, error) {
-	ac, err := s.requireOrgAdmin(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
+	projection, err := s.resolveShadowMCPInventoryProjection(ctx, ac, projectID)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
 		return nil, err
 	}
 
-	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), payload.ServerSlug)
+	server, err := s.readShadowMCPInventoryServer(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+	if err != nil {
+		return nil, err
+	}
+	if !projection.Attributed {
+		redactShadowMCPInventoryAttribution([]*gen.ShadowMCPInventoryServer{server})
+	}
+	return server, nil
+}
+
+func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverSlug string) (*gen.ShadowMCPInventoryServer, error) {
+	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), serverSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
 	if inventoryRow == nil {
 		// A server can be known only through its approval request — asked
 		// for, never observed in traffic — and its page must still resolve.
-		return s.shadowMCPServerFromApprovalRequest(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+		return s.shadowMCPServerFromApprovalRequest(ctx, organizationID, projectID, serverSlug)
 	}
 
 	return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
-		OrganizationID: ac.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		TargetKind:     shadowMCPTargetKindServerURL,
 		TargetKey:      inventoryRow.CanonicalServerURL,
@@ -1577,15 +1617,17 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		LastSeen:           formatTimeValue(row.LastSeen),
 		LastCalled:         formatTimePtrValue(usage.LastCalled),
 		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
-		UserCount:          shadowMCPInventoryCount(usage.UserCount),
-		TopUsers:           topUsers,
-		Access:             rowState.Access,
-		AccessSummary:      rowState.Summary,
-		RequestCount:       rowState.RequestCount,
-		LatestRequest:      rowState.LatestRequest,
-		ApprovalRequest:    rowState.ApprovalRequest,
-		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
-		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
+		// Attribution: always built, then dropped for callers without
+		// org:admin by redactShadowMCPInventoryAttribution.
+		UserCount:        new(shadowMCPInventoryCount(usage.UserCount)),
+		TopUsers:         topUsers,
+		Access:           rowState.Access,
+		AccessSummary:    rowState.Summary,
+		RequestCount:     rowState.RequestCount,
+		LatestRequest:    rowState.LatestRequest,
+		ApprovalRequest:  rowState.ApprovalRequest,
+		AllowedPolicyIds: rowState.AllowedPolicyIDs,
+		BlockedPolicyIds: rowState.BlockedPolicyIDs,
 	}
 }
 

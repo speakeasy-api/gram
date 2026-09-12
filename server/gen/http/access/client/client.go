@@ -85,6 +85,10 @@ type Client struct {
 	// the listEmployeeAIDetections endpoint.
 	ListEmployeeAIDetectionsDoer goahttp.Doer
 
+	// SetAIToolDecision Doer is the HTTP client used to make requests to the
+	// setAIToolDecision endpoint.
+	SetAIToolDecisionDoer goahttp.Doer
+
 	// ListResourceAudience Doer is the HTTP client used to make requests to the
 	// listResourceAudience endpoint.
 	ListResourceAudienceDoer goahttp.Doer
@@ -154,6 +158,7 @@ func NewClient(
 		ResolveShadowMCPInventoryRequestDoer:     doer,
 		ListAIDetectionsDoer:                     doer,
 		ListEmployeeAIDetectionsDoer:             doer,
+		SetAIToolDecisionDoer:                    doer,
 		ListResourceAudienceDoer:                 doer,
 		SetResourceAudienceDoer:                  doer,
 		ListAudienceOptionsDoer:                  doer,
@@ -573,6 +578,30 @@ func (c *Client) ListEmployeeAIDetections() goa.Endpoint {
 		resp, err := c.ListEmployeeAIDetectionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listEmployeeAIDetections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAIToolDecision returns an endpoint that makes HTTP requests to the access
+// service setAIToolDecision server.
+func (c *Client) SetAIToolDecision() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAIToolDecisionRequest(c.encoder)
+		decodeResponse = DecodeSetAIToolDecisionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAIToolDecisionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAIToolDecisionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setAIToolDecision", err)
 		}
 		return decodeResponse(resp)
 	}

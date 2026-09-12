@@ -675,14 +675,14 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 
 // BuildListAIDetectionsPayload builds the payload for the access
 // listAIDetections endpoint from CLI flags.
-func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string) (*access.ListAIDetectionsPayload, error) {
+func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string, accessListAIDetectionsProjectSlugInput string) (*access.ListAIDetectionsPayload, error) {
 	var err error
 	var category *string
 	{
 		if accessListAIDetectionsCategory != "" {
 			category = &accessListAIDetectionsCategory
-			if !(*category == "harness" || *category == "local_model") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "local_model"}))
+			if !(*category == "harness" || *category == "assistant" || *category == "local_model") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "assistant", "local_model"}))
 			}
 			if err != nil {
 				return nil, err
@@ -705,10 +705,17 @@ func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessL
 			sessionToken = &accessListAIDetectionsSessionToken
 		}
 	}
+	var projectSlugInput *string
+	{
+		if accessListAIDetectionsProjectSlugInput != "" {
+			projectSlugInput = &accessListAIDetectionsProjectSlugInput
+		}
+	}
 	v := &access.ListAIDetectionsPayload{}
 	v.Category = category
 	v.DirectoryGroupID = directoryGroupID
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
@@ -744,6 +751,45 @@ func BuildListEmployeeAIDetectionsPayload(accessListEmployeeAIDetectionsUserEmai
 	v.UserEmail = userEmail
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetAIToolDecisionPayload builds the payload for the access
+// setAIToolDecision endpoint from CLI flags.
+func BuildSetAIToolDecisionPayload(accessSetAIToolDecisionBody string, accessSetAIToolDecisionSessionToken string) (*access.SetAIToolDecisionPayload, error) {
+	var err error
+	var body SetAIToolDecisionRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetAIToolDecisionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"approved\",\n      \"rationale\": \"aaa\",\n      \"target_id\": \"1\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.target_id", body.TargetID, "^[a-z0-9][a-z0-9-]{0,63}$"))
+		if !(body.Decision == "unreviewed" || body.Decision == "approved" || body.Decision == "blocked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"unreviewed", "approved", "blocked"}))
+		}
+		if body.Rationale != nil {
+			if utf8.RuneCountInString(*body.Rationale) > 1024 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.rationale", *body.Rationale, utf8.RuneCountInString(*body.Rationale), 1024, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetAIToolDecisionSessionToken != "" {
+			sessionToken = &accessSetAIToolDecisionSessionToken
+		}
+	}
+	v := &access.SetAIToolDecisionPayload{
+		TargetID:  body.TargetID,
+		Decision:  body.Decision,
+		Rationale: body.Rationale,
+	}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

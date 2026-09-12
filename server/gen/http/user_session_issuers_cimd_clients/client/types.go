@@ -64,6 +64,10 @@ type VerifyURLResponseBody struct {
 	// The document's client_name, set only when verified. Lets an operator confirm
 	// the URL names the client they intended.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// The validated document rendered as JSON, set only when verified. Re-encoded
+	// from what Gram parsed rather than echoed from the wire, so it shows what the
+	// authorization server will act on.
+	Document *string `form:"document,omitempty" json:"document,omitempty" xml:"document,omitempty"`
 }
 
 // ListUserSessionIssuerCimdClientsResponseBody is the type of the
@@ -1644,6 +1648,7 @@ func NewVerifyURLVerifyCimdURLResultOK(body *VerifyURLResponseBody) *usersession
 		Reason:     body.Reason,
 		Detail:     *body.Detail,
 		ClientName: body.ClientName,
+		Document:   body.Document,
 	}
 
 	return v

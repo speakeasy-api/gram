@@ -312,21 +312,21 @@ ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS N
 -- overrides of the Speakeasy defaults compiled into the server. The served
 -- list is built in code by overlaying these rows on the defaults.
 
--- name: ListDeviceAgentAIScanTargets :many
+-- name: ListAIScanTargets :many
 SELECT *
-FROM device_agent_ai_scan_targets
+FROM ai_scan_targets
 WHERE organization_id = @organization_id
 ORDER BY id;
 
--- name: GetDeviceAgentAIScanTargetForUpdate :one
+-- name: GetAIScanTargetForUpdate :one
 SELECT *
-FROM device_agent_ai_scan_targets
+FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND id = @id
 FOR UPDATE;
 
--- name: UpsertDeviceAgentAIScanTarget :one
-INSERT INTO device_agent_ai_scan_targets (
+-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
   organization_id,
   id,
   display_name,
@@ -336,6 +336,9 @@ INSERT INTO device_agent_ai_scan_targets (
   config_dirs,
   process_names,
   version_plist_key,
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names,
   enabled
 )
 VALUES (
@@ -348,6 +351,9 @@ VALUES (
   @config_dirs::text[],
   @process_names::text[],
   sqlc.narg('version_plist_key'),
+  @cimd_vendor_keys::text[],
+  @oauth_client_ids::text[],
+  @client_info_names::text[],
   @enabled
 )
 ON CONFLICT (organization_id, id) DO UPDATE
@@ -358,31 +364,87 @@ SET display_name = EXCLUDED.display_name
   , config_dirs = EXCLUDED.config_dirs
   , process_names = EXCLUDED.process_names
   , version_plist_key = EXCLUDED.version_plist_key
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
   , enabled = EXCLUDED.enabled
   , updated_at = clock_timestamp()
 RETURNING *;
 
--- name: DeleteDeviceAgentAIScanTarget :one
-DELETE FROM device_agent_ai_scan_targets
+-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND id = @id
 RETURNING *;
 
+-- An organization's access decisions for its Shadow AI scan targets: whether
+-- a detected tool may reach Gram's MCP gateway. Absent rows read as
+-- unreviewed, so the defaults need no backfill.
+
+-- name: ListAIToolDecisions :many
+SELECT *
+FROM ai_tool_decisions
+WHERE organization_id = @organization_id
+ORDER BY target_id;
+
+-- The gateway hot path asks only "does this organization block anything?".
+-- Nearly every organization answers with an empty set, and that answer costs
+-- one indexed lookup rather than loading the whole scan-target catalog.
+
+-- name: ListBlockedDeviceAgentAITargetIDs :many
+SELECT target_id
+FROM ai_tool_decisions
+WHERE organization_id = @organization_id
+  AND decision = 'blocked'
+ORDER BY target_id;
+
+-- name: GetAIToolDecisionForUpdate :one
+SELECT *
+FROM ai_tool_decisions
+WHERE organization_id = @organization_id
+  AND target_id = @target_id
+FOR UPDATE;
+
+-- name: UpsertAIToolDecision :one
+INSERT INTO ai_tool_decisions (
+  organization_id,
+  target_id,
+  decision,
+  rationale,
+  decided_by,
+  decided_at
+)
+VALUES (
+  @organization_id,
+  @target_id,
+  @decision,
+  sqlc.narg('rationale'),
+  @decided_by,
+  clock_timestamp()
+)
+ON CONFLICT (organization_id, target_id) DO UPDATE
+SET decision = EXCLUDED.decision
+  , rationale = EXCLUDED.rationale
+  , decided_by = EXCLUDED.decided_by
+  , decided_at = EXCLUDED.decided_at
+  , updated_at = clock_timestamp()
+RETURNING *;
+
 -- Serializes an organization's scan target writes. Transaction-scoped.
 
--- name: AcquireDeviceAgentAIScanCatalogLock :exec
-SELECT pg_advisory_xact_lock(hashtextextended('device_agent_ai_scan_catalog:' || @organization_id::text, 0));
+-- name: AcquireAIScanCatalogLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_catalog:' || @organization_id::text, 0));
 
--- name: GetDeviceAgentAIScanCatalogVersion :one
+-- name: GetAIScanCatalogVersion :one
 SELECT COALESCE(
-  (SELECT list_version FROM device_agent_ai_scan_catalogs WHERE organization_id = @organization_id),
+  (SELECT list_version FROM ai_scan_catalogs WHERE organization_id = @organization_id),
   0
 )::integer AS list_version;
 
--- name: BumpDeviceAgentAIScanCatalogVersion :one
-INSERT INTO device_agent_ai_scan_catalogs (organization_id, list_version)
+-- name: BumpAIScanCatalogVersion :one
+INSERT INTO ai_scan_catalogs (organization_id, list_version)
 VALUES (@organization_id, 1)
 ON CONFLICT (organization_id) DO UPDATE
-SET list_version = device_agent_ai_scan_catalogs.list_version + 1
+SET list_version = ai_scan_catalogs.list_version + 1
   , updated_at = clock_timestamp()
 RETURNING list_version;

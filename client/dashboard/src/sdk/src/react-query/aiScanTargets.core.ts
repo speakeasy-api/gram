@@ -13,21 +13,21 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import {
-  ListDeviceAgentAiScanTargetsRequest,
-  ListDeviceAgentAiScanTargetsSecurity,
-} from "../models/operations/listdeviceagentaiscantargets.js";
+  ListAiScanTargetsRequest,
+  ListAiScanTargetsSecurity,
+} from "../models/operations/listaiscantargets.js";
 import { unwrapAsync } from "../types/fp.js";
-export type DeviceAgentAiScanTargetsQueryData = ListAiScanTargetsResult;
+export type AiScanTargetsQueryData = ListAiScanTargetsResult;
 
-export function prefetchDeviceAgentAiScanTargets(
+export function prefetchAiScanTargets(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+  request?: ListAiScanTargetsRequest | undefined,
+  security?: ListAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildDeviceAgentAiScanTargetsQuery(
+    ...buildAiScanTargetsQuery(
       client$,
       request,
       security,
@@ -36,24 +36,20 @@ export function prefetchDeviceAgentAiScanTargets(
   });
 }
 
-export function buildDeviceAgentAiScanTargetsQuery(
+export function buildAiScanTargetsQuery(
   client$: GramCore,
-  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+  request?: ListAiScanTargetsRequest | undefined,
+  security?: ListAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<DeviceAgentAiScanTargetsQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<AiScanTargetsQueryData>;
 } {
   return {
-    queryKey: queryKeyDeviceAgentAiScanTargets({
-      gramSession: request?.gramSession,
-    }),
-    queryFn: async function deviceAgentAiScanTargetsQueryFn(
+    queryKey: queryKeyAiScanTargets({ gramSession: request?.gramSession }),
+    queryFn: async function aiScanTargetsQueryFn(
       ctx,
-    ): Promise<DeviceAgentAiScanTargetsQueryData> {
+    ): Promise<AiScanTargetsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -75,7 +71,7 @@ export function buildDeviceAgentAiScanTargetsQuery(
   };
 }
 
-export function queryKeyDeviceAgentAiScanTargets(
+export function queryKeyAiScanTargets(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "agent", "listAiScanTargets", parameters];

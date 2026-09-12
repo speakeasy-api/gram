@@ -19,6 +19,15 @@ import (
 // enough to surface as a 409 rather than be designed around.
 const slugIDSuffixLen = 4
 
+// Ptr returns a pointer to v, including for the zero value. Use it where a
+// zero is a real answer that has to reach the wire; PtrEmpty is for the
+// commoner case where a zero means "absent".
+//
+//go:fix inline
+func Ptr[T any](v T) *T {
+	return new(v)
+}
+
 // PtrEmpty returns a pointer to the given value or nil if the value is equal
 // to the zero value of the same type. Example:
 //

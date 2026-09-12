@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
+import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
+import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,23 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  UpsertDeviceAgentAiScanTargetRequest,
-  UpsertDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/upsertdeviceagentaiscantarget.js";
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpsertDeviceAgentAiScanTargetMutationVariables = {
-  request: UpsertDeviceAgentAiScanTargetRequest;
-  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined;
+export type DeleteAiScanTargetMutationVariables = {
+  request: DeleteAiScanTargetRequest;
+  security?: DeleteAiScanTargetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpsertDeviceAgentAiScanTargetMutationData =
-  AiScanTargetMutationResult;
+export type DeleteAiScanTargetMutationData = DeleteAiScanTargetResult;
 
-export type UpsertDeviceAgentAiScanTargetMutationError =
+export type DeleteAiScanTargetMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,49 +51,49 @@ export type UpsertDeviceAgentAiScanTargetMutationError =
   | SDKValidationError;
 
 /**
- * upsertAiScanTarget agent
+ * deleteAiScanTarget agent
  *
  * @remarks
- * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+ * Remove a target the organization added, or drop its on/off choice for a built-in so the built-in is served again as supplied. Requires a session with the org:admin scope.
  */
-export function useUpsertDeviceAgentAiScanTargetMutation(
+export function useDeleteAiScanTargetMutation(
   options?: MutationHookOptions<
-    UpsertDeviceAgentAiScanTargetMutationData,
-    UpsertDeviceAgentAiScanTargetMutationError,
-    UpsertDeviceAgentAiScanTargetMutationVariables
+    DeleteAiScanTargetMutationData,
+    DeleteAiScanTargetMutationError,
+    DeleteAiScanTargetMutationVariables
   >,
 ): UseMutationResult<
-  UpsertDeviceAgentAiScanTargetMutationData,
-  UpsertDeviceAgentAiScanTargetMutationError,
-  UpsertDeviceAgentAiScanTargetMutationVariables
+  DeleteAiScanTargetMutationData,
+  DeleteAiScanTargetMutationError,
+  DeleteAiScanTargetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpsertDeviceAgentAiScanTargetMutation(client, options),
+    ...buildDeleteAiScanTargetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpsertDeviceAgentAiScanTarget(): MutationKey {
-  return ["@gram/client", "agent", "upsertAiScanTarget"];
+export function mutationKeyDeleteAiScanTarget(): MutationKey {
+  return ["@gram/client", "agent", "deleteAiScanTarget"];
 }
 
-export function buildUpsertDeviceAgentAiScanTargetMutation(
+export function buildDeleteAiScanTargetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpsertDeviceAgentAiScanTargetMutationVariables,
-  ) => Promise<UpsertDeviceAgentAiScanTargetMutationData>;
+    variables: DeleteAiScanTargetMutationVariables,
+  ) => Promise<DeleteAiScanTargetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpsertDeviceAgentAiScanTarget(),
-    mutationFn: function upsertDeviceAgentAiScanTargetMutationFn({
+    mutationKey: mutationKeyDeleteAiScanTarget(),
+    mutationFn: function deleteAiScanTargetMutationFn({
       request,
       security,
       options,
-    }): Promise<UpsertDeviceAgentAiScanTargetMutationData> {
+    }): Promise<DeleteAiScanTargetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -107,7 +106,7 @@ export function buildUpsertDeviceAgentAiScanTargetMutation(
           ),
         },
       };
-      return unwrapAsync(agentUpsertAiScanTarget(
+      return unwrapAsync(agentDeleteAiScanTarget(
         client$,
         request,
         security,

@@ -59,7 +59,7 @@ export type ShadowMCPInventoryServerQueryError =
  * getShadowMCPInventoryServer access
  *
  * @remarks
- * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+ * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.
  */
 export function useShadowMCPInventoryServer(
   request: GetShadowMCPInventoryServerRequest,
@@ -88,7 +88,7 @@ export function useShadowMCPInventoryServer(
  * getShadowMCPInventoryServer access
  *
  * @remarks
- * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+ * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.
  */
 export function useShadowMCPInventoryServerSuspense(
   request: GetShadowMCPInventoryServerRequest,

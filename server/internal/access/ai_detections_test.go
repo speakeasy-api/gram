@@ -161,8 +161,8 @@ func TestService_ListAIDetections_AggregatesAndDecoratesFromCatalog(t *testing.T
 	require.NotNil(t, cursor)
 	require.Equal(t, "Cursor", cursor.DisplayName, "known ids are decorated from the catalog")
 	require.Equal(t, "harness", cursor.Category)
-	require.EqualValues(t, 2, cursor.UserCount)
-	require.EqualValues(t, 2, cursor.DeviceCount)
+	require.EqualValues(t, 2, conv.PtrValOr(cursor.UserCount, -1))
+	require.EqualValues(t, 2, conv.PtrValOr(cursor.DeviceCount, -1))
 	require.ElementsMatch(t, []string{"installed", "running"}, cursor.Signals)
 	require.Empty(t, cursor.Versions)
 	require.Equal(t, now.Add(-2*time.Hour).Format(time.RFC3339), cursor.FirstSeen)
@@ -340,8 +340,8 @@ func TestService_ListEmployeeAIDetections_ProjectReaderGetsCanonicalEmployeeOnly
 	require.Equal(t, []string{"ollama", "cursor"}, []string{result.Detections[0].TargetID, result.Detections[1].TargetID})
 
 	cursor := result.Detections[1]
-	require.EqualValues(t, 1, cursor.UserCount)
-	require.EqualValues(t, 2, cursor.DeviceCount)
+	require.EqualValues(t, 1, conv.PtrValOr(cursor.UserCount, -1))
+	require.EqualValues(t, 2, conv.PtrValOr(cursor.DeviceCount, -1))
 	require.Equal(t, []string{"installed", "running"}, cursor.Signals)
 	require.Equal(t, []string{"1.7.49", "1.7.52"}, cursor.Versions)
 	require.Equal(t, now.Add(-48*time.Hour).Format(time.RFC3339), cursor.FirstSeen)

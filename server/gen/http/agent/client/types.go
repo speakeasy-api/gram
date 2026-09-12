@@ -34,10 +34,11 @@ type UpsertAiScanTargetRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Name shown in the dashboard.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
-	// Target category: harness (an AI coding tool) or local_model (a local model
-	// runtime).
-	Category   string                             `form:"category" json:"category" xml:"category"`
-	Signatures *AiScanTargetSignaturesRequestBody `form:"signatures" json:"signatures" xml:"signatures"`
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
+	Category      string                                `form:"category" json:"category" xml:"category"`
+	Signatures    *AiScanTargetSignaturesRequestBody    `form:"signatures" json:"signatures" xml:"signatures"`
+	GatewayClient *AiScanTargetGatewayClientRequestBody `form:"gateway_client,omitempty" json:"gateway_client,omitempty" xml:"gateway_client,omitempty"`
 	// Info.plist key to read the installed version from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
@@ -174,7 +175,7 @@ type UpdateConfigurationResponseBody struct {
 // ListAiScanTargetsResponseBody is the type of the "agent" service
 // "listAiScanTargets" endpoint HTTP response body.
 type ListAiScanTargetsResponseBody struct {
-	// Version of the served list; the value agents echo as target_list_version
+	// Version of the served catalog; the value agents echo as target_list_version
 	// once they receive it.
 	ListVersion *int `form:"list_version,omitempty" json:"list_version,omitempty" xml:"list_version,omitempty"`
 	// Fingerprint of the served list; changes whenever the enabled set changes.
@@ -2287,20 +2288,22 @@ type AiScanTargetResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Name shown in the dashboard.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Target category: harness (an AI coding tool) or local_model (a local model
-	// runtime).
+	// Target category: harness (an AI coding tool), assistant (a general-purpose
+	// AI assistant or agent), or local_model (an open model run locally).
 	Category   *string                             `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	Signatures *AiScanTargetSignaturesResponseBody `form:"signatures,omitempty" json:"signatures,omitempty" xml:"signatures,omitempty"`
 	// Info.plist key the installed version is read from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
-	VersionPlistKey *string `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
+	VersionPlistKey *string                                `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
+	GatewayClient   *AiScanTargetGatewayClientResponseBody `form:"gateway_client,omitempty" json:"gateway_client,omitempty" xml:"gateway_client,omitempty"`
 	// Whether the organization's agents probe for this target.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Where the target comes from: default (compiled into Gram) or organization
-	// (added by the organization).
+	// Where the target comes from: default (a Speakeasy built-in, read-only apart
+	// from being switched off) or organization (added by the organization, fully
+	// editable).
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// For a default, whether the organization has replaced it with its own row,
-	// for example to disable it. Always false for organization targets.
+	// For a built-in, whether the organization has recorded a choice about it — in
+	// practice, switched it off. Always false for organization targets.
 	Customized *bool `form:"customized,omitempty" json:"customized,omitempty" xml:"customized,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -2317,10 +2320,30 @@ type AiScanTargetSignaturesResponseBody struct {
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string `form:"binaries,omitempty" json:"binaries,omitempty" xml:"binaries,omitempty"`
 	// Directories whose existence marks the tool as installed, taken as
-	// home-relative unless they start with /.
+	// home-relative unless they start with /. A `*` is a wildcard matching any run
+	// of characters within ONE path segment, never crossing a `/`, for tools
+	// installed under a version-stamped directory name such as an editor extension.
 	ConfigDirs []string `form:"config_dirs,omitempty" json:"config_dirs,omitempty" xml:"config_dirs,omitempty"`
 	// Exact process names checked for the running signal.
 	ProcessNames []string `form:"process_names,omitempty" json:"process_names,omitempty" xml:"process_names,omitempty"`
+}
+
+// AiScanTargetGatewayClientResponseBody is used to define fields on response
+// body types.
+type AiScanTargetGatewayClientResponseBody struct {
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
+	CimdVendorKeys []string `form:"cimd_vendor_keys,omitempty" json:"cimd_vendor_keys,omitempty" xml:"cimd_vendor_keys,omitempty"`
+	// Client ids matched literally against the caller's verified client_id, or
+	// CIMD catalog URLs — including the wildcard patterns — matched against the
+	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
+	// mints one document per MCP server is still named exactly. No two enabled
+	// targets may claim the same entry.
+	OauthClientIds []string `form:"oauth_client_ids,omitempty" json:"oauth_client_ids,omitempty" xml:"oauth_client_ids,omitempty"`
+	// Names an MCP client reports at initialize. Detection only, never
+	// authorization: the value is self-reported and any client can claim any name.
+	ClientInfoNames []string `form:"client_info_names,omitempty" json:"client_info_names,omitempty" xml:"client_info_names,omitempty"`
 }
 
 // AiScanTargetSignaturesRequestBody is used to define fields on request body
@@ -2332,10 +2355,30 @@ type AiScanTargetSignaturesRequestBody struct {
 	// Bare command names resolved on the device PATH; never a path.
 	Binaries []string `form:"binaries" json:"binaries" xml:"binaries"`
 	// Directories whose existence marks the tool as installed, taken as
-	// home-relative unless they start with /.
+	// home-relative unless they start with /. A `*` is a wildcard matching any run
+	// of characters within ONE path segment, never crossing a `/`, for tools
+	// installed under a version-stamped directory name such as an editor extension.
 	ConfigDirs []string `form:"config_dirs" json:"config_dirs" xml:"config_dirs"`
 	// Exact process names checked for the running signal.
 	ProcessNames []string `form:"process_names" json:"process_names" xml:"process_names"`
+}
+
+// AiScanTargetGatewayClientRequestBody is used to define fields on request
+// body types.
+type AiScanTargetGatewayClientRequestBody struct {
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
+	CimdVendorKeys []string `form:"cimd_vendor_keys" json:"cimd_vendor_keys" xml:"cimd_vendor_keys"`
+	// Client ids matched literally against the caller's verified client_id, or
+	// CIMD catalog URLs — including the wildcard patterns — matched against the
+	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
+	// mints one document per MCP server is still named exactly. No two enabled
+	// targets may claim the same entry.
+	OauthClientIds []string `form:"oauth_client_ids" json:"oauth_client_ids" xml:"oauth_client_ids"`
+	// Names an MCP client reports at initialize. Detection only, never
+	// authorization: the value is self-reported and any client can claim any name.
+	ClientInfoNames []string `form:"client_info_names" json:"client_info_names" xml:"client_info_names"`
 }
 
 // AgentSessionMetaResponseBody is used to define fields on response body types.
@@ -2358,9 +2401,9 @@ type AIScanMatchRequestBody struct {
 	// claude-code, ollama). Stored as reported: an agent binary can ship a newer
 	// target list than the server catalog knows.
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
-	// Target category the agent scanned under: harness or local_model. The server
-	// catalog's category wins for targets it knows; this is what gets stored for
-	// the rest.
+	// Target category the agent scanned under: harness, assistant, or local_model.
+	// The server catalog's category wins for targets it knows; this is what gets
+	// stored for the rest.
 	Category string `form:"category" json:"category" xml:"category"`
 	// What the scan observed: installed or running.
 	Signal string `form:"signal" json:"signal" xml:"signal"`
@@ -2396,6 +2439,9 @@ func NewUpsertAiScanTargetRequestBody(p *agent.UpsertAiScanTargetPayload) *Upser
 	}
 	if p.Signatures != nil {
 		body.Signatures = marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesRequestBody(p.Signatures)
+	}
+	if p.GatewayClient != nil {
+		body.GatewayClient = marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientRequestBody(p.GatewayClient)
 	}
 	{
 		var zero bool
@@ -7170,6 +7216,9 @@ func ValidateAiScanTargetResponseBody(body *AiScanTargetResponseBody) (err error
 	if body.Signatures == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signatures", "body"))
 	}
+	if body.GatewayClient == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_client", "body"))
+	}
 	if body.Enabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
@@ -7188,8 +7237,8 @@ func ValidateAiScanTargetResponseBody(body *AiScanTargetResponseBody) (err error
 		}
 	}
 	if body.Category != nil {
-		if !(*body.Category == "harness" || *body.Category == "local_model") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"harness", "local_model"}))
+		if !(*body.Category == "harness" || *body.Category == "assistant" || *body.Category == "local_model") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"harness", "assistant", "local_model"}))
 		}
 	}
 	if body.Signatures != nil {
@@ -7199,6 +7248,11 @@ func ValidateAiScanTargetResponseBody(body *AiScanTargetResponseBody) (err error
 	}
 	if body.VersionPlistKey != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.version_plist_key", *body.VersionPlistKey, "^[A-Za-z0-9]{1,64}$"))
+	}
+	if body.GatewayClient != nil {
+		if err2 := ValidateAiScanTargetGatewayClientResponseBody(body.GatewayClient); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Origin != nil {
 		if !(*body.Origin == "default" || *body.Origin == "organization") {
@@ -7253,6 +7307,43 @@ func ValidateAiScanTargetSignaturesResponseBody(body *AiScanTargetSignaturesResp
 	return
 }
 
+// ValidateAiScanTargetGatewayClientResponseBody runs the validations defined
+// on AiScanTargetGatewayClientResponseBody
+func ValidateAiScanTargetGatewayClientResponseBody(body *AiScanTargetGatewayClientResponseBody) (err error) {
+	if body.CimdVendorKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cimd_vendor_keys", "body"))
+	}
+	if body.OauthClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_client_ids", "body"))
+	}
+	if body.ClientInfoNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_info_names", "body"))
+	}
+	if len(body.CimdVendorKeys) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.cimd_vendor_keys", body.CimdVendorKeys, len(body.CimdVendorKeys), 16, false))
+	}
+	for _, e := range body.CimdVendorKeys {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.cimd_vendor_keys[*]", e, "^[a-z0-9][a-z0-9-]{0,63}$"))
+	}
+	if len(body.OauthClientIds) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.oauth_client_ids", body.OauthClientIds, len(body.OauthClientIds), 16, false))
+	}
+	for _, e := range body.OauthClientIds {
+		if utf8.RuneCountInString(e) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.oauth_client_ids[*]", e, utf8.RuneCountInString(e), 512, false))
+		}
+	}
+	if len(body.ClientInfoNames) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_info_names", body.ClientInfoNames, len(body.ClientInfoNames), 16, false))
+	}
+	for _, e := range body.ClientInfoNames {
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_info_names[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	return
+}
+
 // ValidateAiScanTargetSignaturesRequestBody runs the validations defined on
 // AiScanTargetSignaturesRequestBody
 func ValidateAiScanTargetSignaturesRequestBody(body *AiScanTargetSignaturesRequestBody) (err error) {
@@ -7292,6 +7383,43 @@ func ValidateAiScanTargetSignaturesRequestBody(body *AiScanTargetSignaturesReque
 	return
 }
 
+// ValidateAiScanTargetGatewayClientRequestBody runs the validations defined on
+// AiScanTargetGatewayClientRequestBody
+func ValidateAiScanTargetGatewayClientRequestBody(body *AiScanTargetGatewayClientRequestBody) (err error) {
+	if body.CimdVendorKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cimd_vendor_keys", "body"))
+	}
+	if body.OauthClientIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_client_ids", "body"))
+	}
+	if body.ClientInfoNames == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_info_names", "body"))
+	}
+	if len(body.CimdVendorKeys) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.cimd_vendor_keys", body.CimdVendorKeys, len(body.CimdVendorKeys), 16, false))
+	}
+	for _, e := range body.CimdVendorKeys {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.cimd_vendor_keys[*]", e, "^[a-z0-9][a-z0-9-]{0,63}$"))
+	}
+	if len(body.OauthClientIds) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.oauth_client_ids", body.OauthClientIds, len(body.OauthClientIds), 16, false))
+	}
+	for _, e := range body.OauthClientIds {
+		if utf8.RuneCountInString(e) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.oauth_client_ids[*]", e, utf8.RuneCountInString(e), 512, false))
+		}
+	}
+	if len(body.ClientInfoNames) > 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_info_names", body.ClientInfoNames, len(body.ClientInfoNames), 16, false))
+	}
+	for _, e := range body.ClientInfoNames {
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_info_names[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	return
+}
+
 // ValidateAgentSessionMetaResponseBody runs the validations defined on
 // AgentSessionMetaResponseBody
 func ValidateAgentSessionMetaResponseBody(body *AgentSessionMetaResponseBody) (err error) {
@@ -7322,8 +7450,8 @@ func ValidateAIScanMatchRequestBody(body *AIScanMatchRequestBody) (err error) {
 	if utf8.RuneCountInString(body.TargetID) > 64 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_id", body.TargetID, utf8.RuneCountInString(body.TargetID), 64, false))
 	}
-	if !(body.Category == "harness" || body.Category == "local_model") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", body.Category, []any{"harness", "local_model"}))
+	if !(body.Category == "harness" || body.Category == "assistant" || body.Category == "local_model") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", body.Category, []any{"harness", "assistant", "local_model"}))
 	}
 	if utf8.RuneCountInString(body.Category) > 32 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.category", body.Category, utf8.RuneCountInString(body.Category), 32, false))

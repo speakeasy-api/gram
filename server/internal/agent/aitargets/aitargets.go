@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // Category classifies what kind of AI tool a target is.
@@ -20,14 +22,29 @@ const (
 	// CategoryHarness is an agentic coding tool or AI IDE.
 	CategoryHarness Category = "harness"
 
-	// CategoryLocalModel is a local model runtime.
+	// CategoryAssistant is a general-purpose AI assistant or agent. Like a
+	// harness it speaks MCP to Gram, so a decision about one is enforceable;
+	// unlike a harness it is not a coding tool.
+	CategoryAssistant Category = "assistant"
+
+	// CategoryLocalModel is an open model run locally. The wire value stays
+	// local_model: it is echoed by deployed agent binaries and stored on every
+	// detection row, so the rename is a label, not a contract change.
 	CategoryLocalModel Category = "local_model"
 )
 
 // KnownCategories lists every category the catalog, the scan-report ingest,
 // and the device agent accept.
 func KnownCategories() []Category {
-	return []Category{CategoryHarness, CategoryLocalModel}
+	return []Category{CategoryHarness, CategoryAssistant, CategoryLocalModel}
+}
+
+// CallsGateway reports whether a target of this category ever reaches Gram's
+// MCP gateway, and so whether naming a caller for it is meaningful. It is the
+// one place that distinction is written down: a category that never connects
+// cannot carry matchers and cannot be the subject of an access decision.
+func CallsGateway(category Category) bool {
+	return category == CategoryHarness || category == CategoryAssistant
 }
 
 // SchemaVersion is the version of the ai_scan envelope delivered to agents.
@@ -57,6 +74,51 @@ type VersionHint struct {
 	PlistKey string `json:"plist_key"`
 }
 
+// GatewayClient links a scan target to the MCP gateway callers that are the
+// same tool. A device signature and an OAuth caller share no natural join
+// key — one is a laptop footprint, the other a registered client — so the
+// link is declared here rather than derived.
+//
+// The three lists are not interchangeable. CIMDVendorKeys and OAuthClientIDs
+// name credentials the server itself verified, so a decision may be enforced
+// on them. ClientInfoNames names what the client called itself, which is
+// attribution only; see MatchGatewayCaller.
+type GatewayClient struct {
+	// CIMDVendorKeys match the VendorKey of the CIMD catalog entry that
+	// admitted the caller's client_id. Vendor-grained: two targets in one
+	// served list may not claim the same key, or a block on either would
+	// silently cover the other.
+	CIMDVendorKeys []string `json:"cimd_vendor_keys,omitempty"`
+
+	// OAuthClientIDs match the caller's verified client_id literally, and
+	// also match the CIMD catalog URL that admitted it. Naming the catalog
+	// URL is how a vendor whose client_id namespace is unbounded — one
+	// document minted per MCP server — is still named exactly, since its
+	// catalog entry is a wildcard pattern no literal id can reproduce.
+	OAuthClientIDs []string `json:"oauth_client_ids,omitempty"`
+
+	// ClientInfoNames match the name an MCP client reports at initialize.
+	// Detection only, never authorization: the value is self-reported and
+	// any client can claim any name.
+	ClientInfoNames []string `json:"client_info_names,omitempty"`
+}
+
+// IsZero reports whether no gateway caller is linked to the target. It keeps
+// an unlinked target's JSON byte-identical to the shape that predates these
+// matchers, which is what leaves the served-list ETag alone.
+func (g GatewayClient) IsZero() bool {
+	return len(g.CIMDVendorKeys) == 0 && len(g.OAuthClientIDs) == 0 && len(g.ClientInfoNames) == 0
+}
+
+// Clone returns a deep copy.
+func (g GatewayClient) Clone() GatewayClient {
+	return GatewayClient{
+		CIMDVendorKeys:  slices.Clone(g.CIMDVendorKeys),
+		OAuthClientIDs:  slices.Clone(g.OAuthClientIDs),
+		ClientInfoNames: slices.Clone(g.ClientInfoNames),
+	}
+}
+
 // Target is one AI tool the catalog knows.
 type Target struct {
 	// ID is the stable catalog identifier scan reports key on.
@@ -74,8 +136,32 @@ type Target struct {
 	// VersionHint overrides the Info.plist key used for version capture.
 	VersionHint *VersionHint `json:"version_hint,omitempty"`
 
+	// GatewayClient names the MCP gateway callers that are this tool.
+	// Server-side only: Envelope strips it before agents see it.
+	GatewayClient GatewayClient `json:"gateway_client,omitzero"`
+
 	// Enabled is false for targets kept for history but not served.
 	Enabled bool `json:"enabled"`
+}
+
+// ZeroTarget is the empty target a lookup returns alongside ok=false. It is
+// spelled out once here because the linter requires every field of a struct
+// literal, and an unresolved lookup is not worth eleven lines at each site.
+func ZeroTarget() Target {
+	return Target{
+		ID:          "",
+		DisplayName: "",
+		Category:    "",
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     nil,
+			ConfigDirs:   nil,
+			ProcessNames: nil,
+		},
+		VersionHint:   nil,
+		GatewayClient: GatewayClient{CIMDVendorKeys: nil, OAuthClientIDs: nil, ClientInfoNames: nil},
+		Enabled:       false,
+	}
 }
 
 // Clone returns a deep copy.
@@ -91,157 +177,46 @@ func (t Target) Clone() Target {
 		hint := *t.VersionHint
 		out.VersionHint = &hint
 	}
+	out.GatewayClient = t.GatewayClient.Clone()
 	return out
 }
 
-// Defaults is the code-owned set an empty catalog is seeded from. After the
-// seed, Postgres is the source of truth.
+// Defaults is the code-owned set an empty catalog is seeded from; after that
+// Postgres is the source of truth. Derived from the aivendors registry, so a
+// product declared once is both admissible and blockable.
+//
+// A product with no CIMD document carries detection names only, and a vendor
+// key covering more than one product names neither — GatewayMatchersFor
+// derives both rules.
 func Defaults() []Target {
-	return []Target{
-		{
-			ID:          "chatgpt-classic",
-			DisplayName: "ChatGPT Classic",
-			Category:    CategoryHarness,
+	products := aivendors.ScanProducts()
+	targets := make([]Target, 0, len(products))
+	for _, product := range products {
+		matchers := aivendors.GatewayMatchersFor(product)
+		target := Target{
+			ID:          product.ID,
+			DisplayName: product.DisplayName,
+			Category:    Category(product.Category),
 			Signatures: Signatures{
-				BundleIDs:    []string{"com.openai.chat"},
-				Binaries:     []string{},
-				ConfigDirs:   []string{},
-				ProcessNames: []string{},
+				BundleIDs:    orEmpty(product.Signatures.BundleIDs),
+				Binaries:     orEmpty(product.Signatures.Binaries),
+				ConfigDirs:   orEmpty(product.Signatures.ConfigDirs),
+				ProcessNames: orEmpty(product.Signatures.ProcessNames),
 			},
 			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "claude-code",
-			DisplayName: "Claude Code",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"claude"},
-				ConfigDirs:   []string{"~/.claude"},
-				ProcessNames: []string{"claude"},
+			GatewayClient: GatewayClient{
+				CIMDVendorKeys:  matchers.VendorKeys,
+				OAuthClientIDs:  matchers.ClientIDs,
+				ClientInfoNames: product.ClientInfoNames,
 			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "cursor",
-			DisplayName: "Cursor",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{"com.todesktop.230313mzl4w4u92"},
-				Binaries:     []string{"cursor"},
-				ConfigDirs:   []string{"~/.cursor"},
-				ProcessNames: []string{"Cursor"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "codex",
-			DisplayName: "Codex",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"codex"},
-				ConfigDirs:   []string{"~/.codex"},
-				ProcessNames: []string{"codex"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "gemini-cli",
-			DisplayName: "Gemini CLI",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"gemini"},
-				ConfigDirs:   []string{"~/.gemini"},
-				ProcessNames: []string{"gemini"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "windsurf",
-			DisplayName: "Windsurf",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{"com.exafunction.windsurf"},
-				Binaries:     []string{"windsurf"},
-				ConfigDirs:   []string{"~/.codeium/windsurf"},
-				ProcessNames: []string{"Windsurf"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "aider",
-			DisplayName: "Aider",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"aider"},
-				ConfigDirs:   []string{"~/.aider"},
-				ProcessNames: []string{"aider"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "opencode",
-			DisplayName: "opencode",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"opencode"},
-				ConfigDirs:   []string{"~/.config/opencode"},
-				ProcessNames: []string{"opencode"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "openclaw",
-			DisplayName: "OpenClaw",
-			Category:    CategoryHarness,
-			Signatures: Signatures{
-				BundleIDs:    []string{},
-				Binaries:     []string{"openclaw"},
-				ConfigDirs:   []string{"~/.openclaw"},
-				ProcessNames: []string{"openclaw"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "ollama",
-			DisplayName: "Ollama",
-			Category:    CategoryLocalModel,
-			Signatures: Signatures{
-				BundleIDs:    []string{"com.electron.ollama"},
-				Binaries:     []string{"ollama"},
-				ConfigDirs:   []string{"~/.ollama"},
-				ProcessNames: []string{"ollama"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
-		{
-			ID:          "lmstudio",
-			DisplayName: "LM Studio",
-			Category:    CategoryLocalModel,
-			Signatures: Signatures{
-				BundleIDs:    []string{"ai.elementlabs.lmstudio"},
-				Binaries:     []string{"lms"},
-				ConfigDirs:   []string{"~/.lmstudio"},
-				ProcessNames: []string{"LM Studio"},
-			},
-			VersionHint: nil,
-			Enabled:     true,
-		},
+			Enabled: true,
+		}
+		if product.VersionPlistKey != "" {
+			target.VersionHint = &VersionHint{PlistKey: product.VersionPlistKey}
+		}
+		targets = append(targets, target)
 	}
+	return targets
 }
 
 // Snapshot is an immutable view of the served catalog at one list version.
@@ -294,7 +269,7 @@ func (s *Snapshot) Targets() []Target {
 func (s *Snapshot) ByID(id string) (Target, bool) {
 	target, ok := s.byID[id]
 	if !ok {
-		return Target{ID: "", DisplayName: "", Category: "", Signatures: Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil}, VersionHint: nil, Enabled: false}, false
+		return ZeroTarget(), false
 	}
 	return target.Clone(), true
 }
@@ -321,8 +296,22 @@ func (s *Snapshot) Envelope() Envelope {
 		SchemaVersion: SchemaVersion,
 		ListVersion:   s.ListVersion,
 		ETag:          s.ETag,
-		Targets:       s.Targets(),
+		Targets:       wireTargets(s.targets),
 	}
+}
+
+// wireTargets is targets as agents receive them: gateway-client matchers
+// stripped. A device has no use for them, and leaving them in would make a
+// matcher-only edit change the ETag and send every agent re-applying a scan
+// list that did not move.
+func wireTargets(targets []Target) []Target {
+	out := make([]Target, 0, len(targets))
+	for _, target := range targets {
+		cloned := target.Clone()
+		cloned.GatewayClient = GatewayClient{CIMDVendorKeys: nil, OAuthClientIDs: nil, ClientInfoNames: nil}
+		out = append(out, cloned)
+	}
+	return out
 }
 
 // EnvelopeValue returns the envelope as the generic JSON value the plugin
@@ -347,7 +336,7 @@ func encodeEnvelope(envelope Envelope) map[string]any {
 func fingerprint(listVersion int32, sorted []Target) string {
 	hash := sha256.New()
 	_, _ = fmt.Fprintf(hash, "schema_version=%d\nlist_version=%d\n", SchemaVersion, listVersion)
-	data, err := json.Marshal(sorted)
+	data, err := json.Marshal(wireTargets(sorted))
 	if err != nil {
 		_, _ = fmt.Fprintf(hash, "marshal error: %v", err)
 	}

@@ -97,8 +97,8 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		// LowCardinality(String), so extending the supported vocabulary does
 		// not require a migration. Keep the request contract closed here.
 		category := strings.ToLower(strings.TrimSpace(match.Category))
-		if category != "harness" && category != "local_model" {
-			return oops.E(oops.CodeBadRequest, nil, "match category must be harness or local_model")
+		if !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
+			return oops.E(oops.CodeBadRequest, nil, "match category must be one of harness, assistant, local_model")
 		}
 		signal := strings.ToLower(strings.TrimSpace(match.Signal))
 		if signal != "installed" && signal != "running" {

@@ -31,10 +31,10 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  UpsertDeviceAgentAiScanTargetRequest,
-  UpsertDeviceAgentAiScanTargetRequest$outboundSchema,
-  UpsertDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/upsertdeviceagentaiscantarget.js";
+  UpsertAiScanTargetRequest,
+  UpsertAiScanTargetRequest$outboundSchema,
+  UpsertAiScanTargetSecurity,
+} from "../models/operations/upsertaiscantarget.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -42,12 +42,12 @@ import { Result } from "../types/fp.js";
  * upsertAiScanTarget agent
  *
  * @remarks
- * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+ * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged, which is how a built-in is switched on or off. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
  */
 export function agentUpsertAiScanTarget(
   client: GramCore,
-  request: UpsertDeviceAgentAiScanTargetRequest,
-  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
+  request: UpsertAiScanTargetRequest,
+  security?: UpsertAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function agentUpsertAiScanTarget(
 
 async function $do(
   client: GramCore,
-  request: UpsertDeviceAgentAiScanTargetRequest,
-  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
+  request: UpsertAiScanTargetRequest,
+  security?: UpsertAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,8 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(UpsertDeviceAgentAiScanTargetRequest$outboundSchema, value),
+    (value) => z.parse(UpsertAiScanTargetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -131,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "upsertDeviceAgentAiScanTarget",
+    operationID: "upsertAiScanTarget",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

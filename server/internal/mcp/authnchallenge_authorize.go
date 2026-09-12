@@ -119,6 +119,19 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 	}
 
+	// Shadow AI blocking, refused inline for the same reason an admission
+	// denial is: it is policy about the client itself, so forwarding it to
+	// the client's redirect_uri would hand a blocked tool a normal-looking
+	// error page instead of telling the person what happened. It runs after
+	// resolution because only a resolved client_id is a credential the server
+	// verified.
+	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
+		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+		}
+		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
+	}
+
 	// The origin this request was addressed at. It is the mint origin by
 	// definition — the challenge below snapshots it — and it is what the AS
 	// metadata document advertises as the issuer, so both the error redirect

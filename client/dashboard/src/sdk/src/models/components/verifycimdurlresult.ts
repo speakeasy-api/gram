@@ -39,6 +39,10 @@ export type VerifyCimdURLResult = {
    */
   detail: string;
   /**
+   * The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.
+   */
+  document?: string | undefined;
+  /**
    * Status the document endpoint returned; omitted when no response was received.
    */
   httpStatus?: number | undefined;
@@ -69,6 +73,7 @@ export const VerifyCimdURLResult$inboundSchema: z.ZodMiniType<
   z.object({
     client_name: z.optional(z.string()),
     detail: z.string(),
+    document: z.optional(z.string()),
     http_status: z.optional(z.int()),
     outcome: VerifyCimdURLResultOutcome$inboundSchema,
     reason: z.optional(z.string()),

@@ -23,6 +23,7 @@ import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPI
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
+import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
@@ -44,6 +45,7 @@ import { RequestAccessResult } from "../models/components/requestaccessresult.js
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
 import { ResourceAudienceResult } from "../models/components/resourceaudienceresult.js";
 import { Role } from "../models/components/role.js";
+import { SetAIToolDecisionResult } from "../models/components/setaitooldecisionresult.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
 import {
@@ -131,6 +133,10 @@ import {
   ResolveShadowMCPInventoryRequestSecurity,
 } from "../models/operations/resolveshadowmcpinventoryrequest.js";
 import {
+  SetAIToolDecisionRequest,
+  SetAIToolDecisionSecurity,
+} from "../models/operations/setaitooldecision.js";
+import {
   SetResourceAudienceRequest,
   SetResourceAudienceSecurity,
 } from "../models/operations/setresourceaudience.js";
@@ -210,7 +216,7 @@ export class Access extends ClientSDK {
    * getShadowMCPInventoryServer access
    *
    * @remarks
-   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.
    */
   async getShadowMCPInventoryServer(
     request: GetShadowMCPInventoryServerRequest,
@@ -229,7 +235,7 @@ export class Access extends ClientSDK {
    * listAIDetections access
    *
    * @remarks
-   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
    */
   async listAIDetections(
     request?: ListAIDetectionsRequest | undefined,
@@ -438,7 +444,7 @@ export class Access extends ClientSDK {
    * listShadowMCPInventory access
    *
    * @remarks
-   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.
    */
   async listShadowMCPInventory(
     request: ListShadowMCPInventoryRequest,
@@ -541,6 +547,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setAIToolDecision access
+   *
+   * @remarks
+   * Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool whose only gateway matcher is a self-reported client name records the decision and enforces nothing — the returned summary says which case applies. Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async setAIToolDecision(
+    request: SetAIToolDecisionRequest,
+    security?: SetAIToolDecisionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SetAIToolDecisionResult> {
+    return unwrapAsync(accessSetAIToolDecision(
       this,
       request,
       security,

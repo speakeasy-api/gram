@@ -11,6 +11,7 @@ import (
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -342,7 +343,10 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 	result := ShadowMCPTargetSummary{
 		Display: display, TargetKind: kind, ObservationState: observationState,
 		FirstSeen: "", LastSeen: "", LastCalled: "", ObservedUseCount: max(row.ObservedUseCount, 0),
-		UserCount: NewSubjectCount(int64(row.UserCount)),
+		// Platform MCP reads as an org admin, so the attribution projection
+		// always populates the count; a nil would mean the read was not what
+		// this path assumes, and zero is the safe reading of that.
+		UserCount: NewSubjectCount(int64(conv.PtrValOr(row.UserCount, 0))),
 		Access:    ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
 		Review:    nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
 	}

@@ -93,6 +93,42 @@ type AiIntegrationSync struct {
 	ID                    uuid.UUID
 }
 
+type AiScanCatalog struct {
+	OrganizationID string
+	ListVersion    int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type AiScanTarget struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     string
+	Category        string
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type AiToolDecision struct {
+	OrganizationID string
+	TargetID       string
+	Decision       string
+	Rationale      pgtype.Text
+	DecidedBy      pgtype.Text
+	DecidedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type ApiKey struct {
 	ID                     uuid.UUID
 	OrganizationID         string
