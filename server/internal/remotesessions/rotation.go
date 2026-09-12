@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -171,11 +172,16 @@ type ClientRotator struct {
 	locks       cache.Cache
 	revoker     *UpstreamRevoker
 	auditLogger *audit.Logger
+
+	// registrationTelemetry records the classification of a failed
+	// re-registration. A rotation is a dynamic client registration like any
+	// other, and its failures are the ones that strand logins at the issuer.
+	registrationTelemetry registration.Recorder
 }
 
 // NewClientRotator wires a rotator over the same database, encryption key,
 // egress policy, and lease cache the refresh path uses.
-func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger) *ClientRotator {
+func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger, registrationTelemetry registration.Recorder) *ClientRotator {
 	return &ClientRotator{
 		logger:      logger,
 		db:          db,
@@ -186,6 +192,8 @@ func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cli
 		locks:       locks,
 		revoker:     revoker,
 		auditLogger: auditLogger,
+
+		registrationTelemetry: registrationTelemetry,
 	}
 }
 
@@ -360,7 +368,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(row.IssuerTunneledMcpServerID)),
-	})
+	}, r.registrationTelemetry)
 	if err != nil {
 		return zero, fmt.Errorf("re-register client with issuer: %w", err)
 	}
