@@ -916,6 +916,13 @@ func (p *Proxy) forwardRequest(
 		forwardCancel()
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
 	}
+	if p.Identity.RemoteMCPServerID != "" {
+		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
+			phaseTimer.Stop()
+			forwardCancel()
+			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+		}
+	}
 
 	if err := p.applyRequestHeaders(ctx, r, upstreamReq); err != nil {
 		phaseTimer.Stop()
@@ -934,6 +941,13 @@ func (p *Proxy) forwardRequest(
 	if p.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
+		}
+	} else if p.Identity.RemoteMCPServerID != "" {
+		client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+			if _, err := validateRemoteMCPTransportURL(req.URL.String()); err != nil {
+				return fmt.Errorf("validate remote MCP redirect: %w", err)
+			}
+			return nil
 		}
 	}
 	resp, err := client.Do(upstreamReq)
