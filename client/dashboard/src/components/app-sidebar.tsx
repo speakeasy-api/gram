@@ -256,7 +256,7 @@ export function AppSidebar({
                   ]),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
+              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
             ]}
           />
 

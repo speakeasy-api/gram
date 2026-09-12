@@ -12,6 +12,7 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
+import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { useIdentityOutlet } from "./identityRoute";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ShareBar } from "@/components/chart/ShareBar";
@@ -42,6 +43,10 @@ const RISK_UNAVAILABLE =
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
   const { identity } = useIdentityOutlet();
+  // Only an enrolled person has device scans behind them; an API key or an
+  // external identity has nothing to show.
+  const isEmployee = identity.kind === "user" && identity.userIds.length > 0;
+  const employeeEmail = isEmployee ? (identity.emails[0] ?? null) : null;
   const { from, to } = useIdentityWindow();
   const location = useLocation();
   const routes = useRoutes();
@@ -251,6 +256,11 @@ export default function IdentitySecurity(): JSX.Element {
               ))
           )}
         </IdentityPanel>
+
+        {/* Which AI tools this person runs is a security question about them,
+            not a list of things they have connected — it sits here rather than
+            on Connections for the same reason the denied challenges do. */}
+        {isEmployee && <EmployeeShadowAISection userEmail={employeeEmail} />}
       </div>
     </IdentitySection>
   );

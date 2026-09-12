@@ -126,6 +126,15 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
+import {
+  ShadowAIIndexRedirect,
+  ShadowAIRoot,
+  ShadowMCPLegacyRedirect,
+  ShadowMCPServerLegacyRedirect,
+} from "./pages/shadow-ai/ShadowAI";
+import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
+import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
+import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -821,17 +830,67 @@ const ROUTE_STRUCTURE = {
     icon: "flag",
     component: RiskEventsPage,
   },
+  // Shadow MCP is a subset of Shadow AI, not a sibling: a shadow MCP server
+  // is reached by some AI tool, and one admin answers "what are people
+  // running?" and "what is it talking to?" in the same sitting. The two tabs
+  // are routed rather than toggled so either half survives being linked.
+  //
+  // Project-level placement with organization-scoped reads behind it, the
+  // same shape as identities above and for the same reason.
+  shadowAI: {
+    // "Shadow AI" in the nav, matching the URL segment, which is also what
+    // the redirects below and the links already in tickets point at.
+    title: "Shadow AI",
+    url: "shadow-ai",
+    icon: "shield",
+    component: ShadowAIRoot,
+    indexComponent: ShadowAIIndexRedirect,
+    subPages: {
+      harnesses: {
+        title: "Harnesses",
+        url: "harnesses",
+        component: ShadowAIHarnesses,
+      },
+      assistants: {
+        title: "Assistants",
+        url: "assistants",
+        component: ShadowAIAssistants,
+      },
+      models: {
+        title: "Models",
+        url: "models",
+        component: ShadowAIModels,
+      },
+      mcps: {
+        title: "MCPs",
+        url: "mcps",
+        component: ShadowMCPRoot,
+        indexComponent: ShadowMCP,
+        subPages: {
+          detail: {
+            title: "Shadow MCP Server",
+            url: ":serverSlug",
+            component: ShadowMCPServerDetail,
+          },
+        },
+      },
+    },
+  },
+  // The Shadow MCP paths predate the section and are sitting in bookmarks and
+  // tickets, so they redirect permanently rather than 404. The end-user
+  // request URLs (/shadow-mcp/request, /risk-policy-bypass/request) are
+  // top-level routes in App.tsx, are quoted verbatim in block messages
+  // already in people's terminals, and are deliberately left alone.
   shadowMCP: {
     title: "Shadow MCP",
     url: "shadow-mcp",
-    icon: "shield",
-    component: ShadowMCPRoot,
-    indexComponent: ShadowMCP,
+    component: ShadowAIRoot,
+    indexComponent: ShadowMCPLegacyRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
         url: ":serverSlug",
-        component: ShadowMCPServerDetail,
+        component: ShadowMCPServerLegacyRedirect,
       },
     },
   },
@@ -1375,6 +1434,11 @@ const ORG_ROUTE_STRUCTURE = {
       configuration: {
         title: "Configuration",
         url: "configuration",
+        component: DeviceAgent,
+      },
+      scanTargets: {
+        title: "Scan Targets",
+        url: "scan-targets",
         component: DeviceAgent,
       },
       mdmIntegrations: {
