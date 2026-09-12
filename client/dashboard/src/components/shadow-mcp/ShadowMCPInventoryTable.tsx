@@ -36,7 +36,6 @@ import {
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
-  shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPPolicy,
 } from "./shadowMCPInventoryStatus";
@@ -67,15 +66,13 @@ const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
 
+  // The label alone. The description that used to sit under it restated the
+  // badge for most rows, and the server detail page carries the full reading
+  // for the rows where it did not.
   return (
-    <div className="space-y-1">
-      <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
-        <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
-      </Badge>
-      <Text variant="small" className="text-muted-foreground text-xs">
-        {shadowMCPInventoryStatusDescription(server)}
-      </Text>
-    </div>
+    <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+      <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+    </Badge>
   );
 }
 
