@@ -25,6 +25,7 @@ type Server struct {
 	GetServer                         http.Handler
 	UpdateServer                      http.Handler
 	DiscoverProtectedResourceMetadata http.Handler
+	ProbeURL                          http.Handler
 	VerifyURL                         http.Handler
 	DeleteServer                      http.Handler
 	ListServerHeaders                 http.Handler
@@ -67,6 +68,7 @@ func New(
 			{"GetServer", "GET", "/rpc/remoteMcp.getServer"},
 			{"UpdateServer", "POST", "/rpc/remoteMcp.updateServer"},
 			{"DiscoverProtectedResourceMetadata", "POST", "/rpc/remoteMcp.discoverProtectedResourceMetadata"},
+			{"ProbeURL", "POST", "/rpc/remoteMcp.probeURL"},
 			{"VerifyURL", "POST", "/rpc/remoteMcp.verifyURL"},
 			{"DeleteServer", "DELETE", "/rpc/remoteMcp.deleteServer"},
 			{"ListServerHeaders", "GET", "/rpc/remoteMcp.listServerHeaders"},
@@ -81,6 +83,7 @@ func New(
 		GetServer:                         NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateServer:                      NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataHandler(e.DiscoverProtectedResourceMetadata, mux, decoder, encoder, errhandler, formatter),
+		ProbeURL:                          NewProbeURLHandler(e.ProbeURL, mux, decoder, encoder, errhandler, formatter),
 		VerifyURL:                         NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
 		DeleteServer:                      NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
 		ListServerHeaders:                 NewListServerHeadersHandler(e.ListServerHeaders, mux, decoder, encoder, errhandler, formatter),
@@ -102,6 +105,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetServer = m(s.GetServer)
 	s.UpdateServer = m(s.UpdateServer)
 	s.DiscoverProtectedResourceMetadata = m(s.DiscoverProtectedResourceMetadata)
+	s.ProbeURL = m(s.ProbeURL)
 	s.VerifyURL = m(s.VerifyURL)
 	s.DeleteServer = m(s.DeleteServer)
 	s.ListServerHeaders = m(s.ListServerHeaders)
@@ -122,6 +126,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetServerHandler(mux, h.GetServer)
 	MountUpdateServerHandler(mux, h.UpdateServer)
 	MountDiscoverProtectedResourceMetadataHandler(mux, h.DiscoverProtectedResourceMetadata)
+	MountProbeURLHandler(mux, h.ProbeURL)
 	MountVerifyURLHandler(mux, h.VerifyURL)
 	MountDeleteServerHandler(mux, h.DeleteServer)
 	MountListServerHeadersHandler(mux, h.ListServerHeaders)
@@ -433,6 +438,59 @@ func NewDiscoverProtectedResourceMetadataHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "discoverProtectedResourceMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountProbeURLHandler configures the mux to serve the "remoteMcp" service
+// "probeURL" endpoint.
+func MountProbeURLHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.probeURL", f)
+}
+
+// NewProbeURLHandler creates a HTTP handler which loads the HTTP request and
+// calls the "remoteMcp" service "probeURL" endpoint.
+func NewProbeURLHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeProbeURLRequest(mux, decoder)
+		encodeResponse = EncodeProbeURLResponse(encoder)
+		encodeError    = EncodeProbeURLError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "probeURL")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {
