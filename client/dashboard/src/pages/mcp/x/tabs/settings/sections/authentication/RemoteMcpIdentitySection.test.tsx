@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   protectedResourceMetadata: vi.fn(),
   fetchMetadata: vi.fn(),
   commit: vi.fn(),
+  detach: vi.fn(),
 }));
 
 vi.mock("@/routes", () => ({
@@ -88,6 +89,14 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 
 vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
   invalidateAllRemoteSessionClients: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/detachUserSessionIssuer.js", () => ({
+  useDetachUserSessionIssuerMutation: () => ({
+    mutateAsync: mocks.detach,
+    isPending: false,
+    error: null,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/remoteSessions.js", () => ({
@@ -232,6 +241,7 @@ beforeEach(() => {
     manualSetupRequired: false,
   });
   mocks.invalidateHeaders.mockResolvedValue(undefined);
+  mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
 });
 
@@ -387,7 +397,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("locks the mode to User once a client is linked", () => {
+  it("lets a configured User Identity be changed, after confirming", async () => {
     mocks.clients.mockReturnValue({
       items: [
         {
@@ -423,17 +433,31 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .getByRole("radio", { name: /User Identity/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
+    // The choice is not a one-way door: identity is derived from the linked
+    // client, and unlinking it is what leaves the mode.
+    const agent = screen.getByRole("radio", {
+      name: /Agent Identity/,
+    }) as HTMLButtonElement;
+    expect(agent.disabled).toBe(false);
+
+    fireEvent.click(agent);
+    expect(screen.getByRole("dialog")).toBeDefined();
     expect(
-      (
-        screen.getByRole("radio", {
-          name: /Agent Identity/,
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    expect(screen.getByText("Example provider")).toBeDefined();
-    expect(mocks.authenticationProbe).toHaveBeenLastCalledWith(
-      "remote-source-1",
-      false,
+      screen.getByText(/People who already signed in lose access/i),
+    ).toBeDefined();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove User Identity" }),
+    );
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith({
+        request: {
+          attachUserSessionIssuerForm: {
+            id: "client-1",
+            userSessionIssuerId: "user-session-issuer-1",
+          },
+        },
+      }),
     );
   });
 

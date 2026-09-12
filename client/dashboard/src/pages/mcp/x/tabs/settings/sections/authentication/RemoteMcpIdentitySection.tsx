@@ -9,6 +9,8 @@ import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
+import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
@@ -106,6 +108,10 @@ export function RemoteMcpIdentitySectionBody({
   const [selectedMode, setSelectedMode] =
     useState<RemoteMcpIdentityMode>("none");
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  // Leaving User Identity unlinks the client, so it asks first — the same
+  // shape as dropping the Agent credential.
+  const [leaveUserMode, setLeaveUserMode] =
+    useState<RemoteMcpIdentityMode | null>(null);
 
   useEffect(() => {
     if (actualMode) setSelectedMode(actualMode);
@@ -156,9 +162,13 @@ export function RemoteMcpIdentitySectionBody({
     updateHeader,
   });
 
+  const detachIssuer = useDetachUserSessionIssuerMutation();
+
   const handleModeChange = (next: string) => {
     const mode = next as RemoteMcpIdentityMode;
-    if (actualMode === "user" || identityReadOnly || passThroughAuthorization) {
+    if (identityReadOnly || passThroughAuthorization) return;
+    if (actualMode === "user" && mode !== "user") {
+      setLeaveUserMode(mode);
       return;
     }
     if (actualMode === "agent" && mode === "none") {
@@ -166,6 +176,40 @@ export function RemoteMcpIdentitySectionBody({
       return;
     }
     setSelectedMode(mode);
+  };
+
+  // Identity is derived, not stored: this server reads as User because a
+  // remote session client is bound to its user_session_issuer. Removing that
+  // binding is what actually leaves the mode.
+  const leaveUserIdentity = async () => {
+    const userSessionIssuerId = target.userSessionIssuerId;
+    if (!leaveUserMode || !userSessionIssuerId || !canWrite || rbacLoading) {
+      return;
+    }
+    try {
+      for (const linked of clients) {
+        await detachIssuer.mutateAsync({
+          // The generated detach request reuses the attach form's field
+          // name; the endpoint it posts to is what distinguishes them.
+          request: {
+            attachUserSessionIssuerForm: {
+              id: linked.id,
+              userSessionIssuerId,
+            },
+          },
+        });
+      }
+      await invalidateAllRemoteSessionClients(queryClient);
+      setSelectedMode(leaveUserMode);
+      setLeaveUserMode(null);
+      toast.success("User Identity removed");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to remove User Identity",
+      );
+    }
   };
 
   const removeAgentCredential = async () => {
@@ -298,12 +342,7 @@ export function RemoteMcpIdentitySectionBody({
                     orientation="horizontal"
                     showIndicator={false}
                     value={selectedMode}
-                    disabled={
-                      identityReadOnly ||
-                      scopeDisabled ||
-                      actualMode === "user" ||
-                      saving
-                    }
+                    disabled={identityReadOnly || scopeDisabled || saving}
                     onValueChange={handleModeChange}
                     className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
                   >
@@ -440,6 +479,50 @@ export function RemoteMcpIdentitySectionBody({
           </SettingsSection.Footer>
         ) : null}
       </SettingsSection.Panel>
+
+      <Dialog
+        open={leaveUserMode !== null}
+        onOpenChange={(open) => {
+          if (!open) setLeaveUserMode(null);
+        }}
+      >
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>
+              Stop signing users in through {upstreamName}?
+            </Dialog.Title>
+            <Dialog.Description>
+              This unlinks the identity provider from this server. People who
+              already signed in lose access through it and would have to
+              authorize again if you switch back. The provider and its client
+              stay available to other servers.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button
+              variant="secondary"
+              disabled={detachIssuer.isPending}
+              onClick={() => setLeaveUserMode(null)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+            <Button
+              variant="destructive-primary"
+              disabled={detachIssuer.isPending || !canWrite || rbacLoading}
+              onClick={() => void leaveUserIdentity()}
+            >
+              {detachIssuer.isPending ? (
+                <Button.LeftIcon>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>
+                {detachIssuer.isPending ? "Removing" : "Remove User Identity"}
+              </Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
 
       <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
         <Dialog.Content className="max-w-md">
