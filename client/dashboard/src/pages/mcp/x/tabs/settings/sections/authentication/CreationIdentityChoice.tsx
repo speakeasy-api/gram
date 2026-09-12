@@ -6,6 +6,7 @@ import { Info } from "lucide-react";
 import { useState } from "react";
 import { AgentIdentityRow } from "./AgentIdentityRow";
 import { IdentityExplainerCallout } from "./IdentityExplainer";
+import { identityModeCards } from "./identityModes";
 import type { AgentCredentialFields } from "./useAgentCredentialDraft";
 
 export type CreationIdentityMode = "user" | "agent" | "none";
@@ -66,33 +67,32 @@ export function CreationIdentityChoice({
 
       <RadioCardGroup
         size="sm"
+        showIndicator={false}
         value={value}
         onValueChange={(next) => onChange(next as CreationIdentityMode)}
       >
-        <RadioCard
-          value="user"
-          disabled={!canCreateIdentity}
-          title={
-            <span className="flex items-center gap-2">
-              User Identity
-              {advertisesOAuth ? (
-                <Badge variant="information" size="sm">
-                  <Badge.Text>Default</Badge.Text>
-                </Badge>
-              ) : null}
-            </span>
-          }
-        >
-          {`Each user signs in to ${upstreamName} as themselves and keeps their own permissions.`}
-        </RadioCard>
-        <RadioCard value="agent" title="Agent Identity">
-          Every caller acts as one service account. Manage what it may do in the
-          control plane.
-        </RadioCard>
-        <RadioCard value="none" title="No Identity">
-          Speakeasy will manage no identity and users will manage their own
-          static headers.
-        </RadioCard>
+        {identityModeCards(upstreamName).map((card) => (
+          <RadioCard
+            key={card.value}
+            value={card.value}
+            disabled={card.value === "user" && !canCreateIdentity}
+            leading={card.icon}
+            title={
+              card.value === "user" && advertisesOAuth ? (
+                <span className="flex items-center gap-2">
+                  {card.title}
+                  <Badge variant="information" size="sm">
+                    <Badge.Text>Default</Badge.Text>
+                  </Badge>
+                </span>
+              ) : (
+                card.title
+              )
+            }
+          >
+            {card.description}
+          </RadioCard>
+        ))}
       </RadioCardGroup>
 
       {value === "agent" ? (

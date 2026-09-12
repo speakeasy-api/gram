@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/Collapsible";
 import { HeadersSection } from "../HeadersSection";
 import { AgentIdentityRow } from "./AgentIdentityRow";
+import { identityModeCards } from "./identityModes";
 import { useAgentCredentialDraft } from "./useAgentCredentialDraft";
 import { AuthRow } from "./AuthRow";
 import type { AuthTarget } from "./authTarget";
@@ -46,34 +47,6 @@ import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useRemoteMcpAuthenticationProbe } from "./useRemoteMcpAuthenticationProbe";
 import { UserIdentityRow } from "./UserIdentityRow";
 import { useUserIdentityDraft } from "./useUserIdentityDraft";
-
-/**
- * The three identity modes, in the order AIM-230 fixes. Descriptions name the
- * upstream service rather than talking about "the upstream", so the choice
- * reads as a decision about Linear (or whatever this server fronts) rather
- * than about Speakeasy's plumbing.
- */
-function identityCards(upstreamName: string) {
-  return [
-    {
-      value: "user" as const,
-      title: "User Identity",
-      description: `Each user signs in to ${upstreamName} as themselves and keeps their own permissions.`,
-    },
-    {
-      value: "agent" as const,
-      title: "Agent Identity",
-      description:
-        "Every caller acts as one service account. Manage what it may do in the control plane.",
-    },
-    {
-      value: "none" as const,
-      title: "No Identity",
-      description:
-        "Speakeasy will manage no identity and users will manage their own static headers.",
-    },
-  ];
-}
 
 export function RemoteMcpIdentitySectionBody({
   target,
@@ -220,7 +193,7 @@ export function RemoteMcpIdentitySectionBody({
   };
 
   const identityError = headersQuery.error ?? clientsQueryError;
-  const cards = identityCards(upstreamName);
+  const cards = identityModeCards(upstreamName);
 
   // One Save for the whole section. What it commits depends on the selected
   // mode, and it disappears into a disabled state when there is nothing to do
@@ -323,6 +296,7 @@ export function RemoteMcpIdentitySectionBody({
                 {({ disabled: scopeDisabled }) => (
                   <RadioCardGroup
                     orientation="horizontal"
+                    showIndicator={false}
                     value={selectedMode}
                     disabled={
                       identityReadOnly ||
@@ -341,6 +315,7 @@ export function RemoteMcpIdentitySectionBody({
                           (card.value === "user" && actualMode === "agent") ||
                           (card.value === "agent" && !!passThroughAuthorization)
                         }
+                        leading={card.icon}
                         title={card.title}
                       >
                         {card.description}
