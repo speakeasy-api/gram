@@ -60,7 +60,7 @@ export function SettingsTab({
           title="Display"
           description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
         />
-        {/* Upstream headers live inside Identity's Advanced disclosure now —
+        {/* Upstream headers live inside Identity's Custom Headers disclosure
             they are governed by the identity choice, not a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} />
         <ServerUrlSection

@@ -19,7 +19,7 @@ vi.mock("./sections/DangerZoneSection", () => ({
   DangerZoneSection: () => <h2>Danger Zone</h2>,
 }));
 vi.mock("./sections/HeadersSection", () => ({
-  HeadersSection: () => <h2>Advanced Headers</h2>,
+  HeadersSection: () => <h2>Custom Headers</h2>,
 }));
 vi.mock("./sections/PublicRateLimitsSection", () => ({
   PublicRateLimitsSection: () => <h2>Public Rate Limits</h2>,
@@ -76,7 +76,7 @@ describe("SettingsTab", () => {
       ),
     ).toEqual([
       "Display",
-      // Upstream headers are the Identity panel's Advanced disclosure now,
+      // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
       "Server URL",

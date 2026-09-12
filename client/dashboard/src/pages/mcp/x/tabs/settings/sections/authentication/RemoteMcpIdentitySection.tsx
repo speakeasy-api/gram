@@ -273,8 +273,8 @@ export function RemoteMcpIdentitySectionBody({
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
-                Remove it in Advanced before selecting Agent Identity or relying
-                on No Identity.
+                Remove it in Custom Headers before selecting Agent Identity or
+                relying on No Identity.
               </Alert>
             ) : null}
 
@@ -387,7 +387,7 @@ export function RemoteMcpIdentitySectionBody({
                 className="size-4 transition-transform group-data-[state=open]:rotate-180"
               />
               <Text small className="font-medium">
-                Advanced
+                Custom Headers
               </Text>
               <Text muted small>
                 Upstream headers sent with every request.

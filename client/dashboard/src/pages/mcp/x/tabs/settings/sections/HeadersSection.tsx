@@ -248,7 +248,7 @@ export function HeadersSection({
   identityManagement?: { userSessionIssuerId?: string; resourceId: string };
   /**
    * "embedded" drops the card chrome and heading: on an MCP server's Settings
-   * tab these rows live inside the Identity panel's Advanced disclosure, which
+   * tab these rows live inside the Identity panel's Custom Headers disclosure,
    * supplies both.
    */
   variant?: "section" | "embedded";
@@ -476,7 +476,7 @@ export function HeadersSection({
       {embedded ? null : (
         <>
           <Text variant="subheading" className="mb-1">
-            Advanced Headers
+            Custom Headers
           </Text>
           <Text muted small className="mb-4">
             Headers sent to the remote MCP URL.
