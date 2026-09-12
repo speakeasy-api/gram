@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -1492,11 +1493,10 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	trials := trialsRepo.New(tx)
-	lockedTrial, err := trials.LockTrialLifecycle(ctx, payload.ID)
+	lockedTrial, err := trialsRepo.New(tx).LockTrialLifecycle(ctx, payload.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Never trialled: StartTrial inserts the row.
+		// Never trialled: ArmEnterpriseTrialTx inserts the row.
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for start").LogError(ctx, logger)
 	default:
@@ -1514,13 +1514,25 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 		}
 	}
 
-	started, err := trials.StartTrial(ctx, trialsRepo.StartTrialParams{
+	// The runtime gates ride along with the bundle: an expired trial's
+	// demotion sweep turned them off, and a never-trialled organization only
+	// has its signup defaults.
+	seeder := func(ctx context.Context, tx pgx.Tx, organizationID string) error {
+		if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID); err != nil {
+			return fmt.Errorf("seed enterprise trial bundle: %w", err)
+		}
+		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
+			return fmt.Errorf("enable trial runtime features: %w", err)
+		}
+		return nil
+	}
+	started, err := trials.ArmEnterpriseTrialTx(ctx, tx, trials.ArmParams{
 		OrganizationID: payload.ID,
-		Tier:           string(billing.TierEnterprise),
-		StartForDays:   conv.SafeInt32(payload.Days),
+		Days:           conv.SafeInt32(payload.Days),
+		Seeder:         seeder,
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, trials.ErrNotStartable):
 		_ = tx.Rollback(ctx)
 		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
 			"look up organization after unstarted trial",
@@ -1548,32 +1560,16 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 		}
 	}
 
-	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
-		OrganizationID: payload.ID,
-		AccountType:    started.Tier,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
-	}
-
-	if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, payload.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "seed enterprise trial entitlements").LogError(ctx, logger)
-	}
-
-	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enable trial runtime features").LogError(ctx, logger)
-	}
-
 	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialStarted(ctx, tx, audit.LogOrganizationEnterpriseTrialStartedEvent{
 		OrganizationID:   payload.ID,
 		Actor:            actor,
 		ActorDisplayName: actorDisplayName,
 		ActorSlug:        nil,
-		OrganizationName: organization.Name,
-		OrganizationSlug: organization.Slug,
+		OrganizationName: started.OrganizationName,
+		OrganizationSlug: started.OrganizationSlug,
 		AccountType:      started.Tier,
-		TrialEndsAt:      started.EndsAt.Time,
+		TrialEndsAt:      started.EndsAt,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial start").LogError(ctx, logger)
 	}

@@ -180,18 +180,24 @@ func TestStartTrial_RejectsTrialsThatAreNotStartable(t *testing.T) {
 		{name: "missing organization", orgID: "org_start_reject_missing", noRow: true, want: oops.CodeNotFound},
 	}
 
+	// Fixtures are seeded before the subtests fan out. Each seed upserts the
+	// global system roles, and a start patches grants on those same rows, so two
+	// subtests running both at once deadlock on them.
+	for _, tc := range cases {
+		if tc.noRow {
+			continue
+		}
+		seedOrgReadyForTrial(t, ctx, conn, orgFixture{id: tc.orgID, name: tc.orgID, slug: tc.orgID})
+		if tc.trial != nil {
+			f := *tc.trial
+			f.orgID = tc.orgID
+			seedTrial(t, ctx, conn, f)
+		}
+	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			if !tc.noRow {
-				seedOrgReadyForTrial(t, ctx, conn, orgFixture{id: tc.orgID, name: tc.orgID, slug: tc.orgID})
-				if tc.trial != nil {
-					f := *tc.trial
-					f.orgID = tc.orgID
-					seedTrial(t, ctx, conn, f)
-				}
-			}
 
 			var before *trialsRepo.Trial
 			if tc.trial != nil {
@@ -290,12 +296,18 @@ func TestStartTrial_DayCountBounds(t *testing.T) {
 		{name: "int32 overflow to a valid day count", days: math.MaxUint32 + 2, wantErr: true},
 	}
 
+	// Seeded before the subtests fan out: each seed upserts the global system
+	// roles that a concurrent start patches grants on, which deadlocks.
+	for _, tc := range cases {
+		orgID := "org_start_bound_" + tc.name
+		seedOrgReadyForTrial(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID})
+	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			orgID := "org_start_bound_" + tc.name
-			seedOrgReadyForTrial(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID})
 
 			_, err := svc.StartTrial(ctx, &gen.StartTrialPayload{ID: orgID, Days: tc.days})
 			if tc.wantErr {
