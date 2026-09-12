@@ -15,6 +15,7 @@ import {
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { replaceAdminServerUrl } from "./src/lib/admin-server-url.ts";
+import { withoutLocalDevSlot } from "./dev-slot-plugin.ts";
 
 // Manually grouped vendor chunks. CAUTION: never group a package whose dist
 // contains a top-level `await import(...)` (check before adding). Grouping
@@ -148,6 +149,25 @@ function devReadoutPlugin(): Plugin {
         clearTimeout(timer);
         watcher.close();
       });
+    },
+  };
+}
+
+// A developer's gitignored src/dev/slot.local.tsx is their own file and may do
+// anything at module scope, but the brand row is compiled out of production
+// builds, so nothing there should reach it. Without this the unused binding is
+// shaken out while the module's top-level statements are kept alive, which puts
+// that developer's code — and only theirs, on their own machine — in their
+// build. Declaring it side-effect-free lets the build drop the module outright.
+function sideEffectFreeLocalSlot(): Plugin {
+  return {
+    name: "gram-side-effect-free-local-slot",
+    apply: "build",
+    async resolveId(source, importer, options) {
+      if (!source.endsWith("slot.local.tsx")) return null;
+
+      const resolved = await this.resolve(source, importer, options);
+      return resolved ? { ...resolved, moduleSideEffects: false } : null;
     },
   };
 }
@@ -403,6 +423,10 @@ export default defineConfig(async (env) => {
       },
       themeInitPlugin(),
       devReadoutPlugin(),
+      // Dev only: a production build must not carry a developer's local slot,
+      // not even the top-level statements a tree-shake leaves behind.
+      { ...withoutLocalDevSlot(), apply: "build" },
+      sideEffectFreeLocalSlot(),
       react(),
       tailwindcss(),
     ],
