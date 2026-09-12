@@ -25,7 +25,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import type * as React from "react";
 import { useState } from "react";
 import { Link } from "react-router";
 import type { ProviderOption, UserIdentityDraft } from "./useUserIdentityDraft";
@@ -38,20 +38,18 @@ import type { ProviderOption, UserIdentityDraft } from "./useUserIdentityDraft";
  */
 function ScopeTrigger({
   children,
-  disabled,
   className,
   ariaLabel,
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  className?: string;
-  ariaLabel: string;
-}): JSX.Element {
+  // Rest and ref both matter: this renders under <PopoverTrigger asChild>,
+  // which clones it with the onClick, aria-expanded and ref that make the
+  // menu open. Swallowing them leaves a button that renders and does nothing.
+  ...props
+}: React.ComponentProps<"button"> & { ariaLabel: string }): JSX.Element {
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-label={ariaLabel}
+      {...props}
       className={cn(
         "text-muted-foreground hover:text-foreground hover:bg-muted -mx-1 inline-flex items-center gap-1 px-1 py-0.5 whitespace-nowrap disabled:pointer-events-none disabled:opacity-50",
         className,
