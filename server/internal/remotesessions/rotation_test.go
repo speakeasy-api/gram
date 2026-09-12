@@ -16,10 +16,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -296,6 +298,29 @@ func TestBuildAuthorizationUrl_KeepsClientWhenReRegistrationFails(t *testing.T) 
 	client := loadClient(t, env)
 	require.Equal(t, "synthetic-cid-rotate-register-fails", client.ClientID)
 	require.True(t, client.UpstreamRejectedAt.Valid, "the marker stays so the next login tries again")
+}
+
+// A rotation is a dynamic client registration like any other, so a
+// re-registration the issuer refuses is classified and counted as one. Without
+// this the failure that strands every login at the issuer until an
+// administrator re-registers by hand is the one the taxonomy never sees.
+func TestBuildAuthorizationUrl_RecordsRefusedReRegistration(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	_, env := newSyntheticExpiryEnv(t, "rotate-register-recorded", upstream.handler(), withRegistrationTelemetry())
+	rejectedAt := time.Now().Add(-time.Hour)
+	// A path the fake issuer does not serve as a registration endpoint.
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/missing", &rejectedAt, nil)
+
+	require.Equal(t, "synthetic-cid-rotate-register-recorded", mintLogin(t, env))
+
+	points := registrationFailurePoints(t, env.registrationTelemetryReader)
+	require.Len(t, points, 1, "a refused re-registration records exactly one failure")
+	require.EqualValues(t, 1, points[0].Value)
+	method, ok := points[0].Attributes.Value(attr.OAuthRegistrationMethod(registration.MethodDCR).Key)
+	require.True(t, ok, "the rotation failure carries a registration method")
+	require.Equal(t, string(registration.MethodDCR), method.AsString())
 }
 
 // An issuer that reports an expiry at or before the issuance would otherwise

@@ -679,7 +679,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		case errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint):
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError:
-			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage).LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr):
 			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
 		default:
