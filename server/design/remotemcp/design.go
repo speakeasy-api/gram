@@ -172,8 +172,33 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteMcpProtectedResourceMetadata"}`)
 	})
 
+	Method("probeURL", func() {
+		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.")
+
+		Payload(func() {
+			Extend(ProbeURLForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ProbeURLResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.probeURL")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "probeRemoteMcpURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "probeURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ProbeRemoteMcpURL"}`)
+	})
+
 	Method("verifyURL", func() {
-		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.")
+		Description("Probe a candidate remote MCP server URL and return the legacy boolean verification result.\n\nDeprecated: use probeURL instead.")
 
 		Payload(func() {
 			Extend(VerifyURLForm)
@@ -186,6 +211,7 @@ var _ = Service("remoteMcp", func() {
 
 		HTTP(func() {
 			POST("/rpc/remoteMcp.verifyURL")
+			Deprecated()
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -445,8 +471,18 @@ var ProtectedResourceMetadataDiscovery = Type("ProtectedResourceMetadataDiscover
 	Required("available", "discovery_warnings")
 })
 
-var VerifyURLForm = Type("VerifyURLForm", func() {
+var ProbeURLForm = Type("ProbeURLForm", func() {
 	Description("Form for probing a remote MCP server URL")
+
+	Attribute("url", String, "The URL of the remote MCP server to probe", func() {
+		Format(FormatURI)
+	})
+
+	Required("url")
+})
+
+var VerifyURLForm = Type("VerifyURLForm", func() {
+	Description("Legacy form for probing a remote MCP server URL")
 
 	Attribute("url", String, "The URL of the remote MCP server to probe", func() {
 		Format(FormatURI)
@@ -456,8 +492,23 @@ var VerifyURLForm = Type("VerifyURLForm", func() {
 	Required("url", "transport_type")
 })
 
+var ProbeURLResult = Type("ProbeURLResult", func() {
+	Description("Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.")
+
+	Attribute("outcome", String, "Probe outcome.", func() {
+		Enum("mcp_available", "authentication_required", "invalid_mcp_response", "unreachable")
+	})
+	Attribute("protected_resource_metadata_url", String, "Absolute HTTP(S) protected resource metadata URL advertised by a WWW-Authenticate challenge. Present only when authentication is required and the advertised URL is valid.", func() {
+		Format(FormatURI)
+	})
+	Attribute("http_status", Int, "HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.")
+	Attribute("reason", String, "Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.")
+
+	Required("outcome")
+})
+
 var VerifyURLResult = Type("VerifyURLResult", func() {
-	Description("Outcome of a remote MCP server URL verification")
+	Description("Legacy outcome of a remote MCP server URL verification")
 
 	Attribute("verified", Boolean, "Whether the URL responded in a way consistent with a remote MCP server")
 	Attribute("http_status", Int, "HTTP status code returned by the URL, if any")

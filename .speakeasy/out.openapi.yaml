@@ -42753,6 +42753,111 @@ paths:
       x-speakeasy-name-override: listServers
       x-speakeasy-react-hook:
         name: RemoteMcpServers
+  /rpc/remoteMcp.probeURL:
+    post:
+      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
+      operationId: probeRemoteMcpURL
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeURLForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeURLResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: probeURL remoteMcp
+      tags:
+        - remoteMcp
+      x-speakeasy-name-override: probeURL
+      x-speakeasy-react-hook:
+        name: ProbeRemoteMcpURL
   /rpc/remoteMcp.updateServer:
     post:
       description: Update a remote MCP server
@@ -42965,7 +43070,11 @@ paths:
         name: UpdateRemoteMcpServerHeader
   /rpc/remoteMcp.verifyURL:
     post:
-      description: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+      deprecated: true
+      description: |-
+        Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+
+        Deprecated: use probeURL instead.
       operationId: verifyRemoteMcpURL
       parameters:
         - allowEmptyValue: true
@@ -81711,6 +81820,41 @@ components:
         - window_start
         - window_end
         - actors
+    ProbeURLForm:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The URL of the remote MCP server to probe
+          format: uri
+      description: Form for probing a remote MCP server URL
+      required:
+        - url
+    ProbeURLResult:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: HTTP status returned by the remote server. Required for invalid_mcp_response and present for HTTP-based unreachable outcomes.
+          format: int64
+        outcome:
+          type: string
+          description: Probe outcome.
+          enum:
+            - mcp_available
+            - authentication_required
+            - invalid_mcp_response
+            - unreachable
+        protected_resource_metadata_url:
+          type: string
+          description: Absolute HTTP(S) protected resource metadata URL advertised by a WWW-Authenticate challenge. Present only when authentication is required and the advertised URL is valid.
+          format: uri
+        reason:
+          type: string
+          description: Stable machine-readable reason code. Present only when outcome is unreachable; currently timeout, rate_limited, server_error, dns_error, tls_error, guardian_rejected, or transport_error.
+      description: Structured outcome of probing a remote MCP server URL. Variant-specific fields are populated only when applicable.
+      required:
+        - outcome
     ProductFeatures:
       type: object
       properties:
@@ -93360,7 +93504,7 @@ components:
           type: string
           description: The URL of the remote MCP server to probe
           format: uri
-      description: Form for probing a remote MCP server URL
+      description: Legacy form for probing a remote MCP server URL
       required:
         - url
         - transport_type
@@ -93385,7 +93529,7 @@ components:
         verified:
           type: boolean
           description: Whether the URL responded in a way consistent with a remote MCP server
-      description: Outcome of a remote MCP server URL verification
+      description: Legacy outcome of a remote MCP server URL verification
       required:
         - verified
         - message
