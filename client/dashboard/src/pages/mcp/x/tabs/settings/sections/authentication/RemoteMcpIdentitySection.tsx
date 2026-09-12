@@ -337,10 +337,14 @@ export function RemoteMcpIdentitySectionBody({
                         <RadioCard
                           key={card.value}
                           value={card.value}
+                          // Only the pass-through conflict genuinely blocks a
+                          // choice: that legacy header already occupies the
+                          // Authorization name a static credential needs.
+                          // Agent to User is fine — a linked client wins over
+                          // a static credential, and AIM-230 expects the stale
+                          // one to be left visible for cleanup.
                           disabled={
-                            (card.value === "user" && actualMode === "agent") ||
-                            (card.value === "agent" &&
-                              !!passThroughAuthorization)
+                            card.value === "agent" && !!passThroughAuthorization
                           }
                           leading={card.icon}
                           // Both states, so selecting the card does not swap

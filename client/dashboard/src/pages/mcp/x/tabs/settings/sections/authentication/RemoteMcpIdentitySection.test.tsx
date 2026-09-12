@@ -400,6 +400,34 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("allows Agent to User, which the derivation already expects", () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+
+    // A linked client outranks a static credential, so a server holding both
+    // reads as User — AIM-230 calls that out and leaves the stale credential
+    // visible for cleanup rather than forbidding the move.
+    expect(
+      screen
+        .getByRole("radio", { name: /Agent Identity/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /User Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+
   it("holds a mode change as a draft until Save", async () => {
     mocks.clients.mockReturnValue({
       items: [
