@@ -14,6 +14,10 @@ type MetaRuntimeConfig struct {
 
 	// AutoVerifyWait is how long a remote login callback holds its redirect for the probe a fresh grant starts, so a fast member's verdict is on the first render.
 	AutoVerifyWait time.Duration
+
+	// RecheckInterval is how long an idle grant with no refresh token goes between keepalive re-checks of its stored verdict.
+	// Unlike the other fields, zero or negative disables the sweep; the CLI flag carries the default.
+	RecheckInterval time.Duration
 }
 
 func (c MetaRuntimeConfig) withDefaults() MetaRuntimeConfig {

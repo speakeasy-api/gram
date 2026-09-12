@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -26,4 +27,13 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 // RemoteChallengeManager is the manager the service registered its grant hook on.
 func (s *Service) RemoteChallengeManager() *remotesessions.ChallengeManager {
 	return s.remoteChallengeMgr
+}
+
+// SetRemoteSessionRecheckPacing swaps the sweep's per-host limiter rate and claim batch for a test.
+func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32) {
+	r := s.remoteSessionRecheck
+	r.batch = batch
+	if r.limiterStore != nil {
+		r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
+	}
 }

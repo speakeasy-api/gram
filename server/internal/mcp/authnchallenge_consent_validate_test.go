@@ -394,7 +394,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 // seedStandaloneValidationFixture: a proxied endpoint whose own backend is the fake upstream, and a grant naming it.
 func seedStandaloneValidationFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
 	t.Helper()
-	return seedStandaloneValidationFixtureWith(t, prefix, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout})
+	return seedStandaloneValidationFixtureWith(t, prefix, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 }
 
 // seedStandaloneValidationFixtureWith is seedStandaloneValidationFixture under the given probe budgets.

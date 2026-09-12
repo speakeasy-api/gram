@@ -23,11 +23,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
+
+// errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
+var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
 
 // errValidationRateLimited marks a verify refused before any probe ran.
 var errValidationRateLimited = errors.New("remote session validation rate limited")
@@ -50,6 +54,8 @@ func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterP
 type validationTarget struct {
 	name  string
 	build memberProxyBuilder
+	// tunnelID is set when the upstream is reached through a tunnel, so a keepalive can skip a dial that has no route.
+	tunnelID uuid.NullUUID
 }
 
 // validateRemoteSession probes one card's grant through the runtime routing path and records the verdict.
@@ -70,12 +76,13 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil)
+	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
 // the verdict. Callers pace it: the consent action through the per-challenge
-// limiter, the connect path by running it once per committed grant.
+// limiter, the connect path by running it once per committed grant, the
+// keepalive through its claim lease and per-host limiter.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -83,6 +90,7 @@ func (s *Service) probeRemoteSession(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	expectedGrant *remotesessions.RemoteGrant,
+	trigger remotesessionmetrics.ValidationTrigger,
 ) error {
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
@@ -93,7 +101,7 @@ func (s *Service) probeRemoteSession(
 	}
 	entry, usable := tokens[client.RemoteSessionIssuerID]
 	if !usable || entry.RemoteSessionClientID != client.ID {
-		return oops.E(oops.CodeBadRequest, nil, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -111,6 +119,18 @@ func (s *Service) probeRemoteSession(
 			return err
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve validation target").LogError(ctx, logger)
+	}
+
+	// A keepalive never dials a tunnel with no live route, and records nothing: the member is offline, not answering.
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive && target.tunnelID.Valid && !s.tunnelHasRoute(probeCtx, target.tunnelID.UUID) {
+		return fmt.Errorf("%w: %s", errRemoteSessionMemberOffline, target.name)
+	}
+
+	// Only routable, online grants spend the fleet-wide host quota.
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+		if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
+			return err
+		}
 	}
 
 	ref := remotesessions.RemoteSessionRef{
@@ -137,8 +157,8 @@ func (s *Service) probeRemoteSession(
 	<-enriched
 	issuerDisplay, _ := issuerCardBranding(client, s.serverURL)
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
-	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)))
-	s.validationMetrics.Record(ctx, client.IssuerURL, string(verdict))
+	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
+	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
@@ -270,7 +290,7 @@ func (s *Service) metaValidationTarget(
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			// An unservable member is the probe's failure to report, not a reason to refuse the check.
-			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }}, nil
+			return ctx, validationTarget{name: name, build: func(context.Context) (*proxy.Proxy, error) { return nil, memberErr }, tunnelID: member.tunneledServerID}, nil
 		}
 		return ctx, none, fmt.Errorf("dial meta MCP member: %w", err)
 	}
@@ -282,7 +302,7 @@ func (s *Service) metaValidationTarget(
 	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
-	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build)}, nil
+	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID}, nil
 }
 
 // standaloneValidationTarget dials a proxied endpoint's own backend, routed as serveRemoteBackend and serveTunneledBackend route it.
@@ -340,7 +360,7 @@ func (s *Service) standaloneValidationTarget(
 		if berr != nil {
 			return ctx, none, fmt.Errorf("build remote backend proxy for validation: %w", berr)
 		}
-		return ctx, validationTarget{name: name, build: probeProxyBuilder(build)}, nil
+		return ctx, validationTarget{name: name, build: probeProxyBuilder(build), tunnelID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
@@ -350,7 +370,17 @@ func (s *Service) standaloneValidationTarget(
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}
 		return p, nil
-	})}, nil
+	}), tunnelID: server.TunneledMcpServerID}, nil
+}
+
+// tunnelHasRoute is one route-store read: whether any gateway currently holds the tunnel; a store error reads as no route.
+func (s *Service) tunnelHasRoute(ctx context.Context, tunnelID uuid.UUID) bool {
+	// No route store means no gateway can be dialled, so the member reads offline.
+	if s.tunnelManager == nil || s.tunnelManager.routes == nil {
+		return false
+	}
+	candidates, err := s.tunnelManager.routes.Candidates(ctx, tunnelID.String())
+	return err == nil && len(candidates) > 0
 }
 
 // probeProxyBuilder strips client-session and census interceptors and proxy

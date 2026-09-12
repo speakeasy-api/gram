@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // autoVerifications admits the probes committed grants start off the request
@@ -38,11 +40,15 @@ func (a *autoVerifications) admit(fn func()) bool {
 	return true
 }
 
-// shutdown closes admission, then waits for every admitted probe or ctx.
-func (a *autoVerifications) shutdown(ctx context.Context) error {
+func (a *autoVerifications) closeAdmission() {
 	a.mu.Lock()
 	a.closed = true
 	a.mu.Unlock()
+}
+
+// shutdown closes admission, then waits for every admitted probe or ctx.
+func (a *autoVerifications) shutdown(ctx context.Context) error {
+	a.closeAdmission()
 	drained := make(chan struct{})
 	go func() {
 		a.wg.Wait()
@@ -56,15 +62,21 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 	}
 }
 
-// Shutdown stops admitting automatic verifications and drains the ones in
-// flight. Run it after the HTTP servers have drained and before the database
-// and cache close: the probes detach from their requests and still write
-// verdicts and close upstream sessions.
+// Shutdown stops admitting automatic verifications and the keepalive
+// re-check, then drains the probes in flight. Run it after the HTTP servers
+// have drained and before the database and cache close: the probes detach
+// from their requests and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
-	if err := s.autoVerifications.shutdown(ctx); err != nil {
-		return fmt.Errorf("drain automatic verifications: %w", err)
+	// Close both admission gates before waiting for either group to drain.
+	s.autoVerifications.closeAdmission()
+	var errs []error
+	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))
 	}
-	return nil
+	if err := s.autoVerifications.shutdown(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 // verifyRemoteGrant probes a grant the remote login callback just committed, so
@@ -146,7 +158,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, end
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant); err != nil {
+	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }

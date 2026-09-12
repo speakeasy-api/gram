@@ -76,6 +76,100 @@ func (q *Queries) CheckRemoteSessionClientBindingForUserSessionIssuer(ctx contex
 	return bound, err
 }
 
+const claimDueRemoteSessionRecheckCandidates = `-- name: ClaimDueRemoteSessionRecheckCandidates :many
+
+WITH due AS (
+  SELECT s.id, s.updated_at, COALESCE(s.last_validated_at, s.created_at) AS due_at, elig.organization_id, i.issuer AS issuer_url
+  FROM remote_sessions AS s
+  JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND (
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > $1::timestamptz
+      )
+    ORDER BY usi.id
+    LIMIT 1
+  ) AS elig
+  WHERE s.deleted IS FALSE
+    AND s.refresh_token_encrypted IS NULL
+    AND s.refresh_expires_at IS NULL
+    AND (s.access_expires_at IS NULL OR s.access_expires_at > $1::timestamptz)
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
+    AND COALESCE(s.last_validated_at, s.created_at) <= $2::timestamptz
+    AND (s.last_refresh_attempt_at IS NULL OR s.last_refresh_attempt_at <= $3::timestamptz)
+  ORDER BY COALESCE(s.last_validated_at, s.created_at), s.id
+  LIMIT $4
+  FOR UPDATE OF s SKIP LOCKED
+),
+claimed AS (
+  UPDATE remote_sessions AS s
+  SET last_refresh_attempt_at = $1::timestamptz
+  FROM due
+  WHERE s.id = due.id
+  RETURNING s.id, due.due_at, due.organization_id, due.issuer_url
+)
+SELECT id, organization_id, issuer_url
+FROM claimed
+ORDER BY due_at, id
+`
+
+type ClaimDueRemoteSessionRecheckCandidatesParams struct {
+	NowTs         pgtype.Timestamptz
+	RecheckCutoff pgtype.Timestamptz
+	AttemptCutoff pgtype.Timestamptz
+	LimitValue    int32
+}
+
+type ClaimDueRemoteSessionRecheckCandidatesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	IssuerUrl      string
+}
+
+// Idle re-check (AIM-261): grants with no refresh token or expiry are presented to their upstream on a slow cadence, since the refresh sweep never touches them.
+// Due once the verdict (or, before any, the grant) is older than the interval and no claim lease is live; last_refresh_attempt_at is the lease.
+// Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Gram session for the subject.
+// Rejected and inactive grants stay in the population and are re-probed each interval until their Gram session lapses.
+func (q *Queries) ClaimDueRemoteSessionRecheckCandidates(ctx context.Context, arg ClaimDueRemoteSessionRecheckCandidatesParams) ([]ClaimDueRemoteSessionRecheckCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, claimDueRemoteSessionRecheckCandidates,
+		arg.NowTs,
+		arg.RecheckCutoff,
+		arg.AttemptCutoff,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimDueRemoteSessionRecheckCandidatesRow
+	for rows.Next() {
+		var i ClaimDueRemoteSessionRecheckCandidatesRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.IssuerUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimDueRemoteSessionRefreshCandidates = `-- name: ClaimDueRemoteSessionRefreshCandidates :many
 
 WITH due AS (
@@ -229,6 +323,38 @@ func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, ar
 		return nil, err
 	}
 	return items, nil
+}
+
+const clearRemoteSessionRecheckLease = `-- name: ClearRemoteSessionRecheckLease :execrows
+UPDATE remote_sessions AS s
+SET last_refresh_attempt_at = NULL
+FROM remote_session_clients AS c
+WHERE s.id = $1
+  AND s.remote_session_client_id = c.id
+  AND c.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND COALESCE(p.organization_id, usi.organization_id) = $2
+  )
+`
+
+type ClearRemoteSessionRecheckLeaseParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Releases a claim the pass could not use (issuer host rate limited) so the row is due again next tick; scoped to the organization it was claimed under.
+func (q *Queries) ClearRemoteSessionRecheckLease(ctx context.Context, arg ClearRemoteSessionRecheckLeaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearRemoteSessionRecheckLease, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const clearRemoteSessionRefreshTokenAfterInvalidGrant = `-- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
@@ -1529,6 +1655,97 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getDueRemoteSessionRecheckCandidate = `-- name: GetDueRemoteSessionRecheckCandidate :one
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.remote_session_issuer_id, i.issuer AS issuer_url
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
+WHERE s.id = $1
+  AND s.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NULL
+  AND s.refresh_expires_at IS NULL
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > $2::timestamptz)
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $2::timestamptz)
+  AND COALESCE(s.last_validated_at, s.created_at) <= $3::timestamptz
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    WHERE link.remote_session_client_id = c.id
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND COALESCE(p.organization_id, usi.organization_id) = $4
+      AND (
+        (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+      )
+      AND EXISTS (
+        SELECT 1 FROM user_sessions AS gs
+        WHERE gs.user_session_issuer_id = usi.id
+          AND gs.subject_urn = s.subject_urn
+          AND gs.deleted IS FALSE
+          AND gs.refresh_expires_at > $2::timestamptz
+      )
+  )
+`
+
+type GetDueRemoteSessionRecheckCandidateParams struct {
+	ID             uuid.UUID
+	NowTs          pgtype.Timestamptz
+	RecheckCutoff  pgtype.Timestamptz
+	OrganizationID string
+}
+
+type GetDueRemoteSessionRecheckCandidateRow struct {
+	RemoteSession         RemoteSession
+	RemoteSessionIssuerID uuid.UUID
+	IssuerUrl             string
+}
+
+// Authoritative re-read under the claimed organization right before the probe; no row means "no longer due".
+// Restates ClaimDueRemoteSessionRecheckCandidates' predicate; TestRecheckSweep_ClaimAndRecheckAgree and TestRecheckSweep_OwnsOnlyUnrenewableRoutableGrants fail if they drift.
+func (q *Queries) GetDueRemoteSessionRecheckCandidate(ctx context.Context, arg GetDueRemoteSessionRecheckCandidateParams) (GetDueRemoteSessionRecheckCandidateRow, error) {
+	row := q.db.QueryRow(ctx, getDueRemoteSessionRecheckCandidate,
+		arg.ID,
+		arg.NowTs,
+		arg.RecheckCutoff,
+		arg.OrganizationID,
+	)
+	var i GetDueRemoteSessionRecheckCandidateRow
+	err := row.Scan(
+		&i.RemoteSession.ID,
+		&i.RemoteSession.SubjectUrn,
+		&i.RemoteSession.UserSessionIssuerID,
+		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessExpiresAt,
+		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.AuthorizationExpiresAt,
+		&i.RemoteSession.RefreshExpiresAt,
+		&i.RemoteSession.Scopes,
+		&i.RemoteSession.Resource,
+		&i.RemoteSession.AutoRefresh,
+		&i.RemoteSession.LastRefreshAttemptAt,
+		&i.RemoteSession.LastUsedAt,
+		&i.RemoteSession.UpstreamSubject,
+		&i.RemoteSession.UpstreamEmail,
+		&i.RemoteSession.UpstreamDisplayName,
+		&i.RemoteSession.IdentitySource,
+		&i.RemoteSession.Enrichment,
+		&i.RemoteSession.LastValidatedAt,
+		&i.RemoteSession.ValidationStatus,
+		&i.RemoteSession.ValidationReason,
+		&i.RemoteSession.CreatedAt,
+		&i.RemoteSession.UpdatedAt,
+		&i.RemoteSession.DeletedAt,
+		&i.RemoteSession.Deleted,
+		&i.RemoteSessionIssuerID,
+		&i.IssuerUrl,
 	)
 	return i, err
 }
@@ -3062,6 +3279,95 @@ func (q *Queries) GetRemoteSessionIssuerForMetadataRefresh(ctx context.Context, 
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getRemoteSessionRecheckEndpoints = `-- name: GetRemoteSessionRecheckEndpoints :many
+WITH bound AS (
+  SELECT usi.id, c.project_id AS client_project_id
+  FROM remote_session_client_user_session_issuers AS link
+  JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id AND c.deleted IS FALSE
+  LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
+  JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
+  LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  WHERE link.remote_session_client_id = $2
+    AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+    AND COALESCE(p.organization_id, usi.organization_id) = $3
+    AND (
+      (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
+      OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
+    )
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS gs
+      WHERE gs.user_session_issuer_id = usi.id
+        AND gs.subject_urn = $4
+        AND gs.deleted IS FALSE
+        AND gs.refresh_expires_at > $5::timestamptz
+    )
+),
+candidates AS (
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, ms.user_session_issuer_id
+  FROM bound
+  JOIN mcp_servers AS ms ON ms.user_session_issuer_id = bound.id AND ms.deleted IS FALSE
+  JOIN mcp_endpoints AS e ON e.mcp_server_id = ms.id AND e.deleted IS FALSE AND (bound.client_project_id IS NULL OR e.project_id = bound.client_project_id)
+  UNION ALL
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, mms.user_session_issuer_id
+  FROM bound
+  JOIN meta_mcp_servers AS mms ON mms.user_session_issuer_id = bound.id AND mms.deleted IS FALSE
+  JOIN mcp_endpoints AS e ON e.meta_mcp_server_id = mms.id AND e.deleted IS FALSE AND (bound.client_project_id IS NULL OR e.project_id = bound.client_project_id)
+)
+SELECT project_id, slug, custom_domain_id, mcp_server_id, meta_mcp_server_id
+FROM candidates
+ORDER BY (user_session_issuer_id = $1::uuid) DESC, custom_domain_id IS NOT NULL, id
+`
+
+type GetRemoteSessionRecheckEndpointsParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+	SubjectUrn            urn.SessionSubject
+	NowTs                 pgtype.Timestamptz
+}
+
+type GetRemoteSessionRecheckEndpointsRow struct {
+	ProjectID       uuid.UUID
+	Slug            string
+	CustomDomainID  uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+}
+
+// Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in the claimed organization, with a live Gram session for the subject.
+// Ordered own issuer first, then platform origin over custom domain, then oldest; the caller takes the first the runtime resolver accepts.
+func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetRemoteSessionRecheckEndpointsParams) ([]GetRemoteSessionRecheckEndpointsRow, error) {
+	rows, err := q.db.Query(ctx, getRemoteSessionRecheckEndpoints,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.NowTs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRemoteSessionRecheckEndpointsRow
+	for rows.Next() {
+		var i GetRemoteSessionRecheckEndpointsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.Slug,
+			&i.CustomDomainID,
+			&i.McpServerID,
+			&i.MetaMcpServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTenantRemoteSessionIssuerByID = `-- name: GetTenantRemoteSessionIssuerByID :one
@@ -6395,6 +6701,38 @@ func (q *Queries) SetRemoteSessionValidation(ctx context.Context, arg SetRemoteS
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionValidationTrackingFixture = `-- name: SetRemoteSessionValidationTrackingFixture :exec
+UPDATE remote_sessions s
+SET last_validated_at = $1::timestamptz,
+    last_refresh_attempt_at = $2::timestamptz,
+    created_at = COALESCE($3::timestamptz, s.created_at)
+FROM remote_session_clients c
+WHERE s.id = $4
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = $5
+`
+
+type SetRemoteSessionValidationTrackingFixtureParams struct {
+	LastValidatedAt      pgtype.Timestamptz
+	LastRefreshAttemptAt pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	ID                   uuid.UUID
+	ProjectID            uuid.NullUUID
+}
+
+// Test helper for ageing a grant into the keepalive re-check window without
+// waiting for it. Scoped through the owning remote_session_client's project.
+func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context, arg SetRemoteSessionValidationTrackingFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionValidationTrackingFixture,
+		arg.LastValidatedAt,
+		arg.LastRefreshAttemptAt,
+		arg.CreatedAt,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many

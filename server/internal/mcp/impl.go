@@ -185,6 +185,8 @@ type Service struct {
 	validationLimiter *ratelimit.Limiter
 	// autoVerifications admits and drains the probes a committed grant starts off the request path.
 	autoVerifications *autoVerifications
+	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
+	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
 	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
@@ -475,18 +477,19 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
-		identityResolver:   identityResolver,
-		identityValidator:  mcpidentity.NewValidatorBoundary(),
-		userSessionSigner:  userSessionSigner,
-		remoteChallengeMgr: remoteChallengeMgr,
-		validationMetrics:  remotesessionmetrics.NewValidation(logger, meterProvider),
-		validationLimiter:  newValidationLimiter(redisClient, meterProvider),
-		autoVerifications:  newAutoVerifications(),
-		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
-		metaRuntime:        metaRuntimeConfig.withDefaults(),
+		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		identityResolver:     identityResolver,
+		identityValidator:    mcpidentity.NewValidatorBoundary(),
+		userSessionSigner:    userSessionSigner,
+		remoteChallengeMgr:   remoteChallengeMgr,
+		validationMetrics:    remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:    newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:    newAutoVerifications(),
+		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteProxyManager:   remoteProxyManager,
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
 }
