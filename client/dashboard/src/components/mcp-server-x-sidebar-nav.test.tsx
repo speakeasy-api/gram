@@ -58,27 +58,59 @@ describe("McpServerCardStatus", () => {
 });
 
 describe("RemoteIdentitySummary", () => {
+  function renderSummary(
+    props: Partial<React.ComponentProps<typeof RemoteIdentitySummary>> = {},
+  ) {
+    return render(
+      <MemoryRouter>
+        <RemoteIdentitySummary
+          mode={props.mode ?? "user"}
+          passThroughAuthorization={props.passThroughAuthorization ?? false}
+          authenticationRequired={props.authenticationRequired ?? false}
+          unavailable={props.unavailable ?? false}
+          loading={props.loading ?? false}
+          settingsHref={
+            props.settingsHref ?? "/mcp/x/example/settings#authentication"
+          }
+        />
+      </MemoryRouter>,
+    );
+  }
+
   it.each([
     ["user", "User"],
     ["agent", "Agent"],
     ["none", "None"],
-  ] as const)("renders the %s identity pill and Setup link", (mode, label) => {
-    render(
-      <MemoryRouter>
-        <RemoteIdentitySummary
-          mode={mode}
-          passThroughAuthorization={false}
-          authenticationRequired={false}
-          unavailable={false}
-          loading={false}
-          settingsHref="/mcp/x/example/settings#authentication"
-        />
-      </MemoryRouter>,
-    );
+  ] as const)("makes the %s pill the way into settings", (mode, label) => {
+    renderSummary({ mode });
 
-    expect(screen.getByText(label)).toBeDefined();
+    // The pill reports the setting and opens it; there is no separate link.
+    const pill = screen.getByRole("link", { name: new RegExp(label) });
+    expect(pill.getAttribute("href")).toBe(
+      "/mcp/x/example/settings#authentication",
+    );
+    expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();
+  });
+
+  it("hangs the explainer off the label, not the value", () => {
+    renderSummary();
+
+    // The question belongs to "Identity", not to whichever mode is set.
     expect(
-      screen.getByRole("link", { name: "Setup" }).getAttribute("href"),
-    ).toBe("/mcp/x/example/settings#authentication");
+      screen.getByRole("button", {
+        name: "What do these identity modes mean?",
+      }),
+    ).toBeDefined();
+  });
+
+  it("keeps the problem out of the rail until hovered", () => {
+    renderSummary({ mode: "none", authenticationRequired: true });
+
+    // Warning states used to spend a line of the sidebar on their own; the
+    // pill carries the amber and the detail waits for a hover.
+    expect(screen.queryByText(/keep failing/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /None/ }).className).toContain(
+      "border-warning-default",
+    );
   });
 });

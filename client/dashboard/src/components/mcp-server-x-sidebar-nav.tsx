@@ -51,6 +51,11 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Link, useLocation, useParams } from "react-router";
@@ -97,6 +102,17 @@ export function RemoteIdentitySummary({
     ? "Needs cleanup"
     : remoteIdentityLabel(mode);
 
+  // Only the warning states have something to reveal; a healthy identity is
+  // fully described by the pill itself.
+  let problem: string | null = null;
+  if (passThroughAuthorization) {
+    problem =
+      "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
+  } else if (authenticationRequired) {
+    problem =
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User or Agent Identity is set up.";
+  }
+
   let status: React.JSX.Element;
   if (unavailable) {
     status = (
@@ -111,54 +127,55 @@ export function RemoteIdentitySummary({
       </Text>
     );
   } else {
-    status = (
-      <div className="flex flex-col gap-1">
-        {/* A read-only pill, not a control: clicking it explains the modes,
-            and Setup above is what actually changes one. */}
-        <button
-          type="button"
-          onClick={() => setExplainerOpen(true)}
-          aria-label={`Identity: ${label}. What do these mean?`}
+    // The pill is the way into the setting it reports, so it is the link.
+    const pill = (
+      <Link
+        to={settingsHref}
+        aria-label={`Identity: ${label}. Open identity settings`}
+        className={cn(
+          "bg-card hover:border-input hover:bg-muted/40 flex w-fit items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          warn && "border-warning-default",
+        )}
+      >
+        <span
+          aria-hidden="true"
           className={cn(
-            "bg-card hover:border-input flex w-fit cursor-help items-center gap-2 border px-2.5 py-1.5 text-sm font-medium",
-            warn && "border-warning-default",
+            "size-2 shrink-0 rounded-full",
+            warn ? "bg-warning-default" : IDENTITY_DOT[mode],
           )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              warn ? "bg-warning-default" : IDENTITY_DOT[mode],
-            )}
-          />
-          {label}
-          <Info aria-hidden="true" className="text-muted-foreground size-3" />
-        </button>
-        {authenticationRequired ? (
-          <Text small className="text-default-warning">
-            Upstream requires authentication.
+        />
+        {label}
+      </Link>
+    );
+
+    status = problem ? (
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>{pill}</HoverCardTrigger>
+        <HoverCardContent align="start" className="w-72">
+          <Text small className="block">
+            {problem}
           </Text>
-        ) : null}
-        {passThroughAuthorization ? (
-          <Text muted small>
-            A legacy pass-through Authorization header is configured.
-          </Text>
-        ) : null}
-      </div>
+        </HoverCardContent>
+      </HoverCard>
+    ) : (
+      pill
     );
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-1.5">
         <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
-        <Link
-          to={settingsHref}
-          className="text-primary flex items-center gap-1 text-xs font-medium hover:underline"
+        {/* The question the label raises — what these modes mean — rather than
+            something about the value below it. */}
+        <button
+          type="button"
+          onClick={() => setExplainerOpen(true)}
+          aria-label="What do these identity modes mean?"
+          className="text-muted-foreground hover:text-foreground"
         >
-          Setup
-          <ArrowRight aria-hidden="true" className="size-3" />
-        </Link>
+          <Info aria-hidden="true" className="size-3" />
+        </button>
       </div>
       {status}
       <IdentityExplainerDialog
