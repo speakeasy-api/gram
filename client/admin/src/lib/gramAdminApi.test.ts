@@ -350,9 +350,11 @@ describe("errorMessage", () => {
   });
 });
 
-// The admin API is stripped from both generated SDKs, so nothing checks these
-// paths against the design. A test naming each one is the only thing between a
-// disable that enables and a review that reads two identical-looking calls.
+// The writes that still leave through this hand-written client: enterprise
+// conversion and the bulk account-type update. A test naming each path is what
+// keeps a review from reading two identical-looking calls as the same one. The
+// trial day-count bounds are checked here too, because the browser mirrors them
+// by hand rather than reading them from the design.
 describe("the organization write endpoints", () => {
   const ORG = {
     id: "org_placeholder_one",
