@@ -397,7 +397,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("lets a configured User Identity be changed, after confirming", async () => {
+  it("holds a mode change as a draft until Save", async () => {
     mocks.clients.mockReturnValue({
       items: [
         {
@@ -428,27 +428,22 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
 
-    expect(
-      screen
-        .getByRole("radio", { name: /User Identity/ })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-    // The choice is not a one-way door: identity is derived from the linked
-    // client, and unlinking it is what leaves the mode.
-    const agent = screen.getByRole("radio", {
-      name: /Agent Identity/,
+    // The choice is not a one-way door, and picking a card writes nothing.
+    const none = screen.getByRole("radio", {
+      name: /No Identity/,
     }) as HTMLButtonElement;
-    expect(agent.disabled).toBe(false);
+    expect(none.disabled).toBe(false);
+    fireEvent.click(none);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.detach).not.toHaveBeenCalled();
 
-    fireEvent.click(agent);
+    // Save is what commits it, and the dialog is where the consequence is
+    // stated — the footer stays quiet.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
-    expect(
-      screen.getByText(/People who already signed in lose access/i),
-    ).toBeDefined();
+    expect(mocks.detach).not.toHaveBeenCalled();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Remove User Identity" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(mocks.detach).toHaveBeenCalledWith({
         request: {
@@ -735,7 +730,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(true);
   });
 
-  it("confirms and removes Agent Identity with target permission", async () => {
+  it("removes the Agent credential only once Save is confirmed", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
       isLoading: false,
@@ -746,9 +741,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.remove).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove credential" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(mocks.remove).toHaveBeenCalledWith({
         request: { id: "header-1" },

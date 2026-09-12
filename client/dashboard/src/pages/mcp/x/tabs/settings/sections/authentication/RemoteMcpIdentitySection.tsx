@@ -107,11 +107,9 @@ export function RemoteMcpIdentitySectionBody({
   const identityResolved = !loading && !identityQueryError;
   const [selectedMode, setSelectedMode] =
     useState<RemoteMcpIdentityMode>("none");
-  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
-  // Leaving User Identity unlinks the client, so it asks first — the same
-  // shape as dropping the Agent credential.
-  const [leaveUserMode, setLeaveUserMode] =
-    useState<RemoteMcpIdentityMode | null>(null);
+  // Raised by Save when it would remove an existing identity, which is the
+  // "after confirmation" AIM-230 asks for.
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (actualMode) setSelectedMode(actualMode);
@@ -164,74 +162,65 @@ export function RemoteMcpIdentitySectionBody({
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
 
+  // Picking a card only changes the draft. Nothing is written, removed or
+  // confirmed until Save — the panel has one commit point and this is it.
   const handleModeChange = (next: string) => {
-    const mode = next as RemoteMcpIdentityMode;
     if (identityReadOnly || passThroughAuthorization) return;
-    if (actualMode === "user" && mode !== "user") {
-      setLeaveUserMode(mode);
-      return;
-    }
-    if (actualMode === "agent" && mode === "none") {
-      setRemoveDialogOpen(true);
-      return;
-    }
-    setSelectedMode(mode);
+    setSelectedMode(next as RemoteMcpIdentityMode);
   };
 
-  // Identity is derived, not stored: this server reads as User because a
-  // remote session client is bound to its user_session_issuer. Removing that
-  // binding is what actually leaves the mode.
-  const leaveUserIdentity = async () => {
+  // What leaving the current mode would destroy. Identity is derived, so
+  // leaving User means unbinding the client and leaving Agent means deleting
+  // the credential; both are what Save has to do, not the card click.
+  const leavingUser = actualMode === "user" && selectedMode !== "user";
+  const leavingAgent = actualMode === "agent" && selectedMode !== "agent";
+  const destructive = leavingUser || leavingAgent;
+
+  const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
-    if (!leaveUserMode || !userSessionIssuerId || !canWrite || rbacLoading) {
-      return;
-    }
-    try {
-      for (const linked of clients) {
-        await detachIssuer.mutateAsync({
-          // The generated detach request reuses the attach form's field
-          // name; the endpoint it posts to is what distinguishes them.
-          request: {
-            attachUserSessionIssuerForm: {
-              id: linked.id,
-              userSessionIssuerId,
-            },
+    if (!userSessionIssuerId) return false;
+    for (const linked of clients) {
+      await detachIssuer.mutateAsync({
+        // The generated detach request reuses the attach form's field name;
+        // the endpoint it posts to is what distinguishes them.
+        request: {
+          attachUserSessionIssuerForm: {
+            id: linked.id,
+            userSessionIssuerId,
           },
-        });
-      }
-      await invalidateAllRemoteSessionClients(queryClient);
-      setSelectedMode(leaveUserMode);
-      setLeaveUserMode(null);
-      toast.success("User Identity removed");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove User Identity",
-      );
+        },
+      });
     }
+    await invalidateAllRemoteSessionClients(queryClient);
+    return true;
   };
 
-  const removeAgentCredential = async () => {
-    if (!authorizationHeader || !canWrite || rbacLoading) return;
+  const removeAgentCredential = async (): Promise<boolean> => {
+    if (!authorizationHeader) return false;
+    await deleteHeader.mutateAsync({ request: { id: authorizationHeader.id } });
+    const refreshed = await invalidateHeaders();
+    if (!refreshed) {
+      toast.warning("Credential removed, but headers could not be refreshed.");
+    }
+    return true;
+  };
+
+  const performSave = async () => {
+    if (!canWrite || rbacLoading) return;
+    setConfirmOpen(false);
     try {
-      await deleteHeader.mutateAsync({
-        request: { id: authorizationHeader.id },
-      });
-      const refreshed = await invalidateHeaders();
-      if (!refreshed) {
-        toast.warning(
-          "Credential removed, but headers could not be refreshed.",
-        );
+      if (leavingUser) await detachUserIdentity();
+      if (leavingAgent) await removeAgentCredential();
+      if (selectedMode === "agent") {
+        await agentDraft.save();
+      } else if (selectedMode === "user") {
+        userDraft.save();
+      } else if (destructive) {
+        toast.success("Identity removed");
       }
-      setRemoveDialogOpen(false);
-      setSelectedMode("none");
-      toast.success("Agent Identity removed");
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to remove Agent Identity",
+        error instanceof Error ? error.message : "Failed to save identity",
       );
     }
   };
@@ -242,42 +231,21 @@ export function RemoteMcpIdentitySectionBody({
   // One Save for the whole section. What it commits depends on the selected
   // mode, and it disappears into a disabled state when there is nothing to do
   // rather than sprouting a button per sub-form.
-  const canSave =
-    selectedMode === "user"
-      ? userDraft.canSave
-      : selectedMode === "agent"
-        ? agentDraft.canSave
-        : false;
-  const savePending =
-    selectedMode === "user" ? userDraft.saving : agentDraft.saving || saving;
-
-  let footerHint: string;
+  let canSave: boolean;
   if (selectedMode === "user") {
-    switch (userDraft.status.kind) {
-      case "pending":
-        footerHint = "Registering…";
-        break;
-      case "done":
-        footerHint = `Saved. New connections sign users in through ${upstreamName}.`;
-        break;
-      case "refused":
-        footerHint = "Registration was refused. Choose a way forward above.";
-        break;
-      case "unreachable":
-        footerHint =
-          "Registration could not reach the provider. Save to retry.";
-        break;
-      case "idle":
-        footerHint = "Save registers this server with the provider.";
-        break;
-    }
-  } else if (agentDraft.canSave) {
-    footerHint = "Unsaved changes. New connections pick them up after save.";
-  } else if (authorizationHeader) {
-    footerHint = "Saved. New connections use this identity.";
+    canSave = userDraft.canSave;
+  } else if (selectedMode === "agent") {
+    // Moving to Agent needs a credential; without one there is nothing for
+    // the mode to actually be.
+    canSave = agentDraft.canSave;
   } else {
-    footerHint = `Enter a credential to send to ${upstreamName}.`;
+    // No Identity commits only the removal it implies.
+    canSave = destructive;
   }
+  const savePending =
+    detachIssuer.isPending ||
+    saving ||
+    (selectedMode === "user" ? userDraft.saving : agentDraft.saving);
 
   return (
     <>
@@ -455,11 +423,8 @@ export function RemoteMcpIdentitySectionBody({
           </Collapsible>
         </div>
 
-        {identityResolved && selectedMode !== "none" ? (
+        {identityResolved && (selectedMode !== "none" || destructive) ? (
           <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              {footerHint}
-            </SettingsSection.FooterHint>
             <SettingsSection.FooterActions>
               <RequireScope
                 scope="mcp:write"
@@ -470,8 +435,8 @@ export function RemoteMcpIdentitySectionBody({
                   pending={savePending}
                   disabled={!canSave || savePending || identityReadOnly}
                   onClick={() => {
-                    if (selectedMode === "user") userDraft.save();
-                    else void agentDraft.save();
+                    if (destructive) setConfirmOpen(true);
+                    else void performSave();
                   }}
                 />
               </RequireScope>
@@ -480,79 +445,40 @@ export function RemoteMcpIdentitySectionBody({
         ) : null}
       </SettingsSection.Panel>
 
-      <Dialog
-        open={leaveUserMode !== null}
-        onOpenChange={(open) => {
-          if (!open) setLeaveUserMode(null);
-        }}
-      >
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              Stop signing users in through {upstreamName}?
+              {leavingUser
+                ? `Stop signing users in through ${upstreamName}?`
+                : "Remove the shared credential?"}
             </Dialog.Title>
             <Dialog.Description>
-              This unlinks the identity provider from this server. People who
-              already signed in lose access through it and would have to
-              authorize again if you switch back. The provider and its client
-              stay available to other servers.
+              {leavingUser
+                ? "Saving unlinks the identity provider from this server. People who already signed in lose access through it and would have to authorize again if you switch back. The provider and its client stay available to other servers."
+                : "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream."}
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
             <Button
               variant="secondary"
-              disabled={detachIssuer.isPending}
-              onClick={() => setLeaveUserMode(null)}
+              disabled={savePending}
+              onClick={() => setConfirmOpen(false)}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={detachIssuer.isPending || !canWrite || rbacLoading}
-              onClick={() => void leaveUserIdentity()}
+              disabled={savePending || !canWrite || rbacLoading}
+              onClick={() => void performSave()}
             >
-              {detachIssuer.isPending ? (
+              {savePending ? (
                 <Button.LeftIcon>
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {detachIssuer.isPending ? "Removing" : "Remove User Identity"}
-              </Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
-
-      <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Switch to No Identity?</Dialog.Title>
-            <Dialog.Description>
-              This removes the static Authorization credential from the Remote
-              MCP source. Requests will no longer authenticate upstream.
-            </Dialog.Description>
-          </Dialog.Header>
-          <Dialog.Footer>
-            <Button
-              variant="secondary"
-              disabled={saving}
-              onClick={() => setRemoveDialogOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button
-              variant="destructive-primary"
-              disabled={saving || !canWrite || rbacLoading}
-              onClick={() => void removeAgentCredential()}
-            >
-              {saving ? (
-                <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                </Button.LeftIcon>
-              ) : null}
-              <Button.Text>
-                {saving ? "Removing" : "Remove credential"}
+                {savePending ? "Saving" : "Save changes"}
               </Button.Text>
             </Button>
           </Dialog.Footer>
