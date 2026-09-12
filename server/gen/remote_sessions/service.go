@@ -20,6 +20,14 @@ import (
 // /mcp/{slug}/remote_login_callback and the silent-refresh path.
 // access_token_encrypted and refresh_token_encrypted are never returned.
 type Service interface {
+	// Atomically configure user identity for a Remote MCP-backed MCP server. The
+	// complete plan selects or creates a project Remote Identity Provider and
+	// links an existing client, creates a manual client, or automatically prefers
+	// CIMD over DCR. Existing-client linking requires mcp:write on the target;
+	// creating a provider or client additionally requires project:write.
+	// Unsupported automatic registration returns manual_setup_required without
+	// changing local state.
+	CommitServerUserIdentityConfiguration(context.Context, *CommitServerUserIdentityConfigurationPayload) (res *CommitServerUserIdentityConfigurationResult, err error)
 	// List remote_sessions in the caller's project. access_token_encrypted and
 	// refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
@@ -49,7 +57,148 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"listRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [3]string{"commitServerUserIdentityConfiguration", "listRemoteSessions", "revokeRemoteSession"}
+
+// CommitServerUserIdentityConfigurationPayload is the payload type of the
+// remoteSessions service commitServerUserIdentityConfiguration method.
+type CommitServerUserIdentityConfigurationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The target MCP server. It must be backed directly by a Remote MCP source.
+	McpServerID string
+	// An existing Remote Identity Provider visible to the target project.
+	ProviderID *string
+	// A new project-scoped Remote Identity Provider to create.
+	CreateProvider *CreateRemoteSessionIssuerForm
+	// How to provide the OAuth client.
+	ClientMode string
+	// An existing visible remote-session client to link. Required only for
+	// existing mode.
+	ExistingClientID *string
+	// Client settings for auto or manual mode. Forbidden for existing mode.
+	ClientConfiguration *ServerUserIdentityClientConfiguration
+}
+
+// CommitServerUserIdentityConfigurationResult is the result type of the
+// remoteSessions service commitServerUserIdentityConfiguration method.
+type CommitServerUserIdentityConfigurationResult struct {
+	// Successful commit status. Present only after local commit.
+	Status *string
+	// How the client was obtained. Present on success and registration failure.
+	RegistrationMethod *string
+	// True only when auto mode found neither usable CIMD nor DCR support. This is
+	// not a registration failure and no local state was changed.
+	ManualSetupRequired bool
+	// The selected or created provider on success, or the selected existing
+	// provider when manual setup is required or DCR fails.
+	Provider *types.RemoteSessionIssuer
+	// The created or linked client on success. Never includes a client secret.
+	Client *types.RemoteSessionClient
+	// The provider ownership tier.
+	ProviderTier *string
+	// The client ownership tier.
+	ClientTier *string
+	// Organization-relative dashboard path to the Remote Identity Provider detail
+	// surface.
+	ProviderPath *string
+	// Organization-relative dashboard path to the client detail surface.
+	ClientPath *string
+	// Completed DCR failure. Mutually exclusive with status and
+	// manual_setup_required=true.
+	Failure *ServerUserIdentityRegistrationFailure
+}
+
+// Form for creating a remote_session_issuer.
+type CreateRemoteSessionIssuerForm struct {
+	// Project-unique slug.
+	Slug string
+	// Issuer URL; matches the iss claim.
+	Issuer string
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string
+	// Optional logo asset id.
+	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string
+	// Upstream token endpoint.
+	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
+	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+	RegistrationEndpoint *string
+	// Upstream JWKS URI.
+	JwksURI *string
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string
+	// Scopes advertised by the issuer.
+	ScopesSupported []string
+	// Grant types advertised by the issuer.
+	GrantTypesSupported []string
+	// Response types advertised by the issuer.
+	ResponseTypesSupported []string
+	// Token endpoint auth methods advertised by the issuer.
+	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string
+	// When true, may unlock OIDC-aware behaviour. Default false.
+	Oidc *bool
+	// When true, the MCP client registers and transacts directly with this issuer.
+	// Default false.
+	Passthrough *bool
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool
+}
 
 // ListRemoteSessionsPayload is the payload type of the remoteSessions service
 // listRemoteSessions method.
@@ -83,6 +232,36 @@ type RevokeRemoteSessionPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// Configuration for a newly-created project remote-session client. Manual mode
+// requires client_id. Auto mode forbids client_id and client_secret and uses
+// scope, audience, and token_endpoint_auth_method as registration preferences.
+type ServerUserIdentityClientConfiguration struct {
+	// The out-of-band OAuth client identifier. Manual mode only.
+	ClientID *string
+	// The out-of-band OAuth client secret. Manual mode only; encrypted before
+	// persistence.
+	ClientSecret *string
+	// How the client authenticates at the provider token endpoint, or the
+	// preferred method for DCR.
+	TokenEndpointAuthMethod *string
+	// Each value must be an RFC 6749 scope token.
+	Scope []string
+	// Optional upstream OAuth audience.
+	Audience *string
+}
+
+// A completed automatic registration failure using the bounded OAuth
+// registration taxonomy.
+type ServerUserIdentityRegistrationFailure struct {
+	Outcome   string
+	Reason    string
+	Retryable bool
+	// Optional sanitized and truncated provider-controlled message.
+	ProviderMessage *string
+	// Optional upstream HTTP status.
+	HTTPStatus *int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

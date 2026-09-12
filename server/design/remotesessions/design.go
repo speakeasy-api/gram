@@ -3,6 +3,8 @@ package remotesessions
 import (
 	. "goa.design/goa/v3/dsl"
 
+	remotesessionclients "github.com/speakeasy-api/gram/server/design/remotesessionclients"
+	remotesessionissuers "github.com/speakeasy-api/gram/server/design/remotesessionissuers"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
@@ -14,6 +16,31 @@ var _ = Service("remoteSessions", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+
+	Method("commitServerUserIdentityConfiguration", func() {
+		Description("Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
+
+		Payload(func() {
+			Extend(CommitServerUserIdentityConfigurationForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(CommitServerUserIdentityConfigurationResult)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessions.commitServerUserIdentityConfiguration")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "commitServerUserIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "commitServerUserIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerUserIdentityConfiguration"}`)
+	})
 
 	Method("listRemoteSessions", func() {
 		Description("List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
@@ -76,6 +103,82 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "revoke")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeRemoteSession"}`)
 	})
+})
+
+var CommitServerUserIdentityConfigurationForm = Type("CommitServerUserIdentityConfigurationForm", func() {
+	Description("A complete plan for configuring user identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.")
+
+	Attribute("mcp_server_id", String, "The target MCP server. It must be backed directly by a Remote MCP source.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("provider_id", String, "An existing Remote Identity Provider visible to the target project.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
+	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
+		Enum("auto", "existing", "manual")
+	})
+	Attribute("existing_client_id", String, "An existing visible remote-session client to link. Required only for existing mode.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_configuration", ServerUserIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
+
+	Required("mcp_server_id", "client_mode")
+})
+
+var ServerUserIdentityClientConfiguration = Type("ServerUserIdentityClientConfiguration", func() {
+	Description("Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.")
+
+	Attribute("client_id", String, "The out-of-band OAuth client identifier. Manual mode only.")
+	Attribute("client_secret", String, "The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.")
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the provider token endpoint, or the preferred method for DCR.", func() {
+		Enum("client_secret_basic", "client_secret_post", "none")
+	})
+	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes for this client.", func() {
+		remotesessionclients.ScopeAttribute("Each value must be an RFC 6749 scope token.")
+	})
+	Attribute("audience", String, "Optional upstream OAuth audience.", remotesessionclients.AudienceAttribute)
+})
+
+var ServerUserIdentityRegistrationFailure = Type("ServerUserIdentityRegistrationFailure", func() {
+	Description("A completed automatic registration failure using the bounded OAuth registration taxonomy.")
+
+	Attribute("outcome", String, func() {
+		Enum("unreachable", "refused")
+	})
+	Attribute("reason", String, func() {
+		Enum("dns_error", "tls_error", "timeout", "network_error", "rate_limited", "upstream_unavailable", "authorization_rejected", "invalid_success_response")
+	})
+	Attribute("retryable", Boolean)
+	Attribute("provider_message", String, "Optional sanitized and truncated provider-controlled message.")
+	Attribute("http_status", Int, "Optional upstream HTTP status.")
+
+	Required("outcome", "reason", "retryable")
+})
+
+var CommitServerUserIdentityConfigurationResult = Type("CommitServerUserIdentityConfigurationResult", func() {
+	Description("The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.")
+
+	Attribute("status", String, "Successful commit status. Present only after local commit.", func() {
+		Enum("registered", "linked")
+	})
+	Attribute("registration_method", String, "How the client was obtained. Present on success and registration failure.", func() {
+		Enum("cimd", "dcr", "manual", "existing")
+	})
+	Attribute("manual_setup_required", Boolean, "True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.")
+	Attribute("provider", remotesessionissuers.RemoteSessionIssuer, "The selected or created provider on success, or the selected existing provider when manual setup is required or DCR fails.")
+	Attribute("client", remotesessionclients.RemoteSessionClient, "The created or linked client on success. Never includes a client secret.")
+	Attribute("provider_tier", String, "The provider ownership tier.", func() {
+		Enum("project-specific", "organization-level", "platform-level")
+	})
+	Attribute("client_tier", String, "The client ownership tier.", func() {
+		Enum("project-specific", "organization-level")
+	})
+	Attribute("provider_path", String, "Organization-relative dashboard path to the Remote Identity Provider detail surface.")
+	Attribute("client_path", String, "Organization-relative dashboard path to the client detail surface.")
+	Attribute("failure", ServerUserIdentityRegistrationFailure, "Completed DCR failure. Mutually exclusive with status and manual_setup_required=true.")
+
+	Required("manual_setup_required")
 })
 
 // organizationRemoteSessions manages remote_sessions from the
