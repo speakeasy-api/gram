@@ -6,7 +6,30 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
+
+func TestRemoteSessionRecheckLeaseCoversQueuedBatch(t *testing.T) {
+	t.Parallel()
+	waves := (int(remoteSessionRecheckBatch) + remoteSessionRecheckSlots - 1) / remoteSessionRecheckSlots
+	budget := time.Duration(waves)*RemoteSessionRecheckProbeBudgetCap + RemoteSessionRecheckLeaseReleaseBudget
+	require.Greater(t, remotesessions.RecheckLease(time.Nanosecond), budget, "the shortest lease must cover every queued probe, not just one probe")
+}
+
+func TestRemoteSessionShutdownDoesNotAdmitCancelledProbe(t *testing.T) {
+	t.Parallel()
+	r := newRemoteSessionRecheck(time.Hour, nil, nil)
+	require.True(t, r.acquireSlot(t.Context()))
+	<-r.slots
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range 100 {
+		require.False(t, r.acquireSlot(ctx), "cancellation must win even when a slot is available")
+	}
+	require.Empty(t, r.slots)
+}
 
 func TestRemoteSessionShutdownClosesBothAdmissionGatesBeforeDraining(t *testing.T) {
 	t.Parallel()

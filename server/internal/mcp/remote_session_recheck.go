@@ -38,6 +38,10 @@ const (
 	// RemoteSessionRecheckProbeBudgetCap bounds one re-check end to end; it must stay under the server's probe drain timeout.
 	RemoteSessionRecheckProbeBudgetCap = 18 * time.Second
 
+	// RemoteSessionRecheckLeaseReleaseBudget bounds cleanup after in-flight probes drain.
+	// The server drain must cover both budgets, plus bookkeeping headroom.
+	RemoteSessionRecheckLeaseReleaseBudget = time.Second
+
 	// remoteSessionRecheckTick is how often one replica looks for due grants; the jitter keeps a fleet from claiming together.
 	remoteSessionRecheckTick       = 5 * time.Minute
 	remoteSessionRecheckTickJitter = 2 * time.Minute
@@ -221,9 +225,7 @@ func (s *Service) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
 		}
 		var wg sync.WaitGroup
 		for i, row := range rows {
-			select {
-			case r.slots <- struct{}{}:
-			case <-ctx.Done():
+			if !r.acquireSlot(ctx) {
 				wg.Wait()
 				s.releaseRemoteSessionRecheckLeases(ctx, logger, rows[i:])
 				return int(probed.Load()), nil
@@ -247,9 +249,26 @@ func (s *Service) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
 	}
 }
 
+// acquireSlot never starts a detached probe if cancellation won while waiting.
+func (r *remoteSessionRecheck) acquireSlot(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	select {
+	case r.slots <- struct{}{}:
+		if ctx.Err() != nil {
+			<-r.slots
+			return false
+		}
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // releaseRemoteSessionRecheckLeases clears the claim on rows a cancelled pass never probed, best effort under its own short budget.
 func (s *Service) releaseRemoteSessionRecheckLeases(ctx context.Context, logger *slog.Logger, rows []remotesessions_repo.ClaimDueRemoteSessionRecheckCandidatesRow) {
-	detached, cancel := context.WithTimeout(trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx)), remoteSessionRecheckPlacementBudget)
+	detached, cancel := context.WithTimeout(trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx)), RemoteSessionRecheckLeaseReleaseBudget)
 	defer cancel()
 	for _, row := range rows {
 		if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(detached, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{

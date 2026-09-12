@@ -2,7 +2,9 @@ package remotesessions
 
 import "time"
 
-// RecheckLease is how long a claimed keepalive re-check row is held before it is due again: a quarter of the interval.
+// RecheckLease holds a claim for a quarter of the interval, but never less
+// than five minutes. The floor covers a full queued batch even when operators
+// configure an interval shorter than the time needed to probe that batch.
 func RecheckLease(interval time.Duration) time.Duration {
-	return interval / 4
+	return max(interval/4, 5*time.Minute)
 }

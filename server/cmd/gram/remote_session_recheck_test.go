@@ -10,10 +10,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 )
 
-// One keepalive re-check must finish inside the probe drain, with room for the drain's own bookkeeping.
+// Mid-batch cancellation drains active probes, then releases unstarted claims.
+// Both steps must fit inside the server drain, with bookkeeping headroom.
 func TestRemoteSessionRecheckBudgetFitsProbeDrain(t *testing.T) {
 	t.Parallel()
-	require.LessOrEqual(t, mcp.RemoteSessionRecheckProbeBudgetCap, probeDrainTimeout-2*time.Second)
+	require.LessOrEqual(t, mcp.RemoteSessionRecheckProbeBudgetCap+mcp.RemoteSessionRecheckLeaseReleaseBudget, probeDrainTimeout-time.Second)
 }
 
 func TestRemoteSessionRecheckIntervalDefaultsOn(t *testing.T) {

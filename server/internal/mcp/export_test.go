@@ -37,8 +37,3 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 		r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
 	}
 }
-
-// RemoteSessionRecheckLease is the claim lease the sweep applies for interval.
-func RemoteSessionRecheckLease(interval time.Duration) time.Duration {
-	return remotesessions.RecheckLease(interval)
-}
