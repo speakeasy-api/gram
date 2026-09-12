@@ -166,7 +166,7 @@ func UsageCommands() []string {
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-remote-sessions|revoke-remote-session)",
+		"remote-sessions (commit-server-user-identity-configuration|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
@@ -2844,6 +2844,12 @@ func ParseEndpoint(
 
 		remoteSessionsFlags = flag.NewFlagSet("remote-sessions", flag.ContinueOnError)
 
+		remoteSessionsCommitServerUserIdentityConfigurationFlags                = flag.NewFlagSet("commit-server-user-identity-configuration", flag.ExitOnError)
+		remoteSessionsCommitServerUserIdentityConfigurationBodyFlag             = remoteSessionsCommitServerUserIdentityConfigurationFlags.String("body", "REQUIRED", "")
+		remoteSessionsCommitServerUserIdentityConfigurationSessionTokenFlag     = remoteSessionsCommitServerUserIdentityConfigurationFlags.String("session-token", "", "")
+		remoteSessionsCommitServerUserIdentityConfigurationApikeyTokenFlag      = remoteSessionsCommitServerUserIdentityConfigurationFlags.String("apikey-token", "", "")
+		remoteSessionsCommitServerUserIdentityConfigurationProjectSlugInputFlag = remoteSessionsCommitServerUserIdentityConfigurationFlags.String("project-slug-input", "", "")
+
 		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
 		remoteSessionsListRemoteSessionsSubjectUrnFlag            = remoteSessionsListRemoteSessionsFlags.String("subject-urn", "", "")
 		remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag = remoteSessionsListRemoteSessionsFlags.String("remote-session-client-id", "", "")
@@ -4791,6 +4797,7 @@ func ParseEndpoint(
 	organizationRemoteSessionsRevokeAllClientSessionsFlags.Usage = organizationRemoteSessionsRevokeAllClientSessionsUsage
 
 	remoteSessionsFlags.Usage = remoteSessionsUsage
+	remoteSessionsCommitServerUserIdentityConfigurationFlags.Usage = remoteSessionsCommitServerUserIdentityConfigurationUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
 
@@ -7000,6 +7007,9 @@ func ParseEndpoint(
 
 		case "remote-sessions":
 			switch epn {
+			case "commit-server-user-identity-configuration":
+				epf = remoteSessionsCommitServerUserIdentityConfigurationFlags
+
 			case "list-remote-sessions":
 				epf = remoteSessionsListRemoteSessionsFlags
 
@@ -9545,6 +9555,9 @@ func ParseEndpoint(
 		case "remote-sessions":
 			c := remotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "commit-server-user-identity-configuration":
+				endpoint = c.CommitServerUserIdentityConfiguration()
+				data, err = remotesessionsc.BuildCommitServerUserIdentityConfigurationPayload(*remoteSessionsCommitServerUserIdentityConfigurationBodyFlag, *remoteSessionsCommitServerUserIdentityConfigurationSessionTokenFlag, *remoteSessionsCommitServerUserIdentityConfigurationApikeyTokenFlag, *remoteSessionsCommitServerUserIdentityConfigurationProjectSlugInputFlag)
 			case "list-remote-sessions":
 				endpoint = c.ListRemoteSessions()
 				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
@@ -22475,12 +22488,37 @@ func remoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    commit-server-user-identity-configuration: Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-sessions COMMAND --help\n", os.Args[0])
 }
+func remoteSessionsCommitServerUserIdentityConfigurationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions commit-server-user-identity-configuration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions commit-server-user-identity-configuration --body '{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionsListRemoteSessionsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions list-remote-sessions", os.Args[0])

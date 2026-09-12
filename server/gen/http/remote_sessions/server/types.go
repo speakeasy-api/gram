@@ -8,9 +8,60 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	remotesessions "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// CommitServerUserIdentityConfigurationRequestBody is the type of the
+// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
+// HTTP request body.
+type CommitServerUserIdentityConfigurationRequestBody struct {
+	// The target MCP server. It must be backed directly by a Remote MCP source.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// An existing Remote Identity Provider visible to the target project.
+	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
+	// A new project-scoped Remote Identity Provider to create.
+	CreateProvider *CreateRemoteSessionIssuerFormRequestBody `form:"create_provider,omitempty" json:"create_provider,omitempty" xml:"create_provider,omitempty"`
+	// How to provide the OAuth client.
+	ClientMode *string `form:"client_mode,omitempty" json:"client_mode,omitempty" xml:"client_mode,omitempty"`
+	// An existing visible remote-session client to link. Required only for
+	// existing mode.
+	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
+	// Client settings for auto or manual mode. Forbidden for existing mode.
+	ClientConfiguration *ServerUserIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+}
+
+// CommitServerUserIdentityConfigurationResponseBody is the type of the
+// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
+// HTTP response body.
+type CommitServerUserIdentityConfigurationResponseBody struct {
+	// Successful commit status. Present only after local commit.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// How the client was obtained. Present on success and registration failure.
+	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
+	// True only when auto mode found neither usable CIMD nor DCR support. This is
+	// not a registration failure and no local state was changed.
+	ManualSetupRequired bool `form:"manual_setup_required" json:"manual_setup_required" xml:"manual_setup_required"`
+	// The selected or created provider on success, or the selected existing
+	// provider when manual setup is required or DCR fails.
+	Provider *RemoteSessionIssuerResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The created or linked client on success. Never includes a client secret.
+	Client *RemoteSessionClientResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// The provider ownership tier.
+	ProviderTier *string `form:"provider_tier,omitempty" json:"provider_tier,omitempty" xml:"provider_tier,omitempty"`
+	// The client ownership tier.
+	ClientTier *string `form:"client_tier,omitempty" json:"client_tier,omitempty" xml:"client_tier,omitempty"`
+	// Organization-relative dashboard path to the Remote Identity Provider detail
+	// surface.
+	ProviderPath *string `form:"provider_path,omitempty" json:"provider_path,omitempty" xml:"provider_path,omitempty"`
+	// Organization-relative dashboard path to the client detail surface.
+	ClientPath *string `form:"client_path,omitempty" json:"client_path,omitempty" xml:"client_path,omitempty"`
+	// Completed DCR failure. Mutually exclusive with status and
+	// manual_setup_required=true.
+	Failure *ServerUserIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+}
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "listRemoteSessions" endpoint HTTP response body.
@@ -18,6 +69,196 @@ type ListRemoteSessionsResponseBody struct {
 	Items []*RemoteSessionResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// CommitServerUserIdentityConfigurationUnauthorizedResponseBody is the type of
+// the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "unauthorized" error.
+type CommitServerUserIdentityConfigurationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationForbiddenResponseBody is the type of
+// the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "forbidden" error.
+type CommitServerUserIdentityConfigurationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationBadRequestResponseBody is the type of
+// the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "bad_request" error.
+type CommitServerUserIdentityConfigurationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationNotFoundResponseBody is the type of the
+// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
+// HTTP response body for the "not_found" error.
+type CommitServerUserIdentityConfigurationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationConflictResponseBody is the type of the
+// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
+// HTTP response body for the "conflict" error.
+type CommitServerUserIdentityConfigurationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody is the
+// type of the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "unsupported_media" error.
+type CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationInvalidResponseBody is the type of the
+// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
+// HTTP response body for the "invalid" error.
+type CommitServerUserIdentityConfigurationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationInvariantViolationResponseBody is the
+// type of the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "invariant_violation" error.
+type CommitServerUserIdentityConfigurationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationUnexpectedResponseBody is the type of
+// the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "unexpected" error.
+type CommitServerUserIdentityConfigurationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CommitServerUserIdentityConfigurationGatewayErrorResponseBody is the type of
+// the "remoteSessions" service "commitServerUserIdentityConfiguration"
+// endpoint HTTP response body for the "gateway_error" error.
+type CommitServerUserIdentityConfigurationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListRemoteSessionsUnauthorizedResponseBody is the type of the
@@ -400,6 +641,147 @@ type RevokeRemoteSessionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RemoteSessionIssuerResponseBody is used to define fields on response body
+// types.
+type RemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level issuers.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project-unique slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Issuer URL; matches the iss claim.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Null when neither discovery nor an
+	// operator has captured the field for this issuer yet; an empty array means
+	// the field was captured and the issuer advertises no methods.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft).
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// OpenID Connect userinfo endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Null when not advertised or not yet
+	// captured by discovery.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported"`
+	// JWS algorithms the issuer signs ID tokens with. Null until discovery
+	// captures the field; an empty array means the field was captured and the
+	// issuer advertises none.
+	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
+	// Claims the issuer can return in ID tokens and from userinfo. Null until
+	// discovery captures the field; an empty array means the field was captured
+	// and the issuer advertises none.
+	ClaimsSupported []string `json:"claims_supported"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Null until
+	// discovery captures the field.
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Null until discovery captures the field.
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request, sent verbatim on the upstream authorize
+	// redirect in place of the resolved scope set. Null when unset.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
+	// stated it. Null when unset; false omits the parameter on every grant.
+	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RemoteSessionClientResponseBody is used to define fields on response body
+// types.
+type RemoteSessionClientResponseBody struct {
+	// The remote_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id. Empty for organization-level and global clients.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id. Empty for legacy rows not yet backfilled and
+	// global clients.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The owning remote_session_issuer id.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// The user_session_issuers this client is attached to via the join table.
+	// Empty for a standalone client with no attachments.
+	UserSessionIssuerIds []string `form:"user_session_issuer_ids" json:"user_session_issuer_ids" xml:"user_session_issuer_ids"`
+	// The client_id used to identify this client at the issuer's token and
+	// authorization endpoints.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
+	// hosts its OAuth client metadata document at this URL and uses it as the
+	// client_id. Null for non-CIMD clients.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// How the client authenticates at the issuer's token endpoint. Null resolves
+	// to client_secret_basic at runtime.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// The organization JSON Web Key Set attached to this client, managed through
+	// attachKeySet and detachKeySet. Null when no key set is attached.
+	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
+	// Explicit upstream OAuth scopes the dance requests for this client. Null
+	// falls back to the issuer's scopes_supported.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Upstream OAuth audience sent on the authorize redirect and token exchange.
+	// Null omits the audience parameter.
+	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ServerUserIdentityRegistrationFailureResponseBody is used to define fields
+// on response body types.
+type ServerUserIdentityRegistrationFailureResponseBody struct {
+	Outcome   string `form:"outcome" json:"outcome" xml:"outcome"`
+	Reason    string `form:"reason" json:"reason" xml:"reason"`
+	Retryable bool   `form:"retryable" json:"retryable" xml:"retryable"`
+	// Optional sanitized and truncated provider-controlled message.
+	ProviderMessage *string `form:"provider_message,omitempty" json:"provider_message,omitempty" xml:"provider_message,omitempty"`
+	// Optional upstream HTTP status.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+}
+
 // RemoteSessionResponseBody is used to define fields on response body types.
 type RemoteSessionResponseBody struct {
 	// The remote_session id.
@@ -431,6 +813,140 @@ type RemoteSessionResponseBody struct {
 	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateRemoteSessionIssuerFormRequestBody is used to define fields on request
+// body types.
+type CreateRemoteSessionIssuerFormRequestBody struct {
+	// Project-unique slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Issuer URL; matches the iss claim.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string `form:"revocation_endpoint,omitempty" json:"revocation_endpoint,omitempty" xml:"revocation_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer.
+	// Discovered from the issuer metadata document; rejected unless an absolute
+	// http(s) URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered
+	// from the issuer metadata document; rejected unless an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the
+	// issuer metadata document; rejected unless an absolute http(s) URL.
+	OpTosURI *string `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	// Scopes advertised by the issuer.
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// Grant types advertised by the issuer.
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// Response types advertised by the issuer.
+	ResponseTypesSupported []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	// Token endpoint auth methods advertised by the issuer.
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string `form:"code_challenge_methods_supported,omitempty" json:"code_challenge_methods_supported,omitempty" xml:"code_challenge_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour. Default false.
+	Oidc *bool `form:"oidc,omitempty" json:"oidc,omitempty" xml:"oidc,omitempty"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	// Default false.
+	Passthrough *bool `form:"passthrough,omitempty" json:"passthrough,omitempty" xml:"passthrough,omitempty"`
+	// When true, the issuer accepts a Client ID Metadata Document URL as client_id
+	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
+	// pre-flight outbound CIMD. Default false.
+	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// OpenID Connect userinfo endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	UserinfoEndpoint *string `form:"userinfo_endpoint,omitempty" json:"userinfo_endpoint,omitempty" xml:"userinfo_endpoint,omitempty"`
+	// RFC 7662 token introspection endpoint. Discovered from the issuer metadata
+	// document; rejected unless an absolute https URL, or http on loopback.
+	IntrospectionEndpoint *string `form:"introspection_endpoint,omitempty" json:"introspection_endpoint,omitempty" xml:"introspection_endpoint,omitempty"`
+	// Client authentication methods the introspection endpoint accepts. Omitting
+	// the field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	IntrospectionEndpointAuthMethodsSupported []string `form:"introspection_endpoint_auth_methods_supported,omitempty" json:"introspection_endpoint_auth_methods_supported,omitempty" xml:"introspection_endpoint_auth_methods_supported,omitempty"`
+	// JWS algorithms the issuer signs ID tokens with. Omitting the field stores
+	// null ("not captured"), distinct from an empty array ("the issuer advertises
+	// none").
+	IDTokenSigningAlgValuesSupported []string `form:"id_token_signing_alg_values_supported,omitempty" json:"id_token_signing_alg_values_supported,omitempty" xml:"id_token_signing_alg_values_supported,omitempty"`
+	// Claims the issuer can return in ID tokens and from userinfo. Omitting the
+	// field stores null ("not captured"), distinct from an empty array ("the
+	// issuer advertises none").
+	ClaimsSupported []string `form:"claims_supported,omitempty" json:"claims_supported,omitempty" xml:"claims_supported,omitempty"`
+	// Whether the issuer supports OpenID Connect Back-Channel Logout. Omitting the
+	// field stores null ("not captured").
+	BackchannelLogoutSupported *bool `form:"backchannel_logout_supported,omitempty" json:"backchannel_logout_supported,omitempty" xml:"backchannel_logout_supported,omitempty"`
+	// Whether the issuer includes the RFC 9207 iss parameter in authorization
+	// responses. Omitting the field stores null ("not captured").
+	AuthorizationResponseIssParameterSupported *bool `form:"authorization_response_iss_parameter_supported,omitempty" json:"authorization_response_iss_parameter_supported,omitempty" xml:"authorization_response_iss_parameter_supported,omitempty"`
+	// Operator-pinned scope request. When set, it is sent verbatim on the upstream
+	// authorize redirect in place of the resolved scope set. Omit or send an empty
+	// array to leave it unset.
+	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
+	// unset: the parameter is then sent, and a login or refresh the issuer answers
+	// with invalid_target is retried once without it. Set false to never send it.
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+}
+
+// ServerUserIdentityClientConfigurationRequestBody is used to define fields on
+// request body types.
+type ServerUserIdentityClientConfigurationRequestBody struct {
+	// The out-of-band OAuth client identifier. Manual mode only.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The out-of-band OAuth client secret. Manual mode only; encrypted before
+	// persistence.
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// How the client authenticates at the provider token endpoint, or the
+	// preferred method for DCR.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Each value must be an RFC 6749 scope token.
+	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional upstream OAuth audience.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+}
+
+// NewCommitServerUserIdentityConfigurationResponseBody builds the HTTP
+// response body from the result of the "commitServerUserIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewCommitServerUserIdentityConfigurationResponseBody(res *remotesessions.CommitServerUserIdentityConfigurationResult) *CommitServerUserIdentityConfigurationResponseBody {
+	body := &CommitServerUserIdentityConfigurationResponseBody{
+		Status:              res.Status,
+		RegistrationMethod:  res.RegistrationMethod,
+		ManualSetupRequired: res.ManualSetupRequired,
+		ProviderTier:        res.ProviderTier,
+		ClientTier:          res.ClientTier,
+		ProviderPath:        res.ProviderPath,
+		ClientPath:          res.ClientPath,
+	}
+	if res.Provider != nil {
+		body.Provider = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Provider)
+	}
+	if res.Client != nil {
+		body.Client = marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(res.Client)
+	}
+	if res.Failure != nil {
+		body.Failure = marshalRemotesessionsServerUserIdentityRegistrationFailureToServerUserIdentityRegistrationFailureResponseBody(res.Failure)
+	}
+	return body
+}
+
 // NewListRemoteSessionsResponseBody builds the HTTP response body from the
 // result of the "listRemoteSessions" endpoint of the "remoteSessions" service.
 func NewListRemoteSessionsResponseBody(res *remotesessions.ListRemoteSessionsResult) *ListRemoteSessionsResponseBody {
@@ -448,6 +964,163 @@ func NewListRemoteSessionsResponseBody(res *remotesessions.ListRemoteSessionsRes
 		}
 	} else {
 		body.Items = []*RemoteSessionResponseBody{}
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationUnauthorizedResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationUnauthorizedResponseBody {
+	body := &CommitServerUserIdentityConfigurationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationForbiddenResponseBody builds the
+// HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationForbiddenResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationForbiddenResponseBody {
+	body := &CommitServerUserIdentityConfigurationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationBadRequestResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationBadRequestResponseBody {
+	body := &CommitServerUserIdentityConfigurationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationNotFoundResponseBody builds the HTTP
+// response body from the result of the "commitServerUserIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewCommitServerUserIdentityConfigurationNotFoundResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationNotFoundResponseBody {
+	body := &CommitServerUserIdentityConfigurationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationConflictResponseBody builds the HTTP
+// response body from the result of the "commitServerUserIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewCommitServerUserIdentityConfigurationConflictResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationConflictResponseBody {
+	body := &CommitServerUserIdentityConfigurationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody {
+	body := &CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationInvalidResponseBody builds the HTTP
+// response body from the result of the "commitServerUserIdentityConfiguration"
+// endpoint of the "remoteSessions" service.
+func NewCommitServerUserIdentityConfigurationInvalidResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationInvalidResponseBody {
+	body := &CommitServerUserIdentityConfigurationInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationInvariantViolationResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationInvariantViolationResponseBody {
+	body := &CommitServerUserIdentityConfigurationInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationUnexpectedResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationUnexpectedResponseBody {
+	body := &CommitServerUserIdentityConfigurationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCommitServerUserIdentityConfigurationGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
+// service.
+func NewCommitServerUserIdentityConfigurationGatewayErrorResponseBody(res *goa.ServiceError) *CommitServerUserIdentityConfigurationGatewayErrorResponseBody {
+	body := &CommitServerUserIdentityConfigurationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -752,6 +1425,28 @@ func NewRevokeRemoteSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revo
 	return body
 }
 
+// NewCommitServerUserIdentityConfigurationPayload builds a remoteSessions
+// service commitServerUserIdentityConfiguration endpoint payload.
+func NewCommitServerUserIdentityConfigurationPayload(body *CommitServerUserIdentityConfigurationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.CommitServerUserIdentityConfigurationPayload {
+	v := &remotesessions.CommitServerUserIdentityConfigurationPayload{
+		McpServerID:      *body.McpServerID,
+		ProviderID:       body.ProviderID,
+		ClientMode:       *body.ClientMode,
+		ExistingClientID: body.ExistingClientID,
+	}
+	if body.CreateProvider != nil {
+		v.CreateProvider = unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
+	}
+	if body.ClientConfiguration != nil {
+		v.ClientConfiguration = unmarshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration(body.ClientConfiguration)
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListRemoteSessionsPayload builds a remoteSessions service
 // listRemoteSessions endpoint payload.
 func NewListRemoteSessionsPayload(subjectUrn *string, remoteSessionClientID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.ListRemoteSessionsPayload {
@@ -777,4 +1472,80 @@ func NewRevokeRemoteSessionPayload(id string, sessionToken *string, apikeyToken 
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateCommitServerUserIdentityConfigurationRequestBody runs the
+// validations defined on CommitServerUserIdentityConfigurationRequestBody
+func ValidateCommitServerUserIdentityConfigurationRequestBody(body *CommitServerUserIdentityConfigurationRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.ClientMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_mode", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.ProviderID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.provider_id", *body.ProviderID, goa.FormatUUID))
+	}
+	if body.CreateProvider != nil {
+		if err2 := ValidateCreateRemoteSessionIssuerFormRequestBody(body.CreateProvider); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ClientMode != nil {
+		if !(*body.ClientMode == "auto" || *body.ClientMode == "existing" || *body.ClientMode == "manual") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_mode", *body.ClientMode, []any{"auto", "existing", "manual"}))
+		}
+	}
+	if body.ExistingClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.existing_client_id", *body.ExistingClientID, goa.FormatUUID))
+	}
+	if body.ClientConfiguration != nil {
+		if err2 := ValidateServerUserIdentityClientConfigurationRequestBody(body.ClientConfiguration); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateCreateRemoteSessionIssuerFormRequestBody runs the validations
+// defined on CreateRemoteSessionIssuerFormRequestBody
+func ValidateCreateRemoteSessionIssuerFormRequestBody(body *CreateRemoteSessionIssuerFormRequestBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateServerUserIdentityClientConfigurationRequestBody runs the
+// validations defined on ServerUserIdentityClientConfigurationRequestBody
+func ValidateServerUserIdentityClientConfigurationRequestBody(body *ServerUserIdentityClientConfigurationRequestBody) (err error) {
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		}
+	}
+	for _, e := range body.Scope {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
+		if utf8.RuneCountInString(e) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scope[*]", e, utf8.RuneCountInString(e), 128, false))
+		}
+	}
+	if body.Audience != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.audience", *body.Audience, "^[!-~]+$"))
+	}
+	if body.Audience != nil {
+		if utf8.RuneCountInString(*body.Audience) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
+		}
+	}
+	return
 }
