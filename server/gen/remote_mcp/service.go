@@ -37,9 +37,13 @@ type Service interface {
 	// inspected.
 	DiscoverProtectedResourceMetadata(context.Context, *DiscoverProtectedResourceMetadataPayload) (res *ProtectedResourceMetadataDiscovery, err error)
 	// Probe a candidate remote MCP server URL by issuing an MCP initialize request
-	// and reporting the outcome. Used to give users a reachability signal before
-	// they save a new or updated remote MCP server. Treats reachable-but-401/403
-	// responses as verified — auth verification is intentionally out of scope.
+	// and reporting whether MCP is available, authentication is required, the
+	// response is invalid, or the server is unreachable.
+	ProbeURL(context.Context, *ProbeURLPayload) (res *ProbeURLResult, err error)
+	// Probe a candidate remote MCP server URL and return the legacy boolean
+	// verification result.
+
+	// Deprecated: use probeURL instead.
 	VerifyURL(context.Context, *VerifyURLPayload) (res *VerifyURLResult, err error)
 	// Delete a remote MCP server
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
@@ -75,7 +79,7 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createServer", "createServerAndMcpServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+var MethodNames = [14]string{"createServer", "createServerAndMcpServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "probeURL", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
 
 // CreateServerAndMcpServerPayload is the payload type of the remoteMcp service
 // createServerAndMcpServer method.
@@ -218,6 +222,32 @@ type ListServersPayload struct {
 // method.
 type ListServersResult struct {
 	RemoteMcpServers []*types.RemoteMcpServer
+}
+
+// ProbeURLPayload is the payload type of the remoteMcp service probeURL method.
+type ProbeURLPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The URL of the remote MCP server to probe
+	URL string
+}
+
+// ProbeURLResult is the result type of the remoteMcp service probeURL method.
+type ProbeURLResult struct {
+	// Probe outcome.
+	Outcome string
+	// Absolute HTTP(S) protected resource metadata URL advertised by a
+	// WWW-Authenticate challenge. Present only when authentication is required and
+	// the advertised URL is valid.
+	ProtectedResourceMetadataURL *string
+	// HTTP status returned by the remote server. Required for invalid_mcp_response
+	// and present for HTTP-based unreachable outcomes.
+	HTTPStatus *int
+	// Stable machine-readable reason code. Present only when outcome is
+	// unreachable; currently timeout, rate_limited, server_error, dns_error,
+	// tls_error, guardian_rejected, or transport_error.
+	Reason *string
 }
 
 // RFC 9728 OAuth Protected Resource Metadata advertised by a remote MCP

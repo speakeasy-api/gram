@@ -11,6 +11,7 @@ features:
     constsAndDefaults: 0.1.14
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
+    deprecations: 2.81.1
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
@@ -473,6 +474,7 @@ trackedFiles:
   src/funcs/remoteMcpGetServerHeader.ts: {}
   src/funcs/remoteMcpListServerHeaders.ts: {}
   src/funcs/remoteMcpListServers.ts: {}
+  src/funcs/remoteMcpProbeURL.ts: {}
   src/funcs/remoteMcpUpdateServer.ts: {}
   src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
@@ -1309,6 +1311,8 @@ trackedFiles:
   src/models/components/policybypassredemption.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
+  src/models/components/probeurlform.ts: {}
+  src/models/components/probeurlresult.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/project.ts: {}
   src/models/components/projectentry.ts: {}
@@ -2171,6 +2175,7 @@ trackedFiles:
   src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
   src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/previewspendrule.ts: {}
+  src/models/operations/proberemotemcpurl.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
   src/models/operations/publish.ts: {}
   src/models/operations/publishjsonwebkey.ts: {}
@@ -2961,6 +2966,7 @@ trackedFiles:
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
   src/react-query/previewKillswitchOverlaps.ts: {}
+  src/react-query/probeRemoteMcpURL.ts: {}
   src/react-query/productFeatures.core.ts: {}
   src/react-query/productFeatures.ts: {}
   src/react-query/project.core.ts: {}
@@ -9088,6 +9094,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  probeRemoteMcpURL:
+    speakeasy-default-probe-remote-mcp-URL:
+      requestBody:
+        application/json: {"url": "https://edible-requirement.name/"}
+      responses:
+        "200":
+          application/json: {"outcome": "authentication_required"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   promoteMcpApprovalRequest:
     speakeasy-default-promote-mcp-approval-request:
       requestBody:

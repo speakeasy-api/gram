@@ -22,6 +22,7 @@ type Client struct {
 	GetServerEndpoint                         goa.Endpoint
 	UpdateServerEndpoint                      goa.Endpoint
 	DiscoverProtectedResourceMetadataEndpoint goa.Endpoint
+	ProbeURLEndpoint                          goa.Endpoint
 	VerifyURLEndpoint                         goa.Endpoint
 	DeleteServerEndpoint                      goa.Endpoint
 	ListServerHeadersEndpoint                 goa.Endpoint
@@ -32,7 +33,7 @@ type Client struct {
 }
 
 // NewClient initializes a "remoteMcp" service client given the endpoints.
-func NewClient(createServer, createServerAndMcpServer, listServers, getServer, updateServer, discoverProtectedResourceMetadata, verifyURL, deleteServer, listServerHeaders, getServerHeader, createServerHeader, updateServerHeader, deleteServerHeader goa.Endpoint) *Client {
+func NewClient(createServer, createServerAndMcpServer, listServers, getServer, updateServer, discoverProtectedResourceMetadata, probeURL, verifyURL, deleteServer, listServerHeaders, getServerHeader, createServerHeader, updateServerHeader, deleteServerHeader goa.Endpoint) *Client {
 	return &Client{
 		CreateServerEndpoint:                      createServer,
 		CreateServerAndMcpServerEndpoint:          createServerAndMcpServer,
@@ -40,6 +41,7 @@ func NewClient(createServer, createServerAndMcpServer, listServers, getServer, u
 		GetServerEndpoint:                         getServer,
 		UpdateServerEndpoint:                      updateServer,
 		DiscoverProtectedResourceMetadataEndpoint: discoverProtectedResourceMetadata,
+		ProbeURLEndpoint:                          probeURL,
 		VerifyURLEndpoint:                         verifyURL,
 		DeleteServerEndpoint:                      deleteServer,
 		ListServerHeadersEndpoint:                 listServerHeaders,
@@ -182,6 +184,28 @@ func (c *Client) DiscoverProtectedResourceMetadata(ctx context.Context, p *Disco
 		return
 	}
 	return ires.(*ProtectedResourceMetadataDiscovery), nil
+}
+
+// ProbeURL calls the "probeURL" endpoint of the "remoteMcp" service.
+// ProbeURL may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ProbeURL(ctx context.Context, p *ProbeURLPayload) (res *ProbeURLResult, err error) {
+	var ires any
+	ires, err = c.ProbeURLEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ProbeURLResult), nil
 }
 
 // VerifyURL calls the "verifyURL" endpoint of the "remoteMcp" service.
