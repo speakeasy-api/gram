@@ -133,7 +133,7 @@ export function RemoteIdentitySummary({
         to={settingsHref}
         aria-label={`Identity: ${label}. Open identity settings`}
         className={cn(
-          "bg-card hover:border-input hover:bg-muted/40 flex w-fit items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          "bg-card hover:border-input hover:bg-muted/40 flex w-fit shrink-0 items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
           warn && "border-warning-default",
         )}
       >
@@ -163,16 +163,18 @@ export function RemoteIdentitySummary({
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
+    // One row: what the setting is on the left, what it currently is on the
+    // right. The pill is small enough that a second line spent nothing.
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
         <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
         {/* The question the label raises — what these modes mean — rather than
-            something about the value below it. */}
+            something about the value beside it. */}
         <button
           type="button"
           onClick={() => setExplainerOpen(true)}
           aria-label="What do these identity modes mean?"
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground shrink-0"
         >
           <Info aria-hidden="true" className="size-3" />
         </button>
