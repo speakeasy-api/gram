@@ -32,6 +32,45 @@ export const Default: Story = {
   },
 };
 
+export const Compact: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("standard");
+
+    return (
+      <div className="flex flex-col gap-6">
+        <RadioCardGroup
+          aria-label="Delivery speed, default density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard value="standard" title="Standard delivery">
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard value="express" title="Express delivery">
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+
+        {/* size="sm" is for a choice inside a dialog or form step, where the
+            full-size title competes with the step's own heading. */}
+        <RadioCardGroup
+          size="sm"
+          aria-label="Delivery speed, compact density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard value="standard" title="Standard delivery">
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard value="express" title="Express delivery">
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+      </div>
+    );
+  },
+};
+
 export const WithoutIndicators: Story = {
   render: function Render() {
     const [value, setValue] = useState("comfortable");

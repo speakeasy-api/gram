@@ -65,6 +65,7 @@ export function CreationIdentityChoice({
       ) : null}
 
       <RadioCardGroup
+        size="sm"
         value={value}
         onValueChange={(next) => onChange(next as CreationIdentityMode)}
       >
