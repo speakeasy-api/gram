@@ -126,7 +126,10 @@ async function renderList(initialPath = "/organizations"): Promise<AnyRouter> {
 
 beforeEach(() => {
   mocks.listOrganizations.mockReset();
-  mocks.listOrganizations.mockResolvedValue({ organizations: ORGS });
+  mocks.listOrganizations.mockResolvedValue({
+    total: ORGS.length,
+    organizations: ORGS,
+  });
   mocks.getOrganizationStats.mockReset();
   mocks.getOrganizationStats.mockResolvedValue(STATS);
   mocks.getSession.mockReset();
@@ -418,7 +421,7 @@ describe("organizations stat strip navigation", () => {
   it("returns to the first page even where the filters do not change", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderList(urlFor({ disabled: ["disabled"] }));
 
@@ -428,7 +431,7 @@ describe("organizations stat strip navigation", () => {
     });
     fireEvent.click(next);
     await waitFor(() => {
-      expect(lastListParams().cursor).toBe("cursor_page_two");
+      expect(lastListParams().page).toBe(2);
     });
 
     // The set this cell applies is the set already applied, so nothing in the
@@ -436,14 +439,14 @@ describe("organizations stat strip navigation", () => {
     fireEvent.click(cell("Disabled"));
 
     await waitFor(() => {
-      expect(lastListParams().cursor).toBeUndefined();
+      expect(lastListParams().page).toBe(1);
     });
   });
 
   it("turns Previous off with the page it sends the operator back to", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderList(urlFor({ disabled: ["disabled"] }));
 
@@ -453,12 +456,12 @@ describe("organizations stat strip navigation", () => {
     });
     fireEvent.click(next);
     await waitFor(() => {
-      expect(lastListParams().cursor).toBe("cursor_page_two");
+      expect(lastListParams().page).toBe(2);
     });
 
     fireEvent.click(cell("Disabled"));
     await waitFor(() => {
-      expect(lastListParams().cursor).toBeUndefined();
+      expect(lastListParams().page).toBe(1);
     });
     // Enabled again, so the rows on screen are the first page rather than the
     // one before it. Previous is disabled off the pages behind, not off this.

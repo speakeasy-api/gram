@@ -44,7 +44,7 @@ import {
  * listOrganizations admin
  *
  * @remarks
- * Lists organizations for admin operations with optional search and filters.
+ * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
  */
 export function adminListOrganizations(
   client: GramCore,
