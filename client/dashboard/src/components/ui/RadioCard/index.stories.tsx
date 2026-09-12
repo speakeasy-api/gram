@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { Bot, CircleSlash, UserRound } from "lucide-react";
+
 import { RadioCard, RadioCardGroup } from ".";
 
 const meta: Meta<typeof RadioCardGroup> = {
@@ -43,10 +45,18 @@ export const Compact: Story = {
           value={value}
           onValueChange={setValue}
         >
-          <RadioCard value="standard" title="Standard delivery">
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
             Arrives in three to five working days.
           </RadioCard>
-          <RadioCard value="express" title="Express delivery">
+          <RadioCard
+            value="express"
+            leading={<Bot aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
             Arrives sooner with priority handling.
           </RadioCard>
         </RadioCardGroup>
@@ -59,10 +69,18 @@ export const Compact: Story = {
           value={value}
           onValueChange={setValue}
         >
-          <RadioCard value="standard" title="Standard delivery">
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
             Arrives in three to five working days.
           </RadioCard>
-          <RadioCard value="express" title="Express delivery">
+          <RadioCard
+            value="express"
+            leading={<CircleSlash aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
             Arrives sooner with priority handling.
           </RadioCard>
         </RadioCardGroup>

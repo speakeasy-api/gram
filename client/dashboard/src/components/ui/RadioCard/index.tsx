@@ -167,7 +167,13 @@ export function RadioCard({
         }}
       />
       {leading ? (
-        <div data-slot="radio-card-leading" className="shrink-0">
+        // Centered on the title's line box, not on the top of the text
+        // column: a 16px mark top-aligned against a 24px line sits high
+        // enough to read as misaligned. Matches the mt-0.5 the radio uses.
+        <div
+          data-slot="radio-card-leading"
+          className={cn("flex shrink-0 items-center", compact ? "h-5" : "h-6")}
+        >
           {leading}
         </div>
       ) : null}
