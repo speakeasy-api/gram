@@ -470,9 +470,7 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("Allowed by URL rule")).toBeTruthy();
     expect(screen.getByText("Blocked")).toBeTruthy();
-    expect(screen.getByText("Blocked by policy")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
     expect(screen.getByText("Never")).toBeTruthy();
@@ -1213,9 +1211,9 @@ describe("ShadowMCPInventoryTable", () => {
     await waitFor(() => {
       expect(screen.getByText("Scoped MCP")).toBeTruthy();
     });
+    // The badge carries the verdict; the description under it is gone.
     expect(screen.getByText("Restricted")).toBeTruthy();
-    expect(screen.getByText("Allowed for selected users")).toBeTruthy();
-    expect(screen.queryByText("Allowed by URL rule")).toBeNull();
+    expect(screen.queryByText("Allowed")).toBeNull();
   });
 
   it("renders observed status when blocking is inactive", async () => {
@@ -1235,7 +1233,6 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("Observed MCP")).toBeTruthy();
     });
     expect(screen.getByText("Observed")).toBeTruthy();
-    expect(screen.getByText("Not blocking")).toBeTruthy();
   });
 });
 

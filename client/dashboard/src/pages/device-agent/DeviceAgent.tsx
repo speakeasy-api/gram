@@ -15,6 +15,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { AiScanTargetsSection } from "./ai-scan-targets";
 import { DeviceAgentConfigurationTab } from "./device-agent-configuration";
 import { DeviceAgentSetup } from "./device-agent-setup";
 
@@ -73,18 +74,19 @@ function DeviceAgentTabs() {
   const segments = location.pathname.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] ?? "";
   const onConfigurationTab = lastSegment === "configuration";
+  const onScanTargetsTab = lastSegment === "scan-targets";
   const onMdmTab = lastSegment === "mdm-integrations";
   let currentTab = "setup";
   if (onConfigurationTab && canConfigure) {
     currentTab = "configuration";
+  } else if (onScanTargetsTab && canConfigure) {
+    currentTab = "scan-targets";
   } else if (onMdmTab && mdmEnabled) {
     currentTab = "mdm-integrations";
   }
+  const onSubTab = onMdmTab || onConfigurationTab || onScanTargetsTab;
   const basePath =
-    "/" +
-    (onMdmTab || onConfigurationTab ? segments.slice(0, -1) : segments).join(
-      "/",
-    );
+    "/" + (onSubTab ? segments.slice(0, -1) : segments).join("/");
 
   const handleTabChange = (value: string) => {
     void navigate(value === "setup" ? basePath : `${basePath}/${value}`);
@@ -100,7 +102,11 @@ function DeviceAgentTabs() {
   // Same guard for a deep link to the Configuration tab as a non-admin: only
   // redirect once grants have resolved, so an admin refreshing the URL isn't
   // bounced while RBAC is still loading.
-  if (onConfigurationTab && !rbacLoading && !canConfigure) {
+  if (
+    (onConfigurationTab || onScanTargetsTab) &&
+    !rbacLoading &&
+    !canConfigure
+  ) {
     return <Navigate to={basePath} replace />;
   }
 
@@ -128,6 +134,14 @@ function DeviceAgentTabs() {
                 </span>
               </PageTabsTrigger>
             )}
+            {canConfigure && (
+              <PageTabsTrigger value="scan-targets">
+                <span className="inline-flex items-center gap-2">
+                  Scan Targets
+                  <ReleaseStageBadge stage="preview" noTooltip />
+                </span>
+              </PageTabsTrigger>
+            )}
             {mdmEnabled && (
               <PageTabsTrigger value="mdm-integrations">
                 <span className="inline-flex items-center gap-2">
@@ -146,6 +160,12 @@ function DeviceAgentTabs() {
         {canConfigure && (
           <TabsContent value="configuration" className="mt-6">
             <DeviceAgentConfigurationTab />
+          </TabsContent>
+        )}
+
+        {canConfigure && (
+          <TabsContent value="scan-targets" className="mt-6">
+            <AiScanTargetsSection />
           </TabsContent>
         )}
 

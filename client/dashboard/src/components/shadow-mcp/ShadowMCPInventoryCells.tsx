@@ -126,9 +126,14 @@ export function ShadowMCPInventoryUsageCell({
       <Text variant="small">
         {countLabel(server.observedUseCount, "call", "calls")}
       </Text>
-      <Text muted small className="text-xs">
-        {countLabel(server.userCount, "user", "users")}
-      </Text>
+      {/* The user count is attribution: the server omits it for viewers who
+          hold project read but not org admin, and the row stays useful
+          without it. */}
+      {server.userCount !== undefined ? (
+        <Text muted small className="text-xs">
+          {countLabel(server.userCount, "user", "users")}
+        </Text>
+      ) : null}
     </div>
   );
 }

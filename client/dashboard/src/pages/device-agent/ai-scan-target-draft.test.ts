@@ -20,6 +20,11 @@ const classic: AiScanTarget = {
     configDirs: [],
     processNames: [],
   },
+  gatewayClient: {
+    cimdVendorKeys: [],
+    oauthClientIds: [],
+    clientInfoNames: [],
+  },
   enabled: true,
   origin: "default",
   customized: false,
@@ -124,6 +129,11 @@ describe("draftToUpsertBody", () => {
         binaries: [],
         configDirs: [],
         processNames: ["ChatGPT"],
+      },
+      gatewayClient: {
+        cimdVendorKeys: [],
+        oauthClientIds: [],
+        clientInfoNames: [],
       },
       versionPlistKey: undefined,
       enabled: false,
