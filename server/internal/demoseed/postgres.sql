@@ -737,6 +737,48 @@ BEGIN
      'demo-acct-lucas-personal', 'user_demo_lucas_personal',
      'lucas.meyer@personal.example', 'personal', 'flat_rate');
 
+  -- Shadow AI access decisions (the AI Tools tab of the Shadow AI section).
+  -- Three states, because a column where every row reads the same tells the
+  -- reader nothing about what the page is for:
+  --   claude-code is approved and enforceable — it publishes a CIMD document,
+  --     so a decision on it actually reaches the gateway;
+  --   codex is blocked and enforceable, the case the block warning is about;
+  --   hermes-agent is approved and enforceable, so the Assistants tab shows a
+  --     decision rather than a column of unreviewed;
+  --   zed is approved and goose blocked — both publish CIMD, so both decisions
+  --     reach the gateway, and together with codex they keep the Harnesses
+  --     status column from being one answer repeated;
+  --   cline, continue, warp and msty publish nothing, so they stay unreviewed
+  --     however they are detected — which is the majority case and should look
+  --     like the majority case;
+  --   cursor, openclaw, aider, ollama and lmstudio are left without rows.
+  --     Cursor and OpenClaw are the case worth seeing: they publish no CIMD
+  --     document, so Gram cannot recognize them at the gateway and refuses to
+  --     record any decision about them. They read unreviewed, and that is the
+  --     honest answer rather than a block that enforces nothing.
+  DELETE FROM ai_tool_decisions WHERE organization_id = demo_org;
+
+  INSERT INTO ai_tool_decisions
+    (organization_id, target_id, decision, rationale, decided_by, decided_at)
+  VALUES
+    (demo_org, 'claude-code', 'approved',
+     'Standard issue for the platform team.',
+     'urn:gram:principal:user:user_demo_amara', now() - interval '9 days'),
+    (demo_org, 'codex', 'blocked',
+     'Not covered by the vendor review. Ask in #ai-tooling if you need it.',
+     'urn:gram:principal:user:user_demo_amara', now() - interval '4 days'),
+    (demo_org, 'hermes-agent', 'approved',
+     'Reviewed with the research team. Publishes a client ID metadata '
+     || 'document, so the approval is enforced at the gateway.',
+     'urn:gram:principal:user:user_demo_amara', now() - interval '6 days'),
+    (demo_org, 'zed', 'approved',
+     'Approved for the platform team after the editor review.',
+     'urn:gram:principal:user:user_demo_amara', now() - interval '7 days'),
+    (demo_org, 'goose', 'blocked',
+     'Runs arbitrary local commands under its own extensions. Blocked until '
+     || 'the extension policy lands.',
+     'urn:gram:principal:user:user_demo_amara', now() - interval '3 days');
+
   -- MDM inventory (the identity Accounts & devices tab, and the device
   -- coverage widgets). One Jamf-shaped integration holding the fleet: mostly
   -- MacBooks, one Windows laptop, and deliberate gaps — a machine whose agent
@@ -2727,6 +2769,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND subject_urn NOT LIKE 'agent:%';
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
+  END IF;
+
+  -- The Shadow AI status column is only worth looking at when it shows more
+  -- than one answer, so assert all three states survived the reseed.
+  SELECT count(DISTINCT decision) INTO stray
+  FROM ai_tool_decisions WHERE organization_id = demo_org;
+  IF stray < 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: AI tool decisions span % states, expected at least 2', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',
