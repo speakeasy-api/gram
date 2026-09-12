@@ -10,7 +10,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useRemoteSessions } from "@gram/client/react-query/remoteSessions.js";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
@@ -290,14 +290,49 @@ export function useUserIdentityDraft({
       ? sessionsQuery.data.result.items.length > 0
       : null;
 
+  // A provider we have no record of has published no capabilities either, so
+  // read its metadata before promising anything. Plenty of real upstreams —
+  // GitHub among them — publish neither a registration endpoint nor a CIMD
+  // document and can only be set up by hand.
+  const discoveredMetadataQuery = useQuery({
+    queryKey: ["remote-session-issuer-metadata", discoveredIssuerUrl],
+    queryFn: async () => {
+      if (!discoveredIssuerUrl) throw new Error("no discovered issuer");
+      return await client.remoteSessionIssuers.fetchMetadata({
+        fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
+      });
+    },
+    enabled: enabled && !!selectedDiscovered && !!discoveredIssuerUrl,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const discoveredMetadata = selectedDiscovered
+    ? (discoveredMetadataQuery.data ?? null)
+    : null;
+  // Nothing is claimed while the answer is outstanding.
+  const capabilitiesLoading =
+    !!selectedDiscovered && discoveredMetadataQuery.isLoading;
+
   // A provider that publishes neither a CIMD-capable document nor a
   // registration endpoint cannot register this server on its own.
-  const automaticAvailable = selectedDiscovered
-    ? true
-    : !!selectedIssuer &&
-      (selectedIssuer.clientIdMetadataDocumentSupported ||
-        !!selectedIssuer.registrationEndpoint?.trim());
-  const manualNeeded = !existingClient && (forceManual || !automaticAvailable);
+  const supportsAutomatic = (candidate: {
+    clientIdMetadataDocumentSupported?: boolean;
+    registrationEndpoint?: string | null;
+  }): boolean =>
+    !!candidate.clientIdMetadataDocumentSupported ||
+    !!candidate.registrationEndpoint?.trim();
+
+  let automaticAvailable = false;
+  if (selectedDiscovered) {
+    automaticAvailable =
+      !!discoveredMetadata && supportsAutomatic(discoveredMetadata);
+  } else if (selectedIssuer) {
+    automaticAvailable = supportsAutomatic(selectedIssuer);
+  }
+  const manualNeeded =
+    !existingClient &&
+    !capabilitiesLoading &&
+    (forceManual || !automaticAvailable);
 
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
@@ -322,9 +357,11 @@ export function useUserIdentityDraft({
       let createProvider = undefined;
       let providerId: string | undefined = selectedIssuer?.id;
       if (selectedDiscovered && discoveredIssuerUrl) {
-        const draft = await client.remoteSessionIssuers.fetchMetadata({
-          fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
-        });
+        const draft =
+          discoveredMetadata ??
+          (await client.remoteSessionIssuers.fetchMetadata({
+            fetchIssuerMetadataRequestBody: { issuer: discoveredIssuerUrl },
+          }));
         providerId = undefined;
         createProvider = {
           issuer: discoveredIssuerUrl,
@@ -333,6 +370,7 @@ export function useUserIdentityDraft({
           authorizationEndpoint: draft.authorizationEndpoint ?? undefined,
           tokenEndpoint: draft.tokenEndpoint ?? undefined,
           registrationEndpoint: draft.registrationEndpoint ?? undefined,
+          serviceDocumentation: draft.serviceDocumentation ?? undefined,
           jwksUri: draft.jwksUri ?? undefined,
           scopesSupported: draft.scopesSupported ?? undefined,
           grantTypesSupported: draft.grantTypesSupported ?? undefined,
@@ -407,19 +445,42 @@ export function useUserIdentityDraft({
 
   const canSave =
     !!selected &&
+    !capabilitiesLoading &&
     !isPending &&
     status.kind !== "done" &&
     (!manualNeeded || clientId.trim() !== "");
 
-  const idleHint = !selected
-    ? "Choose a provider to continue."
-    : existingClient
-      ? `Uses ${existingClient.name} when you save.`
-      : manualNeeded
-        ? "Saved with the credentials you paste."
-        : selected.isNew
-          ? "Created from what the upstream publishes and registered when you save."
-          : "Registered automatically when you save.";
+  // What Save is about to do, in one clause. Written as a chain of cases
+  // rather than nested ternaries so a new state is one line to add.
+  let idleHint: string;
+  let clientLabel: string;
+  let clientCaption: string;
+  if (!selected) {
+    idleHint = "Choose a provider to continue.";
+    clientLabel = "Auto-Configure";
+    clientCaption = "Registers on save";
+  } else if (existingClient) {
+    idleHint = `Uses ${existingClient.name} when you save.`;
+    clientLabel = existingClient.name;
+    clientCaption = `${existingClient.connections} connection${existingClient.connections === 1 ? "" : "s"}`;
+  } else if (capabilitiesLoading) {
+    idleHint = "Checking how this provider registers clients…";
+    clientLabel = "Checking…";
+    clientCaption = "Reading what the provider supports";
+  } else if (manualNeeded) {
+    idleHint = "Saved with the credentials you paste.";
+    clientLabel = "New client";
+    clientCaption = "Credentials below";
+  } else if (selected.isNew) {
+    idleHint =
+      "Created from what the upstream publishes and registered when you save.";
+    clientLabel = "Auto-Configure";
+    clientCaption = "Registers on save";
+  } else {
+    idleHint = "Registered automatically when you save.";
+    clientLabel = "Auto-Configure";
+    clientCaption = "Registers on save";
+  }
 
   return {
     providerGroups,
@@ -437,16 +498,8 @@ export function useUserIdentityDraft({
       setLocalStatus({ kind: "idle" });
     },
     /** Label for the registration picker's trigger. */
-    clientLabel: existingClient
-      ? existingClient.name
-      : manualNeeded
-        ? "New client"
-        : "Auto-Configure",
-    clientCaption: existingClient
-      ? `${existingClient.connections} connection${existingClient.connections === 1 ? "" : "s"}`
-      : manualNeeded
-        ? "Credentials below"
-        : "Registers on save",
+    clientLabel,
+    clientCaption,
     newClientHint: manualNeeded
       ? "Needs credentials from the provider"
       : "Recommended. Registers automatically.",
@@ -461,7 +514,11 @@ export function useUserIdentityDraft({
       setForceManual(true);
       setLocalStatus({ kind: "idle" });
     },
-    registrationGuideUrl: selectedIssuer?.clientSetupDocumentationUrl ?? null,
+    registrationGuideUrl:
+      selectedIssuer?.clientSetupDocumentationUrl ??
+      selectedIssuer?.serviceDocumentation ??
+      discoveredMetadata?.serviceDocumentation ??
+      null,
 
     status,
     idleHint,
