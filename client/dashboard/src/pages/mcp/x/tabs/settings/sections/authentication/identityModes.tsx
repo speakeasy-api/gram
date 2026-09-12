@@ -1,7 +1,7 @@
 import { Bot, CircleSlash, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
-export type IdentityMode = "user" | "agent" | "none";
+type IdentityMode = "user" | "agent" | "none";
 
 export type IdentityModeCard = {
   value: IdentityMode;

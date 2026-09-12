@@ -2,7 +2,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import type { ProtectedResourceMetadata } from "@gram/client/models/components/protectedresourcemetadata.js";
 import { useQuery } from "@tanstack/react-query";
 
-export type ProtectedResourceProbeStatus =
+type ProtectedResourceProbeStatus =
   | "idle"
   | "loading"
   | "available"

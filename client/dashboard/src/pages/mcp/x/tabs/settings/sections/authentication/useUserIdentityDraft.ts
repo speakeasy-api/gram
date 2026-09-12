@@ -20,11 +20,11 @@ import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
  * Selecting it commits `create_provider`, so it carries a sentinel id rather
  * than a row id right up until save.
  */
-export const DISCOVERED_PROVIDER_ID = "__discovered__";
+const DISCOVERED_PROVIDER_ID = "__discovered__";
 
 /** Tier headings, in the order AIM-230 fixes for this flow. */
 const TIER_ORDER = ["Platform", "Organization", "Project"] as const;
-export type ProviderTier = (typeof TIER_ORDER)[number];
+type ProviderTier = (typeof TIER_ORDER)[number];
 
 export type ProviderOption = {
   id: string;
@@ -37,18 +37,18 @@ export type ProviderOption = {
   match: boolean;
 };
 
-export type ProviderGroup = {
+type ProviderGroup = {
   tier: ProviderTier;
   options: ProviderOption[];
 };
 
-export type ClientOption = {
+type ClientOption = {
   id: string;
   name: string;
   connections: number;
 };
 
-export type UserIdentityStatus =
+type UserIdentityStatus =
   | { kind: "idle" }
   | { kind: "pending" }
   | { kind: "done" }

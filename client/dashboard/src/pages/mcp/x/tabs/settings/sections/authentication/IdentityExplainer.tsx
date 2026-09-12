@@ -73,7 +73,7 @@ function UseItWhen({ items }: { items: string[] }): JSX.Element {
  * details pill, and inline inside a setup step — a step that is already a
  * dialog must not stack another one on top of it.
  */
-export function IdentityExplainerContent(): JSX.Element {
+function IdentityExplainerContent(): JSX.Element {
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       <div>

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 const REDACTED_SECRET = "***";
 
-export type AgentCredentialFormat =
+type AgentCredentialFormat =
   | "bearer"
   | "basic"
   | "manual"
