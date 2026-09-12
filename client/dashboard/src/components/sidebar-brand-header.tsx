@@ -1,32 +1,9 @@
-import type * as React from "react";
-
 import { Link } from "react-router";
 
 import { HatchRule } from "./hatch-rule";
 import { GramLogo } from "./gram-logo";
-import { DevWorktreeReadout } from "./dev-worktree-readout";
+import { DevBrandSlot } from "@/dev/brand-slot";
 import { SidebarHeader, SidebarTrigger } from "@/components/ui/Sidebar";
-
-// In development the brand row shows the worktree readout instead of the logo.
-// A developer can replace it by dropping a gitignored src/dev-slot.local.tsx
-// that exports a `DevSlot` component — the glob pattern must be a literal, and
-// it resolves to an empty object when the file is absent, which is every stock
-// checkout and every CI build, so nothing is imported and nothing is bundled.
-const devSlots = import.meta.glob<{ DevSlot: () => React.ReactNode }>(
-  "../dev-slot.local.tsx",
-  { eager: true },
-);
-
-// Production builds and tests always render the stock logo. The readout and any
-// local slot are dev-server affordances, so they must not reach a production
-// artifact and must not change what the suite asserts — and a local slot's
-// build-time constants come from that developer's vite.config.local.ts, which
-// neither a production build nor vitest loads.
-const isTest = import.meta.env.MODE === "test";
-const isDevBrandRow = import.meta.env.DEV && !isTest;
-const LocalDevSlot = isDevBrandRow
-  ? Object.values(devSlots)[0]?.DevSlot
-  : undefined;
 
 /**
  * The brand row shared by the project and org sidebars: logo plus the collapse
@@ -55,8 +32,7 @@ export function SidebarBrandHeader({
 }
 
 function BrandSlot({ homeHref }: { homeHref: string }) {
-  if (LocalDevSlot) return <LocalDevSlot />;
-  if (isDevBrandRow) return <DevWorktreeReadout />;
+  if (DevBrandSlot) return <DevBrandSlot />;
   return (
     <Link
       to={homeHref}

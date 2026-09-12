@@ -85,7 +85,7 @@ function themeInitPlugin(): Plugin {
 }
 
 // Feeds the development readout in the sidebar's brand row
-// (src/components/dev-worktree-readout.tsx): which worktree this dev server is
+// (src/dev/worktree-readout.tsx): which worktree this dev server is
 // serving and what it has checked out. Baked in as constants that are empty in
 // production builds, where the readout is compiled out.
 const DEV_BRANCH_EVENT = "gram:dev-branch";

@@ -18,7 +18,7 @@ set -e
 # ports, no per-worktree identity.
 local_config=(
   ./client/dashboard/vite.config.local.ts
-  ./client/dashboard/src/dev-slot.local.tsx
+  ./client/dashboard/src/dev/slot.local.tsx
 )
 
 # Worktree scaffolding, copied from main only when a worktree is created.

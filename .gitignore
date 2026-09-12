@@ -7,7 +7,7 @@ PERSONAL_ACCOUNT_*
 mise.local.toml
 mise.*.local.toml
 client/dashboard/vite.config.local.ts
-client/dashboard/src/dev-slot.local.tsx
+client/dashboard/src/dev/slot.local.tsx
 flags.local.csv
 *.tsbuildinfo
 .eslintcache

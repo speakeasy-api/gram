@@ -14,7 +14,7 @@ import { useEffect, useState, type ReactNode } from "react";
  * with worktree names, branch names and extra lines that don't fit.
  *
  * `branchPrefix` renders just before the branch, so a local dev slot
- * (src/dev-slot.local.tsx) can mark the branch up without rebuilding the frame.
+ * (src/dev/slot.local.tsx) can mark the branch up without rebuilding the frame.
  */
 export function DevWorktreeReadout({
   branchPrefix,
@@ -37,12 +37,7 @@ export function DevWorktreeReadout({
   );
 }
 
-/**
- * One line of the readout. Exported so local slots can match the style —
- * nothing in a stock checkout imports it, hence the tag for knip.
- *
- * @public
- */
+/** One line of the readout. Exported so local slots can match the style. */
 export function ReadoutLine({
   Icon,
   value,
