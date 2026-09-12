@@ -110,7 +110,7 @@ fi
 
 # Fill in per-developer local config added to the main worktree since this one
 # was created. Existing copies here are left alone — see git:workcopy.
-mise run git:workcopy --scope sync
+mise run git:workcopy --mode sync
 
 echo "⏳ Syncing port mappings..."
 added=0

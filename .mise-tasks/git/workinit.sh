@@ -12,7 +12,7 @@ set -e
 # Scaffolding and per-developer config both come from the main worktree;
 # git:workcopy owns the lists so git:worksync can top up the same local config
 # later. It refuses to run outside a worktree, which is this task's guard too.
-mise run git:workcopy --scope init ${usage_source:+--source "$usage_source"}
+mise run git:workcopy --mode init ${usage_source:+--source "$usage_source"}
 
 mise trust
 if ! mise run install:aube --offline; then
