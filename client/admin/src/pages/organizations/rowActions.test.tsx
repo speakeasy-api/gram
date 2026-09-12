@@ -35,8 +35,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
   return {
     ...actual,
     disableOrganization: mocks.disableOrganization,

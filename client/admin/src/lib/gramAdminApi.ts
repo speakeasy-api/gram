@@ -402,28 +402,6 @@ export function markEnterpriseTrialConverted(
   );
 }
 
-// Both answer the organization in its new state, so a caller updates its cache
-// from the response rather than reading the record back.
-export function disableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function enableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds, mirrored so a value it would reject never leaves the
 // browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
 // server/internal/constants/trials.go: zero moves nothing but updated_at, a
@@ -431,23 +409,6 @@ export function enableOrganization(
 // where a trial becomes a contract.
 export const MIN_TRIAL_EXTENSION_DAYS = 1;
 export const MAX_TRIAL_EXTENSION_DAYS = 365;
-
-export type ExtendTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// The days are added to the trial's current end date, not to today, so an
-// extension applied early does not shorten the trial.
-export function extendTrial(
-  body: ExtendTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
 
 // The server's own bounds for a re-arm, mirrored the way the extension bounds
 // above are. See MinTrialRearmDays and MaxTrialRearmDays in
@@ -457,48 +418,11 @@ export function extendTrial(
 export const MIN_TRIAL_REARM_DAYS = 1;
 export const MAX_TRIAL_REARM_DAYS = 365;
 
-export type RearmTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Not an extension with a different verb. The days are the whole length of a
-// fresh run counted from now, and the write also restores the organization's
-// account type and whitelist flag and revives its model provider keys. Only a
-// demoted trial can be re-armed; anything else is refused with a conflict.
-export function rearmTrial(
-  body: RearmTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds for a start, mirrored the way the re-arm bounds
 // above are. See MinTrialStartDays and MaxTrialStartDays in
 // server/internal/constants/trials.go.
 export const MIN_TRIAL_START_DAYS = 1;
 export const MAX_TRIAL_START_DAYS = 365;
-
-export type StartTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Grants a new enterprise trial counted from now. Only an organization that
-// has never trialled, or whose trial has expired without converting or being
-// demoted, can be started; anything else is refused with a conflict.
-export function startTrial(
-  body: StartTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminMutation<AdminOrganization>("/admin/trial.start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
 
 export type CreateOrganizationRequest = {
   name: string;

@@ -17,19 +17,21 @@ import {
 } from "@/lib/adminQueries";
 import {
   bulkUpdateAccountType,
+  type AdminOrganization,
+  type BulkUpdateAccountTypeRequest,
+  type BulkUpdateAccountTypeResult,
+  type TrialState,
+} from "@/lib/gramAdminApi";
+import {
   disableOrganization,
   enableOrganization,
   extendTrial,
   rearmTrial,
   startTrial,
-  type AdminOrganization,
-  type BulkUpdateAccountTypeRequest,
-  type BulkUpdateAccountTypeResult,
-  type ExtendTrialRequest,
-  type RearmTrialRequest,
-  type StartTrialRequest,
-  type TrialState,
-} from "@/lib/gramAdminApi";
+} from "@/lib/gramAdminClient";
+import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
+import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
 
 // The row's own behavior lives here, so the slices that add a row menu, a
 // disable action and a trial extension all land in one file. The peek control
@@ -179,12 +181,12 @@ export function useBulkUpdateAccountType(): UseMutationResult<
   });
 }
 
-export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
+export function useExtendTrial(): OrganizationWrite<ExtendTrialRequestBody> {
   const qc = useQueryClient();
   return useMutation({
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
-    mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
+    mutationFn: (body: ExtendTrialRequestBody) => extendTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
@@ -195,20 +197,20 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
 // and the new end date, so the row repaints from it. A refetch would move the
 // row instead: the re-armed record no longer matches a filter on the demoted
 // state the operator was very likely looking at.
-export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
+export function useRearmTrial(): OrganizationWrite<RearmTrialRequestBody> {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
+    mutationFn: (body: RearmTrialRequestBody) => rearmTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
 
-export function useStartTrial(): OrganizationWrite<StartTrialRequest> {
+export function useStartTrial(): OrganizationWrite<StartTrialRequestBody> {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: StartTrialRequest) => startTrial(body),
+    mutationFn: (body: StartTrialRequestBody) => startTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),

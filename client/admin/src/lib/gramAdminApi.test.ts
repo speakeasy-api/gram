@@ -3,10 +3,7 @@ import {
   GramAdminError,
   bulkUpdateAccountType,
   cancelStripeSubscription,
-  disableOrganization,
-  enableOrganization,
   errorMessage,
-  extendTrial,
   getStripeCustomer,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -23,10 +20,8 @@ import {
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
   MIN_TRIAL_START_DAYS,
-  rearmTrial,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
-  startTrial,
   setStripeCustomer,
   toSearchParams,
   type AdminOrganization,
@@ -348,17 +343,6 @@ describe("the organization write endpoints", () => {
     updated_at: "2026-01-07T00:00:00Z",
   } satisfies AdminOrganization;
 
-  function stubFetch(): ReturnType<typeof vi.fn> {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(ORG), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetch);
-    return fetch;
-  }
-
   function requestOf(fetch: ReturnType<typeof vi.fn>): {
     path: unknown;
     method: unknown;
@@ -445,45 +429,6 @@ describe("the organization write endpoints", () => {
     expect(window.location.href).toBe(before);
   });
 
-  it("posts the id to the disable path", async () => {
-    const fetch = stubFetch();
-
-    await expect(disableOrganization({ id: ORG.id })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/organization.disable",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id },
-    });
-  });
-
-  it("posts the id to the enable path", async () => {
-    const fetch = stubFetch();
-
-    await expect(enableOrganization({ id: ORG.id })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/organization.enable",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id },
-    });
-  });
-
-  it("posts the id and the day count to the trial path", async () => {
-    const fetch = stubFetch();
-
-    await expect(extendTrial({ id: ORG.id, days: 30 })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/trial.extend",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id, days: 30 },
-    });
-  });
-
   // MinTrialRearmDays and MaxTrialRearmDays in
   // server/internal/constants/trials.go, which alias the extension bounds there
   // today. Written out rather than compared to the extension constants: the two
@@ -494,58 +439,9 @@ describe("the organization write endpoints", () => {
     expect(MAX_TRIAL_REARM_DAYS).toBe(365);
   });
 
-  // A different path and a different action from extend: this one restores the
-  // account type and the whitelist flag and revives the model provider keys,
-  // and its days are the whole length of a fresh run rather than an addition.
-  it("posts the id and the day count to the re-arm path", async () => {
-    const fetch = stubFetch();
-
-    await expect(rearmTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/trial.rearm",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id, days: 14 },
-    });
-  });
-
   it("mirrors the server's start bounds exactly", () => {
     expect(MIN_TRIAL_START_DAYS).toBe(1);
     expect(MAX_TRIAL_START_DAYS).toBe(365);
-  });
-
-  it("posts the id and the day count to the start path", async () => {
-    const fetch = stubFetch();
-
-    await expect(startTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/trial.start",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id, days: 14 },
-    });
-  });
-
-  it("reports a start 401 in place without starting login", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ message: "admin session expired" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-    const before = window.location.href;
-
-    await expect(startTrial({ id: ORG.id, days: 14 })).rejects.toMatchObject({
-      status: 401,
-      message: expect.stringContaining("gram admin 401"),
-      body: { message: "admin session expired" },
-    });
-    expect(window.location.href).toBe(before);
   });
 
   it("posts the ids and one account type to the bulk path", async () => {
@@ -579,33 +475,6 @@ describe("the organization write endpoints", () => {
         account_type: "enterprise",
       },
     });
-  });
-
-  // The 409 the server answers when a trial has converted, been demoted or
-  // already expired. The body carries the sentence the operator has to read,
-  // and it only survives if the call goes through gramAdminFetch.
-  it("carries the conflict the server sends back", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            name: "conflict",
-            message: "organization has no running enterprise trial to extend",
-          }),
-          { status: 409, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
-    );
-
-    const failure = await extendTrial({ id: ORG.id, days: 30 }).catch(
-      (e: unknown) => e,
-    );
-
-    expect(failure).toBeInstanceOf(GramAdminError);
-    expect(errorMessage(failure)).toBe(
-      "organization has no running enterprise trial to extend",
-    );
   });
 });
 

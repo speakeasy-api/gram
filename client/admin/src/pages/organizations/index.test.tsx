@@ -93,13 +93,20 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    bulkUpdateAccountType: mocks.bulkUpdateAccountType,
+    createOrganization: mocks.createOrganization,
+  };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
     rearmTrial: mocks.rearmTrial,
     startTrial: mocks.startTrial,
-    bulkUpdateAccountType: mocks.bulkUpdateAccountType,
-    createOrganization: mocks.createOrganization,
   };
 });
 

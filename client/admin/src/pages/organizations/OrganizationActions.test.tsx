@@ -55,8 +55,8 @@ const mocks = vi.hoisted(() => ({
 
 // The writes only. errorMessage stays real, because what the operator is told
 // about a failure is the subject of several of these tests.
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
   return {
     ...actual,
     disableOrganization: mocks.disableOrganization,
