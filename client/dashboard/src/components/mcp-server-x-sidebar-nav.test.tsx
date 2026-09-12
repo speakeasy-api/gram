@@ -1,10 +1,13 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   McpServerCardStatus,
   RemoteIdentitySummary,
+  SidebarUrlRow,
 } from "./mcp-server-x-sidebar-nav";
 
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
@@ -112,5 +115,41 @@ describe("RemoteIdentitySummary", () => {
     expect(screen.getByRole("link", { name: /None/ }).className).toContain(
       "border-warning-default",
     );
+  });
+});
+
+describe("SidebarUrlRow", () => {
+  it("clips to one line and reveals the whole URL on hover", async () => {
+    const url = "https://localhost:34183/mcp/speakeasy-a-very-long-server-slug";
+    const display = "localhost:34183/mcp/speakeasy-a-very-long-server-slug";
+    const { container } = render(
+      <MemoryRouter>
+        {/* The app mounts one of these at the root; CopyButton needs it. */}
+        <TooltipProvider>
+          <SidebarUrlRow label="URL" url={url} copyTooltip="Copy URL" />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    const line = container.querySelector(
+      '[data-slot="sidebar-url-line"]',
+    ) as HTMLElement;
+    expect(line.textContent).toBe(display);
+    expect(line.className).toContain("truncate");
+    expect(document.querySelector('[data-slot="sidebar-url-full"]')).toBeNull();
+
+    await userEvent.hover(line);
+
+    // Portalled, because the rail scrolls and would clip anything that tried
+    // to escape it from inside.
+    await waitFor(() => {
+      const full = document.querySelector(
+        '[data-slot="sidebar-url-full"]',
+      ) as HTMLElement | null;
+      expect(full).not.toBeNull();
+      expect(full?.textContent).toBe(display);
+      expect(full?.className).toContain("whitespace-nowrap");
+      expect(container.contains(full)).toBe(false);
+    });
   });
 });

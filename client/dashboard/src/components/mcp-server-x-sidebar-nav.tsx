@@ -188,6 +188,70 @@ export function RemoteIdentitySummary({
   );
 }
 
+/**
+ * A labelled URL in the rail. The value is long and the rail is narrow, so it
+ * sits on one clipped line and the whole thing appears on hover.
+ *
+ * The reveal is a hover card rather than an absolutely-positioned child:
+ * SidebarContent scrolls (overflow-auto), which clips any descendant that
+ * tries to escape the rail no matter what z-index it carries. Radix portals
+ * the content to the body, so it floats over the page as intended.
+ */
+export function SidebarUrlRow({
+  label,
+  url,
+  copyTooltip,
+}: {
+  label: string;
+  url: string;
+  copyTooltip: string;
+}): React.JSX.Element {
+  const display = url.replace(/^https?:\/\//, "");
+  return (
+    <div className="flex flex-col gap-1">
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+      <div className="flex items-start gap-1">
+        {/* No delay: this is a reveal of text already on screen, not a
+            disclosure of extra information. */}
+        <HoverCard openDelay={0}>
+          <HoverCardTrigger asChild>
+            <span className="min-w-0 flex-1">
+              <Text
+                variant="small"
+                muted
+                data-slot="sidebar-url-line"
+                className="block truncate font-mono text-xs"
+              >
+                {display}
+              </Text>
+            </span>
+          </HoverCardTrigger>
+          {/* Offsets pull the card back over the line it belongs to, so the
+              full URL appears where the clipped one was rather than below it:
+              back up by the line box plus the card's own padding, and left by
+              that padding, which lands text exactly on text. */}
+          <HoverCardContent
+            align="start"
+            side="bottom"
+            sideOffset={-24}
+            alignOffset={-8}
+            data-slot="sidebar-url-full"
+            className="w-auto max-w-none p-2 font-mono text-xs whitespace-nowrap duration-75"
+          >
+            {display}
+          </HoverCardContent>
+        </HoverCard>
+        <CopyButton
+          text={url}
+          size="xs"
+          tooltip={copyTooltip}
+          className="mt-[-2px] shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function McpServerCardStatus({
   server,
 }: {
@@ -472,47 +536,17 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         />
       ) : null}
 
-      {mcpUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="xs"
-              tooltip="Copy URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
-      )}
+      {mcpUrl ? (
+        <SidebarUrlRow label="URL" url={mcpUrl} copyTooltip="Copy URL" />
+      ) : null}
 
-      {upstreamUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={upstreamUrl}
-              size="xs"
-              tooltip="Copy upstream URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
-      )}
+      {upstreamUrl ? (
+        <SidebarUrlRow
+          label="Upstream URL"
+          url={upstreamUrl}
+          copyTooltip="Copy upstream URL"
+        />
+      ) : null}
 
       {/* Content-sized halves with one gutter either side of the rule: at
           flex-1 the rule sat at the container's midpoint, which the longer
