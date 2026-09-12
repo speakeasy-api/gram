@@ -7,25 +7,31 @@ import { useEffect, useState, type ReactNode } from "react";
  * their own stacks side by side, so a dashboard tab needs to say which one it
  * is.
  *
- * Truncates to the sidebar's width and floats the full readout over the page on
- * hover, since worktree and branch names routinely outrun 16rem.
+ * The readout never contributes to layout — it is absolutely positioned inside
+ * the brand row and clamped to that row's box, so no amount of content can
+ * shift the page or spill over the nav beneath. Hovering lifts the clamp on
+ * both axes and floats the whole thing over the page, which is how it copes
+ * with worktree names, branch names and extra lines that don't fit.
  *
- * `children` are rendered as extra lines below, so a local dev slot
- * (src/dev-slot.local.tsx) can add its own without rebuilding the frame.
+ * `branchPrefix` renders just before the branch, so a local dev slot
+ * (src/dev-slot.local.tsx) can mark the branch up without rebuilding the frame.
  */
 export function DevWorktreeReadout({
-  children,
+  branchPrefix,
 }: {
-  children?: ReactNode;
+  branchPrefix?: ReactNode;
 }): JSX.Element {
   const branch = useGitBranch();
 
   return (
     <div className="group/worktree relative flex h-full min-w-0 flex-1 items-center group-data-[collapsible=icon]:hidden">
-      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute left-1 z-20 flex max-w-[calc(100%-0.25rem)] flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width] duration-150 group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
+      <div className="group-hover/worktree:border-border group-hover/worktree:bg-card absolute top-1/2 left-1 z-20 flex max-h-[calc(var(--header-height)-0.5rem)] max-w-[calc(100%-0.25rem)] -translate-y-1/2 flex-col gap-0.5 overflow-hidden border border-transparent px-1.5 py-1 font-mono text-[10px] leading-none transition-[max-width,max-height] duration-150 group-hover/worktree:max-h-[32rem] group-hover/worktree:max-w-[32rem] group-hover/worktree:shadow-md">
         <ReadoutLine Icon={FolderGit2Icon} value={__GRAM_DEV_WORKTREE__} />
-        <ReadoutLine Icon={GitBranchIcon} value={branch} />
-        {children}
+        <ReadoutLine
+          Icon={GitBranchIcon}
+          value={branch}
+          prefix={branchPrefix}
+        />
       </div>
     </div>
   );
@@ -35,17 +41,17 @@ export function DevWorktreeReadout({
 export function ReadoutLine({
   Icon,
   value,
-  note,
+  prefix,
 }: {
   Icon: LucideIcon;
   value: string;
-  note?: string | undefined;
+  prefix?: ReactNode;
 }): JSX.Element {
   return (
     <span className="text-muted-foreground flex items-center gap-1">
       <Icon className="size-2.5 shrink-0" aria-hidden />
+      {prefix ? <span className="shrink-0">{prefix}</span> : null}
       <span className="truncate">{value || "unknown"}</span>
-      {note ? <span className="shrink-0 opacity-60">· {note}</span> : null}
     </span>
   );
 }

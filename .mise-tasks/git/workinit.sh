@@ -41,6 +41,10 @@ for item in "${copy_from_main[@]}"; do
   fi
 done
 
+# Per-developer local config (gitignored) lives in its own task so that
+# git:worksync can top up an existing worktree with the same list.
+mise run git:worklocal --force ${usage_source:+--source "$usage_source"}
+
 mise trust
 if ! mise run install:aube --offline; then
   echo "Offline install failed, falling back to online install..."

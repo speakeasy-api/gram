@@ -108,6 +108,10 @@ if grep -qE "^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*['\"]client_[^'\"]*['\"
   echo "✅ Removed the stale WorkOS GRAM_IDP_CLIENT_ID override; using gram-local-dev."
 fi
 
+# Fill in per-developer local config added to the main worktree since this one
+# was created. Existing copies here are left alone — see git:worklocal.
+mise run git:worklocal
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)
