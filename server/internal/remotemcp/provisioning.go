@@ -20,6 +20,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -68,7 +69,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	if s == nil || s.db == nil || s.policy == nil || s.audit == nil || authCtx == nil || authCtx.ProjectID == nil || input.URL == "" || !dashboardRemoteMCPTransportSupported(input.TransportType) {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, nil, "invalid dashboard remote MCP provisioning input")
 	}
-	if _, err := s.policy.ValidateHTTPURL(ctx, input.URL); err != nil {
+	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, input.URL); err != nil {
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeBadRequest, err, "invalid url")
 	}
 

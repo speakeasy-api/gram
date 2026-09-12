@@ -12,6 +12,7 @@ import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
 import { remoteMcpGetServerHeader } from "../funcs/remoteMcpGetServerHeader.js";
 import { remoteMcpListServerHeaders } from "../funcs/remoteMcpListServerHeaders.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
+import { remoteMcpProbeURL } from "../funcs/remoteMcpProbeURL.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
 import { remoteMcpUpdateServerHeader } from "../funcs/remoteMcpUpdateServerHeader.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
@@ -19,6 +20,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateServerAndMcpServerResult } from "../models/components/createserverandmcpserverresult.js";
 import { ListServerHeadersResult } from "../models/components/listserverheadersresult.js";
 import { ListServersResult } from "../models/components/listserversresult.js";
+import { ProbeURLResult } from "../models/components/probeurlresult.js";
 import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
 import { RemoteMcpServer } from "../models/components/remotemcpserver.js";
 import { RemoteMcpServerHeader } from "../models/components/remotemcpserverheader.js";
@@ -63,6 +65,10 @@ import {
   ListRemoteMcpServersRequest,
   ListRemoteMcpServersSecurity,
 } from "../models/operations/listremotemcpservers.js";
+import {
+  ProbeRemoteMcpURLRequest,
+  ProbeRemoteMcpURLSecurity,
+} from "../models/operations/proberemotemcpurl.js";
 import {
   UpdateRemoteMcpServerRequest,
   UpdateRemoteMcpServerSecurity,
@@ -269,6 +275,25 @@ export class RemoteMcp extends ClientSDK {
   }
 
   /**
+   * probeURL remoteMcp
+   *
+   * @remarks
+   * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
+   */
+  async probeURL(
+    request: ProbeRemoteMcpURLRequest,
+    security?: ProbeRemoteMcpURLSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ProbeURLResult> {
+    return unwrapAsync(remoteMcpProbeURL(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * updateServer remoteMcp
    *
    * @remarks
@@ -310,7 +335,11 @@ export class RemoteMcp extends ClientSDK {
    * verifyURL remoteMcp
    *
    * @remarks
-   * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting the outcome. Used to give users a reachability signal before they save a new or updated remote MCP server. Treats reachable-but-401/403 responses as verified — auth verification is intentionally out of scope.
+   * Probe a candidate remote MCP server URL and return the legacy boolean verification result.
+   *
+   * Deprecated: use probeURL instead.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */
   async verifyURL(
     request: VerifyRemoteMcpURLRequest,

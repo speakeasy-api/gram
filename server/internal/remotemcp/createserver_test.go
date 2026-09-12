@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -252,7 +253,7 @@ func TestCreateServer_InvalidURL_BlockedIPv4LiteralLoopback(t *testing.T) {
 
 func TestCreateServer_InvalidURL_BlockedIPv4LiteralPrivate(t *testing.T) {
 	t.Parallel()
-	err := requireCreateServerInvalidURL(t, "http://10.0.0.1")
+	err := requireCreateServerInvalidURL(t, "https://10.0.0.1")
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
@@ -264,13 +265,13 @@ func TestCreateServer_InvalidURL_BlockedIPv6LiteralLoopback(t *testing.T) {
 
 func TestCreateServer_InvalidURL_HostnameResolvesToBlockedIP(t *testing.T) {
 	t.Parallel()
-	err := requireCreateServerInvalidURL(t, "http://"+blockedTestHost)
+	err := requireCreateServerInvalidURL(t, "https://"+blockedTestHost)
 	require.ErrorIs(t, err, guardian.ErrBlockedIP)
 }
 
 func TestCreateServer_InvalidURL_HostnameFailsToResolve(t *testing.T) {
 	t.Parallel()
-	err := requireCreateServerInvalidURL(t, "http://"+unresolvableTestHost)
+	err := requireCreateServerInvalidURL(t, "https://"+unresolvableTestHost)
 	require.ErrorIs(t, err, guardian.ErrBadHost)
 }
 
@@ -284,20 +285,47 @@ func TestCreateServer_InvalidURL_MissingHost(t *testing.T) {
 	_ = requireCreateServerInvalidURL(t, "https://")
 }
 
-func TestCreateServer_AllowsPublicIPLiteral(t *testing.T) {
+func TestCreateServer_RejectsHostedHTTP(t *testing.T) {
+	t.Parallel()
+	err := requireCreateServerInvalidURL(t, "http://8.8.8.8")
+	require.ErrorIs(t, err, remotemcpproxy.ErrInsecureRemoteMCPTransport)
+}
+
+func TestCreateServer_RejectsUserinfo(t *testing.T) {
+	t.Parallel()
+	err := requireCreateServerInvalidURL(t, "https://user:secret@mcp.example.com")
+	require.ErrorIs(t, err, remotemcpproxy.ErrRemoteMCPURLUserinfo)
+}
+
+func TestCreateServer_AllowsLoopbackHTTPWithDevelopmentPolicy(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithPolicy(t, newPermissivePolicy(t))
 
 	result, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		URL:              "http://8.8.8.8",
+		URL:              "http://127.42.0.1:8080/mcp",
 		TransportType:    "streamable-http",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "http://8.8.8.8", result.URL)
+	require.Equal(t, "http://127.42.0.1:8080/mcp", result.URL)
+}
+
+func TestCreateServerAndMcpServer_RejectsHostedHTTP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		URL:              "http://8.8.8.8/mcp",
+		TransportType:    "streamable-http",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorIs(t, err, remotemcpproxy.ErrInsecureRemoteMCPTransport)
 }
 
 func TestCreateServer_RBACForbidden(t *testing.T) {

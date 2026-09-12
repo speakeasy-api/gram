@@ -1,10 +1,29 @@
-import { useVerifyRemoteMcpURLMutation } from "@gram/client/react-query/verifyRemoteMcpURL.js";
+import { useProbeRemoteMcpURLMutation } from "@gram/client/react-query/probeRemoteMcpURL.js";
 import { useEffect, useRef, useState } from "react";
 
 type VerifyResult = {
   verified: boolean;
   message: string;
 };
+
+function unreachableMessage(reason: string | undefined): string {
+  switch (reason) {
+    case "timeout":
+      return "Request timed out";
+    case "rate_limited":
+      return "Remote server rate limited the request";
+    case "server_error":
+      return "Remote server returned an error";
+    case "dns_error":
+      return "DNS lookup failed";
+    case "tls_error":
+      return "TLS connection failed";
+    case "guardian_rejected":
+      return "Network policy rejected the host";
+    default:
+      return "Could not connect to the remote server";
+  }
+}
 
 export type VerifyRemoteMcpUrlState = {
   trigger: () => Promise<void>;
@@ -18,7 +37,7 @@ export type VerifyRemoteMcpUrlState = {
 // Alert so callers can place the button inside a row of actions and the alert
 // next to the input it describes.
 export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
-  const verify = useVerifyRemoteMcpURLMutation();
+  const probe = useProbeRemoteMcpURLMutation();
   const [result, setResult] = useState<VerifyResult | null>(null);
   const resultUrlRef = useRef<string | null>(null);
   // The URL on screen right now. A verify started for one URL must not answer
@@ -41,25 +60,56 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
     const trimmed = url.trim();
     if (!trimmed) return;
     try {
-      const response = await verify.mutateAsync({
+      const response = await probe.mutateAsync({
         request: {
-          verifyURLForm: {
+          probeURLForm: {
             url: trimmed,
-            transportType: "streamable-http",
           },
         },
       });
       if (latestUrlRef.current.trim() !== trimmed) return;
-      setResult({ verified: response.verified, message: response.message });
+      switch (response.outcome) {
+        case "mcp_available":
+          setResult({ verified: true, message: "MCP server is available" });
+          break;
+        case "authentication_required":
+          setResult({
+            verified: true,
+            message: "MCP server is available and requires authentication",
+          });
+          break;
+        case "invalid_mcp_response": {
+          let status = "";
+          if (response.httpStatus !== undefined) {
+            status = ` (HTTP ${response.httpStatus})`;
+          }
+          setResult({
+            verified: false,
+            message: `MCP endpoint returned an invalid response${status}`,
+          });
+          break;
+        }
+        case "unreachable": {
+          let status = "";
+          if (response.httpStatus !== undefined) {
+            status = ` (HTTP ${response.httpStatus})`;
+          }
+          setResult({
+            verified: false,
+            message: `${unreachableMessage(response.reason)}${status}`,
+          });
+          break;
+        }
+      }
       resultUrlRef.current = trimmed;
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to verify URL";
+        error instanceof Error ? error.message : "Failed to probe URL";
       if (latestUrlRef.current.trim() !== trimmed) return;
       setResult({ verified: false, message });
       resultUrlRef.current = trimmed;
     }
   };
 
-  return { trigger, result, isPending: verify.isPending };
+  return { trigger, result, isPending: probe.isPending };
 }
