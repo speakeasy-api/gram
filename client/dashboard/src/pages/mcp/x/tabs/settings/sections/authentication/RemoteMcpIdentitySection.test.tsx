@@ -381,16 +381,19 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe("https://docs.github.com/apps");
   });
 
-  it("warns when the structured probe says No Identity cannot authenticate", () => {
+  it("marks the No Identity card when the probe says auth is required", () => {
     mocks.authenticationProbe.mockReturnValue("authentication-required");
 
     renderIdentity();
 
-    expect(
-      screen.getByText(
-        /upstream server reported that authentication is required/i,
-      ),
-    ).toBeDefined();
+    // The warning lives on the choice it is about, not in a banner below it,
+    // and the detail waits for a hover rather than taking a row.
+    const card = screen
+      .getByLabelText("This server requires authentication")
+      .closest("[data-slot=radio-card]");
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain("border-warning-default");
+    expect(screen.queryByText(/keep failing/i)).toBeNull();
     expect(mocks.authenticationProbe).toHaveBeenCalledWith(
       "remote-source-1",
       true,
@@ -652,9 +655,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
 
+    // One alert above the choice, not a second copy under it.
     expect(
       screen.getAllByText(/legacy pass-through Authorization header/i),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(
       (
         screen.getByRole("radio", {
@@ -662,9 +666,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    expect(
-      screen.getByText(/can still send a credential upstream/i),
-    ).toBeDefined();
   });
 
   it("renders query failures as indeterminate instead of No Identity", () => {

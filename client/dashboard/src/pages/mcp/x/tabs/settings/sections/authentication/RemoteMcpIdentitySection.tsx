@@ -2,9 +2,15 @@ import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
+import { cn } from "@/lib/utils";
 import { mcpServerTabHref } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
@@ -20,7 +26,12 @@ import {
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUpdateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/updateRemoteMcpServerHeader.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, ChevronDown, Loader2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -226,6 +237,12 @@ export function RemoteMcpIdentitySectionBody({
   };
 
   const identityError = headersQuery.error ?? clientsQueryError;
+  // A server that answers with a challenge has no business on No Identity, so
+  // that card says so rather than a banner underneath the choice.
+  const noneWarning =
+    noneProbeStatus === "authentication-required"
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User or Agent Identity."
+      : null;
   const cards = identityModeCards(upstreamName);
 
   // One Save for the whole section. What it commits depends on the selected
@@ -314,20 +331,56 @@ export function RemoteMcpIdentitySectionBody({
                     onValueChange={handleModeChange}
                     className="grid-flow-row grid-cols-1 md:grid-flow-col md:grid-cols-none"
                   >
-                    {cards.map((card) => (
-                      <RadioCard
-                        key={card.value}
-                        value={card.value}
-                        disabled={
-                          (card.value === "user" && actualMode === "agent") ||
-                          (card.value === "agent" && !!passThroughAuthorization)
-                        }
-                        leading={card.icon}
-                        title={card.title}
-                      >
-                        {card.description}
-                      </RadioCard>
-                    ))}
+                    {cards.map((card) => {
+                      const warned = card.value === "none" && !!noneWarning;
+                      return (
+                        <RadioCard
+                          key={card.value}
+                          value={card.value}
+                          disabled={
+                            (card.value === "user" && actualMode === "agent") ||
+                            (card.value === "agent" &&
+                              !!passThroughAuthorization)
+                          }
+                          leading={card.icon}
+                          // Both states, so selecting the card does not swap
+                          // the warning border back to the selected one.
+                          className={cn(
+                            warned &&
+                              "border-warning-default has-data-[state=checked]:border-warning-default",
+                          )}
+                          title={
+                            warned ? (
+                              <span className="flex items-center gap-2">
+                                {card.title}
+                                <HoverCard openDelay={150}>
+                                  <HoverCardTrigger asChild>
+                                    <span className="text-default-warning inline-flex cursor-help">
+                                      <TriangleAlert
+                                        aria-label="This server requires authentication"
+                                        className="size-3.5"
+                                      />
+                                    </span>
+                                  </HoverCardTrigger>
+                                  <HoverCardContent
+                                    align="start"
+                                    className="w-72"
+                                  >
+                                    <Text small className="block">
+                                      {noneWarning}
+                                    </Text>
+                                  </HoverCardContent>
+                                </HoverCard>
+                              </span>
+                            ) : (
+                              card.title
+                            )
+                          }
+                        >
+                          {card.description}
+                        </RadioCard>
+                      );
+                    })}
                   </RadioCardGroup>
                 )}
               </RequireScope>
@@ -382,18 +435,6 @@ export function RemoteMcpIdentitySectionBody({
                 upstreamName={upstreamName}
               />
             </AuthRow>
-          ) : null}
-
-          {identityResolved &&
-          selectedMode === "none" &&
-          (passThroughAuthorization ||
-            noneProbeStatus === "authentication-required") ? (
-            <div className="px-6 py-5">
-              <NoIdentityWarning
-                passThroughAuthorization={!!passThroughAuthorization}
-                probeStatus={noneProbeStatus}
-              />
-            </div>
           ) : null}
 
           <Collapsible>
@@ -486,31 +527,4 @@ export function RemoteMcpIdentitySectionBody({
       </Dialog>
     </>
   );
-}
-
-function NoIdentityWarning({
-  passThroughAuthorization,
-  probeStatus,
-}: {
-  passThroughAuthorization: boolean;
-  probeStatus: ReturnType<typeof useRemoteMcpAuthenticationProbe>;
-}): JSX.Element | null {
-  if (passThroughAuthorization) {
-    return (
-      <Alert variant="info" dismissible={false}>
-        No static identity is configured, but the legacy pass-through
-        Authorization header can still send a credential upstream.
-      </Alert>
-    );
-  }
-  if (probeStatus === "authentication-required") {
-    return (
-      <Alert variant="warning" dismissible={false}>
-        The upstream server reported that authentication is required. No
-        Identity sends no Authorization credential, so requests may fail until
-        User or Agent Identity is configured.
-      </Alert>
-    );
-  }
-  return null;
 }
