@@ -194,7 +194,19 @@ filtered AS (
             OR lower(om.id) = lower(search.term)
             OR lower(om.workos_id) = lower(search.term)
         )
-        AND (sqlc.narg('after_id')::text IS NULL OR om.id > sqlc.narg('after_id')::text)
+        -- Keep ID-shaped cursors compatible, but seek in the default creation
+        -- order, not ID order. Resolve the anchor outside the filters so changes
+        -- to its account/disabled state do not break an existing cursor. A
+        -- deleted or unknown anchor exhausts the walk rather than restarting it.
+        AND (
+            sqlc.narg('after_id')::text IS NULL
+            OR EXISTS (
+                SELECT 1 FROM organization_metadata anchor
+                WHERE anchor.id = sqlc.narg('after_id')::text
+                  AND (om.created_at < anchor.created_at
+                       OR (om.created_at = anchor.created_at AND om.id > anchor.id))
+            )
+        )
 )
 SELECT * FROM filtered
 -- trial_state is computed in the CTE's select list, so it cannot be named in the

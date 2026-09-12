@@ -1,7 +1,7 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
 import {
-  capturePreservedStorage,
+  capturePreservedStorageIfSafe,
   clearStorageForLogout,
   type PreservedStorage,
 } from "@/lib/logout-storage";
@@ -44,7 +44,10 @@ export const SdkProvider = ({
     // hook below runs, so anything meant to outlive the session has to be read
     // off localStorage before the request is sent. Keyed by request so
     // overlapping logouts — a double-clicked menu item — each restore their own
-    // snapshot rather than racing over one slot.
+    // snapshot rather than racing over one slot. capturePreservedStorageIfSafe
+    // returns the last safe snapshot while impersonating (it does not write
+    // a new backup). The backup is written by a prior safe capture so
+    // impersonation exit can time out and still restore after Clear-Site-Data.
     const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
 
     const httpClient = new HTTPClient({
@@ -70,7 +73,7 @@ export const SdkProvider = ({
 
     httpClient.addHook("beforeRequest", (request) => {
       if (new URL(request.url).pathname === LOGOUT_PATH) {
-        preservedAcrossLogout.set(request, capturePreservedStorage());
+        preservedAcrossLogout.set(request, capturePreservedStorageIfSafe());
       }
     });
 

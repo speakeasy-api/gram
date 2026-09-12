@@ -1,5 +1,22 @@
 # dashboard
 
+## 0.118.0
+
+### Minor Changes
+
+- 4147092: Setup's Enable logging step now says that an admin sees only their own agent sessions by default, and offers to create a Session Auditor role carrying chat:read and add the admin to it, so the Confirm traffic step can see the conversation an Anthropic inference hook delivers. Once traffic is confirmed, the step offers to take the role back off them again. Directory-synced organizations create the role and map it from a directory group instead.
+- 67f9908: Move platform issuer management out of the dashboard to standalone admin, while preserving tenant issuer management and read-only access to inherited platform providers.
+- cfe318b: Bring back the linear setup wizard at /setup/wizard, walking the board's cards in order, with a header button that swaps between the board and the wizard.
+
+### Patch Changes
+
+- e28870b: Expose standalone admin global issuer management and regenerate SDK metadata while preserving legacy internal SDK operation naming.
+- e65573a: Stop policing the shape of an AI scan target config dir. Any path the device agent can resolve is accepted, including one written with a trailing slash such as `~/Library/Application Support/com.openai.chat/`.
+- 6d2ded6: Show project names instead of project IDs when choosing MCP servers for a killswitch.
+- 3606376: The risk policy create and update endpoints no longer accept the policy-level `message_types`, `scope_include`, and `scope_exempt` fields. New policies leave those legacy columns empty and updates carry stored values forward unchanged; scope through `detection_scopes` instead. The fields remain readable on a policy until the legacy scope migration folds them. The dashboard's secrets guide now scopes its default policy through a detection scope.
+- 9ca6e44: The setup board gains a Set up LiteLLM card, hidden by default until a platform admin reveals it. Its page creates a LiteLLM instance in place, shows that instance's proxy environment, guardrail fragment, and verification requests exactly as the AI Integrations page does, and confirms traffic from the instance's connection diagnostics. LiteLLM guardrail events no longer count toward the other-platforms card.
+- b2454d5: Setup wizard rail rows are no longer focusable or announced as buttons while a card's completion is settling.
+
 ## 0.117.0
 
 ### Minor Changes

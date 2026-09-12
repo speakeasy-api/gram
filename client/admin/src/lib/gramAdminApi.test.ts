@@ -90,6 +90,28 @@ describe("listOrganizations", () => {
     );
   });
 
+  it("sends Created direction and page to the admin API", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ organizations: [], total: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const result = await listOrganizations({
+      sort: "created_at",
+      direction: "asc",
+      page: 2,
+      limit: 50,
+    });
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/organizations.list?sort=created_at&direction=asc&page=2&limit=50",
+    );
+    expect(result.total).toBe(0);
+  });
+
   it("asks for the unfiltered list with no query string at all", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ organizations: [] }), {

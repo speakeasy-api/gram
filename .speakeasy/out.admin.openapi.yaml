@@ -2349,7 +2349,7 @@ paths:
       x-speakeasy-name-override: bulkUpdateAccountType
   /admin/organizations.list:
     get:
-      description: Lists organizations for admin operations with optional search and filters.
+      description: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
       operationId: adminListOrganizations
       parameters:
         - allowEmptyValue: true
@@ -2401,11 +2401,11 @@ paths:
             description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
             type: boolean
         - allowEmptyValue: true
-          description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
+          description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
           in: query
           name: cursor
           schema:
-            description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
+            description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
             type: string
         - allowEmptyValue: true
           description: Page size (default 50, max 100).
@@ -2416,18 +2416,18 @@ paths:
             format: int64
             type: integer
         - allowEmptyValue: true
-          description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+          description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
           in: query
           name: sort
           schema:
-            description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+            description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
             type: string
         - allowEmptyValue: true
-          description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+          description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
           in: query
           name: direction
           schema:
-            description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+            description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
             type: string
         - allowEmptyValue: true
           description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
