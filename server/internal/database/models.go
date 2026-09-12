@@ -93,6 +93,26 @@ type AiIntegrationSync struct {
 	ID                    uuid.UUID
 }
 
+type AiScanTarget struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
+	Enabled         bool
+	Status          string
+	Rationale       pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ApiKey struct {
 	ID                     uuid.UUID
 	OrganizationID         string
