@@ -1,7 +1,11 @@
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  mcpServerRouteParam,
+  validateMcpServerUrl,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -55,6 +59,11 @@ function CreateRemoteMcpForm() {
   const [touched, setTouched] = useState(false);
 
   const verify = useVerifyRemoteMcpUrl(url);
+
+  // The identity copy names the service in sentence-initial position, so an
+  // unnamed server falls back to its host rather than to a bare "this server".
+  const upstreamName =
+    name.trim() || deriveRemoteSessionIssuerNameFromUrl(url) || "This server";
 
   const isPending = createRemote.isPending || createUnproxied.isPending;
   // Read from the mutation the current mode would run, so switching Connection
@@ -254,7 +263,7 @@ function CreateRemoteMcpForm() {
                 setIdentityMode(next);
               }}
               credential={agentCredential}
-              upstreamName={name.trim() || "this server"}
+              upstreamName={upstreamName}
               advertisesOAuth={
                 verify.result?.outcome === "authentication_required"
               }

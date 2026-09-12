@@ -59,8 +59,8 @@ import { Link, useLocation, useParams } from "react-router";
 // AIM-230 settled on: blue for per-user, green for the shared agent, grey for
 // none, amber when none is configured but the upstream demands a credential.
 const IDENTITY_DOT: Record<RemoteMcpIdentityMode, string> = {
-  user: "bg-blue-400",
-  agent: "bg-green-400",
+  user: "bg-information-default",
+  agent: "bg-success-default",
   none: "bg-muted-foreground/50",
 };
 
@@ -121,21 +121,21 @@ export function RemoteIdentitySummary({
           aria-label={`Identity: ${label}. What do these mean?`}
           className={cn(
             "bg-card hover:border-input flex w-fit cursor-help items-center gap-2 border px-2.5 py-1.5 text-sm font-medium",
-            warn && "border-warning-500",
+            warn && "border-warning-default",
           )}
         >
           <span
             aria-hidden="true"
             className={cn(
               "size-2 shrink-0 rounded-full",
-              warn ? "bg-warning-500" : IDENTITY_DOT[mode],
+              warn ? "bg-warning-default" : IDENTITY_DOT[mode],
             )}
           />
           {label}
           <Info aria-hidden="true" className="text-muted-foreground size-3" />
         </button>
         {authenticationRequired ? (
-          <Text small className="text-warning-600">
+          <Text small className="text-default-warning">
             Upstream requires authentication.
           </Text>
         ) : null}

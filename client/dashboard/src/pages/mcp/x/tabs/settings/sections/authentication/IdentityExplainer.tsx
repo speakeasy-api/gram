@@ -77,9 +77,7 @@ export function IdentityExplainerContent(): JSX.Element {
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       <div>
-        <Text variant="small" mono className="text-eyebrow block uppercase">
-          User Identity
-        </Text>
+        <div className="text-eyebrow">User Identity</div>
         <div className="mt-3">
           <Flow
             nodes={[
@@ -111,9 +109,7 @@ export function IdentityExplainerContent(): JSX.Element {
         />
       </div>
       <div>
-        <Text variant="small" mono className="text-eyebrow block uppercase">
-          Agent Identity
-        </Text>
+        <div className="text-eyebrow">Agent Identity</div>
         <div className="mt-3">
           <Flow
             nodes={[
