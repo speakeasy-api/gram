@@ -3576,6 +3576,10 @@ func EncodeListAIDetectionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
 		values := req.URL.Query()
 		if p.Category != nil {
 			values.Add("category", *p.Category)
@@ -4021,6 +4025,240 @@ func DecodeListEmployeeAIDetectionsResponse(decoder func(*http.Response) goahttp
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("access", "listEmployeeAIDetections", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetAIToolDecisionRequest instantiates a HTTP request object with method
+// and path set to call the "access" service "setAIToolDecision" endpoint
+func (c *Client) BuildSetAIToolDecisionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetAIToolDecisionAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "setAIToolDecision", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetAIToolDecisionRequest returns an encoder for requests sent to the
+// access setAIToolDecision server.
+func EncodeSetAIToolDecisionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.SetAIToolDecisionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "setAIToolDecision", "*access.SetAIToolDecisionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetAIToolDecisionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "setAIToolDecision", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetAIToolDecisionResponse returns a decoder for responses returned by
+// the access setAIToolDecision endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetAIToolDecisionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetAIToolDecisionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetAIToolDecisionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			res := NewSetAIToolDecisionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetAIToolDecisionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetAIToolDecisionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetAIToolDecisionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetAIToolDecisionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetAIToolDecisionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetAIToolDecisionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetAIToolDecisionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetAIToolDecisionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+				}
+				err = ValidateSetAIToolDecisionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+				}
+				return nil, NewSetAIToolDecisionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetAIToolDecisionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+				}
+				err = ValidateSetAIToolDecisionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+				}
+				return nil, NewSetAIToolDecisionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "setAIToolDecision", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetAIToolDecisionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setAIToolDecision", err)
+			}
+			err = ValidateSetAIToolDecisionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setAIToolDecision", err)
+			}
+			return nil, NewSetAIToolDecisionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "setAIToolDecision", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -6192,13 +6430,15 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		LastSeen:           *v.LastSeen,
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   *v.ObservedUseCount,
-		UserCount:          *v.UserCount,
+		UserCount:          v.UserCount,
 		Access:             *v.Access,
 		RequestCount:       *v.RequestCount,
 	}
-	res.TopUsers = make([]string, len(v.TopUsers))
-	for i, val := range v.TopUsers {
-		res.TopUsers[i] = val
+	if v.TopUsers != nil {
+		res.TopUsers = make([]string, len(v.TopUsers))
+		for i, val := range v.TopUsers {
+			res.TopUsers[i] = val
+		}
 	}
 	if v.AccessSummary != nil {
 		res.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(v.AccessSummary)
@@ -6323,8 +6563,8 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 		TargetID:    *v.TargetID,
 		DisplayName: *v.DisplayName,
 		Category:    *v.Category,
-		UserCount:   *v.UserCount,
-		DeviceCount: *v.DeviceCount,
+		UserCount:   v.UserCount,
+		DeviceCount: v.DeviceCount,
 		FirstSeen:   *v.FirstSeen,
 		LastSeen:    *v.LastSeen,
 	}
@@ -6335,6 +6575,23 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 	res.Versions = make([]string, len(v.Versions))
 	for i, val := range v.Versions {
 		res.Versions[i] = val
+	}
+	res.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v.Access)
+
+	return res
+}
+
+// unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary builds a
+// value of type *access.AIToolAccessSummary from a value of type
+// *AIToolAccessSummaryResponseBody.
+func unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *access.AIToolAccessSummary {
+	res := &access.AIToolAccessSummary{
+		State:       *v.State,
+		Decision:    *v.Decision,
+		Enforceable: *v.Enforceable,
+		Rationale:   v.Rationale,
+		DecidedBy:   v.DecidedBy,
+		DecidedAt:   v.DecidedAt,
 	}
 
 	return res

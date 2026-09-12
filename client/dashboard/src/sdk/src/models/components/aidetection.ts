@@ -8,16 +8,21 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AIToolAccessSummary,
+  AIToolAccessSummary$inboundSchema,
+} from "./aitoolaccesssummary.js";
 
 /**
- * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
+ * Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.
  */
 export const Category = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**
- * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
+ * Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.
  */
 export type Category = ClosedEnum<typeof Category>;
 
@@ -32,13 +37,17 @@ export type Signals = ClosedEnum<typeof Signals>;
  */
 export type AIDetection = {
   /**
-   * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
+   * The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+   */
+  access: AIToolAccessSummary;
+  /**
+   * Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.
    */
   category: Category;
   /**
-   * Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.
+   * Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted. Attribution: omitted for callers who hold project:read but not org:admin.
    */
-  deviceCount: number;
+  deviceCount?: number | undefined;
   /**
    * Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.
    */
@@ -60,9 +69,9 @@ export type AIDetection = {
    */
   targetId: string;
   /**
-   * Distinct enrolled users this tool was detected for.
+   * Distinct enrolled users this tool was detected for. Attribution: omitted for callers who hold project:read but not org:admin.
    */
-  userCount: number;
+  userCount?: number | undefined;
   /**
    * Unique non-empty detected versions for this target.
    */
@@ -83,8 +92,9 @@ export const Signals$inboundSchema: z.ZodMiniEnum<typeof Signals> = z.enum(
 export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
   .pipe(
     z.object({
+      access: AIToolAccessSummary$inboundSchema,
       category: Category$inboundSchema,
-      device_count: z.int(),
+      device_count: z.optional(z.int()),
       display_name: z.string(),
       first_seen: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -96,7 +106,7 @@ export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
       ),
       signals: z.array(Signals$inboundSchema),
       target_id: z.string(),
-      user_count: z.int(),
+      user_count: z.optional(z.int()),
       versions: z.array(z.string()),
     }),
     z.transform((v) => {

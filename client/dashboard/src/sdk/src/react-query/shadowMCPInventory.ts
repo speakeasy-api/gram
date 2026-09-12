@@ -59,7 +59,7 @@ export type ShadowMCPInventoryQueryError =
  * listShadowMCPInventory access
  *
  * @remarks
- * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+ * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.
  */
 export function useShadowMCPInventory(
   request: ListShadowMCPInventoryRequest,
@@ -85,7 +85,7 @@ export function useShadowMCPInventory(
  * listShadowMCPInventory access
  *
  * @remarks
- * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+ * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.
  */
 export function useShadowMCPInventorySuspense(
   request: ListShadowMCPInventoryRequest,

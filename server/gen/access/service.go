@@ -35,10 +35,14 @@ type Service interface {
 	// Update a team member's role assignments.
 	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
-	// telemetry usage, and policy-bypass state.
+	// telemetry usage, and policy-bypass state. Requires project:read on the named
+	// project; the response is projected to what that scope may see, omitting the
+	// user count and top users. A caller with org:admin receives those as well.
+	// Every mutation on the inventory stays at org:admin.
 	ListShadowMCPInventory(context.Context, *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Get one project-scoped Shadow MCP server inventory URL with usage and
-	// policy-bypass state.
+	// policy-bypass state. Requires project:read on the named project, under the
+	// same attribution split as listShadowMCPInventory.
 	GetShadowMCPInventoryServer(context.Context, *GetShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryServer, err error)
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
@@ -54,18 +58,33 @@ type Service interface {
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
 	// List AI tools detected on enrolled devices by device-agent AI scans,
-	// aggregated per detection target across the organization. Org-scoped —
-	// detections attach to devices and enrolled users, not projects. Requires an
-	// authenticated session authorized for org:admin on the active organization.
-	// Display names and categories are decorated from the server's detection
-	// target catalog at read time; targets the catalog does not know are listed
-	// under their raw reported id.
+	// aggregated per detection target across the organization. The reads are
+	// org-scoped — detections attach to devices and enrolled users, not projects —
+	// but the surface is reached per project, the same shape the Identities pages
+	// use: a project is how an organization segments the people it manages, and
+	// the answer is the same whichever project you arrive from. Requires
+	// project:read on the active project, and the response is projected to what
+	// that scope may see: tool-level rows only, with no user or device counts and
+	// no way to reach a person. A caller with org:admin additionally receives
+	// attribution — the counts, the team filter, and who recorded each access
+	// decision. Display names and categories are decorated from the server's
+	// detection target catalog at read time; targets the catalog does not know are
+	// listed under their raw reported id.
 	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// List AI tools detected for one enrolled employee in the active organization.
 	// The employee email is required so project viewers cannot broaden the request
 	// into an organization-wide inventory. Linked alias emails are folded to the
 	// canonical identity. Requires project:read on the active project.
 	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// Record whether a detected AI tool may reach this organization's MCP gateway.
+	// The decision is organization-level and applies to every server: a blocked
+	// tool is refused when it authenticates, so its users see an error their
+	// client cannot recover from. Enforcement needs a credential Gram can verify,
+	// so a tool whose only gateway matcher is a self-reported client name records
+	// the decision and enforces nothing — the returned summary says which case
+	// applies. Requires an authenticated session authorized for org:admin on the
+	// active organization.
+	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
 	// List who can reach one resource: the principals granted or blocked on it,
 	// and the organization-wide rules they inherit.
 	ListResourceAudience(context.Context, *ListResourceAudiencePayload) (res *ResourceAudienceResult, err error)
@@ -116,7 +135,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [25]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [26]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -127,15 +146,18 @@ type AIDetection struct {
 	// catalog does not know — agent binaries can ship newer target lists — fall
 	// back to the raw id.
 	DisplayName string
-	// Detection target category: harness (an AI coding tool) or local_model (a
-	// local model runtime). From the catalog for ids it knows, otherwise as
-	// recorded at detection time.
+	// Detection target category: harness (an AI coding tool), assistant (a
+	// general-purpose AI assistant or agent), or local_model (an open model run
+	// locally). From the catalog for ids it knows, otherwise as recorded at
+	// detection time.
 	Category string
-	// Distinct enrolled users this tool was detected for.
-	UserCount int64
+	// Distinct enrolled users this tool was detected for. Attribution: omitted for
+	// callers who hold project:read but not org:admin.
+	UserCount *int64
 	// Distinct devices, by hardware serial, this tool was detected on. Devices
-	// that report no serial are not counted.
-	DeviceCount int64
+	// that report no serial are not counted. Attribution: omitted for callers who
+	// hold project:read but not org:admin.
+	DeviceCount *int64
 	// Detection signals observed for this target across all reports: installed
 	// and/or running.
 	Signals []string
@@ -145,6 +167,32 @@ type AIDetection struct {
 	FirstSeen string
 	// When this tool was most recently detected.
 	LastSeen string
+	Access   *AIToolAccessSummary
+}
+
+// The enforcement verdict for one detected AI tool, computed server-side so a
+// client renders wording without re-deriving it. state shares its vocabulary
+// with the shadow MCP inventory's access summary, so one column describes both
+// halves of the Shadow AI section.
+type AIToolAccessSummary struct {
+	// The decision as a table renders it: allowed and blocked are the recorded
+	// organization decision, unreviewed means nobody has decided and nothing is
+	// enforced.
+	State string
+	// The recorded organization decision behind state. Absent rows read as
+	// unreviewed, so every tool has one.
+	Decision string
+	// Whether a block on this tool would actually reach the gateway. False when
+	// the tool is linked only by a self-reported client name, or by nothing at
+	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
+	// admin is never told a tool is blocked when it is not.
+	Enforceable bool
+	// Why the decision was made, when an admin gave a reason.
+	Rationale *string
+	// URN of the admin who last recorded the decision.
+	DecidedBy *string
+	// When the decision was last recorded.
+	DecidedAt *string
 }
 
 // AccessMember is the result type of the access service updateMemberRoles
@@ -376,9 +424,11 @@ type ListAIDetectionsPayload struct {
 	// Filter to detection targets of one category.
 	Category *string
 	// Filter to detections attributed to active members of this SCIM directory
-	// group. A group with no active members yields an empty list.
+	// group. A group with no active members yields an empty list. Requires
+	// org:admin: narrowing an inventory to one team is itself attribution.
 	DirectoryGroupID *string
 	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListAIDetectionsResult is the result type of the access service
@@ -789,6 +839,26 @@ type Selector struct {
 	ServerURL *string
 }
 
+// SetAIToolDecisionPayload is the payload type of the access service
+// setAIToolDecision method.
+type SetAIToolDecisionPayload struct {
+	// Id of the detection target to decide on, as agents report it.
+	TargetID string
+	// The decision to record. unreviewed clears an earlier one.
+	Decision string
+	// Why the decision was made. Shown beside it and carried into the audit trail.
+	Rationale    *string
+	SessionToken *string
+}
+
+// SetAIToolDecisionResult is the result type of the access service
+// setAIToolDecision method.
+type SetAIToolDecisionResult struct {
+	// The detection target the decision was recorded for.
+	TargetID string
+	Access   *AIToolAccessSummary
+}
+
 type SetResourceAudienceEntry struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string
@@ -904,8 +974,12 @@ type ShadowMCPInventoryServer struct {
 	LastSeen         string
 	LastCalled       *string
 	ObservedUseCount int
-	UserCount        int
-	TopUsers         []string
+	// Distinct users who reached this server. Attribution: omitted for callers who
+	// hold project:read but not org:admin.
+	UserCount *int
+	// The users who reached this server most. Attribution: omitted for callers who
+	// hold project:read but not org:admin.
+	TopUsers []string
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass

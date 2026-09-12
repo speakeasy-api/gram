@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type DeviceAgentAiScanTarget struct {
+type AiScanTarget struct {
 	OrganizationID  string
 	ID              string
 	DisplayName     string
@@ -18,9 +18,23 @@ type DeviceAgentAiScanTarget struct {
 	ConfigDirs      []string
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
 	Enabled         bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type AiToolDecision struct {
+	OrganizationID string
+	TargetID       string
+	Decision       string
+	Rationale      pgtype.Text
+	DecidedBy      pgtype.Text
+	DecidedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {

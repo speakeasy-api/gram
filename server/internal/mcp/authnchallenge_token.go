@@ -227,6 +227,23 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
 
+	// Shadow AI blocking DOES enforce here, unlike `presets` admission above,
+	// and for the opposite reason: it is a decision an administrator of this
+	// organization made about this tool, not implicit membership Gram can
+	// change under them. An admin who blocks a tool expects its outstanding
+	// refresh tokens to stop working rather than to keep it connected until
+	// they happen to expire.
+	//
+	// Access tokens already minted stay valid until they expire, same as the
+	// disabled case (AIS-406).
+	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
+		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "ai_tool_blocked")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+		}
+		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
+	}
+
 	switch grantType {
 	case "authorization_code":
 		return s.handleTokenAuthorizationCodeGrant(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, logger)

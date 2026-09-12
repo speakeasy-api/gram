@@ -33,6 +33,7 @@ type Endpoints struct {
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
 	ListAIDetections                     goa.Endpoint
 	ListEmployeeAIDetections             goa.Endpoint
+	SetAIToolDecision                    goa.Endpoint
 	ListResourceAudience                 goa.Endpoint
 	SetResourceAudience                  goa.Endpoint
 	ListAudienceOptions                  goa.Endpoint
@@ -65,6 +66,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
 		ListAIDetections:                     NewListAIDetectionsEndpoint(s, a.APIKeyAuth),
 		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsEndpoint(s, a.APIKeyAuth),
+		SetAIToolDecision:                    NewSetAIToolDecisionEndpoint(s, a.APIKeyAuth),
 		ListResourceAudience:                 NewListResourceAudienceEndpoint(s, a.APIKeyAuth),
 		SetResourceAudience:                  NewSetResourceAudienceEndpoint(s, a.APIKeyAuth),
 		ListAudienceOptions:                  NewListAudienceOptionsEndpoint(s, a.APIKeyAuth),
@@ -95,6 +97,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
 	e.ListAIDetections = m(e.ListAIDetections)
 	e.ListEmployeeAIDetections = m(e.ListEmployeeAIDetections)
+	e.SetAIToolDecision = m(e.SetAIToolDecision)
 	e.ListResourceAudience = m(e.ListResourceAudience)
 	e.SetResourceAudience = m(e.SetResourceAudience)
 	e.ListAudienceOptions = m(e.ListAudienceOptions)
@@ -576,6 +579,18 @@ func NewListAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -615,6 +630,29 @@ func NewListEmployeeAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListEmployeeAIDetections(ctx, p)
+	}
+}
+
+// NewSetAIToolDecisionEndpoint returns an endpoint function that calls the
+// method "setAIToolDecision" of service "access".
+func NewSetAIToolDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetAIToolDecisionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetAIToolDecision(ctx, p)
 	}
 }
 

@@ -70,8 +70,10 @@ func TestOverlayLeavesTheDefaultsUntouched(t *testing.T) {
 	require.NoError(t, aitargets.ValidateServed(aitargets.Served(entries)))
 }
 
-func TestListVersionAddsTheDefaultsRevision(t *testing.T) {
+// The served version names the compiled-in defaults revision and nothing
+// else. An organization's edits change the served targets, which the
+// snapshot ETag hashes; that is what makes an agent re-apply the list.
+func TestListVersionIsTheDefaultsRevision(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion(0), "an organization that never edited its list serves the defaults' own version")
-	require.Equal(t, aitargets.DefaultsVersion+3, aitargets.ListVersion(3))
+	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
 }

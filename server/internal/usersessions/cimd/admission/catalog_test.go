@@ -161,3 +161,43 @@ func catalogAdmits(clientID string) bool {
 	_, ok := CatalogMatch(clientID)
 	return ok
 }
+
+// TestCatalogPreset_NamesTheVendorBehindAClientID: policy is written about a
+// product, not about the id a client happened to present. A vendor minting
+// one document per MCP server has no literal id to write down, so the
+// pattern entry is the only stable handle on it.
+func TestCatalogPreset_NamesTheVendorBehindAClientID(t *testing.T) {
+	t.Parallel()
+
+	preset, ok := CatalogPreset(claudeCodeURL)
+	require.True(t, ok)
+	require.Equal(t, "anthropic", preset.VendorKey)
+	require.Equal(t, claudeCodeURL, preset.URL)
+
+	preset, ok = CatalogPreset(chatGPTConnectorURL)
+	require.True(t, ok)
+	require.Equal(t, "openai", preset.VendorKey)
+	require.True(t, preset.IsPattern(), "a per-connector id resolves to the wildcard that admits it")
+
+	_, ok = CatalogPreset(unknownURL)
+	require.False(t, ok)
+}
+
+// TestCatalogPreset_AgreesWithCatalogMatch pins the two lookups to one
+// answer. A client this catalog admits must always be nameable, or a policy
+// written about a vendor would silently miss traffic admission let through.
+func TestCatalogPreset_AgreesWithCatalogMatch(t *testing.T) {
+	t.Parallel()
+
+	for _, preset := range Catalog() {
+		if !preset.Enabled || preset.IsPattern() {
+			continue
+		}
+		_, admitted := CatalogMatch(preset.URL)
+		resolved, named := CatalogPreset(preset.URL)
+		require.Equal(t, admitted, named, "catalog entry %q", preset.URL)
+		if named {
+			require.NotEmpty(t, resolved.VendorKey, "catalog entry %q", preset.URL)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 export type ListAIDetectionsSecurity = {
+  projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -15,6 +16,7 @@ export type ListAIDetectionsSecurity = {
  */
 export const Category = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**
@@ -28,17 +30,22 @@ export type ListAIDetectionsRequest = {
    */
   category?: Category | undefined;
   /**
-   * Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.
+   * Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list. Requires org:admin: narrowing an inventory to one team is itself attribution.
    */
   directoryGroupId?: string | undefined;
   /**
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * project header
+   */
+  gramProject?: string | undefined;
 };
 
 /** @internal */
 export type ListAIDetectionsSecurity$Outbound = {
+  "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -48,10 +55,12 @@ export const ListAIDetectionsSecurity$outboundSchema: z.ZodMiniType<
   ListAIDetectionsSecurity
 > = z.pipe(
   z.object({
+    projectSlugHeaderGramProject: z.optional(z.string()),
     sessionHeaderGramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
       sessionHeaderGramSession: "session_header_Gram-Session",
     });
   }),
@@ -75,6 +84,7 @@ export type ListAIDetectionsRequest$Outbound = {
   category?: string | undefined;
   directory_group_id?: string | undefined;
   "Gram-Session"?: string | undefined;
+  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -86,11 +96,13 @@ export const ListAIDetectionsRequest$outboundSchema: z.ZodMiniType<
     category: z.optional(Category$outboundSchema),
     directoryGroupId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
+    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       directoryGroupId: "directory_group_id",
       gramSession: "Gram-Session",
+      gramProject: "Gram-Project",
     });
   }),
 );

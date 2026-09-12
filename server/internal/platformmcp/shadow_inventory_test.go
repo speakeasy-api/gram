@@ -50,7 +50,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 		FirstSeen:          "2026-09-06T10:00:00Z",
 		LastSeen:           "2026-09-06T11:00:00Z",
 		ObservedUseCount:   7,
-		UserCount:          1,
+		UserCount:          new(1),
 		AccessSummary: &accessgen.ShadowMCPAccessSummary{
 			State: "restricted", AllowedFor: "selected", BlockedFor: "some", BlockingDefault: "deny", Decision: &decision, DecisionCoverage: "partial",
 		},

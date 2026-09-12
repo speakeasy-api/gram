@@ -31,10 +31,10 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListDeviceAgentAiScanTargetsRequest,
-  ListDeviceAgentAiScanTargetsRequest$outboundSchema,
-  ListDeviceAgentAiScanTargetsSecurity,
-} from "../models/operations/listdeviceagentaiscantargets.js";
+  ListAiScanTargetsRequest,
+  ListAiScanTargetsRequest$outboundSchema,
+  ListAiScanTargetsSecurity,
+} from "../models/operations/listaiscantargets.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -42,12 +42,12 @@ import { Result } from "../types/fp.js";
  * listAiScanTargets agent
  *
  * @remarks
- * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.
+ * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins overlaid with the organization's own additions and its on/off choices, with the catalog version agents echo on scan receipts. Requires a session with the org:admin scope.
  */
 export function agentListAiScanTargets(
   client: GramCore,
-  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+  request?: ListAiScanTargetsRequest | undefined,
+  security?: ListAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function agentListAiScanTargets(
 
 async function $do(
   client: GramCore,
-  request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-  security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+  request?: ListAiScanTargetsRequest | undefined,
+  security?: ListAiScanTargetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -96,10 +96,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        z.optional(ListDeviceAgentAiScanTargetsRequest$outboundSchema),
-        value,
-      ),
+      z.parse(z.optional(ListAiScanTargetsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -131,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listDeviceAgentAiScanTargets",
+    operationID: "listAiScanTargets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

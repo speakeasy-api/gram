@@ -15,7 +15,7 @@ func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
 	defaults := aitargets.Defaults()
-	require.Len(t, defaults, 11)
+	require.Len(t, defaults, 36)
 	require.NoError(t, aitargets.Validate(defaults))
 	for _, target := range defaults {
 		require.True(t, target.Enabled, "default %q must be enabled", target.ID)
@@ -25,13 +25,32 @@ func TestDefaultsAreValid(t *testing.T) {
 func TestDefaultsReturnsACopy(t *testing.T) {
 	t.Parallel()
 
+	// Indexed by id rather than position: Defaults is derived from the
+	// aivendors registry now, so declaration order is the registry's business
+	// and a reordering there must not look like a copying bug here.
+	withBinaries := func(targets []aitargets.Target) *aitargets.Target {
+		for i := range targets {
+			if len(targets[i].Signatures.Binaries) > 0 {
+				return &targets[i]
+			}
+		}
+		return nil
+	}
+
 	first := aitargets.Defaults()
 	first[0].DisplayName = "mutated"
-	first[1].Signatures.Binaries[0] = "mutated"
+	mutable := withBinaries(first)
+	require.NotNil(t, mutable)
+	mutatedID := mutable.ID
+	mutable.Signatures.Binaries[0] = "mutated"
 
 	fresh := aitargets.Defaults()
 	require.NotEqual(t, "mutated", fresh[0].DisplayName)
-	require.NotEqual(t, "mutated", fresh[1].Signatures.Binaries[0])
+	for _, target := range fresh {
+		if target.ID == mutatedID {
+			require.NotEqual(t, "mutated", target.Signatures.Binaries[0])
+		}
+	}
 }
 
 func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
