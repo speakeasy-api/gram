@@ -20,6 +20,7 @@ function unreachableMessage(reason: string | undefined): string {
       return "TLS connection failed";
     case "guardian_rejected":
       return "Network policy rejected the host";
+    case undefined:
     default:
       return "Could not connect to the remote server";
   }

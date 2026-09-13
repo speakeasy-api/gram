@@ -63,4 +63,20 @@ describe("useVerifyRemoteMcpUrl", () => {
       message: "MCP endpoint returned an invalid response",
     });
   });
+
+  it("uses generic copy when an unreachable response omits its reason", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "unreachable" });
+    const hook = renderHook(() =>
+      useVerifyRemoteMcpUrl("https://mcp.example.com/mcp"),
+    );
+
+    await act(async () => {
+      await hook.result.current.trigger();
+    });
+
+    expect(hook.result.current.result).toEqual({
+      verified: false,
+      message: "Could not connect to the remote server",
+    });
+  });
 });
