@@ -34,7 +34,7 @@ import {
   OverridesFields,
 } from "./IssuerFormFields";
 import { parseScopes } from "./issuerFormUtils";
-import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
+import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
 import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
