@@ -143,7 +143,7 @@ func TestAssemble_RemoteReferenceCarriesExposure(t *testing.T) {
 		},
 		usage: []telemetryrepo.ShadowMCPInventoryUsageRow{{
 			CanonicalServerURL: "https://mcp.example.com/sse", ServerName: "example",
-			FirstCalled: &first, LastCalled: &last, CallCount: 42, UserCount: 7, TopUsers: nil,
+			FirstCalled: &first, LastCalled: &last, CallCount: 42, UserCount: 7, TopUsers: nil, Sources: nil,
 		}},
 		rowErr: nil, usageErr: nil,
 	}, quietProbes{}, quietProbes{}, quietProbes{})

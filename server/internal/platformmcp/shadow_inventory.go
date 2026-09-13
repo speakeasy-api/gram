@@ -20,9 +20,14 @@ import (
 const (
 	shadowTargetKindServerURL    = "server_url"
 	shadowTargetKindStdioCommand = "stdio_command"
-	shadowTargetReferenceKind    = "shadow_mcp_target"
-	shadowInventoryCursorKind    = "shadow_mcp_cursor"
-	shadowInventoryPageSize      = 50
+	// shadowTargetKindToolNamespace is an MCP server an LLM proxy saw only by
+	// the <server> segment of its namespaced tool names, inventoried under
+	// the synthetic identity mcp-tool://<server>. It has usage but no
+	// resolved server identity.
+	shadowTargetKindToolNamespace = "tool_namespace"
+	shadowTargetReferenceKind     = "shadow_mcp_target"
+	shadowInventoryCursorKind     = "shadow_mcp_cursor"
+	shadowInventoryPageSize       = 50
 )
 
 var (
@@ -339,6 +344,9 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 	if kind == shadowTargetKindStdioCommand {
 		display = "Requested local MCP command"
 	}
+	if kind == shadowTargetKindToolNamespace {
+		display = "Observed MCP tool namespace (server identity unresolved)"
+	}
 	result := ShadowMCPTargetSummary{
 		Display: display, TargetKind: kind, ObservationState: observationState,
 		FirstSeen: "", LastSeen: "", LastCalled: "", ObservedUseCount: max(row.ObservedUseCount, 0),
@@ -421,7 +429,7 @@ func validShadowEvidence(review mcpapproval.PlatformReviewSummary) bool {
 }
 
 func validShadowTargetKind(kind string) bool {
-	return kind == shadowTargetKindServerURL || kind == shadowTargetKindStdioCommand
+	return kind == shadowTargetKindServerURL || kind == shadowTargetKindStdioCommand || kind == shadowTargetKindToolNamespace
 }
 
 func validShadowAccessSummary(summary ShadowMCPAccessSummary) bool {

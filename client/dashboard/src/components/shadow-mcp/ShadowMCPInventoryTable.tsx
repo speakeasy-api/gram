@@ -21,6 +21,10 @@ import {
   ShadowMCPInventoryServerCell,
   ShadowMCPInventoryUsageCell,
 } from "./ShadowMCPInventoryCells";
+import {
+  isObserveOnlyShadowMCPTarget,
+  shadowMCPInventoryServerLabel,
+} from "./shadowMCPServerIdentity";
 import { ReviewRequestSheet } from "@/components/mcp-approvals/ReviewRequestSheet";
 import {
   matchesReviewFilter,
@@ -220,7 +224,8 @@ export function ShadowMCPInventoryTable({
     server.targetKind === "stdio_command";
 
   const openRow = (server: ShadowMCPInventoryServer) => {
-    // Local commands have no server page; their review lives in a sheet.
+    // Local commands have no server page; their review lives in a sheet. A
+    // tool namespace has usage and users, so it opens its page like a URL.
     if (isStdio(server)) {
       setReviewSheetServer(server);
       return;
@@ -234,9 +239,9 @@ export function ShadowMCPInventoryTable({
       return;
     }
     setDecideTarget({
+      targetKind: server.targetKind,
       canonicalServerUrl: server.canonicalServerUrl,
-      displayName:
-        server.serverName || server.urlHost || server.canonicalServerUrl,
+      displayName: shadowMCPInventoryServerLabel(server),
       approvalRequestId: server.approvalRequest?.id,
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
@@ -250,9 +255,7 @@ export function ShadowMCPInventoryTable({
       header: "Server",
       sortable: true,
       sortValue: (server) =>
-        (server.serverName || server.urlHost || server.canonicalServerUrl)
-          .trim()
-          .toLowerCase(),
+        shadowMCPInventoryServerLabel(server).trim().toLowerCase(),
       width: "2fr",
       render: (server) => <ShadowMCPInventoryServerCell server={server} />,
     },
@@ -263,8 +266,10 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) =>
         shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
       width: "0.9fr",
+      // Nothing enforces against a local command or an unresolved identity,
+      // so a verdict badge would over-report control.
       render: (server) =>
-        server.targetKind === "stdio_command" ? (
+        isObserveOnlyShadowMCPTarget(server.targetKind) ? (
           <Text muted small>
             —
           </Text>

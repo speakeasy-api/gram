@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -599,6 +600,11 @@ type ShadowMCPInventoryUsageRow struct {
 	CallCount          uint64
 	UserCount          uint64
 	TopUsers           []string
+	// Sources is the sorted, de-duplicated set of hook sources (claude-code,
+	// cursor, litellm, ...) whose traces reached this server. It lets the
+	// inventory say where a server was seen from — the only clue to a
+	// server's identity when an LLM proxy knows it by tool namespace alone.
+	Sources []string
 }
 
 type ListShadowMCPInventoryUsersParams struct {
@@ -1332,8 +1338,12 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 				CallCount:          0,
 				UserCount:          0,
 				TopUsers:           nil,
+				Sources:            nil,
 			}
 			usageByURL[invURL.CanonicalURL] = usage
+		}
+		if source := strings.TrimSpace(traceRow.HookSource); source != "" && !slices.Contains(usage.Sources, source) {
+			usage.Sources = append(usage.Sources, source)
 		}
 		if traceRow.ServerName != "" {
 			usage.ServerName = traceRow.ServerName
@@ -1385,6 +1395,10 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 			topUsers = append(topUsers, users[i].UserKey)
 		}
 		usage.TopUsers = topUsers
+		if usage.Sources == nil {
+			usage.Sources = []string{}
+		}
+		slices.Sort(usage.Sources)
 		usageRows = append(usageRows, *usage)
 	}
 	sort.Slice(usageRows, func(i, j int) bool {

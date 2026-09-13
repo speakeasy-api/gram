@@ -416,11 +416,20 @@ func senderOf(prov telemetryrepo.MCPProvenance, call ToolCall) string {
 // `mcp__<server>__` tool-name prefix. That last case carries no server
 // identity, so it is reported unresolved rather than being flagged on the
 // strength of a value derived from the tool name the scanner already has.
+//
+// A tool-namespace identity (`mcp-tool://<server>`, see
+// shadowmcp.ToolNamespaceURL) is the same bare prefix wearing a URL: an LLM
+// proxy that only saw the agent's tool names mints it so the server can pass
+// through the URL-keyed inventory. It is unresolved for the same reason,
+// whichever attribute delivers it.
 func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix string) (string, bool) {
 	// Trim both: senders relay these straight off a client payload without
 	// normalizing (the Cursor hook does not), and a trailing newline would
 	// otherwise defeat URL parsing in the hosted check.
 	if serverURL := strings.TrimSpace(prov.ServerURL); serverURL != "" {
+		if shadowmcp.IsToolNamespaceURL(serverURL) {
+			return "", false
+		}
 		return serverURL, true
 	}
 	match := strings.TrimSpace(prov.Match)
@@ -428,6 +437,9 @@ func resolvedServerIdentity(prov telemetryrepo.MCPProvenance, serverPrefix strin
 		return "", false
 	}
 	if serverPrefix != "" && match == serverPrefix {
+		return "", false
+	}
+	if shadowmcp.IsToolNamespaceURL(match) {
 		return "", false
 	}
 	return match, true

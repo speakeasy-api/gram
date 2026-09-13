@@ -264,8 +264,13 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL *string `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
 	ServerSlug         *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	URLHost            *string `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
-	// What the row identifies: a server URL observed or requested, or a local
-	// stdio command known only through its review. Absent means server_url.
+	// What the row identifies: a server URL observed or requested, a local stdio
+	// command known only through its review, or a tool namespace — an MCP server
+	// an LLM proxy saw only by the <server> segment of its namespaced tool names
+	// (mcp__<server>__<tool>), carried as the synthetic identity
+	// mcp-tool://<server>. Tool-namespace rows have usage but no resolved server
+	// identity; review decisions on them are recorded without writing enforcement,
+	// like stdio commands. Absent means server_url.
 	TargetKind       *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	ServerName       *string  `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen        *string  `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
@@ -274,6 +279,10 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	ObservedUseCount *int     `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 	UserCount        *int     `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	TopUsers         []string `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	// Hook sources (claude-code, cursor, litellm, ...) that observed this server,
+	// sorted and de-duplicated. Empty when the server is known only from a review
+	// request.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass
@@ -5161,8 +5170,13 @@ type ShadowMCPInventoryServerResponseBody struct {
 	CanonicalServerURL *string `form:"canonical_server_url,omitempty" json:"canonical_server_url,omitempty" xml:"canonical_server_url,omitempty"`
 	ServerSlug         *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	URLHost            *string `form:"url_host,omitempty" json:"url_host,omitempty" xml:"url_host,omitempty"`
-	// What the row identifies: a server URL observed or requested, or a local
-	// stdio command known only through its review. Absent means server_url.
+	// What the row identifies: a server URL observed or requested, a local stdio
+	// command known only through its review, or a tool namespace — an MCP server
+	// an LLM proxy saw only by the <server> segment of its namespaced tool names
+	// (mcp__<server>__<tool>), carried as the synthetic identity
+	// mcp-tool://<server>. Tool-namespace rows have usage but no resolved server
+	// identity; review decisions on them are recorded without writing enforcement,
+	// like stdio commands. Absent means server_url.
 	TargetKind       *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	ServerName       *string  `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
 	FirstSeen        *string  `form:"first_seen,omitempty" json:"first_seen,omitempty" xml:"first_seen,omitempty"`
@@ -5171,6 +5185,10 @@ type ShadowMCPInventoryServerResponseBody struct {
 	ObservedUseCount *int     `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
 	UserCount        *int     `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	TopUsers         []string `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
+	// Hook sources (claude-code, cursor, litellm, ...) that observed this server,
+	// sorted and de-duplicated. Empty when the server is known only from a review
+	// request.
+	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
 	// Note the values themselves are corrected in this release: URLs whose bypass
@@ -7408,6 +7426,12 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 	v.TopUsers = make([]string, len(body.TopUsers))
 	for i, val := range body.TopUsers {
 		v.TopUsers[i] = val
+	}
+	if body.Sources != nil {
+		v.Sources = make([]string, len(body.Sources))
+		for i, val := range body.Sources {
+			v.Sources[i] = val
+		}
 	}
 	if body.AccessSummary != nil {
 		v.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(body.AccessSummary)
@@ -10213,8 +10237,8 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_policy_ids", "body"))
 	}
 	if body.TargetKind != nil {
-		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command"}))
+		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command" || *body.TargetKind == "tool_namespace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command", "tool_namespace"}))
 		}
 	}
 	if body.FirstSeen != nil {
@@ -16793,8 +16817,8 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_policy_ids", "body"))
 	}
 	if body.TargetKind != nil {
-		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command"}))
+		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command" || *body.TargetKind == "tool_namespace") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command", "tool_namespace"}))
 		}
 	}
 	if body.FirstSeen != nil {

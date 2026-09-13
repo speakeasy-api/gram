@@ -759,16 +759,21 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 //
 // Only http and https are admitted: the MCP backend can reach nothing else,
 // and a review for an unreachable reference wastes an admin's attention. The
-// key comes from the same canonicalization the shadow-MCP inventory uses, so
-// a request, a block, and the org's own traffic converge on one key per
-// server.
+// one exception is the synthetic tool-namespace identity
+// (shadowmcp.ToolNamespaceURL): an LLM proxy that saw a server only by its
+// namespaced tool names inventories it under mcp-tool://<server>, and a
+// decision on that row is a decision of record — recorded without
+// enforcement, like a stdio command — so the review is worth an admin's
+// attention even though nothing can be reached at the key. The key comes
+// from the same canonicalization the shadow-MCP inventory uses, so a request,
+// a block, and the org's own traffic converge on one key per server.
 func admittableServerURL(raw string) (key string, display string, err error) {
 	parsed, parseErr := url.Parse(strings.TrimSpace(raw))
 	if parseErr != nil {
 		return "", "", oops.E(oops.CodeBadRequest, parseErr, "target is not a valid server URL")
 	}
 	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
+	if scheme != "http" && scheme != "https" && scheme != shadowmcp.ToolNamespaceScheme {
 		return "", "", oops.E(oops.CodeBadRequest, nil, "target must be an http or https URL")
 	}
 

@@ -238,6 +238,27 @@ vi.mock("@/components/ui/Badge", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/Icon", () => ({
+  Icon: ({ className }: { className?: string; name: string }) => (
+    <span className={className} />
+  ),
+}));
+
+vi.mock("@/components/ui/Tooltip", () => ({
+  SimpleTooltip: ({
+    children,
+    tooltip,
+  }: {
+    children: ReactNode;
+    tooltip: ReactNode;
+  }) => (
+    <>
+      {children}
+      <span data-testid="tooltip">{tooltip}</span>
+    </>
+  ),
+}));
+
 vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
@@ -702,6 +723,49 @@ describe("ShadowMCPServerDetail", () => {
     expect(
       screen.getByRole("button", { name: "github.example.com" }),
     ).toBeTruthy();
+  });
+
+  it("marks a tool namespace server as unresolved and names the proxy that saw it", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        canonicalServerUrl: "mcp-tool://github",
+        serverName: "github",
+        serverSlug: "github-mcp-tool-0f3a9c21",
+        sources: ["litellm"],
+        targetKind: "tool_namespace",
+        urlHost: "",
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(screen.getByRole("button", { name: "github" })).toBeTruthy();
+    // The header names the namespace the proxy saw and never presents the
+    // synthetic mcp-tool:// key as a reachable URL.
+    expect(screen.getByText("mcp__github__*")).toBeTruthy();
+    expect(screen.queryByText("mcp-tool://github")).toBeNull();
+    expect(screen.getByText("Identity unresolved")).toBeTruthy();
+    const sources = screen.getByText("seen via").closest("p")!;
+    expect(within(sources).getByText("LiteLLM")).toBeTruthy();
+  });
+
+  it("names the hook sources that observed a server URL", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ sources: ["claude-code", "litellm"] }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
+    // Scoped to the header line: the user table below lists sources too.
+    const sources = screen.getByText("seen via").closest("p")!;
+    expect(within(sources).getByText("Claude Code")).toBeTruthy();
+    expect(within(sources).getByText("LiteLLM")).toBeTruthy();
+    expect(screen.queryByText("Identity unresolved")).toBeNull();
   });
 
   it("shows an empty state when the server has no user activity", () => {

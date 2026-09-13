@@ -811,6 +811,121 @@ FROM (
   FROM numbers(180)
 );
 
+-- Shadow MCP servers observed through a LiteLLM proxy. LiteLLM sees MCP
+-- servers two ways and the inventory shows both:
+--   * Generic Guardrail: tool definitions and tool calls arrive as namespaced
+--     tool names (mcp__<server>__<tool>) with no URL behind them, so the
+--     server is known only by name and gets the synthetic identity
+--     mcp-tool://<server> (target_kind = tool_namespace, observe-only,
+--     identity unresolved). Rows are urn litellm:guardrail:tool_call.
+--   * MCP gateway: OTLP spans carry the upstream server origin, so the row is
+--     a normal https:// server URL. Rows are urn litellm:otel:traces.
+-- Both ride the same URL-keyed chain as the device-hook rows above
+-- (gram.mcp.server_url -> trace_summaries -> inventory); gram.hook.source =
+-- litellm is what the inventory reports in each row's sources list. The
+-- scoped deletes above already cover these rows.
+INSERT INTO shadow_mcp_inventory_urls
+  (gram_project_id, canonical_server_url, url_host, server_name, first_seen, last_seen, updated_at)
+VALUES
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'mcp-tool://github',
+   'github', 'github', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  (toUUID('dec0de00-0000-4000-a000-000000000001'), 'https://mcp.grafana.example.com/mcp',
+   'mcp.grafana.example.com', 'Grafana', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 5 HOUR, now64(9));
+
+-- Guardrail-observed tool calls on the name-only server: one row per tool
+-- call, trace id per call (the ingest hashes the tool_call id), spread over
+-- the last ~5 days across four demo users so the row carries usage,
+-- last-called and per-user attribution.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('MCP tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-litellmnstrace-', toString(number))))),
+  concat(
+    '{"gram.event.source":"hook"',
+    ',"gram.hook.source":"litellm"',
+    ',"gram.hook.event":"PostToolUse"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gen_ai.tool.name":"', tool_name, '"',
+    ',"gen_ai.tool.call.id":"call_demo_litellm_ns_', toString(number), '"',
+    ',"gram.tool_call.source":"github"',
+    ',"gram.mcp.match":"mcp-tool://github"',
+    ',"gram.mcp.server_url":"mcp-tool://github"',
+    ',"gram.litellm.call_id":"chatcmpl-demo-litellm-ns-', toString(number), '"',
+    ',"gram.litellm.user_email":"', email, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'litellm:guardrail:tool_call',
+  'gram-server',
+  ''
+FROM (
+  SELECT
+    number,
+    arrayElement(['mcp__github__list_pull_requests', 'mcp__github__get_issue', 'mcp__github__search_code',
+                  'mcp__github__create_issue', 'mcp__github__list_pull_requests'], toUInt32(number) + 1) AS tool_name,
+    arrayElement(['jonas@demo.getgram.ai', 'priya@demo.getgram.ai', 'amara@demo.getgram.ai',
+                  'priya@demo.getgram.ai', 'mateo@demo.getgram.ai'], toUInt32(number) + 1) AS email,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 3 + toInt64(number) * 26),
+                                          toInt64(cityHash64('llns', number) % 240))) AS nano
+  FROM numbers(5)
+);
+
+-- MCP gateway spans on the URL-grade server: what the LiteLLM OTLP exporter
+-- emits when an agent reaches an upstream MCP server through the proxy. The
+-- span is not model usage, so it carries no token or response attributes;
+-- gram.tool.name is the ingest's fixed 'litellm' and gram.tool_call.source is
+-- the upstream server name from the span metadata.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'litellm_request',
+  lower(hex(MD5(concat('gram-demo-litellmgwtrace-', toString(number))))),
+  concat(
+    '{"gram.event.source":"hook"',
+    ',"gram.hook.source":"litellm"',
+    ',"gram.resource.urn":"litellm:otel:traces"',
+    ',"gram.event.urn":"urn:telemetry:provider_otel:span:unknown"',
+    ',"otel.span.name":"litellm_request"',
+    ',"otel.span.kind":"internal"',
+    ',"otel.span.status_code":"ok"',
+    ',"otel.scope.name":"litellm"',
+    ',"gram.tool.name":"litellm"',
+    ',"gram.tool_call.source":"grafana"',
+    ',"gram.mcp.match":"https://mcp.grafana.example.com/mcp"',
+    ',"gram.mcp.server_url":"https://mcp.grafana.example.com/mcp"',
+    ',"gram.litellm.call_id":"chatcmpl-demo-litellm-gw-', toString(number), '"',
+    ',"gram.litellm.user_email":"', email, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'litellm:otel:traces',
+  'gram-server',
+  ''
+FROM (
+  SELECT
+    number,
+    arrayElement(['hana@demo.getgram.ai', 'lucas@demo.getgram.ai', 'hana@demo.getgram.ai',
+                  'priya@demo.getgram.ai'], toUInt32(number) + 1) AS email,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    toUnixTimestamp64Nano(subtractMinutes(subtractHours(now64(9), 5 + toInt64(number) * 31),
+                                          toInt64(cityHash64('llgw', number) % 240))) AS nano
+  FROM numbers(4)
+);
+
 -- Shadow AI detections (employee enrollment detail): device-agent AI scan
 -- results for the six demo directory users. Target
 -- ids and categories come from the aitargets catalog
@@ -1634,6 +1749,31 @@ SELECT throwIf(
    WHERE organization_id = 'org_gram_demo_workspace'
      AND excluded_reason NOT IN ('', 'rule', 'manual', 'automated')) > 0,
   'demo seed postflight: risk_findings carry an unrecognized excluded_reason');
+
+-- LiteLLM-observed shadow MCP servers: the name-only (tool_namespace) row and
+-- the gateway URL row must each exist in the inventory and each must have
+-- litellm-sourced traces behind it, or the Shadow MCP page shows neither the
+-- "identity unresolved" row nor a "seen via LiteLLM" source.
+SELECT throwIf(
+  (SELECT count() FROM shadow_mcp_inventory_urls
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND canonical_server_url IN ('mcp-tool://github', 'https://mcp.grafana.example.com/mcp')) < 2,
+  'demo seed postflight: LiteLLM-observed shadow MCP inventory rows missing');
+
+SELECT throwIf(
+  (SELECT uniqExact(trace_id) FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND hook_source = 'litellm'
+     AND toString(attributes.gram.mcp.server_url) = 'mcp-tool://github') < 5,
+  'demo seed postflight: LiteLLM tool_namespace shadow MCP traces missing');
+
+SELECT throwIf(
+  (SELECT uniqExact(trace_id) FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND hook_source = 'litellm'
+     AND gram_urn = 'litellm:otel:traces'
+     AND toString(attributes.gram.mcp.server_url) = 'https://mcp.grafana.example.com/mcp') < 4,
+  'demo seed postflight: LiteLLM gateway shadow MCP traces missing');
 
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs

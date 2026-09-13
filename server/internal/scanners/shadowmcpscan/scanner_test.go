@@ -619,6 +619,12 @@ func TestResolvedServerIdentity(t *testing.T) {
 		{"bare prefix is unresolved", telemetryrepo.MCPProvenance{Match: "db", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
 		{"empty is unresolved", telemetryrepo.MCPProvenance{Match: "", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
 		{"whitespace is unresolved", telemetryrepo.MCPProvenance{Match: "   ", ServerURL: "", ServerIdentity: "", HookSource: ""}, "db", "", false},
+		// A tool-namespace identity (an LLM proxy that saw only the
+		// `mcp__<server>__` prefix) carries no more than the bare prefix does,
+		// so it is unresolved whichever attribute delivers it.
+		{"tool namespace server url is unresolved", telemetryrepo.MCPProvenance{Match: "mcp-tool://db", ServerURL: "mcp-tool://db", ServerIdentity: "", HookSource: "litellm"}, "db", "", false},
+		{"tool namespace match is unresolved", telemetryrepo.MCPProvenance{Match: "mcp-tool://db", ServerURL: "", ServerIdentity: "", HookSource: "litellm"}, "db", "", false},
+		{"tool namespace server url with surrounding whitespace is unresolved", telemetryrepo.MCPProvenance{Match: "", ServerURL: " mcp-tool://db\n", ServerIdentity: "", HookSource: "litellm"}, "db", "", false},
 	}
 
 	for _, tc := range cases {

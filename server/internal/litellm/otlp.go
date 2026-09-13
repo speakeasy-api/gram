@@ -1130,6 +1130,14 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 		for _, scopeSpans := range resourceSpans.ScopeSpans {
 			for _, span := range scopeSpans.Spans {
 				spanAttributes := s.sanitizeOTLPAttributes(ctx, span.Attributes, spanAttributeAllowlist)
+				// MCP gateway identity is derived from the raw span attributes
+				// after allowlisting so the derived gram.* keys survive the
+				// filter while the raw payload (which carries tool arguments)
+				// is never persisted.
+				mcpAttributes := otlpMCPSpanAttributes(span.Attributes)
+				for key, value := range mcpAttributes {
+					spanAttributes[key] = value
+				}
 				invalidIDs := 0
 				if traceID, ok := normalizeOTLPID(span.TraceID, 32); ok {
 					spanAttributes[attr.TraceIDKey] = traceID
@@ -1178,11 +1186,16 @@ func (s *Service) traceLogParams(ctx context.Context, request *otlpExportRequest
 					if conversationID := conv.Default(traceID, callID); conversationID != "" {
 						spanAttributes[attr.GenAIConversationIDKey] = conversationID
 					}
+				} else {
+					stripLiteLLMUsageAttributes(spanAttributes)
+				}
+				// MCP gateway spans are not model usage, but they are the only
+				// record of who called an upstream MCP server through the proxy,
+				// so they keep the actor alongside model spans.
+				if operation != "unknown" || len(mcpAttributes) > 0 {
 					if email, _ := spanAttributes[attr.LiteLLMUserEmailKey].(string); email != "" {
 						userInfo = telemetry.UserInfoByEmail(email)
 					}
-				} else {
-					stripLiteLLMUsageAttributes(spanAttributes)
 				}
 				eventURN := liteLLMEventURN(operation)
 				spanAttributes[attr.EventURNKey] = eventURN

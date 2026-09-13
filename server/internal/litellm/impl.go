@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -47,20 +48,21 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      authorizer
-	hooks     HookIngester
-	calls     *callcache.Cache
-	traces    *TraceProcessor
-	metrics   *MetricProcessor
-	health    *HealthProcessor
-	db        *pgxpool.Pool
-	telemetry telemetryrepo.CHTX
-	instances *InstanceResolver
-	authz     *authz.Engine
-	audit     *audit.Logger
-	keyPrefix string
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	auth            authorizer
+	hooks           HookIngester
+	calls           *callcache.Cache
+	traces          *TraceProcessor
+	metrics         *MetricProcessor
+	health          *HealthProcessor
+	db              *pgxpool.Pool
+	telemetry       telemetryrepo.CHTX
+	telemetryLogger *telemetry.Logger
+	instances       *InstanceResolver
+	authz           *authz.Engine
+	audit           *audit.Logger
+	keyPrefix       string
 }
 
 var (
@@ -68,22 +70,23 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, telemetryLogger *telemetry.Logger, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:    logger.With(attr.SlogComponent("litellm")),
-		auth:      auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:     hookIngester,
-		calls:     calls,
-		traces:    traces,
-		metrics:   metrics,
-		health:    health,
-		db:        db,
-		telemetry: telemetryDB,
-		instances: instances,
-		authz:     authzEngine,
-		audit:     auditLogger,
-		keyPrefix: auth.APIKeyPrefix(environment),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:          logger.With(attr.SlogComponent("litellm")),
+		auth:            auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:           hookIngester,
+		calls:           calls,
+		traces:          traces,
+		metrics:         metrics,
+		health:          health,
+		db:              db,
+		telemetry:       telemetryDB,
+		telemetryLogger: telemetryLogger,
+		instances:       instances,
+		authz:           authzEngine,
+		audit:           auditLogger,
+		keyPrefix:       auth.APIKeyPrefix(environment),
 	}
 }
 
@@ -147,7 +150,11 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	if prompt == "" {
 		prompt = lastText(payload.Texts)
 	}
-	if prompt == "" {
+	// The request's tool definitions are the only place the proxy sees which
+	// MCP servers the agent has configured, so they feed the shadow MCP
+	// inventory even when there is no prompt text to evaluate.
+	mcpInventory := mcpInventoryFromTools(payload.Tools)
+	if prompt == "" && len(mcpInventory) == 0 {
 		return noneResult(), nil
 	}
 
@@ -171,6 +178,18 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	if attribution.TurnID != "" {
 		turnID = agentTurnPrefix + attribution.TurnProvider + ":" + attribution.TurnID
 	}
+	// A request with tool definitions but no prompt text (an image-only turn,
+	// or no user message at all) still carries an inventory snapshot. It goes
+	// out as a session.updated configuration event rather than an empty
+	// prompt.submitted: the hooks path would otherwise run the quarantine gate
+	// and prompt risk scan against nothing and record an empty prompt as a
+	// UserPromptSubmit telemetry row.
+	eventType := "prompt.submitted"
+	promptData := &hooksgen.HookPromptData{Text: &prompt}
+	if prompt == "" {
+		eventType = "session.updated"
+		promptData = nil
+	}
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
@@ -192,15 +211,15 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			Model:  conv.PtrEmpty(model),
 		},
 		Event: &hooksgen.HookIngestEvent{
-			Type:       "prompt.submitted",
+			Type:       eventType,
 			OccurredAt: nil,
 		},
 		Data: &hooksgen.HookIngestData{
-			Prompt:                &hooksgen.HookPromptData{Text: &prompt},
+			Prompt:                promptData,
 			ToolCall:              nil,
 			Mcp:                   nil,
-			McpInventory:          nil,
-			McpInventoryCollected: nil,
+			McpInventory:          mcpInventory,
+			McpInventoryCollected: conv.PtrEmpty(len(mcpInventory) > 0),
 			Usage:                 nil,
 			Message:               nil,
 			Skill:                 nil,
@@ -340,7 +359,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		},
 		Raw: nil,
 	}
-	_, err = s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
+	outcome, err := s.hooks.IngestAuthenticatedDetailed(ctx, &authCopy, hookPayload, hooks.AuthenticatedIngestOptions{
 		AllowWarnAcknowledgement:     false,
 		AllowSessionIdentityFallback: false,
 		SourceAttributes:             sourceAttributes(payload),
@@ -349,6 +368,26 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ingest LiteLLM hook: %w", err)
+	}
+
+	// Record one telemetry row per LiteLLM-observed MCP tool call so the
+	// synthetic server identities surface in the shadow MCP inventory with
+	// usage and per-user attribution. IngestAuthenticatedDetailed reports no
+	// "persisted" signal, so this runs unconditionally; a natively captured
+	// session's own hook stream carries no per-call output tool-call id, so the
+	// two channels do not double-count the same call.
+	if prov := mcpToolCallProvenanceFrom(payload.ToolCalls); len(prov) > 0 {
+		s.recordMCPToolCallProvenance(ctx, mcpProvenanceInput{
+			ProjectID:      authCtx.ProjectID.String(),
+			OrganizationID: authCtx.ActiveOrganizationID,
+			UserID:         outcome.Actor.UserID,
+			UserEmail:      conv.Default(outcome.Actor.Email, email),
+			SessionID:      sessionID,
+			CallID:         callID,
+			TraceID:        traceID,
+			Model:          model,
+			ToolCalls:      prov,
+		})
 	}
 	return noneResult(), nil
 }

@@ -3,16 +3,109 @@ import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
+import {
+  isToolNamespaceServer,
+  shadowMCPInventoryServerLabel,
+  shadowMCPSourceLabels,
+  TOOL_NAMESPACE_UNRESOLVED_HINT,
+  toolNamespacePattern,
+} from "./shadowMCPServerIdentity";
 
 function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function shadowMCPInventoryServerLabel(
-  server: ShadowMCPInventoryServer,
-): string {
-  return server.serverName || server.urlHost || server.canonicalServerUrl;
+/**
+ * Flags a row whose server URL the inventory has not resolved: an LLM proxy
+ * saw it only as a tool namespace, so nothing can enforce against it yet.
+ */
+export function ShadowMCPUnresolvedIdentityBadge(): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={TOOL_NAMESPACE_UNRESOLVED_HINT}>
+      <Badge variant="warning" size="sm" background={false}>
+        <Badge.LeftIcon>
+          <Icon name="circle-help" />
+        </Badge.LeftIcon>
+        <Badge.Text>Identity unresolved</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
+}
+
+/**
+ * The hook sources that observed a server ("seen via LiteLLM"), as inline
+ * chips so the line sits inside a row cell or a page description alike.
+ * Renders nothing for a server known only from its review request.
+ */
+export function ShadowMCPSources({
+  sources,
+}: {
+  sources: string[] | undefined;
+}): JSX.Element | null {
+  const labels = shadowMCPSourceLabels(sources);
+  if (labels.length === 0) return null;
+
+  return (
+    <span className="text-muted-foreground inline-flex flex-wrap items-center gap-1 text-xs">
+      <span>seen via</span>
+      {labels.map((label) => (
+        <Badge key={label} variant="neutral" size="sm" background={false}>
+          <Badge.Text>{label}</Badge.Text>
+        </Badge>
+      ))}
+    </span>
+  );
+}
+
+function AccessRequestBadge({ count }: { count: number }): JSX.Element | null {
+  if (count <= 0) return null;
+
+  return (
+    <Badge variant="warning" size="sm" background={false}>
+      <Badge.LeftIcon>
+        <Icon name="shield-alert" />
+      </Badge.LeftIcon>
+      <Badge.Text>
+        {count} Access Request
+        {count > 1 && "s"}
+      </Badge.Text>
+    </Badge>
+  );
+}
+
+/**
+ * What the server cell's two lines say for each kind of row: the primary
+ * line names the server, the secondary line says where that name came from.
+ */
+function serverCellLines(server: ShadowMCPInventoryServer): {
+  primary: string;
+  primaryClassName?: string;
+  secondary: string;
+  secondaryClassName?: string;
+} {
+  switch (server.targetKind) {
+    case "stdio_command":
+      return {
+        primary: server.canonicalServerUrl,
+        primaryClassName: "font-mono",
+        secondary: "Local command — known only from its access request",
+      };
+    case "tool_namespace":
+      return {
+        primary: shadowMCPInventoryServerLabel(server),
+        secondary: toolNamespacePattern(server.canonicalServerUrl),
+        secondaryClassName: "truncate font-mono",
+      };
+    case "server_url":
+    case undefined:
+      return {
+        primary: shadowMCPInventoryServerLabel(server),
+        secondary: server.canonicalServerUrl,
+        secondaryClassName: "truncate",
+      };
+  }
 }
 
 export function ShadowMCPInventoryServerCell({
@@ -20,49 +113,30 @@ export function ShadowMCPInventoryServerCell({
 }: {
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
-  if (server.targetKind === "stdio_command") {
-    return (
-      <div className="min-w-0 space-y-1">
-        <Text
-          variant="small"
-          className="truncate font-mono font-medium"
-          title={server.canonicalServerUrl}
-        >
-          {server.canonicalServerUrl}
-        </Text>
-        <Text muted small className="text-xs">
-          Local command — known only from its access request
-        </Text>
-      </div>
-    );
-  }
+  const lines = serverCellLines(server);
 
   return (
     <div className="min-w-0 space-y-1">
       <div className="flex items-center gap-2">
-        <Text variant="small" className="truncate font-medium">
-          {shadowMCPInventoryServerLabel(server)}
+        <Text
+          variant="small"
+          className={cn("truncate font-medium", lines.primaryClassName)}
+          title={lines.primary}
+        >
+          {lines.primary}
         </Text>
-        {server.requestCount > 0 && (
-          <Badge variant="warning" size="sm" background={false}>
-            <Badge.LeftIcon>
-              <Icon name="shield-alert" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {server.requestCount} Access Request
-              {server.requestCount > 1 && "s"}
-            </Badge.Text>
-          </Badge>
-        )}
+        {isToolNamespaceServer(server) && <ShadowMCPUnresolvedIdentityBadge />}
+        <AccessRequestBadge count={server.requestCount} />
       </div>
       <Text
         muted
         small
-        className="truncate text-xs"
-        title={server.canonicalServerUrl}
+        className={cn("text-xs", lines.secondaryClassName)}
+        title={lines.secondary}
       >
-        {server.canonicalServerUrl}
+        {lines.secondary}
       </Text>
+      <ShadowMCPSources sources={server.sources} />
     </div>
   );
 }

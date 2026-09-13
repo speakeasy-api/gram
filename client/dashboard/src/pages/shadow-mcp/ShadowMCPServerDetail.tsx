@@ -27,6 +27,15 @@ import {
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
 import {
+  ShadowMCPSources,
+  ShadowMCPUnresolvedIdentityBadge,
+} from "@/components/shadow-mcp/ShadowMCPInventoryCells";
+import {
+  isToolNamespaceServer,
+  shadowMCPInventoryServerLabel,
+  toolNamespacePattern,
+} from "@/components/shadow-mcp/shadowMCPServerIdentity";
+import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
@@ -333,6 +342,41 @@ function TopUsersTable({
   );
 }
 
+/**
+ * The line under the title that says what the row is keyed on: the server
+ * URL, or — for a server an LLM proxy saw only as a tool namespace — the
+ * namespace pattern plus the unresolved flag, never the synthetic key as if
+ * it were reachable. The hook sources that observed it follow either way.
+ */
+function ServerIdentityLine({
+  server,
+  serverSlug,
+}: {
+  server: ShadowMCPInventoryServer | undefined;
+  serverSlug: string;
+}) {
+  if (!server) return <span>{serverSlug}</span>;
+
+  if (isToolNamespaceServer(server)) {
+    return (
+      <>
+        <span className="font-mono">
+          {toolNamespacePattern(server.canonicalServerUrl)}
+        </span>
+        <ShadowMCPUnresolvedIdentityBadge />
+        <ShadowMCPSources sources={server.sources} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span>{server.canonicalServerUrl}</span>
+      <ShadowMCPSources sources={server.sources} />
+    </>
+  );
+}
+
 function DetailActionButtons({
   disabled,
   onOpenDecide,
@@ -501,8 +545,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     { enabled: queryEnabled },
   );
   const server = serverQuery.data;
-  const serverDisplayName =
-    server?.serverName || server?.urlHost || "Shadow MCP Server";
+  const serverDisplayName = server
+    ? shadowMCPInventoryServerLabel(server)
+    : "Shadow MCP Server";
   const serverURL = server?.canonicalServerUrl ?? "";
   const usersQueryEnabled = queryEnabled && serverURL.length > 0;
   const usersScope = usersQueryEnabled ? `${project.id}:${serverURL}` : "";
@@ -677,6 +722,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const openDecide = () => {
     if (!server) return;
     setDecideTarget({
+      targetKind: server.targetKind,
       canonicalServerUrl: server.canonicalServerUrl,
       displayName: serverDisplayName,
       approvalRequestId: server.approvalRequest?.id,
@@ -702,8 +748,8 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             {/* No area eyebrow: "SECURE" over a server under review reads as
                 a verdict about the server, not as the app section. */}
             <Page.Section.Title area="">{serverNameTitle}</Page.Section.Title>
-            <Page.Section.Description>
-              {server?.canonicalServerUrl || serverSlug}
+            <Page.Section.Description className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <ServerIdentityLine server={server} serverSlug={serverSlug} />
             </Page.Section.Description>
             <Page.Section.CTA>
               {server && (

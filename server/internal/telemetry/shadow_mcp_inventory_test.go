@@ -543,6 +543,72 @@ func TestShadowMCPInventoryUsage_FromTelemetry(t *testing.T) {
 	require.Equal(t, []string{"ada@example.com", "grace@example.com"}, usage[0].TopUsers)
 }
 
+func TestShadowMCPInventoryUsage_CollectsHookSources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	base := time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC)
+
+	// One URL-identified server reached from two agents, in an order that is
+	// neither sorted nor de-duplicated, and one server an LLM proxy knows
+	// only by tool namespace.
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.example.com/mcp",
+		ServerName: "Example",
+		UserEmail:  "ada@example.com",
+		HookSource: "litellm",
+		ObservedAt: base,
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.example.com/mcp?token=secret",
+		ServerName: "Example",
+		UserEmail:  "grace@example.com",
+		HookSource: "claude-code",
+		ObservedAt: base.Add(time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.example.com/mcp",
+		ServerName: "Example",
+		UserEmail:  "ada@example.com",
+		HookSource: "litellm",
+		ObservedAt: base.Add(2 * time.Minute),
+	})
+	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
+		ProjectID:  projectID,
+		ServerURL:  "mcp-tool://github",
+		ServerName: "github",
+		UserEmail:  "ada@example.com",
+		HookSource: "litellm",
+		ObservedAt: base.Add(3 * time.Minute),
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	usage, err := ti.chClient.ListShadowMCPInventoryUsage(ctx, telemetryRepo.ListShadowMCPInventoryUsageParams{
+		GramProjectID:  projectID,
+		Limit:          50,
+		OrganizationID: "",
+		UserKeys:       nil,
+		From:           nil,
+		To:             nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, usage, 2)
+
+	require.Equal(t, "https://mcp.example.com/mcp", usage[0].CanonicalServerURL)
+	require.Equal(t, []string{"claude-code", "litellm"}, usage[0].Sources, "sorted and de-duplicated")
+
+	// The synthetic identity passes through the URL-keyed fold unchanged.
+	require.Equal(t, "mcp-tool://github", usage[1].CanonicalServerURL)
+	require.Equal(t, "github", usage[1].ServerName)
+	require.EqualValues(t, 1, usage[1].CallCount)
+	require.Equal(t, []string{"litellm"}, usage[1].Sources)
+}
+
 func TestShadowMCPInventoryUsage_FiltersToCanonicalURLsBeforeLimit(t *testing.T) {
 	t.Parallel()
 
@@ -851,15 +917,21 @@ type historicalShadowMCPCall struct {
 	ServerURL  string
 	ServerName string
 	UserEmail  string
+	// HookSource is the gram.hook.source attribute; empty means claude-code.
+	HookSource string
 	ObservedAt time.Time
 }
 
 func insertHistoricalShadowMCPCall(t *testing.T, ctx context.Context, ti *testInstance, p historicalShadowMCPCall) {
 	t.Helper()
 
+	hookSource := p.HookSource
+	if hookSource == "" {
+		hookSource = "claude-code"
+	}
 	attrs := map[string]any{
 		"gram.event.source":     "hook",
-		"gram.hook.source":      "claude-code",
+		"gram.hook.source":      hookSource,
 		"gram.mcp.server_url":   p.ServerURL,
 		"gram.tool_call.source": p.ServerName,
 		"gram.tool.name":        "mcp__speakeasy__search",

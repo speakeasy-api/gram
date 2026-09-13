@@ -149,6 +149,21 @@ vi.mock("@/components/ui/Badge", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/Tooltip", () => ({
+  SimpleTooltip: ({
+    children,
+    tooltip,
+  }: {
+    children: ReactNode;
+    tooltip: ReactNode;
+  }) => (
+    <>
+      {children}
+      <span data-testid="tooltip">{tooltip}</span>
+    </>
+  ),
+}));
+
 vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
@@ -751,6 +766,120 @@ describe("ShadowMCPInventoryTable", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("review-request-sheet")).toBeNull();
     });
+  });
+
+  it("renders tool namespace rows as unresolved identities and opens the server page", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "mcp-tool://github",
+          serverName: "github",
+          serverSlug: "github-mcp-tool-0f3a9c21",
+          urlHost: "",
+          targetKind: "tool_namespace",
+          sources: ["litellm"],
+          observedUseCount: 12,
+          userCount: 2,
+        }),
+      ],
+    });
+    const onOpenServer = vi.fn<(server: ShadowMCPInventoryServer) => void>();
+
+    renderInventoryTable(
+      "project-id-1",
+      [blockingPolicy()],
+      [],
+      [],
+      onOpenServer,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("github")).toBeTruthy();
+    });
+    const row = screen.getByText("github").closest("tr")!;
+    // The row names the tool namespace the proxy saw, never the synthetic
+    // mcp-tool:// key, and flags that the server URL is still unknown.
+    expect(within(row).getByText("mcp__github__*")).toBeTruthy();
+    expect(within(row).queryByText("mcp-tool://github")).toBeNull();
+    expect(within(row).getByText("Identity unresolved")).toBeTruthy();
+    expect(within(row).getByTestId("tooltip").textContent).toBe(
+      "Seen only by the LLM proxy as a tool namespace. Configure the LiteLLM MCP gateway to resolve the server URL.",
+    );
+    expect(within(row).getByText("LiteLLM")).toBeTruthy();
+    // Status is a dash like stdio: nothing enforces against an unresolved
+    // identity, so "Observed" would over-report control. Review is the
+    // second dash (no dossier yet).
+    expect(within(row).queryByText("Observed")).toBeNull();
+    expect(within(row).getAllByText("—")).toHaveLength(2);
+
+    // Usage and users exist, so the row opens the server page rather than
+    // the stdio review sheet.
+    fireEvent.click(row);
+    expect(onOpenServer).toHaveBeenCalledWith(
+      expect.objectContaining({ canonicalServerUrl: "mcp-tool://github" }),
+    );
+    expect(screen.queryByTestId("review-request-sheet")).toBeNull();
+  });
+
+  it("decides access on a tool namespace row as an observe-only target", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "mcp-tool://github",
+          serverName: "github",
+          urlHost: "",
+          targetKind: "tool_namespace",
+          sources: ["litellm"],
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("github")).toBeTruthy();
+    });
+
+    const lastCall = mocks.rowContextMenu.mock.lastCall as
+      | [Array<{ label: string; onClick: () => void }>]
+      | undefined;
+    if (!lastCall) {
+      throw new Error("Row context menu was not rendered");
+    }
+    act(() => {
+      lastCall[0][0]!.onClick();
+    });
+
+    const sheetProps = lastDecideAccessSheetProps();
+    expect(sheetProps.target).toEqual({
+      targetKind: "tool_namespace",
+      canonicalServerUrl: "mcp-tool://github",
+      displayName: "github",
+      approvalRequestId: undefined,
+      pendingBypassRequestId: undefined,
+    });
+  });
+
+  it("lists the hook sources that observed a server URL", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://github.example.com/mcp",
+          serverName: "GitHub MCP",
+          sources: ["claude-code", "litellm"],
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("GitHub MCP")).toBeTruthy();
+    });
+    const row = screen.getByText("GitHub MCP").closest("tr")!;
+    expect(within(row).getByText("Claude Code")).toBeTruthy();
+    expect(within(row).getByText("LiteLLM")).toBeTruthy();
+    expect(within(row).queryByText("Identity unresolved")).toBeNull();
   });
 
   it("closes the decide access sheet when the sheet requests it", async () => {

@@ -330,12 +330,19 @@ func generateTraceID() string {
 	return hex.EncodeToString(b)
 }
 
-// hashToolCallIDToTraceID converts a tool call ID (e.g., toolu_01SsRreQbJuFTsZS9ZszkzNR)
-// into a W3C-compliant 32-character hex trace ID using SHA256 hashing
-func hashToolCallIDToTraceID(toolCallID string) string {
+// HashToolCallIDToTraceID converts a tool call ID (e.g., toolu_01SsRreQbJuFTsZS9ZszkzNR)
+// into a W3C-compliant 32-character hex trace ID using SHA256 hashing. Every
+// writer that records telemetry for a tool call derives the row's trace_id
+// from the call id this way, so rows observed by different channels (device
+// hooks, LLM proxies) for the same call land in one trace_summaries trace.
+func HashToolCallIDToTraceID(toolCallID string) string {
 	hash := sha256.Sum256([]byte(toolCallID))
 	// Take first 16 bytes (128 bits) of the hash to create a 32-hex-char trace ID
 	return hex.EncodeToString(hash[:16])
+}
+
+func hashToolCallIDToTraceID(toolCallID string) string {
+	return HashToolCallIDToTraceID(toolCallID)
 }
 
 // syntheticToolCallID is the per-(session, tool) tool-call id for senders whose
