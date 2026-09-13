@@ -89,6 +89,7 @@ type RefreshService struct {
 	// idTokens verifies an ID token a refresh returns so the session's
 	// identity is restated.
 	idTokens IDTokenVerifier
+	enricher *SessionEnricher
 
 	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
 	issuerMetadata *IssuerMetadataRefresher
@@ -99,8 +100,9 @@ type RefreshService struct {
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
 type identityRestatement struct {
-	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow
-	tok    tokenResponse
+	client          remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow
+	tok             tokenResponse
+	previousSubject string
 }
 
 // RefreshOption configures optional RefreshService behaviour.
@@ -117,6 +119,18 @@ func WithRefreshIssuerMetadataRefresher(refresher *IssuerMetadataRefresher) Refr
 	return func(s *RefreshService) { s.issuerMetadata = refresher }
 }
 
+// WithRefreshSessionEnricher uses the same issuer-key verifier as exchange and
+// Verify. A nil enricher keeps the default.
+func WithRefreshSessionEnricher(enricher *SessionEnricher) RefreshOption {
+	return func(s *RefreshService) {
+		if enricher != nil {
+			s.enricher = enricher
+		}
+	}
+}
+
+// NewRefreshService builds the service; without a guardian policy no enricher
+// is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
 	s := &RefreshService{
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
@@ -127,7 +141,11 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		metrics:        remotesessionmetrics.NewRefresh(logger, meterProvider),
 		idTokens:       NoIDTokenVerifier(),
 		issuerMetadata: nil,
+		enricher:       nil,
 		restatements:   sync.WaitGroup{},
+	}
+	if policy != nil {
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -221,10 +239,10 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		if trigger == remotesessionmetrics.RefreshTriggerRequest {
 			// Detached so a cold key-set fetch never holds the tool call; the write is CAS-protected.
 			s.restatements.Go(func() {
-				s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
+				s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok, restatement.previousSubject)
 			})
 		} else {
-			result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok)
+			result.Session = s.restateIdentity(ctx, q, restatement.client, result.Session, restatement.tok, restatement.previousSubject)
 		}
 	}
 	result.IssuerURL = issuerURL
@@ -406,7 +424,7 @@ func (s *RefreshService) refresh(
 				attr.SlogOAuthResource(updated.Resource.String),
 			)
 		}
-		return RefreshResult{Session: updated, AccessToken: accessToken, SourceUpdatedAt: sess.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, client.IssuerUrl, &identityRestatement{client: client, tok: tok}, nil
+		return RefreshResult{Session: updated, AccessToken: accessToken, SourceUpdatedAt: sess.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, client.IssuerUrl, &identityRestatement{client: client, tok: tok, previousSubject: sess.UpstreamSubject.String}, nil
 	}
 
 	var tokenRefreshErr *TokenRefreshError

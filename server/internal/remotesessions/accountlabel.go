@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -55,7 +56,16 @@ func (l AccountLabel) String() string {
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // RemoteSessionAccountLabel decides the account label from the identity columns and the enrichment document.
-func RemoteSessionAccountLabel(email, displayName string, enrichment []byte) AccountLabel {
+// A JWT-sourced name is shown only alongside an email claim or an email-shaped subject.
+func RemoteSessionAccountLabel(email, displayName, subject, source string, enrichment []byte) AccountLabel {
+	if source == IdentitySourceJWTAccessToken && email == "" {
+		if parsed, err := mail.ParseAddress(subject); err == nil && parsed.Address == subject {
+			email = subject
+		} else {
+			// Hide the identity, not independently supplied provider context.
+			displayName = ""
+		}
+	}
 	label := AccountLabel{Name: conv.Default(displayName, email), Email: "", Chips: nil}
 	if displayName != "" && email != "" {
 		label.Email = email

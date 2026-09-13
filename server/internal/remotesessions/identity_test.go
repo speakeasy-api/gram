@@ -1,6 +1,8 @@
 package remotesessions
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -10,6 +12,16 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
+
+func TestJWTVerificationRejectsSmallRSAKey(t *testing.T) {
+	t.Parallel()
+	weak, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+	require.Error(t, validateJWTVerificationKeyStrength(&jose.JSONWebKey{Key: &weak.PublicKey}))
+	strong, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	require.NoError(t, validateJWTVerificationKeyStrength(&jose.JSONWebKey{Key: &strong.PublicKey}))
+}
 
 func rawClaims(t *testing.T, doc string) map[string]json.RawMessage {
 	t.Helper()
@@ -98,18 +110,18 @@ func TestBuildEnrichment(t *testing.T) {
 		Claims:  rawClaims(t, `{"sub":"user-1","email":"grant-owner@example.com","api_key":"secret","at_hash":"h","address":{"locality":"Berlin","access_token":"nested"},"big":9007199254740993}`),
 	}
 
-	raw, err := buildEnrichment(plain, nil, nil)
+	raw, err := buildEnrichment(plain, nil, nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, raw, "nothing to keep yields no document")
 
-	raw, err = buildEnrichment(withExtras, nil, nil)
+	raw, err = buildEnrichment(withExtras, nil, nil, nil)
 	require.NoError(t, err)
 	var doc enrichmentDocument
 	require.NoError(t, json.Unmarshal(raw, &doc))
 	require.Nil(t, doc.IDToken)
 	require.JSONEq(t, `"A1"`, string(doc.TokenResponse["app_id"]))
 
-	raw, err = buildEnrichment(plain, identity, nil)
+	raw, err = buildEnrichment(plain, identity, nil, nil)
 	require.NoError(t, err)
 	doc = enrichmentDocument{IDToken: nil, TokenResponse: nil}
 	require.NoError(t, json.Unmarshal(raw, &doc))
@@ -122,7 +134,7 @@ func TestBuildEnrichment(t *testing.T) {
 
 	other := *identity
 	other.Source = IdentitySourceUserinfo
-	raw, err = buildEnrichment(plain, &other, nil)
+	raw, err = buildEnrichment(plain, &other, nil, nil)
 	require.NoError(t, err)
 	var fromUserinfo enrichmentDocument
 	require.NoError(t, json.Unmarshal(raw, &fromUserinfo))
@@ -140,7 +152,7 @@ func TestBuildEnrichmentDropsEmailVerifiedWithoutEmail(t *testing.T) {
 		Claims:  rawClaims(t, `{"sub":"user-1","email_verified":true,"name":"Ada"}`),
 	}
 
-	raw, err := buildEnrichment(plain, identity, nil)
+	raw, err := buildEnrichment(plain, identity, nil, nil)
 	require.NoError(t, err)
 	var doc enrichmentDocument
 	require.NoError(t, json.Unmarshal(raw, &doc))
@@ -148,23 +160,30 @@ func TestBuildEnrichmentDropsEmailVerifiedWithoutEmail(t *testing.T) {
 	require.JSONEq(t, `"Ada"`, string(doc.IDToken["name"]))
 
 	identity.Claims = rawClaims(t, `{"email_verified":true}`)
-	raw, err = buildEnrichment(plain, identity, nil)
+	raw, err = buildEnrichment(plain, identity, nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, raw, "a flag with nothing to describe leaves no document")
 
 	for _, email := range []string{`""`, `null`, `42`} {
 		identity.Claims = rawClaims(t, `{"sub":"user-1","email":`+email+`,"email_verified":true}`)
-		raw, err = buildEnrichment(plain, identity, nil)
+		raw, err = buildEnrichment(plain, identity, nil, nil)
 		require.NoError(t, err)
 		require.NoError(t, json.Unmarshal(raw, &doc))
 		require.NotContains(t, doc.IDToken, "email_verified", "email %s", email)
 	}
 
 	identity.Claims = rawClaims(t, `{"sub":"user-1","email":"ada@example.com","email_verified":true}`)
-	raw, err = buildEnrichment(plain, identity, nil)
+	raw, err = buildEnrichment(plain, identity, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &doc))
 	require.JSONEq(t, `true`, string(doc.IDToken["email_verified"]))
+
+	jwtClaims := rawClaims(t, `{"sub":"user-1","email_verified":true}`)
+	raw, err = buildEnrichment(plain, identity, nil, jwtClaims)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	require.NotContains(t, doc.JWTAccessToken, "email_verified", "fallback JWT claims get the same cleanup")
+	require.JSONEq(t, `"user-1"`, string(doc.JWTAccessToken["sub"]))
 }
 
 func TestTokenResponseUnchanged(t *testing.T) {
@@ -189,7 +208,7 @@ func TestBuildEnrichmentRejectsOversizedDocument(t *testing.T) {
 	t.Parallel()
 
 	oversized := tokenResponse{raw: []byte(`{"access_token":"a","token_type":"Bearer","hub_domain":"` + strings.Repeat("x", maxEnrichmentBytes) + `"}`)}
-	raw, err := buildEnrichment(oversized, nil, nil)
+	raw, err := buildEnrichment(oversized, nil, nil, nil)
 	require.ErrorIs(t, err, errEnrichmentTooLarge)
 	require.Nil(t, raw)
 }
