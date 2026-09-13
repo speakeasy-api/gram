@@ -242,7 +242,7 @@ describe("Overview", () => {
     expect(screen.queryByText("Free trial ends")).toBeNull();
   });
 
-  it("hides the trial panel for an organization that never trialled", async () => {
+  it("shows Start trial on the trial panel for an organization that never trialled", async () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       trial_state: "none",
@@ -252,9 +252,31 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    const trial = within(panelNamed("Enterprise trial"));
+    expect(trial.getByText("No trial")).toBeTruthy();
+    expect(
+      trial.getByRole("button", { name: `Start trial for ${ORG.name}` }),
+    ).toBeTruthy();
+  });
+
+  it("keeps Start trial off a disabled organization that never trialled", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "none",
+      trial_ends_at: undefined,
+      disabled_at: "2026-03-04T00:00:00Z",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
     await screen.findByRole("heading", { name: "Details" });
     expect(
       screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${ORG.name}` }),
     ).toBeNull();
   });
 
@@ -1198,7 +1220,7 @@ describe("Overview", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["running", "ending_soon", "expired", "demoted"] as const)(
+  it.each(["running", "ending_soon", "expired", "demoted", "none"] as const)(
     "shows the trial panel for a %s trial",
     async (trialState) => {
       mocks.getOrganization.mockResolvedValue({
@@ -1219,7 +1241,7 @@ describe("Overview", () => {
     },
   );
 
-  it.each(["none", "converted", undefined] as const)(
+  it.each(["converted", undefined] as const)(
     "hides the trial panel for a %s trial",
     async (trialState) => {
       mocks.getOrganization.mockResolvedValue({
@@ -1237,26 +1259,40 @@ describe("Overview", () => {
     },
   );
 
-  it.each(["none", undefined] as const)(
-    "keeps no-trial facts in Details for a %s trial state",
-    async (trialState) => {
-      mocks.getOrganization.mockResolvedValue({
-        ...ORG,
-        trial_state: trialState,
-      });
-      await renderRouteTree(routeTree, {
-        initialPath: `/organizations/${ORG.slug}`,
-      });
+  it("keeps no-trial facts in Details for a missing trial state", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: undefined,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
 
-      await screen.findByRole("heading", { name: "Details" });
-      const details = panelNamed("Details");
-      expect(within(details).getByText("No trial")).toBeTruthy();
-      expect(screen.getAllByText("No trial")).toHaveLength(1);
-      expect(
-        screen.queryByRole("heading", { name: "Enterprise trial" }),
-      ).toBeNull();
-    },
-  );
+    await screen.findByRole("heading", { name: "Details" });
+    const details = panelNamed("Details");
+    expect(within(details).getByText("No trial")).toBeTruthy();
+    expect(screen.getAllByText("No trial")).toHaveLength(1);
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+  });
+
+  it("keeps no-trial facts in Details when the startable trial panel is showing", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "none",
+      trial_ends_at: undefined,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    expect(within(panelNamed("Details")).getByText("No trial")).toBeTruthy();
+    expect(
+      within(panelNamed("Enterprise trial")).getByText("No trial"),
+    ).toBeTruthy();
+  });
 
   it("keeps converted trial facts in Details without showing the side panel", async () => {
     const convertedAt = "2026-08-20T00:00:00Z";
@@ -1351,7 +1387,7 @@ describe("Overview", () => {
     ).toBeTruthy();
   });
 
-  it("offers only the conversion action for an expired trial", async () => {
+  it("offers conversion and Restart trial for an expired trial", async () => {
     mocks.getOrganization.mockResolvedValue({ ...ORG, trial_state: "expired" });
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
@@ -1361,6 +1397,9 @@ describe("Overview", () => {
     const trial = within(panelNamed("Enterprise trial"));
     expect(
       trial.getByRole("button", { name: `Mark ${ORG.name} as converted` }),
+    ).toBeTruthy();
+    expect(
+      trial.getByRole("button", { name: `Restart trial for ${ORG.name}` }),
     ).toBeTruthy();
     expect(trial.queryByRole("button", { name: /Extend|Re-arm/ })).toBeNull();
   });

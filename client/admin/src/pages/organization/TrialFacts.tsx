@@ -51,6 +51,22 @@ function tierLabel(tier: string | undefined): string {
   return tier === "enterprise" ? "Enterprise" : "Unknown";
 }
 
+function summaryHero({
+  remaining,
+  expired,
+  trialState,
+}: {
+  remaining: string | undefined;
+  expired: boolean;
+  trialState: AdminOrganization["trial_state"];
+}): string {
+  if (remaining) return `${remaining} left`;
+  if (expired || trialState === "expired") return "Trial ended";
+  if (trialState === "demoted") return "Trial demoted";
+  if (trialState === "none" || trialState === undefined) return "No trial";
+  return "Trial status unknown";
+}
+
 function dateLabel(iso: string | undefined): string {
   if (!iso) return "Unknown";
   const date = new Date(iso);
@@ -169,14 +185,14 @@ export function TrialSummary({ org }: { org: AdminOrganization }): JSX.Element {
     live && !expired
       ? formatTrialTimeRemaining(org.trial_ends_at, now)
       : undefined;
-  const hero = remaining
-    ? `${remaining} left`
-    : expired || org.trial_state === "expired"
-      ? "Trial ended"
-      : org.trial_state === "demoted"
-        ? "Trial demoted"
-        : "Trial status unknown";
+  const hero = summaryHero({
+    remaining,
+    expired,
+    trialState: org.trial_state,
+  });
   const status = expired ? TRIAL_LABELS.expired : trialLabel(org.trial_state);
+  const neverTrialled =
+    org.trial_state === "none" || org.trial_state === undefined;
 
   return (
     <div>
@@ -194,10 +210,12 @@ export function TrialSummary({ org }: { org: AdminOrganization }): JSX.Element {
       >
         {hero}
       </p>
-      <p className="text-muted-foreground mt-1 text-xs">
-        End date {dateLabel(org.trial_ends_at)} · {tierLabel(org.trial_tier)}{" "}
-        tier
-      </p>
+      {neverTrialled ? null : (
+        <p className="text-muted-foreground mt-1 text-xs">
+          End date {dateLabel(org.trial_ends_at)} · {tierLabel(org.trial_tier)}{" "}
+          tier
+        </p>
+      )}
     </div>
   );
 }

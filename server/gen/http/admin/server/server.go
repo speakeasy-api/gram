@@ -68,6 +68,7 @@ type Server struct {
 	MigrateToGlobalIssuer                 http.Handler
 	UploadPlatformImage                   http.Handler
 	ServeImage                            http.Handler
+	StartTrial                            http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -144,6 +145,7 @@ func New(
 			{"MigrateToGlobalIssuer", "POST", "/admin/remote-session-issuers.migrateToGlobalIssuer"},
 			{"UploadPlatformImage", "POST", "/admin/assets.uploadImage"},
 			{"ServeImage", "GET", "/admin/assets.serveImage"},
+			{"StartTrial", "POST", "/admin/trial.start"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -192,6 +194,7 @@ func New(
 		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerHandler(e.MigrateToGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
 		UploadPlatformImage:                   NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
 		ServeImage:                            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
+		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -247,6 +250,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.MigrateToGlobalIssuer = m(s.MigrateToGlobalIssuer)
 	s.UploadPlatformImage = m(s.UploadPlatformImage)
 	s.ServeImage = m(s.ServeImage)
+	s.StartTrial = m(s.StartTrial)
 }
 
 // MethodNames returns the methods served.
@@ -301,6 +305,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountMigrateToGlobalIssuerHandler(mux, h.MigrateToGlobalIssuer)
 	MountUploadPlatformImageHandler(mux, h.UploadPlatformImage)
 	MountServeImageHandler(mux, h.ServeImage)
+	MountStartTrialHandler(mux, h.StartTrial)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -2849,6 +2854,59 @@ func NewServeImageHandler(
 		if _, err := io.Copy(w, buf); err != nil {
 			http.NewResponseController(w).Flush()
 			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountStartTrialHandler configures the mux to serve the "admin" service
+// "startTrial" endpoint.
+func MountStartTrialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/trial.start", f)
+}
+
+// NewStartTrialHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "startTrial" endpoint.
+func NewStartTrialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStartTrialRequest(mux, decoder)
+		encodeResponse = EncodeStartTrialResponse(encoder)
+		encodeError    = EncodeStartTrialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "startTrial")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
 		}
 	})
 }

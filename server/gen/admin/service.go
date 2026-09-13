@@ -185,6 +185,12 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
+	// Starts a new enterprise trial for an organization that has never trialled,
+	// or restarts one that has expired without converting or being demoted. Sets
+	// the account type, whitelist flag, trial entitlements and a fresh runway
+	// counted from now. A running, demoted or converted trial is rejected: those
+	// are extend, re-arm and a contract.
+	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -207,7 +213,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage"}
+var MethodNames = [48]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -1195,6 +1201,15 @@ type SetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+// StartTrialPayload is the payload type of the admin service startTrial method.
+type StartTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the trial runs for, counted from now.
+	Days int
 }
 
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin

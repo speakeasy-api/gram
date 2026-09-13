@@ -42,6 +42,7 @@ import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyM
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
+import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
@@ -88,6 +89,7 @@ import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/set
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
+import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
@@ -857,6 +859,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminRearmTrial(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startTrial admin
+   *
+   * @remarks
+   * Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.
+   */
+  async startTrial(
+    request: StartTrialRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminStartTrial(
       this,
       request,
       options,

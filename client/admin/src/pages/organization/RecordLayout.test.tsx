@@ -27,6 +27,13 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+  };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
     enableOrganization: mocks.enableOrganization,
   };
 });

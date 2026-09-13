@@ -204,6 +204,10 @@ type Client struct {
 	// endpoint.
 	ServeImageDoer goahttp.Doer
 
+	// StartTrial Doer is the HTTP client used to make requests to the startTrial
+	// endpoint.
+	StartTrialDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -271,6 +275,7 @@ func NewClient(
 		MigrateToGlobalIssuerDoer:                 doer,
 		UploadPlatformImageDoer:                   doer,
 		ServeImageDoer:                            doer,
+		StartTrialDoer:                            doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1409,5 +1414,29 @@ func (c *Client) ServeImage() goa.Endpoint {
 			return nil, err
 		}
 		return &admin.ServeImageResponseData{Result: res.(*admin.ServeImageResult), Body: resp.Body}, nil
+	}
+}
+
+// StartTrial returns an endpoint that makes HTTP requests to the admin service
+// startTrial server.
+func (c *Client) StartTrial() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartTrialRequest(c.encoder)
+		decodeResponse = DecodeStartTrialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartTrialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartTrialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "startTrial", err)
+		}
+		return decodeResponse(resp)
 	}
 }

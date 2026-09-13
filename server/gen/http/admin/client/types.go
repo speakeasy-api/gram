@@ -333,6 +333,15 @@ type MigrateToGlobalIssuerRequestBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 }
 
+// StartTrialRequestBody is the type of the "admin" service "startTrial"
+// endpoint HTTP request body.
+type StartTrialRequestBody struct {
+	// Organization ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Number of days the trial runs for, counted from now.
+	Days int `form:"days" json:"days" xml:"days"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1329,6 +1338,46 @@ type MigrateToGlobalIssuerResponseBody struct {
 type UploadPlatformImageResponseBody struct {
 	// The asset entry that was created in Gram
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
+}
+
+// StartTrialResponseBody is the type of the "admin" service "startTrial"
+// endpoint HTTP response body.
+type StartTrialResponseBody struct {
+	// The ID of the organization
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the organization
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the organization
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Gram account type (e.g. free, pro, payg, enterprise).
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Number of active members in the organization.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// The creation date of the organization.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the organization.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -10424,6 +10473,186 @@ type ServeImageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// StartTrialUnauthorizedResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unauthorized" error.
+type StartTrialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialForbiddenResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "forbidden" error.
+type StartTrialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialBadRequestResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "bad_request" error.
+type StartTrialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialNotFoundResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "not_found" error.
+type StartTrialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialConflictResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "conflict" error.
+type StartTrialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialUnsupportedMediaResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unsupported_media" error.
+type StartTrialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialInvalidResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "invalid" error.
+type StartTrialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialInvariantViolationResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "invariant_violation" error.
+type StartTrialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialUnexpectedResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "unexpected" error.
+type StartTrialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartTrialGatewayErrorResponseBody is the type of the "admin" service
+// "startTrial" endpoint HTTP response body for the "gateway_error" error.
+type StartTrialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -11087,6 +11316,16 @@ func NewMigrateToGlobalIssuerRequestBody(p *admin.MigrateToGlobalIssuerPayload) 
 	body := &MigrateToGlobalIssuerRequestBody{
 		SourceID: p.SourceID,
 		TargetID: p.TargetID,
+	}
+	return body
+}
+
+// NewStartTrialRequestBody builds the HTTP request body from the payload of
+// the "startTrial" endpoint of the "admin" service.
+func NewStartTrialRequestBody(p *admin.StartTrialPayload) *StartTrialRequestBody {
+	body := &StartTrialRequestBody{
+		ID:   p.ID,
+		Days: p.Days,
 	}
 	return body
 }
@@ -19445,6 +19684,182 @@ func NewServeImageGatewayError(body *ServeImageGatewayErrorResponseBody) *goa.Se
 	return v
 }
 
+// NewStartTrialAdminOrganizationOK builds a "admin" service "startTrial"
+// endpoint result from a HTTP "OK" response.
+func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.AdminOrganization {
+	v := &admin.AdminOrganization{
+		ID:                   *body.ID,
+		Name:                 *body.Name,
+		Slug:                 *body.Slug,
+		AccountType:          *body.AccountType,
+		WorkosID:             body.WorkosID,
+		StripeCustomerID:     body.StripeCustomerID,
+		StripeSubscriptionID: body.StripeSubscriptionID,
+		Whitelisted:          *body.Whitelisted,
+		DisabledAt:           body.DisabledAt,
+		TrialState:           body.TrialState,
+		TrialTier:            body.TrialTier,
+		TrialEndsAt:          body.TrialEndsAt,
+		TrialConvertedAt:     body.TrialConvertedAt,
+		TrialDemotedAt:       body.TrialDemotedAt,
+		MemberCount:          *body.MemberCount,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewStartTrialUnauthorized builds a admin service startTrial endpoint
+// unauthorized error.
+func NewStartTrialUnauthorized(body *StartTrialUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialForbidden builds a admin service startTrial endpoint forbidden
+// error.
+func NewStartTrialForbidden(body *StartTrialForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialBadRequest builds a admin service startTrial endpoint
+// bad_request error.
+func NewStartTrialBadRequest(body *StartTrialBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialNotFound builds a admin service startTrial endpoint not_found
+// error.
+func NewStartTrialNotFound(body *StartTrialNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialConflict builds a admin service startTrial endpoint conflict
+// error.
+func NewStartTrialConflict(body *StartTrialConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialUnsupportedMedia builds a admin service startTrial endpoint
+// unsupported_media error.
+func NewStartTrialUnsupportedMedia(body *StartTrialUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialInvalid builds a admin service startTrial endpoint invalid
+// error.
+func NewStartTrialInvalid(body *StartTrialInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialInvariantViolation builds a admin service startTrial endpoint
+// invariant_violation error.
+func NewStartTrialInvariantViolation(body *StartTrialInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialUnexpected builds a admin service startTrial endpoint
+// unexpected error.
+func NewStartTrialUnexpected(body *StartTrialUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartTrialGatewayError builds a admin service startTrial endpoint
+// gateway_error error.
+func NewStartTrialGatewayError(body *StartTrialGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -20575,6 +20990,59 @@ func ValidateUploadPlatformImageResponseBody(body *UploadPlatformImageResponseBo
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateStartTrialResponseBody runs the validations defined on
+// StartTrialResponseBody
+func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.Whitelisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.MemberCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.DisabledAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
+	}
+	if body.TrialState != nil {
+		if !(*body.TrialState == "none" || *body.TrialState == "running" || *body.TrialState == "ending_soon" || *body.TrialState == "expired" || *body.TrialState == "demoted" || *body.TrialState == "converted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_state", *body.TrialState, []any{"none", "running", "ending_soon", "expired", "demoted", "converted"}))
+		}
+	}
+	if body.TrialEndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -32387,6 +32855,246 @@ func ValidateServeImageUnexpectedResponseBody(body *ServeImageUnexpectedResponse
 // ValidateServeImageGatewayErrorResponseBody runs the validations defined on
 // serveImage_gateway_error_response_body
 func ValidateServeImageGatewayErrorResponseBody(body *ServeImageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialUnauthorizedResponseBody runs the validations defined on
+// startTrial_unauthorized_response_body
+func ValidateStartTrialUnauthorizedResponseBody(body *StartTrialUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialForbiddenResponseBody runs the validations defined on
+// startTrial_forbidden_response_body
+func ValidateStartTrialForbiddenResponseBody(body *StartTrialForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialBadRequestResponseBody runs the validations defined on
+// startTrial_bad_request_response_body
+func ValidateStartTrialBadRequestResponseBody(body *StartTrialBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialNotFoundResponseBody runs the validations defined on
+// startTrial_not_found_response_body
+func ValidateStartTrialNotFoundResponseBody(body *StartTrialNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialConflictResponseBody runs the validations defined on
+// startTrial_conflict_response_body
+func ValidateStartTrialConflictResponseBody(body *StartTrialConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialUnsupportedMediaResponseBody runs the validations defined
+// on startTrial_unsupported_media_response_body
+func ValidateStartTrialUnsupportedMediaResponseBody(body *StartTrialUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialInvalidResponseBody runs the validations defined on
+// startTrial_invalid_response_body
+func ValidateStartTrialInvalidResponseBody(body *StartTrialInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialInvariantViolationResponseBody runs the validations
+// defined on startTrial_invariant_violation_response_body
+func ValidateStartTrialInvariantViolationResponseBody(body *StartTrialInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialUnexpectedResponseBody runs the validations defined on
+// startTrial_unexpected_response_body
+func ValidateStartTrialUnexpectedResponseBody(body *StartTrialUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartTrialGatewayErrorResponseBody runs the validations defined on
+// startTrial_gateway_error_response_body
+func ValidateStartTrialGatewayErrorResponseBody(body *StartTrialGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

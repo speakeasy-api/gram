@@ -70,6 +70,7 @@ trackedFiles:
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
+  src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
   src/funcs/adminUpdateGlobalIssuer.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
@@ -143,6 +144,7 @@ trackedFiles:
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
+  src/models/components/starttrialrequestbody.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
@@ -235,6 +237,7 @@ trackedFiles:
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
+  src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
   src/react-query/adminUpdateGlobalIssuer.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
@@ -805,6 +808,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminStartTrial:
+    speakeasy-default-admin-start-trial:
+      requestBody:
+        application/json: {"days": 94695, "id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-02-28T05:39:12.577Z", "id": "<id>", "member_count": 466443, "name": "<value>", "slug": "<value>", "updated_at": "2026-05-06T05:08:01.892Z", "whitelisted": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminTriggerOrganizationChatAnalysis:
     speakeasy-default-admin-trigger-organization-chat-analysis:
       requestBody:

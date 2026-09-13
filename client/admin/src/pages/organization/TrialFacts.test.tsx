@@ -239,6 +239,14 @@ describe("TrialFacts", () => {
     },
   );
 
+  it("summarizes a never-trialled organization as No trial", () => {
+    render(<TrialSummary org={anOrganization({ trial_state: "none" })} />);
+
+    expect(screen.getByText("No trial")).toBeTruthy();
+    expect(screen.queryByText("Trial status unknown")).toBeNull();
+    expect(screen.queryByText(/End date/)).toBeNull();
+  });
+
   it.each(["converted", "demoted", "expired"] as const)(
     "shows missing %s history as unknown",
     (trialState) => {

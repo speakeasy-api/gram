@@ -64,6 +64,7 @@ type Endpoints struct {
 	MigrateToGlobalIssuer                 goa.Endpoint
 	UploadPlatformImage                   goa.Endpoint
 	ServeImage                            goa.Endpoint
+	StartTrial                            goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -136,6 +137,7 @@ func NewEndpoints(s Service) *Endpoints {
 		MigrateToGlobalIssuer:                 NewMigrateToGlobalIssuerEndpoint(s, a.APIKeyAuth),
 		UploadPlatformImage:                   NewUploadPlatformImageEndpoint(s, a.APIKeyAuth),
 		ServeImage:                            NewServeImageEndpoint(s),
+		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -188,6 +190,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MigrateToGlobalIssuer = m(e.MigrateToGlobalIssuer)
 	e.UploadPlatformImage = m(e.UploadPlatformImage)
 	e.ServeImage = m(e.ServeImage)
+	e.StartTrial = m(e.StartTrial)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1229,5 +1232,28 @@ func NewServeImageEndpoint(s Service) goa.Endpoint {
 			return nil, err
 		}
 		return &ServeImageResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewStartTrialEndpoint returns an endpoint function that calls the method
+// "startTrial" of service "admin".
+func NewStartTrialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartTrialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.StartTrial(ctx, p)
 	}
 }

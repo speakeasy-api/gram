@@ -37,20 +37,30 @@ import {
   errorMessage,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
+  MAX_TRIAL_START_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
+  MIN_TRIAL_START_DAYS,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
-import { calendarDate, dayISO, dayOf, trialEndDay } from "@/lib/trialDates";
-import { fmtDateShort } from "@/lib/utils";
+import {
+  calendarDate,
+  dayISO,
+  dayOf,
+  trialEndDay,
+  utcTodayDay,
+} from "@/lib/trialDates";
+import { cn, fmtDateShort } from "@/lib/utils";
 
 import {
   canExtendTrial,
   canRearmTrial,
+  canStartTrial,
   useDisableOrganization,
   useEnableOrganization,
   useExtendTrial,
   useRearmTrial,
+  useStartTrial,
 } from "./rowActions";
 import { WriteReportContext, type WriteReporter } from "./writeReport";
 
@@ -74,11 +84,23 @@ const REARM_BOUNDS: DayBounds = {
   max: MAX_TRIAL_REARM_DAYS,
 };
 
+const START_BOUNDS: DayBounds = {
+  min: MIN_TRIAL_START_DAYS,
+  max: MAX_TRIAL_START_DAYS,
+};
+
 function boundsHint({ min, max }: DayBounds): string {
   return `Enter a whole number of days between ${min} and ${max}.`;
 }
 
-type DayRange = { anchor: number; earliest: number; latest: number };
+type DayRange = {
+  anchor: number;
+  earliest: number;
+  latest: number;
+  // Start counts from the UTC day of submit. Extend counts from the trial's
+  // current end, which does not move if the dialog sits overnight.
+  fromToday?: boolean;
+};
 
 // The days the server would accept, as the calendar's own range. `undefined`
 // where the record carries no end date to add days to.
@@ -89,6 +111,28 @@ function extensionRange(org: AdminOrganization): DayRange | undefined {
     anchor,
     earliest: anchor + MIN_TRIAL_EXTENSION_DAYS,
     latest: anchor + MAX_TRIAL_EXTENSION_DAYS,
+  };
+}
+
+function startTrialRange(): DayRange {
+  const anchor = utcTodayDay();
+  return {
+    anchor,
+    earliest: anchor + MIN_TRIAL_START_DAYS,
+    latest: anchor + MAX_TRIAL_START_DAYS,
+    fromToday: true,
+  };
+}
+
+function liveRange(range: DayRange): DayRange {
+  if (!range.fromToday) return range;
+  const anchor = utcTodayDay();
+  if (anchor === range.anchor) return range;
+  return {
+    ...range,
+    anchor,
+    earliest: anchor + (range.earliest - range.anchor),
+    latest: anchor + (range.latest - range.anchor),
   };
 }
 
@@ -106,15 +150,15 @@ export function WriteReportProvider({
   );
 }
 
-type OpenDialog = "disable" | "extend" | "rearm";
+type OpenDialog = "disable" | "extend" | "rearm" | "start";
 
 /**
- * Disable, re-enable, extend and re-arm wherever organization actions are
- * reused: the row menu, the peek panel footer and the overview panels.
+ * Disable, re-enable, extend, re-arm and start, wherever the record is on
+ * screen: the row menu, the peek panel footer and the overview panels.
  *
  * One component for all of them, because they are the same actions against the
  * same record: two implementations would be two answers to "can this trial be
- * extended" and two confirmations to keep in step.
+ * started" and two confirmations to keep in step.
  *
  * `buttons` names the shape rather than the place. It was `footer` while the
  * peek panel was the only surface that drew it that way.
@@ -124,6 +168,7 @@ export function OrganizationActions({
   layout,
   actions = "all",
   buttonClassName,
+  fieldTrigger,
   focusFallbackRef,
 }: {
   org: AdminOrganization;
@@ -136,6 +181,8 @@ export function OrganizationActions({
   // button brings the page's border and fill with it, which inside a toned
   // panel reads as a control belonging to something else.
   buttonClassName?: string;
+  // Compact control used where the trial field itself is the start action.
+  fieldTrigger?: boolean;
   // A stable destination owned by the surface drawing these actions. Used when
   // a successful mutation replaces the disconnected control that opened the
   // dialog. Menu triggers remain their own stable destination.
@@ -150,27 +197,33 @@ export function OrganizationActions({
   const enable = useEnableOrganization();
   const extend = useExtendTrial();
   const rearm = useRearmTrial();
+  const start = useStartTrial();
 
   const isDisabled = Boolean(org.disabled_at);
   const busy =
     disable.isPending ||
     enable.isPending ||
     extend.isPending ||
-    rearm.isPending;
+    rearm.isPending ||
+    start.isPending;
 
   // The two failures a trial dialog reports, written once so the bounds refusal
   // and the server's own refusal are led by the same words.
   const extendFailureLead = `Could not extend the trial for ${org.name}`;
   const rearmFailureLead = `Could not re-arm the trial for ${org.name}`;
+  const startCopy = startTrialCopy(org);
+  const startFailureLead = startCopy.failureLead;
 
   // Only extend has a date to add days to. Re-arm counts from now, so it gets
   // no calendar and its dialog falls back to a day count.
   const extendRange = extensionRange(org);
+  const startRange = startTrialRange();
 
   // Read once and used by both layouts, so a menu caller cannot get a
   // different answer from a buttons caller passing the same `actions`.
   const showLifecycle = actions !== "trial";
   const showExtend = actions !== "lifecycle" && canExtendTrial(org);
+  const showStart = actions !== "lifecycle" && canStartTrial(org);
   const showRearm = actions !== "lifecycle" && canRearmTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -190,6 +243,7 @@ export function OrganizationActions({
     disable.reset();
     extend.reset();
     rearm.reset();
+    start.reset();
     setOpen(dialog);
   };
 
@@ -297,6 +351,21 @@ export function OrganizationActions({
     );
   };
 
+  const runStart = (days: number): void => {
+    start.mutate(
+      { id: org.id, days },
+      {
+        onSuccess: () => {
+          closeAfterWrite();
+          showFailure(null);
+          announce(startCopy.started(days));
+        },
+        onError: (error) =>
+          announce(`${startFailureLead}: ${errorMessage(error)}`),
+      },
+    );
+  };
+
   const dialogs = (
     <>
       {open === "disable" && (
@@ -346,6 +415,22 @@ export function OrganizationActions({
           onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runRearm}
+        />
+      )}
+      {open === "start" && (
+        <TrialDaysDialog
+          bounds={START_BOUNDS}
+          range={startRange}
+          title={startCopy.title}
+          description="Puts the organization on the enterprise tier for the duration of the trial, brings the model provider keys up, and takes it out from behind the book-a-demo gate. The trial then runs until the date below, counted from today."
+          submitLabel={startCopy.submitLabel}
+          pendingLabel={startCopy.pendingLabel}
+          failureLead={startFailureLead}
+          pending={start.isPending}
+          failure={start.error}
+          onCancel={cancelDialog}
+          onCloseAutoFocus={restoreFocus}
+          onSubmit={runStart}
         />
       )}
     </>
@@ -419,9 +504,25 @@ export function OrganizationActions({
             size="xs"
             aria-label={`Re-arm trial for ${org.name}`}
             aria-busy={busy}
+            className={buttonClassName}
             onClick={(event) => openDialog("rearm", event.currentTarget)}
           >
             Re-arm trial
+          </Button>
+        )}
+        {showStart && (
+          <Button
+            variant="outline"
+            size="xs"
+            aria-label={startCopy.ariaLabel}
+            aria-busy={busy}
+            className={cn(
+              fieldTrigger && FIELD_TRIGGER_CLASS_NAME,
+              buttonClassName,
+            )}
+            onClick={(event) => openDialog("start", event.currentTarget)}
+          >
+            {fieldTrigger ? startCopy.fieldLabel : startCopy.actionLabel}
           </Button>
         )}
         {dialogs}
@@ -481,6 +582,13 @@ export function OrganizationActions({
               Re-arm trial
             </DropdownMenuItem>
           )}
+          {showStart && (
+            <DropdownMenuItem
+              onSelect={() => openDialog("start", menuTrigger.current)}
+            >
+              {startCopy.actionLabel}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {dialogs}
@@ -490,6 +598,48 @@ export function OrganizationActions({
 
 function dayCount(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+// Account type's compact trigger: `h-auto w-auto px-2 py-1.5` on SelectTrigger.
+// The start control in that row has to read as the same kind of field.
+const FIELD_TRIGGER_CLASS_NAME =
+  "h-auto w-auto min-w-0 px-2 py-1.5 text-left text-sm font-normal";
+
+type StartTrialCopy = {
+  actionLabel: string;
+  fieldLabel: string;
+  ariaLabel: string;
+  title: string;
+  submitLabel: string;
+  pendingLabel: string;
+  failureLead: string;
+  started: (days: number) => string;
+};
+
+function startTrialCopy(org: AdminOrganization): StartTrialCopy {
+  if (org.trial_state === "expired") {
+    return {
+      actionLabel: "Restart trial",
+      fieldLabel: "Restart trial",
+      ariaLabel: `Restart trial for ${org.name}`,
+      title: `Restart the trial for ${org.name}?`,
+      submitLabel: "Restart trial",
+      pendingLabel: "Restarting...",
+      failureLead: `Could not restart the trial for ${org.name}`,
+      started: (days) => `${org.name} trial restarted for ${dayCount(days)}.`,
+    };
+  }
+
+  return {
+    actionLabel: "Start trial",
+    fieldLabel: "No trial",
+    ariaLabel: `Start trial for ${org.name}`,
+    title: `Start a trial for ${org.name}?`,
+    submitLabel: "Start trial",
+    pendingLabel: "Starting...",
+    failureLead: `Could not start the trial for ${org.name}`,
+    started: (days) => `${org.name} trial started for ${dayCount(days)}.`,
+  };
 }
 
 // The dialog's own account of a failure, beside the field it is about. The
@@ -615,19 +765,31 @@ export function TrialDaysDialog({
   const fieldID = useId();
   const messageID = useId();
 
-  const hint = range
-    ? `Pick a date between ${fmtDateShort(dayISO(range.earliest))} and ${fmtDateShort(dayISO(range.latest))}.`
+  // Start counts from UTC today at submit. Recompute here and again in
+  // submit: a dialog that sits across midnight must not keep the open-time
+  // anchor, and submit must not use a render that happened before the day
+  // rolled.
+  const activeRange = range ? liveRange(range) : undefined;
+
+  const hint = activeRange
+    ? `Pick a date between ${fmtDateShort(dayISO(activeRange.earliest))} and ${fmtDateShort(dayISO(activeRange.latest))}.`
     : boundsHint(bounds);
 
   // What the picked date is worth as the request the server takes. NaN where
   // nothing is picked, so the guard below refuses it rather than sending it.
-  const picked = endsOn && range ? dayOf(endsOn) - range.anchor : Number.NaN;
+  const picked =
+    endsOn && activeRange ? dayOf(endsOn) - activeRange.anchor : Number.NaN;
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     // A disabled day is not an enforced value: the calendar can still be left
     // holding nothing, and the day count has no calendar at all.
-    const parsed = range ? picked : Number(days);
+    const currentRange = range ? liveRange(range) : undefined;
+    const parsed = currentRange
+      ? endsOn
+        ? dayOf(endsOn) - currentRange.anchor
+        : Number.NaN
+      : Number(days);
     // The endpoint's own bounds, refused here so a request that cannot succeed
     // never leaves the browser. A whole number, because the interval the
     // server works in is a count of days.
@@ -673,9 +835,9 @@ export function TrialDaysDialog({
 
           <div className="my-4 flex items-center gap-2">
             <label htmlFor={fieldID} className="text-sm">
-              {range ? "Ends on" : "Days"}
+              {activeRange ? "Ends on" : "Days"}
             </label>
-            {range ? (
+            {activeRange ? (
               <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -705,11 +867,11 @@ export function TrialDaysDialog({
                     autoFocus
                     selected={endsOn}
                     defaultMonth={endsOn}
-                    startMonth={calendarDate(range.earliest)}
-                    endMonth={calendarDate(range.latest)}
+                    startMonth={calendarDate(activeRange.earliest)}
+                    endMonth={calendarDate(activeRange.latest)}
                     disabled={{
-                      before: calendarDate(range.earliest),
-                      after: calendarDate(range.latest),
+                      before: calendarDate(activeRange.earliest),
+                      after: calendarDate(activeRange.latest),
                     }}
                     onSelect={(date) => {
                       setEndsOn(date);
@@ -741,7 +903,7 @@ export function TrialDaysDialog({
 
           {/* The operator picks a date and the request sends a count, so the
               dialog says the date that count reaches. */}
-          {range && endsOn && (
+          {activeRange && endsOn && (
             <p className="text-muted-foreground text-sm">
               The trial will end on {fmtDateShort(dayISO(dayOf(endsOn)))},{" "}
               {dayCount(picked)} later than it does now.
