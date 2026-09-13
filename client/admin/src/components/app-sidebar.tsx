@@ -11,12 +11,13 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { ADMIN_NAV } from "@/lib/adminNav";
+import { ADMIN_NAV_GROUPS } from "@/lib/adminNav";
 import { organizationQuery } from "@/lib/adminQueries";
 
 export function AppSidebar({
@@ -61,26 +62,29 @@ export function AppSidebar({
         {org ? (
           <RecordNav idOrSlug={idOrSlug} org={org} />
         ) : (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {ADMIN_NAV.map(({ to, label, icon: Icon }) => (
-                  <SidebarMenuItem key={to}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(to)}
-                      tooltip={label}
-                    >
-                      <Link to={to}>
-                        <Icon />
-                        <span>{label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          ADMIN_NAV_GROUPS.map(({ label: groupLabel, items }) => (
+            <SidebarGroup key={groupLabel}>
+              <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {items.map(({ to, label, icon: Icon }) => (
+                    <SidebarMenuItem key={to}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname.startsWith(to)}
+                        tooltip={label}
+                      >
+                        <Link to={to}>
+                          <Icon />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
         )}
       </SidebarContent>
 
