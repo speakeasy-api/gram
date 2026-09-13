@@ -180,6 +180,33 @@ describe("AppSidebar", () => {
   it("renders the global nav outside a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
+    const groups = sidebar().querySelectorAll("[data-slot='sidebar-group']");
+    expect(
+      Array.from(groups, (group) => ({
+        label: group.querySelector("[data-slot='sidebar-group-label']")
+          ?.textContent,
+        links: Array.from(group.querySelectorAll("a"), (link) => ({
+          label: link.textContent,
+          href: link.getAttribute("href"),
+        })),
+      })),
+    ).toEqual([
+      {
+        label: "Account Management",
+        links: [
+          { label: "Organizations", href: "/organizations" },
+          { label: "Projects", href: "/projects" },
+          { label: "S-token Calculator", href: "/stoken-calculator" },
+        ],
+      },
+      {
+        label: "Platform Management",
+        links: [
+          { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+        ],
+      },
+    ]);
+
     expect(hrefs()).toContain("/projects");
     expect(
       screen.queryByRole("link", { name: "All organizations" }),
@@ -579,7 +606,7 @@ describe("AppSidebar", () => {
 it("links the top-level remote session issuer catalog", async () => {
   await renderRouteTree(routeTree, { initialPath: "/organizations" });
   const link = await within(sidebar()).findByRole("link", {
-    name: "Remote session issuers",
+    name: "Remote Session Issuers",
   });
   expect(link.getAttribute("href")).toBe("/remote-session-issuers");
 });
