@@ -8,10 +8,9 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { AuthRow } from "./AuthRow";
 import { SettingsSection } from "@/components/detail/settings-section";
@@ -21,16 +20,25 @@ import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
-import { CimdAdmissionModeField } from "./CimdAdmissionModeField";
-import { CimdCustomClientsField } from "./CimdCustomClientsField";
-import { UserSessionDurationField } from "./UserSessionDurationField";
-import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
-import {
-  type ProtectedResourceProbeStatus,
-  useProtectedResourceMetadata,
-} from "./useProtectedResourceMetadata";
+import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
+import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
+
+function authenticationSectionDescription(
+  isUnproxied: boolean,
+  isRemoteMcp: boolean,
+  upstreamName: string,
+): string {
+  if (isUnproxied) {
+    return "Speakeasy doesn't manage authentication for unproxied servers.";
+  }
+  if (isRemoteMcp) {
+    return `How callers are identified to ${upstreamName}. Changes take effect on new connections.`;
+  }
+  return "Who may connect to this server and how they sign in. Changes take effect on new connections.";
+}
 
 /**
  * Chrome wrapper for the remote/tunneled MCP server settings tab. The
@@ -43,16 +51,21 @@ export function AuthenticationSection({
   mcpServer: McpServer;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  const isRemoteMcp = !!mcpServer.remoteMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer);
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Title>
+          {isRemoteMcp ? "Identity" : "Authentication"}
+        </SettingsSection.Title>
         <SettingsSection.Description>
-          {isUnproxied
-            ? "Speakeasy doesn't manage authentication for unproxied servers."
-            : "Who may connect to this server and how they sign in. Changes take effect on new connections."}
+          {authenticationSectionDescription(
+            isUnproxied,
+            isRemoteMcp,
+            mcpServer.name?.trim() || "the upstream service",
+          )}
         </SettingsSection.Description>
       </SettingsSection.Header>
       {isUnproxied ? (
@@ -96,6 +109,25 @@ export function AuthenticationSectionBody({
   target: AuthTarget;
   additionalSetupAction?: ReactNode;
 }): JSX.Element {
+  if (target.kind === "remote-mcp") {
+    return <RemoteMcpIdentitySectionBody target={target} />;
+  }
+
+  return (
+    <StandardAuthenticationSectionBody
+      target={target}
+      additionalSetupAction={additionalSetupAction}
+    />
+  );
+}
+
+function StandardAuthenticationSectionBody({
+  target,
+  additionalSetupAction,
+}: {
+  target: AuthTarget;
+  additionalSetupAction?: ReactNode;
+}): JSX.Element {
   const userSessionIssuerId = target.userSessionIssuerId ?? undefined;
   const issuerConfigured = !!userSessionIssuerId;
 
@@ -125,23 +157,6 @@ export function AuthenticationSectionBody({
       { enabled: issuerConfigured },
     );
 
-  // Remote MCP servers receive a user-session issuer when they are created,
-  // before any upstream OAuth client is attached. Keep protected-resource
-  // discovery available in that recovery state so providers that advertise
-  // scopes only in RFC 9728 metadata can still be configured manually.
-  const shouldProbeProtectedResource =
-    !!target.remoteMcpServerId &&
-    (!issuerConfigured || (!isLoadingClients && allClients.length === 0));
-  const { status: probeStatus, metadata: protectedResourceMetadata } =
-    useProtectedResourceMetadata(
-      target.remoteMcpServerId,
-      shouldProbeProtectedResource,
-    );
-  const authorizationServer =
-    protectedResourceMetadata?.authorizationServers?.[0];
-  const protectedResourceScopes =
-    protectedResourceMetadata?.scopesSupported ?? [];
-
   const associatedIssuerIds = useMemo(
     () => new Set(allClients.map((client) => client.remoteSessionIssuerId)),
     [allClients],
@@ -157,37 +172,7 @@ export function AuthenticationSectionBody({
     [allIssuers, associatedIssuerIds],
   );
 
-  // Mirrors the unsaved selection in the admission mode field so the
-  // custom-URL list can render against it. The field owns the draft; this is
-  // a copy, so it has to be reset on every trigger the field resets its own
-  // on: a change to the saved mode, a different issuer, and the field going
-  // away. That last one is not hypothetical — the field lives in one branch
-  // below and this state does not, so a failed background refetch swaps the
-  // branch for an error, unmounts the field, and remounts it later with a
-  // fresh draft. Without it in the deps, this copy would keep a selection
-  // the field no longer holds, and the list would render for a mode nothing
-  // is showing as chosen.
-  const [cimdDraftMode, setCimdDraftMode] = useState<WritableMode | null>(null);
-  const savedCimdMode = userSessionIssuer?.clientIdMetadataAdmissionMode;
-  const loadedIssuerId = userSessionIssuer?.id;
-  const cimdFieldMounted =
-    issuerConfigured &&
-    !isLoadingUserSessionIssuer &&
-    !isUserSessionIssuerError &&
-    !!userSessionIssuer;
-  useEffect(() => {
-    setCimdDraftMode(null);
-  }, [savedCimdMode, loadedIssuerId, cimdFieldMounted]);
-
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
-  const [sheetInitialScopes, setSheetInitialScopes] = useState<string[]>();
-
-  const openSheet = (initialIssuerUrl?: string, initialScopes?: string[]) => {
-    setSheetInitialUrl(initialIssuerUrl);
-    setSheetInitialScopes(initialScopes);
-    setSheetOpen(true);
-  };
 
   // Keep targets mounted for one render after close so exit animations retain
   // the row that triggered them.
@@ -214,12 +199,7 @@ export function AuthenticationSectionBody({
   if (!issuerConfigured) {
     authenticationFields = (
       <IdentityProviderSetupField
-        probeStatus={probeStatus}
-        hasDiscoveredAuthorizationServer={!!authorizationServer}
-        onUseDiscovered={() =>
-          openSheet(authorizationServer, protectedResourceScopes)
-        }
-        onStartManual={() => openSheet(undefined)}
+        onStartManual={() => setSheetOpen(true)}
         additionalAction={additionalSetupAction}
       />
     );
@@ -228,35 +208,15 @@ export function AuthenticationSectionBody({
   } else if (isUserSessionIssuerError || !userSessionIssuer) {
     authenticationFields = <AuthenticationLoadErrorField />;
   } else {
-    // The custom-URL list only means anything in the modes that consult it,
-    // so it follows the selection rather than the saved value: an operator
-    // moving onto "Known clients" can add the URLs that mode enforces before
-    // saving it, instead of switching first and racing to fill the list
-    // while enforcement is already live with nothing in it.
-    const shownMode =
-      cimdDraftMode ?? userSessionIssuer.clientIdMetadataAdmissionMode;
-    const admitsCustomUrls =
-      shownMode === "presets" || shownMode === "reporting";
-
     authenticationFields = (
       <>
-        <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
-        <CimdAdmissionModeField
-          userSessionIssuer={userSessionIssuer}
-          onDraftModeChange={setCimdDraftMode}
-        >
-          {admitsCustomUrls && (
-            <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
-          )}
-        </CimdAdmissionModeField>
+        <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
           projectId={target.projectId}
-          isLoading={
-            isLoadingIssuers || isLoadingClients || probeStatus === "loading"
-          }
-          onAdd={() => openSheet(authorizationServer, protectedResourceScopes)}
+          isLoading={isLoadingIssuers || isLoadingClients}
+          onAdd={() => setSheetOpen(true)}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />
@@ -278,8 +238,6 @@ export function AuthenticationSectionBody({
         target={target}
         userSessionIssuer={userSessionIssuer ?? null}
         selectableIssuers={selectableIssuers}
-        initialIssuerUrl={sheetInitialUrl}
-        initialScopes={sheetInitialScopes}
       />
 
       {deleteTarget && userSessionIssuerId && (
@@ -304,15 +262,9 @@ export function AuthenticationSectionBody({
 }
 
 function IdentityProviderSetupField({
-  probeStatus,
-  hasDiscoveredAuthorizationServer,
-  onUseDiscovered,
   onStartManual,
   additionalAction,
 }: {
-  probeStatus: ProtectedResourceProbeStatus;
-  hasDiscoveredAuthorizationServer: boolean;
-  onUseDiscovered: () => void;
   onStartManual: () => void;
   additionalAction?: ReactNode;
 }) {
@@ -328,9 +280,6 @@ function IdentityProviderSetupField({
         className="py-8"
         action={
           <AuthenticationSetupActions
-            probeStatus={probeStatus}
-            hasDiscoveredAuthorizationServer={hasDiscoveredAuthorizationServer}
-            onUseDiscovered={onUseDiscovered}
             onStartManual={onStartManual}
             additionalAction={additionalAction}
           />
