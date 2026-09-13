@@ -1347,39 +1347,6 @@ CREATE TABLE IF NOT EXISTS ai_tool_decisions (
   CONSTRAINT ai_tool_decisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- Superseded by ai_scan_targets / ai_scan_catalogs above. Left in place so the
--- rename lands without a backfill; dropped by a follow-up migration once the
--- code reading them is deployed.
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_targets (
-  organization_id TEXT NOT NULL,
-  id TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  bundle_ids TEXT[] NOT NULL DEFAULT '{}',
-  binaries TEXT[] NOT NULL DEFAULT '{}',
-  config_dirs TEXT[] NOT NULL DEFAULT '{}',
-  process_names TEXT[] NOT NULL DEFAULT '{}',
-  version_plist_key TEXT,
-  enabled boolean NOT NULL DEFAULT true,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT device_agent_ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
-  CONSTRAINT device_agent_ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_catalogs (
-  organization_id TEXT NOT NULL,
-  list_version integer NOT NULL DEFAULT 0,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT device_agent_ai_scan_catalogs_pkey PRIMARY KEY (organization_id),
-  CONSTRAINT device_agent_ai_scan_catalogs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
