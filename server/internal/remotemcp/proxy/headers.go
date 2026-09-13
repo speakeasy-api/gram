@@ -143,7 +143,8 @@ func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwA
 // credentials (API keys, Gram-managed OAuth tokens, chat-session JWTs)
 // are not meaningful upstream. When [Proxy.AuthorizationOverride] is
 // non-empty, the proxy emits its own "Authorization: Bearer <override>"
-// upstream; configured headers may further override that.
+// upstream after configured headers are resolved so per-user identity wins a
+// legacy conflict with a static Authorization credential.
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {
@@ -152,10 +153,6 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		for _, v := range values {
 			remoteReq.Header.Add(name, v)
 		}
-	}
-
-	if p.AuthorizationOverride != "" {
-		remoteReq.Header.Set("Authorization", "Bearer "+p.AuthorizationOverride)
 	}
 
 	for _, h := range p.Headers {
@@ -168,6 +165,10 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)
+	}
+
+	if p.AuthorizationOverride != "" {
+		remoteReq.Header.Set("Authorization", "Bearer "+p.AuthorizationOverride)
 	}
 
 	// Strip last so configured headers can't reintroduce Accept-Encoding after
