@@ -168,8 +168,12 @@ func TestProxy_Post_RejectsCredentialBearingLegacyHostedHTTP(t *testing.T) {
 	p := newProxyForTest(t, "http://8.8.8.8/mcp")
 	p.Identity.RemoteMCPServerID = "legacy-remote"
 	p.AuthorizationOverride = "user-token"
+	// The configured credential is required and unresolvable from this request,
+	// so header application would fail with the missing-header error. Getting
+	// the transport error instead is what proves the cleartext target is
+	// rejected before any credential is attached to it.
 	p.Headers = []proxy.ConfiguredHeader{{
-		Name: "X-Agent-Credential", StaticValue: "agent-token", ValueFromRequestHeader: "", IsRequired: true,
+		Name: "X-Agent-Credential", StaticValue: "", ValueFromRequestHeader: "X-Caller-Credential", IsRequired: true,
 	}}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
