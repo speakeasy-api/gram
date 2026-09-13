@@ -200,7 +200,10 @@ export function AIToolsTable({
     return base;
   }, [canDecide]);
 
-  const detections = detectionsQuery.data?.detections ?? [];
+  const detections = useMemo(
+    () => detectionsQuery.data?.detections ?? [],
+    [detectionsQuery.data],
+  );
   const normalizedSearch = search.trim().toLowerCase();
   const statusFilter = values.status ?? undefined;
   const filtered = useMemo(() => {

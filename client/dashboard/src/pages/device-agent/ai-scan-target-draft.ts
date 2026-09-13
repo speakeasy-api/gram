@@ -118,6 +118,15 @@ function codePoints(value: string): number {
   return Array.from(value).length;
 }
 
+// hasControlCharacter scans for C0 controls rather than matching them in a
+// regex, which the lint rules forbid.
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f;
+  });
+}
+
 // normalizeConfigDir just trims what was typed. The path is taken as
 // home-relative unless it starts with /, and the device agent resolves it.
 export function normalizeConfigDir(dir: string): string {
@@ -229,7 +238,7 @@ export function validateDraft(draft: Draft): DraftErrors {
       (id) => {
         if (codePoints(id) > 512)
           return `"${id}" is longer than 512 characters`;
-        if (/[\s\u0000-\u001f]/.test(id))
+        if (/\s/.test(id) || hasControlCharacter(id))
           return `"${id}" must not contain spaces`;
         // Blocking is CIMD-only, and a CIMD client_id is the https URL its
         // document is served from.
