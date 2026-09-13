@@ -34,6 +34,30 @@ func ValidateRemoteMCPURL(ctx context.Context, policy *guardian.Policy, rawURL s
 	return validated, nil
 }
 
+// sameRemoteMCPOrigin reports whether two URLs address the same origin:
+// scheme, host, and port must all match, with the scheme's default port
+// filled in so https://mcp.example.com and https://mcp.example.com:443 are
+// one origin.
+func sameRemoteMCPOrigin(a *url.URL, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		remoteMCPOriginPort(a) == remoteMCPOriginPort(b)
+}
+
+func remoteMCPOriginPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
+}
+
 // validateRemoteMCPTransportURL performs no DNS lookup. Runtime SSRF
 // enforcement remains in Guardian's dialer, including redirected requests.
 func validateRemoteMCPTransportURL(rawURL string) (*url.URL, error) {

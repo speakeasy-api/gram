@@ -943,9 +943,15 @@ func (p *Proxy) forwardRequest(
 			return http.ErrUseLastResponse
 		}
 	} else if p.Identity.RemoteMCPServerID != "" {
+		configuredOrigin := upstreamReq.URL
 		client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
 			if _, err := validateRemoteMCPTransportURL(req.URL.String()); err != nil {
 				return fmt.Errorf("validate remote MCP redirect: %w", err)
+			}
+			// Redirects are still followed, but a hop off the configured
+			// origin travels without the project's credentials.
+			if !sameRemoteMCPOrigin(configuredOrigin, req.URL) {
+				p.stripConfiguredCredentials(req.Header)
 			}
 			return nil
 		}

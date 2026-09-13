@@ -1,10 +1,43 @@
 package proxy
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	parsed, err := url.Parse(raw)
+	require.NoError(t, err)
+	return parsed
+}
+
+func TestSameRemoteMCPOrigin_MatchesImpliedDefaultPort(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameRemoteMCPOrigin(mustParseURL(t, "https://mcp.example.com/mcp"), mustParseURL(t, "https://mcp.example.com:443/other")))
+}
+
+func TestSameRemoteMCPOrigin_IgnoresCase(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameRemoteMCPOrigin(mustParseURL(t, "https://MCP.Example.com/mcp"), mustParseURL(t, "HTTPS://mcp.example.com/mcp")))
+}
+
+func TestSameRemoteMCPOrigin_RejectsPortChange(t *testing.T) {
+	t.Parallel()
+	require.False(t, sameRemoteMCPOrigin(mustParseURL(t, "https://mcp.example.com/mcp"), mustParseURL(t, "https://mcp.example.com:8443/mcp")))
+}
+
+func TestSameRemoteMCPOrigin_RejectsSubdomain(t *testing.T) {
+	t.Parallel()
+	require.False(t, sameRemoteMCPOrigin(mustParseURL(t, "https://example.com/mcp"), mustParseURL(t, "https://attacker.example.com/mcp")))
+}
+
+func TestSameRemoteMCPOrigin_RejectsSchemeChange(t *testing.T) {
+	t.Parallel()
+	require.False(t, sameRemoteMCPOrigin(mustParseURL(t, "https://127.0.0.1:8080/mcp"), mustParseURL(t, "http://127.0.0.1:8080/mcp")))
+}
 
 func TestValidateRemoteMCPTransportURL_AllowsFullIPv4LoopbackRange(t *testing.T) {
 	t.Parallel()
