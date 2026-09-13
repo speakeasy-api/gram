@@ -4,7 +4,7 @@ import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/componen
 // Form state and rules for the scan target editor; the rules mirror the
 // server's aitargets.Validate.
 
-export type TargetCategory = "harness" | "local_model";
+export type TargetCategory = "harness" | "assistant" | "local_model";
 
 export const TARGET_CATEGORIES: ReadonlyArray<{
   value: TargetCategory;
@@ -18,17 +18,23 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
       "An agentic coding tool or AI IDE, such as Claude Code or Cursor.",
   },
   {
+    value: "assistant",
+    label: "Assistants",
+    description:
+      "A general-purpose AI assistant or agent, such as OpenClaw or Hermes.",
+  },
+  {
     value: "local_model",
-    label: "Local model",
-    description: "A local model runtime, such as Ollama or LM Studio.",
+    label: "Open models",
+    description: "An open model run locally, such as Ollama or LM Studio.",
   },
 ];
 
-// The form edits the name, category, binaries, config dirs, and process
-// names. The other fields ride along from an existing target so an edit never
-// wipes them: the id is derived from the name on create and fixed afterwards,
-// and bundle ids, the plist key, and the served flag are only set outside the
-// form.
+// The form edits the name, category, binaries, config dirs, process names,
+// and the gateway-client matchers. The other fields ride along from an
+// existing target so an edit never wipes them: the id is derived from the
+// name on create and fixed afterwards, and bundle ids, the plist key, and the
+// served flag are only set outside the form.
 export type Draft = {
   id: string;
   displayName: string;
@@ -38,17 +44,25 @@ export type Draft = {
   configDirs: string[];
   processNames: string[];
   versionPlistKey: string;
+  cimdVendorKeys: string[];
+  oauthClientIds: string[];
+  clientInfoNames: string[];
   enabled: boolean;
 };
 
 export type DraftErrors = Partial<Record<keyof Draft, string>>;
 
 const MAX_SIGNATURE_ENTRIES = 16;
+const MAX_GATEWAY_CLIENT_ENTRIES = 16;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const BUNDLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const BINARY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 const PROCESS_NAME_PATTERN = /^[A-Za-z0-9 ._-]{1,64}$/;
 const PLIST_KEY_PATTERN = /^[A-Za-z0-9]{1,64}$/;
+
+function isTargetCategory(value: string): value is TargetCategory {
+  return TARGET_CATEGORIES.some((option) => option.value === value);
+}
 
 export function emptyDraft(): Draft {
   return {
@@ -60,6 +74,9 @@ export function emptyDraft(): Draft {
     configDirs: [],
     processNames: [],
     versionPlistKey: "",
+    cimdVendorKeys: [],
+    oauthClientIds: [],
+    clientInfoNames: [],
     enabled: true,
   };
 }
@@ -68,12 +85,15 @@ export function draftFromTarget(target: AiScanTarget): Draft {
   return {
     id: target.id,
     displayName: target.displayName,
-    category: target.category === "local_model" ? "local_model" : "harness",
+    category: isTargetCategory(target.category) ? target.category : "harness",
     bundleIds: [...target.signatures.bundleIds],
     binaries: [...target.signatures.binaries],
     configDirs: [...target.signatures.configDirs],
     processNames: [...target.signatures.processNames],
     versionPlistKey: target.versionPlistKey ?? "",
+    cimdVendorKeys: [...target.gatewayClient.cimdVendorKeys],
+    oauthClientIds: [...target.gatewayClient.oauthClientIds],
+    clientInfoNames: [...target.gatewayClient.clientInfoNames],
     enabled: target.enabled,
   };
 }
@@ -117,6 +137,28 @@ function listProblem(
     if (problem) return problem;
   }
   return undefined;
+}
+
+function gatewayListProblem(
+  entries: string[],
+  noun: string,
+  accept: (entry: string) => string | undefined,
+): string | undefined {
+  if (entries.length > MAX_GATEWAY_CLIENT_ENTRIES) {
+    return `At most ${MAX_GATEWAY_CLIENT_ENTRIES} ${noun} are allowed`;
+  }
+  for (const entry of entries) {
+    const problem = accept(entry);
+    if (problem) return problem;
+  }
+  return undefined;
+}
+
+// callsGateway mirrors the server's aitargets.CallsGateway: which categories
+// ever reach Gram's MCP gateway, and so which ones it is meaningful to name a
+// caller for. An open model run locally never connects.
+export function callsGateway(category: TargetCategory): boolean {
+  return category === "harness" || category === "assistant";
 }
 
 export function validateDraft(draft: Draft): DraftErrors {
@@ -168,10 +210,93 @@ export function validateDraft(draft: Draft): DraftErrors {
       "Use an Info.plist key made of letters and digits only";
   }
 
+  // A harness and an assistant both reach Gram's MCP gateway, so both may
+  // carry matchers. The form hides these fields for an open model; this
+  // catches a category switch that would otherwise leave stale ones behind.
+  if (!callsGateway(draft.category)) {
+    if (
+      draft.oauthClientIds.length > 0 ||
+      draft.clientInfoNames.length > 0 ||
+      draft.cimdVendorKeys.length > 0
+    ) {
+      errors.oauthClientIds =
+        "Only a harness or assistant can carry gateway client matchers";
+    }
+  } else {
+    errors.oauthClientIds = gatewayListProblem(
+      draft.oauthClientIds,
+      "documents",
+      (id) => {
+        if (codePoints(id) > 512)
+          return `"${id}" is longer than 512 characters`;
+        if (/[\s\u0000-\u001f]/.test(id))
+          return `"${id}" must not contain spaces`;
+        // Blocking is CIMD-only, and a CIMD client_id is the https URL its
+        // document is served from.
+        if (!id.startsWith("https://")) {
+          return `"${id}" must be an https URL to a client ID metadata document`;
+        }
+        return undefined;
+      },
+    );
+    errors.clientInfoNames = gatewayListProblem(
+      draft.clientInfoNames,
+      "client names",
+      (name) =>
+        codePoints(name) > 128
+          ? `"${name}" is longer than 128 characters`
+          : undefined,
+    );
+  }
+
   for (const key of Object.keys(errors) as Array<keyof Draft>) {
     if (errors[key] === undefined) delete errors[key];
   }
   return errors;
+}
+
+/**
+ * clientIdFromCimdInput reads what someone put in the CIMD documents field and
+ * returns the client_id to store.
+ *
+ * Two shapes are accepted because both are what people have to hand: the URL
+ * the document is served from, or the document itself. They collapse to one
+ * value — draft-ietf-oauth-client-id-metadata-document requires a document's
+ * `client_id` member to equal the URL it was fetched from — so pasting the
+ * JSON is a convenience, not a second kind of matcher.
+ */
+export function clientIdFromCimdInput(
+  input: string,
+): { clientId: string } | { error: string } {
+  const trimmed = input.trim();
+  if (trimmed === "") return { error: "Enter a document URL, or paste one" };
+
+  if (!trimmed.startsWith("{")) {
+    return trimmed.startsWith("https://")
+      ? { clientId: trimmed }
+      : {
+          error:
+            "Enter an https URL to a client ID metadata document, or paste the document itself",
+        };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { error: "That is not valid JSON" };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { error: "A client ID metadata document must be a JSON object" };
+  }
+  const clientId = (parsed as { client_id?: unknown }).client_id;
+  if (typeof clientId !== "string" || !clientId.startsWith("https://")) {
+    return {
+      error:
+        "The document has no client_id member, or it is not an https URL. A document's client_id must equal the URL it is served from.",
+    };
+  }
+  return { clientId };
 }
 
 export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
@@ -186,6 +311,13 @@ export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
       configDirs: draft.configDirs,
       processNames: draft.processNames,
     },
+    gatewayClient: callsGateway(draft.category)
+      ? {
+          cimdVendorKeys: draft.cimdVendorKeys,
+          oauthClientIds: draft.oauthClientIds,
+          clientInfoNames: draft.clientInfoNames,
+        }
+      : { cimdVendorKeys: [], oauthClientIds: [], clientInfoNames: [] },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
     enabled: draft.enabled,
   };

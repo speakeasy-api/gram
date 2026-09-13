@@ -98,6 +98,10 @@ function PageHeaderTitle({
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   "shadow-mcp": "Shadow MCP",
+  "shadow-ai": "Shadow AI",
+  harnesses: "Harnesses",
+  models: "Models",
+  mcps: "MCPs",
   sdks: "SDKs",
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",

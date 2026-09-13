@@ -24,6 +24,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "risk-policies": "Security and Policy",
   "risk-events": "Security and Policy",
   "shadow-mcp": "Security and Policy",
+  "shadow-ai": "Security and Policy",
   "request-access": "Security and Policy",
   "detection-rules": "Security and Policy",
   // MCP Gateway

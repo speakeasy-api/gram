@@ -58,16 +58,18 @@ describe("project routes", () => {
     expect(screen.getByText("/org/projects/project/guide")).toBeTruthy();
   });
 
-  it("does not expose a dedicated Shadow AI route", () => {
+  it("exposes the Shadow AI section with Shadow MCP as one of its tabs", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ProjectRouteHrefs />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("project-route-hrefs").textContent).not.toContain(
-      "shadow-ai",
-    );
+    const hrefs = screen.getByTestId("project-route-hrefs").textContent ?? "";
+    expect(hrefs).toContain("shadow-ai");
+    // The Shadow MCP paths predate the section and are in bookmarks and block
+    // messages, so they stay routable and redirect.
+    expect(hrefs).toContain("shadow-mcp");
   });
 
   it("navigates to absolute routes through goTo", () => {

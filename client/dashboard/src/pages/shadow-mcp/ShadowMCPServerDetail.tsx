@@ -7,6 +7,7 @@ import {
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
+import { shadowAIBreadcrumbSubstitutions } from "@/pages/shadow-ai/ShadowAI";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -691,13 +692,16 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
-            ["shadow-mcp"]: "Shadow MCP",
+            ...shadowAIBreadcrumbSubstitutions,
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">
-        <RequireScope scope="org:admin" level="page">
+        {/* Project read to view, under the same split as the section's
+            tables: the server withholds attribution from this scope, and
+            every action on the page stays behind its own org:admin gate. */}
+        <RequireScope scope={["project:read", "project:write"]} level="page">
           <Page.Section>
             {/* No area eyebrow: "SECURE" over a server under review reads as
                 a verdict about the server, not as the app section. */}

@@ -47,7 +47,7 @@ const COLUMNS: Column<AIDetection>[] = [
     width: "0.75fr",
     render: (detection) => (
       <Text small>
-        {detection.category === "local_model" ? "Local model" : "Harness"}
+        {detection.category === "local_model" ? "Open model" : "Harness"}
       </Text>
     ),
   },
@@ -144,7 +144,7 @@ export function EmployeeShadowAISection({
       <InlineEmptyState
         icon="radar"
         heading="No detected AI tools"
-        description="No AI harnesses or local model runtimes have been detected for this identity."
+        description="No AI harnesses or open models have been detected for this identity."
         orientation="horizontal"
       />
     );

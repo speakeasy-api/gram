@@ -61,6 +61,7 @@ export const AUDIT_ACTIONS = [
   "device_agent_ai_scan_target:create",
   "device_agent_ai_scan_target:delete",
   "device_agent_ai_scan_target:update",
+  "ai_tool_decision:set",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -423,6 +424,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated AI scan target";
     case "device_agent_ai_scan_target:delete":
       return "removed AI scan target";
+    case "ai_tool_decision:set":
+      return "decided AI tool access";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":

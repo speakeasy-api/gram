@@ -79,16 +79,17 @@ vi.mock("./useIdentityQueries", () => ({
 }));
 
 describe("IdentityConnections", () => {
-  it("shows employee Shadow AI directly after active MCP connections", () => {
+  it("renders active MCP connections", () => {
     render(<IdentityConnections />);
 
-    const connections = screen.getByTestId("active-connections");
-    const shadowAI = screen.getByTestId("shadow-ai");
+    expect(screen.getByTestId("active-connections")).toBeTruthy();
+  });
 
-    expect(shadowAI.textContent).toBe("employee@example.com");
-    expect(
-      connections.compareDocumentPosition(shadowAI) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+  // Which AI tools a person runs is a security question about them, not a
+  // list of things they have connected. It moved to Identity -> Security.
+  it("no longer carries the employee Shadow AI section", () => {
+    render(<IdentityConnections />);
+
+    expect(screen.queryByTestId("shadow-ai")).toBeNull();
   });
 });
