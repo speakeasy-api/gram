@@ -19,6 +19,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -351,7 +352,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
-	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
+	attachShadowInventory(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
@@ -406,14 +407,34 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 // attachShadowInventory keeps the Shadow tools registered on both browser and
 // local-fixture surfaces. Missing dependencies degrade to stable unavailable
 // descriptors, but the capability loss is logged rather than silently hidden.
-func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
+func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) bool {
 	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budget, config.JWTSigningKey)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
 	reader.WithShadowInventory(shadowInventory)
+	attachShadowAI(reader, config, authorizer, budget)
 	return true
+}
+
+// attachShadowAI registers the Shadow AI reads — what enrolled devices are
+// running, and what the agents probe for. Organization-scoped, so unlike the
+// MCP half it needs no project resolver or cursor key; it needs the live
+// org:admin authorizer, because the per-tool user and device counts are
+// attribution the dashboard withholds below that grant.
+func attachShadowAI(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) {
+	service := platformmcp.NewShadowAIService(
+		config.ShadowInventory,
+		platformmcp.NewPostgresShadowAILibrary(agentrepo.New(config.DB)),
+		authorizer,
+		budget,
+	)
+	if service == nil {
+		config.Logger.WarnContext(context.Background(), "platform mcp shadow ai unavailable")
+		return
+	}
+	reader.WithShadowAI(service)
 }
 
 // platformMCPSetupResources builds the reviewed setup corpus this deployment
@@ -722,6 +743,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
 	} else {
 		platformReader.WithShadowInventory(shadowInventory)
+		attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 		shadowDecisionBudget := platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionConnectionLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionOrganizationLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),

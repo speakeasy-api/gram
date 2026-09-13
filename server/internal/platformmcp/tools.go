@@ -217,6 +217,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
+		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
@@ -225,6 +226,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableOrganizationEventTools(reg)
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
+		registerUnavailableShadowAITools(reg)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
