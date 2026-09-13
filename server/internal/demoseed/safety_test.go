@@ -5,14 +5,12 @@ package demoseed
 import (
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
-	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -118,11 +116,6 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
-	// Publish the fixture tenant's raw meter facts through the same complete
-	// generation rebuild used by production before taking the outside-tenant
-	// baseline.
-	require.NoError(t, chrepo.New(ch).RebuildUsageSummaries(ctx, time.Now().UTC()))
-
 	demoProjects := []string{DefaultSpec().ProjectID()}
 
 	pgBefore, err := demoseedtest.SnapshotPostgres(ctx, db)
@@ -203,13 +196,12 @@ func TestDemoSeedSafety(t *testing.T) {
 		require.True(t, ok, "postgres table %s appeared between seed runs", table)
 	}
 
-	// ClickHouse: the seed writes deterministic row counts into plain
-	// MergeTree tables. Summing/Aggregating MV targets collapse rows by
-	// time-bucketed keys that shift with now(), so only their isolation is
-	// asserted (above), not exact demo-scope counts.
+	// ClickHouse: deterministic plain MergeTree targets and the daily meter
+	// SummingMergeTree target must return to the same demo-scope row count.
+	// Other collapsing targets are covered by the tenant-isolation assertions.
 	for table, s1 := range chAfter1 {
 		s2 := chAfter2[table]
-		if isPlainMergeTree(s1.Engine) {
+		if isPlainMergeTree(s1.Engine) || table == "billing_meter_daily_summaries" {
 			require.Equal(t, s1.DemoCount, s2.DemoCount,
 				"clickhouse table %s: demo row count changed between seed runs — reseed is not cleaning up or not idempotent", table)
 		}

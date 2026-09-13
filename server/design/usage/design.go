@@ -178,14 +178,14 @@ var PaygBillingSummary = Type("PaygBillingSummary", func() {
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
-// MeterUsageWindow is one inclusive/exclusive UTC reporting window.
+// MeterUsageWindow is one inclusive/exclusive UTC-day reporting window.
 var MeterUsageWindow = Type("MeterUsageWindow", func() {
-	Attribute("from", String, "Inclusive UTC window boundary", func() { Format(FormatDateTime) })
-	Attribute("to", String, "Exclusive UTC window boundary", func() { Format(FormatDateTime) })
+	Attribute("from", String, "Inclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
 	Required("from", "to")
 })
 
-// MeterUsageBucket is one dense, clipped UTC day in a usage response.
+// MeterUsageBucket is one dense UTC day in a usage response.
 var MeterUsageBucket = Type("MeterUsageBucket", func() {
 	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
 	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
@@ -238,7 +238,7 @@ var MeterUsageResponse = Type("MeterUsageResponse", func() {
 	Attribute("unit", String, func() { Enum("stokens", "bytes") })
 	Attribute("measurement_method", String)
 	Attribute("total", String, "Exact signed integer period total as a decimal string")
-	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense clipped UTC daily buckets")
+	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense UTC daily buckets, including in-progress days")
 	Attribute("breakdown", MeterUsageBreakdown)
 	Attribute("queried_at", String, "Retrieval timestamp, not an ingestion watermark", func() { Format(FormatDateTime) })
 	Required("family", "reading_kind", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
@@ -270,17 +270,17 @@ var _ = Service("usage", func() {
 	})
 
 	Method("getMeterUsage", func() {
-		Description("Get meter-ledger usage for an organization over a maximum of three calendar months")
+		Description("Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("family", String, func() {
 				Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
 			})
-			Attribute("from", String, "Inclusive UTC reporting boundary. Must be paired with to.", func() {
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
 				Format(FormatDateTime)
 			})
-			Attribute("to", String, "Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("breakdown", String, "Family-compatible reporting facet")

@@ -47,7 +47,7 @@ export type MeterUsageResponse = {
   billingCycles: Array<MeterUsageWindow>;
   breakdown: MeterUsageBreakdown;
   /**
-   * Dense clipped UTC daily buckets
+   * Dense UTC daily buckets, including in-progress days
    */
   buckets: Array<MeterUsageBucket>;
   family: Family;

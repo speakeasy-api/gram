@@ -18,15 +18,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestGetMeterUsageBuildsDenseClippedOrganizationReport(t *testing.T) {
+func TestGetMeterUsageBuildsDenseDailyOrganizationReport(t *testing.T) {
 	t.Parallel()
 	organizationID := "org-" + uuid.NewString()
 	otherOrganizationID := "org-" + uuid.NewString()
 	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
 	service.meterReadConn = newIsolatedMeterClickhouse(t)
 	service.now = func() time.Time { return time.Date(2026, time.April, 15, 10, 0, 0, 0, time.UTC) }
-	from := time.Date(2026, time.April, 1, 12, 0, 0, 0, time.UTC)
-	to := time.Date(2026, time.April, 3, 6, 0, 0, 0, time.UTC)
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, time.April, 4, 0, 0, 0, 0, time.UTC)
 
 	rows := []chrepo.ReadingRow{
 		apiMeterUsageReading(organizationID, 9_007_199_254_740_993, from.Add(time.Hour)),
@@ -34,7 +34,6 @@ func TestGetMeterUsageBuildsDenseClippedOrganizationReport(t *testing.T) {
 		apiMeterUsageReading(otherOrganizationID, 1_000_000, from.Add(time.Hour)),
 	}
 	require.NoError(t, chrepo.New(service.meterReadConn).InsertReadings(t.Context(), rows))
-	refreshMeterUsageSummary(t, service.meterReadConn)
 
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
 	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
@@ -82,7 +81,7 @@ func TestResolveMeterUsageWindowRejectsUnpairedAndOversizedRanges(t *testing.T) 
 	_, _, err := resolveMeterUsageWindow(&from, nil, active)
 	require.Error(t, err)
 
-	to := active.Start.AddDate(0, 3, 0).Add(time.Nanosecond).Format(time.RFC3339Nano)
+	to := active.Start.AddDate(0, 3, 1).Format(time.RFC3339)
 	_, _, err = resolveMeterUsageWindow(&from, &to, active)
 	require.Error(t, err)
 }
@@ -94,20 +93,27 @@ func TestResolveMeterUsageWindowClampsThreeCalendarMonths(t *testing.T) {
 		from string
 		to   string
 	}{
-		{name: "month end", from: "2026-01-31T12:30:00Z", to: "2026-04-30T12:30:00Z"},
-		{name: "leap year and UTC normalization", from: "2023-11-30T17:30:00+02:00", to: "2024-02-29T15:30:00Z"},
+		{name: "month end", from: "2026-01-31T00:00:00Z", to: "2026-04-30T00:00:00Z"},
+		{name: "leap year and UTC normalization", from: "2023-11-30T02:00:00+02:00", to: "2024-02-29T00:00:00Z"},
 		{name: "long quarter", from: "2026-07-01T00:00:00Z", to: "2026-10-01T00:00:00Z"},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			_, to, err := resolveMeterUsageWindow(&test.from, &test.to, BillingCyclePeriod{})
-			require.NoError(t, err)
-			require.Equal(t, test.to, to.Format(time.RFC3339))
-			beyond := to.Add(time.Nanosecond).Format(time.RFC3339Nano)
-			_, _, err = resolveMeterUsageWindow(&test.from, &beyond, BillingCyclePeriod{})
-			require.Error(t, err)
-		})
+		_, to, err := resolveMeterUsageWindow(&test.from, &test.to, BillingCyclePeriod{})
+		require.NoError(t, err, test.name)
+		require.Equal(t, test.to, to.Format(time.RFC3339), test.name)
+		beyond := to.AddDate(0, 0, 1).Format(time.RFC3339)
+		_, _, err = resolveMeterUsageWindow(&test.from, &beyond, BillingCyclePeriod{})
+		require.Error(t, err, test.name)
 	}
+}
+
+func TestResolveMeterUsageWindowRejectsPartialUTCDays(t *testing.T) {
+	t.Parallel()
+	from, to := "2026-04-01T12:00:00Z", "2026-04-02T00:00:00Z"
+	_, _, err := resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	require.Error(t, err)
+	from, to = "2026-04-01T00:00:00Z", "2026-04-02T00:00:00.000000001Z"
+	_, _, err = resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	require.Error(t, err)
 }
 
 func newIsolatedMeterClickhouse(t *testing.T) clickhouse.Conn {
@@ -120,11 +126,6 @@ func newIsolatedMeterClickhouse(t *testing.T) clickhouse.Conn {
 	conn, err := factory(t)
 	require.NoError(t, err)
 	return conn
-}
-
-func refreshMeterUsageSummary(t *testing.T, conn clickhouse.Conn) {
-	t.Helper()
-	require.NoError(t, chrepo.New(conn).RebuildUsageSummaries(t.Context(), time.Now().UTC()))
 }
 
 func apiMeterUsageReading(organizationID string, value int64, occurredAt time.Time) chrepo.ReadingRow {

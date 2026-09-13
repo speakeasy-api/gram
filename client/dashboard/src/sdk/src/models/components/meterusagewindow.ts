@@ -9,11 +9,11 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type MeterUsageWindow = {
   /**
-   * Inclusive UTC window boundary
+   * Inclusive UTC midnight window boundary
    */
   from: Date;
   /**
-   * Exclusive UTC window boundary
+   * Exclusive UTC midnight window boundary
    */
   to: Date;
 };

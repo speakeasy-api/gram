@@ -81,6 +81,7 @@ DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_daily_summaries WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
@@ -89,8 +90,12 @@ DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_dem
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
-   ) != 0,
-  'demo seed preflight: telemetry rows remain after scoped deletes');
+   )
+  + (SELECT count() FROM billing_meter_readings_by_time
+     WHERE organization_id = 'org_gram_demo_workspace')
+  + (SELECT count() FROM billing_meter_daily_summaries
+     WHERE organization_id = 'org_gram_demo_workspace') != 0,
+  'demo seed preflight: source or summary rows remain after scoped deletes');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -1585,8 +1590,8 @@ FROM (
   FROM numbers(864)
 );
 
--- One identical redelivery per meter. FINAL must prevent duplicate contribution
--- even when background merges have not yet combined these insertion batches.
+-- One identical physical redelivery per meter. Raw FINAL still collapses the
+-- ledger read, while the incremental summary intentionally counts each delivery.
 INSERT INTO billing_meter_readings_by_time
   (id, organization_id, project_id, meter_id, operation_id, unit,
    measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
@@ -1634,6 +1639,12 @@ SELECT throwIf(
       WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'adjustment') != 18,
   'demo seed postflight: meter families or separate adjustments missing')
 SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT sum(reading_count) FROM billing_meter_daily_summaries
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND facet = 'total') != 891,
+  'demo seed postflight: incremental meter summaries missing or duplicated');
 
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero

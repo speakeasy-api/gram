@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -14,33 +13,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 )
 
-func TestGetUsageDeduplicatesRanksAndPreservesExactTotals(t *testing.T) {
+func TestGetUsageCountsDeliveriesScopesTenantAndConservesExactTotals(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
 	queries := chrepo.New(conn)
 	organizationID := "org-" + uuid.NewString()
-	from := time.Date(2026, time.January, 31, 12, 0, 0, 0, time.UTC)
-	to := time.Date(2026, time.February, 2, 12, 0, 0, 0, time.UTC)
+	from := time.Date(2026, time.January, 31, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 0, 2)
 
-	rows := make([]chrepo.ReadingRow, 0, 10)
+	rows := make([]chrepo.ReadingRow, 0, 12)
 	for index, model := range []string{"largest", "m1", "m2", "m3", "m4", "m5", "m6", "m7"} {
 		value := int64(10 - index)
 		if model == "largest" {
 			value = math.MaxInt64
 		}
-		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, value, from.Add(time.Duration(index)*time.Minute), nil, map[string]string{
+		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, value, from.Add(time.Duration(index+1)*time.Minute), nil, map[string]string{
 			metering.AttributeModel: model,
 		}))
 	}
-	secondLargest := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, math.MaxInt64, time.Date(2026, time.February, 1, 1, 0, 0, 0, time.UTC), nil, map[string]string{
+	secondLargest := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, math.MaxInt64, from.AddDate(0, 0, 1).Add(time.Hour), nil, map[string]string{
 		metering.AttributeModel: "largest",
 	})
 	rows = append(rows, secondLargest)
-	retry := secondLargest
-	retry.InsertedAt = retry.InsertedAt.Add(time.Second)
-	rows = append(rows, retry)
+	redelivery := secondLargest
+	redelivery.InsertedAt = to.Add(time.Hour)
+	rows = append(rows, meterUsageReading("other-"+uuid.NewString(), metering.MeterAgentSessionStorage, math.MaxInt64, from.Add(time.Hour), nil, map[string]string{
+		metering.AttributeModel: "other-tenant",
+	}))
 	require.NoError(t, queries.InsertReadings(t.Context(), rows))
-	refreshUsageSummary(t, conn)
+	// Deliver the old reading in a separate, unmerged block after this window.
+	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{redelivery}))
 
 	result, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
@@ -70,8 +72,8 @@ func TestGetUsageDeduplicatesRanksAndPreservesExactTotals(t *testing.T) {
 			require.Equal(t, "Other", row.Label)
 		}
 	}
-	require.Equal(t, "18446744073709551614", largest.String())
-	require.Equal(t, "18446744073709551656", total.String())
+	require.Equal(t, "27670116110564327421", largest.String())
+	require.Equal(t, "27670116110564327463", total.String())
 	require.True(t, remainderSeen)
 }
 
@@ -81,7 +83,7 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 	queries := chrepo.New(conn)
 	organizationID := "org-" + uuid.NewString()
 	from := time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)
-	to := from.Add(48 * time.Hour)
+	to := from.AddDate(0, 0, 2)
 	originalID := uuid.New()
 
 	usage := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 500, from.Add(time.Hour), nil, map[string]string{})
@@ -91,7 +93,6 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 		metering.AttributeBillingUserDirectoryGroups: `["Support","Engineering","Support"]`,
 	})
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{usage, negative, positive, sortedGroups}))
-	refreshUsageSummary(t, conn)
 
 	adjustments, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
@@ -122,28 +123,36 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 	require.Equal(t, "Engineering, Support", groups.Rows[1].Label)
 }
 
-func TestGetUsageRejectsMixedMeasurementMethods(t *testing.T) {
+func TestGetUsageRejectsMixedMeasurementOutsideTopSix(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
 	queries := chrepo.New(conn)
 	organizationID := "org-" + uuid.NewString()
 	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
-	row := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1, from.Add(time.Hour), nil, map[string]string{})
-	row.MeasurementMethod = "incompatible"
-	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{row}))
-	refreshUsageSummary(t, conn)
+	rows := make([]chrepo.ReadingRow, 0, 8)
+	for index := range 7 {
+		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, int64(100-index), from.Add(time.Duration(index+1)*time.Minute), nil, map[string]string{
+			metering.AttributeModel: string(rune('a' + index)),
+		}))
+	}
+	incompatible := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1, from.Add(time.Hour), nil, map[string]string{
+		metering.AttributeModel: "loser",
+	})
+	incompatible.MeasurementMethod = "incompatible"
+	rows = append(rows, incompatible)
+	require.NoError(t, queries.InsertReadings(t.Context(), rows))
 
 	_, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
-		Selection:      storageUsageSelection(t, "total"),
+		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
-		To:             from.Add(24 * time.Hour),
+		To:             from.AddDate(0, 0, 1),
 		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.ErrorIs(t, err, chrepo.ErrMixedMeasurement)
 }
 
-func TestGetUsagePreservesZeroNetOmittedActivity(t *testing.T) {
+func TestGetUsageRanksAdjustmentsByAbsoluteNetAndPreservesZeroNetActivity(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
 	queries := chrepo.New(conn)
@@ -151,7 +160,7 @@ func TestGetUsagePreservesZeroNetOmittedActivity(t *testing.T) {
 	from := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
 	originalID := uuid.New()
 
-	rows := make([]chrepo.ReadingRow, 0, 9)
+	rows := make([]chrepo.ReadingRow, 0, 12)
 	for index, model := range []string{"m1", "m2", "m3", "m4", "m5", "m6"} {
 		rows = append(rows, meterUsageReading(
 			organizationID,
@@ -162,19 +171,19 @@ func TestGetUsagePreservesZeroNetOmittedActivity(t *testing.T) {
 			map[string]string{metering.AttributeModel: model},
 		))
 	}
-	rows = append(
-		rows,
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 5, from.Add(7*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -5, from.Add(8*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
+	rows = append(rows,
+		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1000, from.Add(7*time.Hour), &originalID, map[string]string{metering.AttributeModel: "noisy"}),
+		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -1000, from.Add(8*time.Hour), &originalID, map[string]string{metering.AttributeModel: "noisy"}),
+		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 5, from.Add(9*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
+		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -5, from.Add(10*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
 	)
 	require.NoError(t, queries.InsertReadings(t.Context(), rows))
-	refreshUsageSummary(t, conn)
 
 	result, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
-		To:             from.Add(24 * time.Hour),
+		To:             from.AddDate(0, 0, 1),
 		ReadingKind:    chrepo.ReadingKindAdjustment,
 	})
 	require.NoError(t, err)
@@ -183,14 +192,13 @@ func TestGetUsagePreservesZeroNetOmittedActivity(t *testing.T) {
 	require.Equal(t, "0", result.Rows[0].Total)
 }
 
-func TestGetUsageRanksPeriodWinnersWithTheLiveTail(t *testing.T) {
+func TestGetUsageRanksAcrossTheWholePeriod(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
 	queries := chrepo.New(conn)
 	organizationID := "org-" + uuid.NewString()
-	publicationBoundary := time.Now().UTC().Add(-time.Hour).Truncate(24 * time.Hour)
-	from := publicationBoundary.AddDate(0, 0, -5)
-	rows := make([]chrepo.ReadingRow, 0, 14)
+	from := time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC)
+	rows := make([]chrepo.ReadingRow, 0, 15)
 	for _, model := range []string{"a0", "a1", "a2", "a3", "a4", "a5", "b0", "b1", "b2", "b3", "b4", "b5"} {
 		day := from
 		if model[0] == 'b' {
@@ -199,20 +207,16 @@ func TestGetUsageRanksPeriodWinnersWithTheLiveTail(t *testing.T) {
 		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 100, day.Add(time.Hour), nil, map[string]string{metering.AttributeModel: model}))
 	}
 	for day := range 2 {
-		// Seventh on each day, but first across the two complete days.
-		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 99, from.AddDate(0, 0, day).Add(time.Hour), nil, map[string]string{metering.AttributeModel: "period"}))
+		rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 99, from.AddDate(0, 0, day).Add(2*time.Hour), nil, map[string]string{metering.AttributeModel: "period"}))
 	}
+	rows = append(rows, meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 500, from.AddDate(0, 0, 1).Add(3*time.Hour), nil, map[string]string{metering.AttributeModel: "live"}))
 	require.NoError(t, queries.InsertReadings(t.Context(), rows))
-	publishedBefore := refreshUsageSummary(t, conn)
-	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 500, publishedBefore.Add(time.Minute), nil, map[string]string{metering.AttributeModel: "live"}),
-	}))
 
 	result, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
-		To:             publishedBefore.Add(time.Hour),
+		To:             from.AddDate(0, 0, 2),
 		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
@@ -237,40 +241,22 @@ func TestGetUsageRanksPeriodWinnersWithTheLiveTail(t *testing.T) {
 	}, exact)
 }
 
-func TestGetUsageRejectsAbsentPublication(t *testing.T) {
+func TestGetUsageReturnsEmptyWithoutCoverageMarkers(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
-	prepareMissingUsagePublication(t, conn)
+	from := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
 
-	publishedBefore := time.Now().UTC().Add(-time.Hour).Truncate(24 * time.Hour)
-	_, err := chrepo.New(conn).GetUsage(t.Context(), chrepo.UsageParams{
+	result, err := chrepo.New(conn).GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: "org-" + uuid.NewString(),
 		Selection:      storageUsageSelection(t, "total"),
-		From:           publishedBefore.AddDate(0, 0, -1),
-		To:             publishedBefore,
+		From:           from,
+		To:             from.AddDate(0, 0, 1),
 		ReadingKind:    chrepo.ReadingKindUsage,
 	})
-	require.ErrorIs(t, err, chrepo.ErrUsageSummaryUnavailable)
-}
-
-func TestGetUsageRejectsStalePublication(t *testing.T) {
-	t.Parallel()
-	conn := newTestClickhouse(t)
-	prepareMissingUsagePublication(t, conn)
-
-	publishedBefore := time.Now().UTC().Add(-time.Hour).Truncate(24*time.Hour).AddDate(0, 0, -4)
-	require.NoError(t, conn.Exec(t.Context(), `
-		INSERT INTO billing_meter_daily_summaries
-		VALUES ('', '', '', '', ?, '', '', '', '', '', toInt128(0), toUInt64(0), toUInt8(1), ?, now64(9))
-	`, publishedBefore, publishedBefore))
-	_, err := chrepo.New(conn).GetUsage(t.Context(), chrepo.UsageParams{
-		OrganizationID: "org-" + uuid.NewString(),
-		Selection:      storageUsageSelection(t, "total"),
-		From:           publishedBefore,
-		To:             time.Now().UTC(),
-		ReadingKind:    chrepo.ReadingKindUsage,
-	})
-	require.ErrorIs(t, err, chrepo.ErrUsageSummaryUnavailable)
+	require.NoError(t, err)
+	require.Empty(t, result.Rows)
+	require.Equal(t, "stokens", result.Unit)
+	require.Equal(t, "tiktoken_o200k_base", result.MeasurementMethod)
 }
 
 func storageUsageSelection(t *testing.T, breakdown string) chrepo.UsageSelection {
@@ -278,11 +264,6 @@ func storageUsageSelection(t *testing.T, breakdown string) chrepo.UsageSelection
 	_, selection, err := metering.ResolveUsageSelection(metering.UsageFamilyAgentSessionStorage, breakdown)
 	require.NoError(t, err)
 	return selection
-}
-
-func prepareMissingUsagePublication(t *testing.T, conn clickhouse.Conn) {
-	t.Helper()
-	require.NoError(t, conn.Exec(t.Context(), "TRUNCATE TABLE billing_meter_daily_summaries"))
 }
 
 func meterUsageReading(organizationID string, meterID metering.MeterID, value int64, occurredAt time.Time, corrects *uuid.UUID, attributes map[string]string) chrepo.ReadingRow {

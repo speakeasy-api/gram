@@ -1258,10 +1258,10 @@ SETTINGS index_granularity = 8192
 COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
 -- Usage quantity, occurrence time, and reporting attributes are frozen upstream.
--- Redeliveries retain the full sorting key and occurrence month. Readers must use
--- FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1 before
--- aggregating: background replacement alone does not guarantee unique reads.
--- Adjustments remain separate signed facts and do not replace original usage.
+-- Redeliveries retain the full sorting key and occurrence month. Ledger readers
+-- that require logical-reading convergence use FINAL with
+-- do_not_merge_across_partitions_select_final = 1. Incremental reporting instead
+-- counts each physical delivery. Adjustments remain separate signed facts.
 CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
     organization_id String COMMENT 'Organization that owns the workload.',
@@ -1302,13 +1302,52 @@ PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
 ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
+COMMENT 'Time-windowed usage ledger with optional FINAL convergence for logical-reading queries';
 
--- Complete UTC days are rebuilt from bounded parameterized slices of the
--- deduplicated ledger. Each reading is expanded into every retained family
--- facet before aggregation so the stored family total remains independent
--- from every breakdown.
-CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source_slice AS
+-- Each incoming delivery block is expanded into independent family facets and
+-- aggregated at UTC-day precision. SummingMergeTree combines partial sums from
+-- later blocks and background merges; duplicate physical deliveries therefore
+-- count independently.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
+    organization_id String,
+    family LowCardinality(String),
+    reading_kind LowCardinality(String),
+    facet LowCardinality(String),
+    day Date,
+    series_kind LowCardinality(String),
+    series_key String,
+    label String,
+    unit LowCardinality(String),
+    measurement_method LowCardinality(String),
+    quantity Int128,
+    reading_count Int64
+) ENGINE = SummingMergeTree((quantity, reading_count))
+PARTITION BY toYYYYMM(day)
+PRIMARY KEY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day
+)
+ORDER BY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day,
+    unit,
+    measurement_method,
+    label
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Incremental daily meter family and facet marginals';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summaries_mv TO billing_meter_daily_summaries AS
 SELECT
     organization_id,
     family,
@@ -1317,14 +1356,11 @@ SELECT
     toDate(occurred_at, 'UTC') AS day,
     facet_identity.2 AS series_kind,
     facet_identity.3 AS series_key,
-    max(facet_identity.4) AS label,
+    max(facet_label) AS label,
     unit,
     measurement_method,
     sum(toInt128(value)) AS quantity,
-    count() AS reading_count,
-    toUInt8(0) AS is_publication,
-    toDateTime64(0, 9, 'UTC') AS published_before,
-    toDateTime64(0, 9, 'UTC') AS snapshot_at
+    toInt64(count()) AS reading_count
 FROM
 (
     SELECT
@@ -1418,39 +1454,20 @@ FROM
                     tuple('tool_name', if(tool_name = '', 'unset', 'value'), tool_name, if(tool_name = '', '(unset)', tool_name))
                 ]
             )
-        ) AS facet_identity
-    FROM billing_meter_readings_by_time FINAL
-    WHERE
-        meter_id IN (
-            'gram.agent_session.storage',
-            'gram.mcp.bandwidth.ingress',
-            'gram.mcp.bandwidth.egress',
-            'gram.risk.scan.gitleaks',
-            'gram.risk.scan.presidio',
-            'gram.risk.scan.prompt_injection',
-            'gram.risk.scan.prompt_policy',
-            'gram.risk.scan.custom_rules',
-            'gram.risk.scan.cli_destructive'
-        )
-        AND (
-            {summary_organization_id:String} = ''
-            OR organization_id = {summary_organization_id:String}
-        )
-        AND (
-            {summary_family:String} = ''
-            OR ({summary_family:String} = 'agent_session_storage' AND meter_id = 'gram.agent_session.storage')
-            OR ({summary_family:String} = 'mcp_bandwidth' AND meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'))
-            OR ({summary_family:String} = 'risk_content_scans' AND meter_id IN (
-                'gram.risk.scan.gitleaks',
-                'gram.risk.scan.presidio',
-                'gram.risk.scan.prompt_injection',
-                'gram.risk.scan.prompt_policy',
-                'gram.risk.scan.custom_rules',
-                'gram.risk.scan.cli_destructive'
-            ))
-        )
-        AND occurred_at >= {summary_from:DateTime64(9, 'UTC')}
-        AND occurred_at < {summary_to:DateTime64(9, 'UTC')}
+        ) AS facet_identity,
+        facet_identity.4 AS facet_label
+    FROM billing_meter_readings_by_time
+    WHERE meter_id IN (
+        'gram.agent_session.storage',
+        'gram.mcp.bandwidth.ingress',
+        'gram.mcp.bandwidth.egress',
+        'gram.risk.scan.gitleaks',
+        'gram.risk.scan.presidio',
+        'gram.risk.scan.prompt_injection',
+        'gram.risk.scan.prompt_policy',
+        'gram.risk.scan.custom_rules',
+        'gram.risk.scan.cli_destructive'
+    )
 )
 GROUP BY
     organization_id,
@@ -1461,72 +1478,7 @@ GROUP BY
     series_kind,
     series_key,
     unit,
-    measurement_method
-SETTINGS
-    do_not_merge_across_partitions_select_final = 1,
-    max_threads = 2,
-    max_final_threads = 2,
-    max_block_size = 4096,
-    max_memory_usage = 536870912,
-    max_bytes_before_external_group_by = 134217728,
-    max_bytes_ratio_before_external_group_by = 0.5;
-
--- Unbounded organization/family parameters retain the verification surface
--- while production builders invoke the slice view with prunable boundaries.
-CREATE VIEW IF NOT EXISTS billing_meter_daily_summary_source AS
-SELECT *
-FROM billing_meter_daily_summary_source_slice(
-    summary_organization_id = '',
-    summary_family = '',
-    summary_from = toDateTime64('1900-01-01 00:00:00', 9, 'UTC'),
-    summary_to = toStartOfDay(now('UTC') - INTERVAL 1 HOUR, 'UTC')
-);
-
-CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
-    organization_id String,
-    family LowCardinality(String),
-    reading_kind LowCardinality(String),
-    facet LowCardinality(String),
-    day Date,
-    series_kind LowCardinality(String),
-    series_key String,
-    label String,
-    unit LowCardinality(String),
-    measurement_method LowCardinality(String),
-    quantity Int128,
-    reading_count UInt64,
-    is_publication UInt8 COMMENT '0 for quantities, 1 for ready coverage',
-    published_before DateTime64(9, 'UTC'),
-    snapshot_at DateTime64(9, 'UTC')
-) ENGINE = MergeTree
-PARTITION BY toYYYYMM(day)
-ORDER BY (
-    organization_id,
-    family,
-    reading_kind,
-    facet,
-    day,
-    series_kind,
-    series_key,
-    unit,
-    measurement_method
-)
-SETTINGS index_granularity = 8192
-COMMENT 'Daily meter family and facet marginals with atomic publication metadata';
-
--- The application rebuilds unpublished partials before consolidating a complete
--- generation into this identical staging twin. EXCHANGE TABLES publishes all
--- normal rows and the global coverage marker in one metadata operation.
-CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries_staging AS billing_meter_daily_summaries;
-
--- Oversized organization/family/day slices are divided on immutable occurrence
--- boundaries and written here. Each completed day is consolidated into staging
--- before these bounded partials are discarded.
-CREATE TABLE IF NOT EXISTS billing_meter_daily_summary_parts AS billing_meter_daily_summaries;
-
--- One adaptive attempt is isolated here because a failed INSERT SELECT may have
--- produced output. Only a successful attempt is copied into the day's parts.
-CREATE TABLE IF NOT EXISTS billing_meter_daily_summary_attempt AS billing_meter_daily_summaries;
+    measurement_method;
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity

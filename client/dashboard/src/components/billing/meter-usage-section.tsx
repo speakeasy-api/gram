@@ -240,9 +240,9 @@ export function MeterUsageSection(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Meter usage</Page.Section.Title>
       <Page.Section.Description>
-        Explore independently metered storage, bandwidth, and risk-scanning
-        volume. Usage and adjustments are reported separately and are not
-        invoice estimates.
+        Explore storage, bandwidth, and risk-scanning volume by UTC day. Today's
+        totals update as readings arrive. Usage and adjustments are reported
+        separately and are not invoice estimates.
       </Page.Section.Description>
       <Page.Section.Body>
         <Page.Toolbar>
@@ -277,10 +277,10 @@ export function MeterUsageSection(): JSX.Element {
                     preset={null}
                     customRange={periodDisplayRange(period)}
                     customRangeLabel={
-                      periodState.customRange?.label ??
-                      (periodState.customRange ? "Custom" : "Cycle")
+                      periodState.customRange ? "Custom" : "Cycle"
                     }
                     availablePresets={[]}
+                    timezone="UTC"
                     onCustomRangeChange={periodState.setPickedRange}
                     onClearCustomRange={periodState.clearCustomRange}
                     className="bg-background py-1.5 text-sm"

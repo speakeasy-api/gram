@@ -63597,7 +63597,7 @@ paths:
         name: getInferenceSpendCaps
   /rpc/usage.getMeterUsage:
     get:
-      description: Get meter-ledger usage for an organization over a maximum of three calendar months
+      description: Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
       operationId: getMeterUsage
       parameters:
         - allowEmptyValue: true
@@ -63611,19 +63611,19 @@ paths:
               - risk_content_scans
             type: string
         - allowEmptyValue: true
-          description: Inclusive UTC reporting boundary. Must be paired with to.
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
           in: query
           name: from
           schema:
-            description: Inclusive UTC reporting boundary. Must be paired with to.
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
             format: date-time
             type: string
         - allowEmptyValue: true
-          description: Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
           in: query
           name: to
           schema:
-            description: Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
             format: date-time
             type: string
         - allowEmptyValue: true
@@ -80113,7 +80113,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MeterUsageBucket'
-          description: Dense clipped UTC daily buckets
+          description: Dense UTC daily buckets, including in-progress days
         family:
           type: string
           enum:
@@ -80183,11 +80183,11 @@ components:
       properties:
         from:
           type: string
-          description: Inclusive UTC window boundary
+          description: Inclusive UTC midnight window boundary
           format: date-time
         to:
           type: string
-          description: Exclusive UTC window boundary
+          description: Exclusive UTC midnight window boundary
           format: date-time
       required:
         - from

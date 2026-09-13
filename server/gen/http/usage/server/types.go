@@ -77,7 +77,7 @@ type GetMeterUsageResponseBody struct {
 	MeasurementMethod string                          `form:"measurement_method" json:"measurement_method" xml:"measurement_method"`
 	// Exact signed integer period total as a decimal string
 	Total string `form:"total" json:"total" xml:"total"`
-	// Dense clipped UTC daily buckets
+	// Dense UTC daily buckets, including in-progress days
 	Buckets   []*MeterUsageBucketResponseBody  `form:"buckets" json:"buckets" xml:"buckets"`
 	Breakdown *MeterUsageBreakdownResponseBody `form:"breakdown" json:"breakdown" xml:"breakdown"`
 	// Retrieval timestamp, not an ingestion watermark
@@ -3610,9 +3610,9 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 
 // MeterUsageWindowResponseBody is used to define fields on response body types.
 type MeterUsageWindowResponseBody struct {
-	// Inclusive UTC window boundary
+	// Inclusive UTC midnight window boundary
 	From string `form:"from" json:"from" xml:"from"`
-	// Exclusive UTC window boundary
+	// Exclusive UTC midnight window boundary
 	To string `form:"to" json:"to" xml:"to"`
 }
 

@@ -13,10 +13,10 @@ directory holds the authoring docs:
   violation). Deliberately NOT a migration: migrations are append-only and
   the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
 - `server/internal/demoseed/clickhouse.sql` — scoped deletes of raw/source
-  tables followed by fresh inserts. Postflight `throwIf` asserts fail the run
-  on missing or leaked rows. Keep semicolons out of string literals — the
-  runner splits on ';'. After these scoped mutations, the Go runner performs
-  the same bounded full-generation usage-summary rebuild as the hourly worker.
+  tables and every incremental MV target followed by fresh inserts. The
+  inserts repopulate those targets automatically; postflight `throwIf` asserts
+  fail the run on missing or leaked rows. Keep semicolons out of string
+  literals — the runner splits on ';'.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
 - `verify.md` — the agent-driven page verification playbook.
@@ -31,9 +31,9 @@ directory holds the authoring docs:
 | Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
-rerun regenerates a fresh window and data never goes stale. Incremental MVs
-populate their targets on INSERT; billing usage summaries are rebuilt from
-the complete retained raw ledger after every seed run.
+rerun regenerates a fresh window and data never goes stale. Incremental MVs,
+including billing usage's UTC-day summaries, populate their targets on INSERT.
+Physical duplicate meter deliveries intentionally count independently.
 
 ## Tenants
 
@@ -85,25 +85,18 @@ suffixed slug because the seeded row already holds `speakeasy`.
   grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
   proxy as an explicit sidecar with --quitquitquit so the Job completes.
 
-### Billing usage summary publication
+### Billing usage summaries
 
-The seed and the hourly background pass share
-`pg_try_advisory_lock(hashtext('gram-demo-seed'))` on a dedicated Postgres
-session. The seed holds it across every Postgres and ClickHouse raw mutation
-and the complete summary rebuild. An hourly pass that finds the lock busy
-skips without waiting; the next pass repairs the full retained history.
+The ClickHouse script deletes the demo tenant's
+`billing_meter_daily_summaries` rows before deleting its raw meter rows. The
+runner waits until both deletions are visible, then the fresh
+`billing_meter_readings_by_time` inserts synchronously trigger the incremental
+materialized view. This makes each seed run scoped and repeatable without a
+full-history reporting scan or a separate rebuild.
 
-Each rebuild reads every retained complete day before the UTC cutoff derived
-from its snapshot time, including `FINAL` readings and every supported facet.
-It builds a bounded staging generation and publishes all tenants plus one
-global readiness marker atomically. A failure never exposes the staging
-generation. This is deliberately full-history late-arrival repair on every
-pass, not dirty-day or incremental ingestion.
-
-The queue-scoped Temporal schedule runs hourly with one workflow and one
-activity, without per-reading or per-tenant actions. Cost is approximately
-720 starts + 720 activity attempts = **1,440 Temporal actions/month per
-namespace before retries**.
+Summaries have UTC-day precision. Every physical delivery contributes to the
+daily `SummingMergeTree`; producer-side deduplication is responsible for
+preventing unwanted duplicate accounting.
 
 ## Local-only fixtures
 
@@ -171,12 +164,10 @@ and the test asserts:
 2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
    versions can always roll forward.
 3. **Idempotence** — per-table row counts are identical after every run for
-   published plain MergeTree tables. The transient
-   `billing_meter_daily_summaries_staging`,
-   `billing_meter_daily_summary_parts`, and
-   `billing_meter_daily_summary_attempt` tables are never treated as tenant
-   state. Summing/Aggregating MV targets collapse rows on `now()`-bucketed
-   keys, so they are checked for isolation only.
+   published plain MergeTree tables and the merged
+   `billing_meter_daily_summaries` target. Other Summing/Aggregating MV targets
+   collapse rows on `now()`-bucketed keys, so they are checked for isolation
+   only.
 
 What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the

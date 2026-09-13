@@ -21,8 +21,8 @@ import (
 
 const maxMeterUsageMonths = 3
 
-// GetMeterUsage returns exact meter-ledger totals, dense daily buckets, and a
-// bounded full-period facet breakdown for the active organization.
+// GetMeterUsage returns incrementally aggregated daily quantities and a bounded
+// full-period facet breakdown for the active organization.
 func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.MeterUsageResponse, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -90,10 +90,13 @@ func resolveMeterUsageWindow(fromText, toText *string, activeCycle BillingCycleP
 	}
 	from = from.UTC()
 	to = to.UTC()
+	if !from.Equal(utcDay(from)) || !to.Equal(utcDay(to)) {
+		return time.Time{}, time.Time{}, errors.New("from and to must be UTC midnight boundaries")
+	}
 	if !from.Before(to) {
 		return time.Time{}, time.Time{}, errors.New("from must be before to")
 	}
-	maxTo := anchoredCycleStart(from.Year(), from.Month()+maxMeterUsageMonths, from.Day()).Add(from.Sub(utcDay(from)))
+	maxTo := anchoredCycleStart(from.Year(), from.Month()+maxMeterUsageMonths, from.Day())
 	if to.After(maxTo) {
 		return time.Time{}, time.Time{}, errors.New("meter usage window must not exceed three calendar months")
 	}
@@ -106,17 +109,14 @@ type meterSeriesAccumulator struct {
 }
 
 func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string, from, to, queriedAt time.Time, cycles []BillingCyclePeriod, result chrepo.UsageResult) (*gen.MeterUsageResponse, error) {
-	firstDay := utcDay(from)
-	bucketCount := int(utcDay(to.Add(-time.Nanosecond)).Sub(firstDay)/(24*time.Hour)) + 1
+	bucketCount := int(to.Sub(from) / (24 * time.Hour))
 	buckets := make([]*gen.MeterUsageBucket, 0, bucketCount)
 	bucketIndexes := make(map[int64]int, bucketCount)
-	for day := firstDay; day.Before(to); day = day.AddDate(0, 0, 1) {
-		bucketFrom := maxTime(day, from)
-		bucketTo := minTime(day.AddDate(0, 0, 1), to)
+	for day := from; day.Before(to); day = day.AddDate(0, 0, 1) {
 		bucketIndexes[day.Unix()] = len(buckets)
 		buckets = append(buckets, &gen.MeterUsageBucket{
-			From:  bucketFrom.Format(time.RFC3339Nano),
-			To:    bucketTo.Format(time.RFC3339Nano),
+			From:  day.Format(time.RFC3339Nano),
+			To:    day.AddDate(0, 0, 1).Format(time.RFC3339Nano),
 			Total: "0",
 		})
 	}
@@ -240,18 +240,4 @@ func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string
 func utcDay(value time.Time) time.Time {
 	value = value.UTC()
 	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
-}
-
-func minTime(left, right time.Time) time.Time {
-	if left.Before(right) {
-		return left
-	}
-	return right
-}
-
-func maxTime(left, right time.Time) time.Time {
-	if left.After(right) {
-		return left
-	}
-	return right
 }

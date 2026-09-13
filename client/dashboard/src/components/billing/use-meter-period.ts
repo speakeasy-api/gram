@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 export type MeterCycleWindow = { from: Date; to: Date };
-export type MeterPeriod = { from: Date; to: Date; label?: string };
+export type MeterPeriod = { from: Date; to: Date };
 export type MeterCustomRange = MeterPeriod;
 
 function cycleKey(cycle: MeterCycleWindow): string {
@@ -9,14 +9,6 @@ function cycleKey(cycle: MeterCycleWindow): string {
 }
 
 function rangeFromPicker(from: Date, to: Date): MeterPeriod {
-  const localDayStart = (date: Date): number =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  if (
-    from.getTime() !== localDayStart(from) ||
-    to.getTime() !== localDayStart(to)
-  ) {
-    return { from, to };
-  }
   return {
     from: new Date(
       Date.UTC(from.getFullYear(), from.getMonth(), from.getDate()),
@@ -31,7 +23,7 @@ export function useMeterPeriod(cycles: MeterCycleWindow[]): {
   customRange: MeterCustomRange | null;
   viewNonce: number;
   selectCycle: (cycle: MeterCycleWindow) => void;
-  setPickedRange: (from: Date, to: Date, label?: string) => void;
+  setPickedRange: (from: Date, to: Date) => void;
   clearCustomRange: () => void;
   selectChartRange: (from: Date, to: Date) => void;
   reset: () => void;
@@ -52,17 +44,24 @@ export function useMeterPeriod(cycles: MeterCycleWindow[]): {
     setSelectedKey(cycleKey(cycle));
     setCustomRange(null);
   }, []);
-  const setPickedRange = useCallback((from: Date, to: Date, label?: string) => {
+  const setPickedRange = useCallback((from: Date, to: Date) => {
     const range = rangeFromPicker(from, to);
     if (range.to.getTime() <= range.from.getTime()) return;
-    setCustomRange({ ...range, label });
+    setCustomRange(range);
   }, []);
   const clearCustomRange = useCallback(() => setCustomRange(null), []);
   const selectChartRange = useCallback(
     (from: Date, to: Date) => {
       if (!period) return;
-      const start = Math.max(from.getTime(), period.from.getTime());
-      const end = Math.min(to.getTime(), period.to.getTime());
+      const dayMs = 24 * 60 * 60 * 1000;
+      const start = Math.max(
+        Math.floor(from.getTime() / dayMs) * dayMs,
+        period.from.getTime(),
+      );
+      const end = Math.min(
+        Math.ceil(to.getTime() / dayMs) * dayMs,
+        period.to.getTime(),
+      );
       if (end <= start) return;
       setCustomRange({ from: new Date(start), to: new Date(end) });
     },

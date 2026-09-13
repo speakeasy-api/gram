@@ -22,7 +22,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -39,14 +38,11 @@ const (
 	clickHouseDeleteVisibilityTimeout = 30 * time.Second
 	clickHouseDeleteVisibilityPoll    = 250 * time.Millisecond
 	demoSeedLockCleanupTimeout        = 5 * time.Second
-	demoSeedSummaryRebuildTimeout     = 60 * time.Second
 )
 
-// Run applies the seed for spec's tenant while holding the shared advisory
-// lock: Postgres first, then scoped ClickHouse raw-data replacement, then a
-// complete usage-summary generation rebuild. The lock covers every mutation
-// and the atomic publication so the hourly background rebuild safely skips
-// rather than observing an in-progress seed.
+// Run replaces the data for spec's tenant while holding the shared advisory
+// lock. The ClickHouse script deletes both source rows and materialized-view
+// targets before its inserts incrementally repopulate the summaries.
 //
 // Pass DefaultSpec() for the shared production demo org — the scripts are
 // written against its literals, so they run through unmodified.
@@ -76,7 +72,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 	if !locked {
 		conn.Release()
-		return errors.New("another usage summary rebuild or demo seed run holds the advisory lock; refusing to run concurrently")
+		return errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
@@ -161,9 +157,10 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 						SELECT
 							(SELECT count() FROM telemetry_logs WHERE gram_project_id = toUUID(?))
 							+ (SELECT count() FROM billing_meter_readings_by_time WHERE organization_id = ?)
-					`, spec.ProjectID(), spec.OrgID).Scan(&remaining)
+							+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
+					`, spec.ProjectID(), spec.OrgID, spec.OrgID).Scan(&remaining)
 					if err != nil {
-						return 0, fmt.Errorf("count remaining demo telemetry and meter ledger rows: %w", err)
+						return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, and summary rows: %w", err)
 					}
 					return remaining, nil
 				},
@@ -175,11 +172,6 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		if err := ch.Exec(chCtx, stmt); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
 		}
-	}
-	rebuildCtx, cancelRebuild := context.WithTimeout(ctx, demoSeedSummaryRebuildTimeout)
-	defer cancelRebuild()
-	if err := chrepo.New(ch).RebuildUsageSummaries(rebuildCtx, time.Now().UTC()); err != nil {
-		return fmt.Errorf("rebuild usage summaries after demo seed: %w", err)
 	}
 
 	logger.InfoContext(ctx, "demo seed applied to clickhouse")

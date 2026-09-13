@@ -463,7 +463,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
-	temporalWorker.RegisterActivity(activities.RebuildUsageSummaries)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
 	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
@@ -599,7 +598,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
-	temporalWorker.RegisterWorkflow(RebuildUsageSummariesWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
@@ -732,10 +730,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
-	}
-
-	if err := AddRebuildUsageSummariesSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add usage summary rebuild schedule", attr.SlogError(err))
 	}
 
 	if err := AddAssistantReaperSchedule(ctx, env); err != nil {

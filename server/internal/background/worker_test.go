@@ -42,7 +42,6 @@ func TestWorkers_Run_RegistersSchedules(t *testing.T) {
 			aiUsagePollerCoordinatorScheduleID,
 			deviceIntegrationSyncCoordinatorScheduleID,
 			indexToolsetSweepScheduleID(string(env.Queue())),
-			rebuildUsageSummariesScheduleID(string(env.Queue())),
 		}, "the long-running worker owns the recurring sweeps")
 	}, 60*time.Second, 250*time.Millisecond, "Run should register the recurring schedules")
 }

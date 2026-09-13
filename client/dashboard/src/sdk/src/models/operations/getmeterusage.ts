@@ -32,11 +32,11 @@ export type ReadingKind = ClosedEnum<typeof ReadingKind>;
 export type GetMeterUsageRequest = {
   family: Family;
   /**
-   * Inclusive UTC reporting boundary. Must be paired with to.
+   * Inclusive UTC midnight reporting boundary. Must be paired with to.
    */
   from?: Date | undefined;
   /**
-   * Exclusive UTC reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+   * Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
    */
   to?: Date | undefined;
   /**

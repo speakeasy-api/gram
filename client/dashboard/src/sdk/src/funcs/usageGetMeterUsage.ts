@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getMeterUsage usage
  *
  * @remarks
- * Get meter-ledger usage for an organization over a maximum of three calendar months
+ * Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
  */
 export function usageGetMeterUsage(
   client: GramCore,

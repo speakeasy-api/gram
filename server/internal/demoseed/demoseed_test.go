@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWaitForClickHouseTelemetryDeleteRetriesUntilNoRowsRemain(t *testing.T) {
+func TestWaitForClickHouseDeleteRetriesUntilNoRowsRemain(t *testing.T) {
 	t.Parallel()
 
 	counts := []uint64{7, 2, 0}
@@ -30,7 +30,7 @@ func TestWaitForClickHouseTelemetryDeleteRetriesUntilNoRowsRemain(t *testing.T) 
 	require.Equal(t, len(counts), calls)
 }
 
-func TestWaitForClickHouseTelemetryDeleteReturnsQueryError(t *testing.T) {
+func TestWaitForClickHouseDeleteReturnsQueryError(t *testing.T) {
 	t.Parallel()
 
 	queryErr := errors.New("query unavailable")
@@ -47,7 +47,7 @@ func TestWaitForClickHouseTelemetryDeleteReturnsQueryError(t *testing.T) {
 	require.ErrorIs(t, err, queryErr)
 }
 
-func TestWaitForClickHouseTelemetryDeleteTimesOut(t *testing.T) {
+func TestWaitForClickHouseDeleteTimesOut(t *testing.T) {
 	t.Parallel()
 
 	err := waitForClickHouseDelete(

@@ -18,8 +18,9 @@ import (
 type Service interface {
 	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
-	// Get meter-ledger usage for an organization over a maximum of three calendar
-	// months
+	// Get incrementally aggregated meter usage by UTC day over a maximum of three
+	// calendar months. Duplicate deliveries count unless prevented by the producer
+	// or corrected out of band.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *MeterUsageResponse, err error)
 	// Get tokens under management for the active billing cycle alongside the
 	// contracted terms
@@ -144,10 +145,11 @@ type GetInferenceSpendCapsPayload struct {
 type GetMeterUsagePayload struct {
 	SessionToken *string
 	Family       string
-	// Inclusive UTC reporting boundary. Must be paired with to.
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
 	From *string
-	// Exclusive UTC reporting boundary. Must be paired with from and no later than
-	// three calendar months after from, clamped to the target month's last day.
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
 	To *string
 	// Family-compatible reporting facet
 	Breakdown *string
@@ -218,7 +220,7 @@ type MeterUsageResponse struct {
 	MeasurementMethod string
 	// Exact signed integer period total as a decimal string
 	Total string
-	// Dense clipped UTC daily buckets
+	// Dense UTC daily buckets, including in-progress days
 	Buckets   []*MeterUsageBucket
 	Breakdown *MeterUsageBreakdown
 	// Retrieval timestamp, not an ingestion watermark
@@ -239,9 +241,9 @@ type MeterUsageSeries struct {
 }
 
 type MeterUsageWindow struct {
-	// Inclusive UTC window boundary
+	// Inclusive UTC midnight window boundary
 	From string
-	// Exclusive UTC window boundary
+	// Exclusive UTC midnight window boundary
 	To string
 }
 
