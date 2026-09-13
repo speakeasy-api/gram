@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var OnboardingState = Type("PlatformMCPOnboardingState", func() {
@@ -63,6 +64,14 @@ var _ = Service("platformMcp", func() {
 	Description("Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
+	})
 
 	Method("getOnboarding", func() {
 		Description("Get the current user's safe Platform MCP onboarding projection for the active organization.")

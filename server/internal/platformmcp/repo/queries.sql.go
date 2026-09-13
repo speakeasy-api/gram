@@ -1701,6 +1701,51 @@ func (q *Queries) GetActivePlatformMCPSessionByJTI(ctx context.Context, arg GetA
 	return i, err
 }
 
+const getDirectRemoteAdmissionTargetForMCPServer = `-- name: GetDirectRemoteAdmissionTargetForMCPServer :one
+SELECT
+    registration.id AS registration_id,
+    server.remote_mcp_server_id,
+    remote.url AS remote_url
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = server.remote_mcp_server_id
+ AND remote.project_id = server.project_id
+ AND remote.deleted IS FALSE
+WHERE registration.organization_id = $1
+  AND registration.project_id = $2
+  AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND registration.mcp_server_id = $3
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1
+`
+
+type GetDirectRemoteAdmissionTargetForMCPServerParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+}
+
+type GetDirectRemoteAdmissionTargetForMCPServerRow struct {
+	RegistrationID    uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+	RemoteUrl         pgtype.Text
+}
+
+// Distribution admission follows durable Platform MCP provenance, including a
+// soft-deleted registration while its exact MCP server still exists. The live
+// remote URL comes from the MCP server's current backend, never from the
+// historical catalog reference.
+func (q *Queries) GetDirectRemoteAdmissionTargetForMCPServer(ctx context.Context, arg GetDirectRemoteAdmissionTargetForMCPServerParams) (GetDirectRemoteAdmissionTargetForMCPServerRow, error) {
+	row := q.db.QueryRow(ctx, getDirectRemoteAdmissionTargetForMCPServer, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	var i GetDirectRemoteAdmissionTargetForMCPServerRow
+	err := row.Scan(&i.RegistrationID, &i.RemoteMcpServerID, &i.RemoteUrl)
+	return i, err
+}
+
 const getLatestPlatformMCPReadinessForLifecycle = `-- name: GetLatestPlatformMCPReadinessForLifecycle :one
 SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
@@ -3905,6 +3950,172 @@ func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizatio
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listDirectRemoteAdmissionAudiencesForMCPServer = `-- name: ListDirectRemoteAdmissionAudiencesForMCPServer :many
+SELECT
+    plugin.id AS plugin_id,
+    assignment.principal_urn
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+LEFT JOIN plugin_servers AS attachment
+  ON attachment.mcp_server_id = server.id
+ AND attachment.deleted IS FALSE
+LEFT JOIN plugins AS plugin
+  ON plugin.id = attachment.plugin_id
+ AND plugin.organization_id = registration.organization_id
+ AND plugin.project_id = registration.project_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN plugin_assignments AS assignment
+  ON assignment.plugin_id = plugin.id
+ AND assignment.organization_id = registration.organization_id
+WHERE registration.organization_id = $1
+  AND registration.project_id = $2
+  AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND registration.mcp_server_id = $3
+ORDER BY attachment.plugin_id NULLS FIRST, assignment.principal_urn NULLS FIRST
+`
+
+type ListDirectRemoteAdmissionAudiencesForMCPServerParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.NullUUID
+}
+
+type ListDirectRemoteAdmissionAudiencesForMCPServerRow struct {
+	PluginID     uuid.NullUUID
+	PrincipalUrn pgtype.Text
+}
+
+// Return one row per live attachment/principal for a provenance-bound MCP. LEFT
+// joins preserve attached plugins with an empty audience and provenance-bound
+// MCPs with no attachment, which callers must distinguish from incomplete data.
+func (q *Queries) ListDirectRemoteAdmissionAudiencesForMCPServer(ctx context.Context, arg ListDirectRemoteAdmissionAudiencesForMCPServerParams) ([]ListDirectRemoteAdmissionAudiencesForMCPServerRow, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionAudiencesForMCPServer, arg.OrganizationID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectRemoteAdmissionAudiencesForMCPServerRow
+	for rows.Next() {
+		var i ListDirectRemoteAdmissionAudiencesForMCPServerRow
+		if err := rows.Scan(&i.PluginID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectRemoteAdmissionMCPServersForRemote = `-- name: ListDirectRemoteAdmissionMCPServersForRemote :many
+SELECT DISTINCT server.id AS mcp_server_id
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+WHERE registration.organization_id = $1
+  AND registration.project_id = $2
+  AND registration.catalog_provider = 'direct-remote-url-v1'
+  AND server.remote_mcp_server_id = $3
+ORDER BY server.id
+`
+
+type ListDirectRemoteAdmissionMCPServersForRemoteParams struct {
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+}
+
+// A remote URL edit affects every provenance-bound MCP server currently backed
+// by that remote source. Audience expansion is evaluated separately for each
+// server using ListDirectRemoteAdmissionAudiencesForMCPServer.
+func (q *Queries) ListDirectRemoteAdmissionMCPServersForRemote(ctx context.Context, arg ListDirectRemoteAdmissionMCPServersForRemoteParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionMCPServersForRemote, arg.OrganizationID, arg.ProjectID, arg.RemoteMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectRemoteAdmissionTargetsForPlugin = `-- name: ListDirectRemoteAdmissionTargetsForPlugin :many
+SELECT DISTINCT
+    server.id AS mcp_server_id,
+    remote.url AS remote_url
+FROM plugins AS plugin
+JOIN plugin_servers AS attachment
+  ON attachment.plugin_id = plugin.id
+ AND attachment.deleted IS FALSE
+JOIN mcp_servers AS server
+  ON server.id = attachment.mcp_server_id
+ AND server.project_id = plugin.project_id
+ AND server.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.mcp_server_id = server.id
+ AND registration.organization_id = plugin.organization_id
+ AND registration.project_id = plugin.project_id
+ AND registration.catalog_provider = 'direct-remote-url-v1'
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = server.remote_mcp_server_id
+ AND remote.project_id = server.project_id
+ AND remote.deleted IS FALSE
+WHERE plugin.id = $1
+  AND plugin.organization_id = $2
+  AND plugin.project_id = $3
+  AND plugin.deleted IS FALSE
+ORDER BY server.id
+`
+
+type ListDirectRemoteAdmissionTargetsForPluginParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListDirectRemoteAdmissionTargetsForPluginRow struct {
+	McpServerID uuid.UUID
+	RemoteUrl   pgtype.Text
+}
+
+// Return every distinct in-scope MCP target attached to one exact live plugin.
+// Assignment callers supply the complete desired audience separately, so no
+// presentation limit is allowed here.
+func (q *Queries) ListDirectRemoteAdmissionTargetsForPlugin(ctx context.Context, arg ListDirectRemoteAdmissionTargetsForPluginParams) ([]ListDirectRemoteAdmissionTargetsForPluginRow, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetsForPlugin, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectRemoteAdmissionTargetsForPluginRow
+	for rows.Next() {
+		var i ListDirectRemoteAdmissionTargetsForPluginRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
