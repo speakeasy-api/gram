@@ -17,6 +17,10 @@ import (
 
 // Client lists the remoteSessions service endpoint HTTP clients.
 type Client struct {
+	// CommitServerUserIdentityConfiguration Doer is the HTTP client used to make
+	// requests to the commitServerUserIdentityConfiguration endpoint.
+	CommitServerUserIdentityConfigurationDoer goahttp.Doer
+
 	// ListRemoteSessions Doer is the HTTP client used to make requests to the
 	// listRemoteSessions endpoint.
 	ListRemoteSessionsDoer goahttp.Doer
@@ -46,13 +50,39 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRemoteSessionsDoer:  doer,
-		RevokeRemoteSessionDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		CommitServerUserIdentityConfigurationDoer: doer,
+		ListRemoteSessionsDoer:                    doer,
+		RevokeRemoteSessionDoer:                   doer,
+		RestoreResponseBody:                       restoreBody,
+		scheme:                                    scheme,
+		host:                                      host,
+		decoder:                                   dec,
+		encoder:                                   enc,
+	}
+}
+
+// CommitServerUserIdentityConfiguration returns an endpoint that makes HTTP
+// requests to the remoteSessions service commitServerUserIdentityConfiguration
+// server.
+func (c *Client) CommitServerUserIdentityConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCommitServerUserIdentityConfigurationRequest(c.encoder)
+		decodeResponse = DecodeCommitServerUserIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCommitServerUserIdentityConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CommitServerUserIdentityConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
