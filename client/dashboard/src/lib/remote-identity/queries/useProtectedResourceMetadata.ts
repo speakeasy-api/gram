@@ -1,6 +1,21 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ProtectedResourceMetadata } from "@gram/client/models/components/protectedresourcemetadata.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+
+const PROTECTED_RESOURCE_METADATA_QUERY_KEY = "protected-resource-metadata";
+
+// The probe is keyed by remote id but answers for whatever URL the remote had
+// when it ran, so a URL change must drop it. A reset rather than an
+// invalidation: the hook below only reports isLoading, so a cached answer
+// left in place during the refetch would keep "Use discovered" armed with the
+// old upstream's authorization server until the new probe lands.
+export function resetAllProtectedResourceMetadata(
+  queryClient: QueryClient,
+): Promise<void> {
+  return queryClient.resetQueries({
+    queryKey: [PROTECTED_RESOURCE_METADATA_QUERY_KEY],
+  });
+}
 
 type ProtectedResourceProbeStatus =
   | "idle"
@@ -26,7 +41,7 @@ export function useProtectedResourceMetadata(
   const client = useSdkClient();
 
   const query = useQuery({
-    queryKey: ["protected-resource-metadata", remoteMcpServerId],
+    queryKey: [PROTECTED_RESOURCE_METADATA_QUERY_KEY, remoteMcpServerId],
     queryFn: async () => {
       if (!remoteMcpServerId) throw new Error("no remote mcp server id");
       return client.remoteMcp.discoverProtectedResourceMetadata({

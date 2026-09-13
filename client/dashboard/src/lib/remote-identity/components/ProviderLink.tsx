@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 import { issuerDisplayName } from "@/pages/remote-identity-providers/issuerDisplay";
 
@@ -29,7 +29,7 @@ export function IssuerLink({
   issuer: LinkableIssuer;
   className?: string;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasAnyScope } = useRBAC();
   const label = issuerDisplayName(issuer);
 
@@ -39,7 +39,7 @@ export function IssuerLink({
 
   return (
     <Link
-      to={orgRoutes.remoteIdentityProviders.issuerDetail.href(issuer.id)}
+      to={routes.remoteIdentityProviders.issuerDetail.href(issuer.id)}
       className={cn("hover:text-primary hover:underline", className)}
     >
       {label}

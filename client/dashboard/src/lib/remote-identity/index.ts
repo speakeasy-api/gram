@@ -40,6 +40,7 @@ export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 export { useUserIdentityDraft } from "./drafts/useIdentityDraft";
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
+export { resetAllProtectedResourceMetadata } from "./queries/useProtectedResourceMetadata";
 export { useUpstreamProbe } from "./queries/useUpstreamProbe";
 
 export { AgentIdentityRow } from "./components/CredentialFields";
