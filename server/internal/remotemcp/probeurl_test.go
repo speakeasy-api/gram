@@ -240,10 +240,36 @@ func TestProbeRemoteMcpURL_RejectsNonJSONRPCSSE(t *testing.T) {
 
 func TestProbeRemoteMcpURL_Truncated2xxIsInvalidMCP(t *testing.T) {
 	t.Parallel()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Length", "128")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1`))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The truncation is written by hand: letting the handler under-write a
+		// declared Content-Length leaves the server to close the connection on
+		// its own terms, which can reach the probe as a reset rather than a
+		// short body and reclassify the outcome as unreachable.
+		_, _ = io.Copy(io.Discard, r.Body)
+
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, buf, err := hijacker.Hijack()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 128\r\n\r\n" + `{"jsonrpc":"2.0","id":1`)
+		_ = buf.Flush()
+
+		halfCloser, ok := conn.(interface{ CloseWrite() error })
+		if !ok {
+			return
+		}
+		_ = halfCloser.CloseWrite()
+
+		// Hold the read side open until the probe hangs up so it sees the
+		// half-close mid-body instead of a reset.
+		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		_, _ = io.Copy(io.Discard, conn)
 	}))
 	t.Cleanup(upstream.Close)
 
