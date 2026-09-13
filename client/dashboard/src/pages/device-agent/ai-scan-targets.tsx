@@ -10,12 +10,12 @@ import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
-import { useDeleteDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/deleteDeviceAgentAiScanTarget.js";
+import { useDeleteAiScanTargetMutation } from "@gram/client/react-query/deleteAiScanTarget.js";
 import {
-  invalidateAllDeviceAgentAiScanTargets,
-  useDeviceAgentAiScanTargets,
-} from "@gram/client/react-query/deviceAgentAiScanTargets.js";
-import { useUpsertDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/upsertDeviceAgentAiScanTarget.js";
+  invalidateAllAiScanTargets,
+  useAiScanTargets,
+} from "@gram/client/react-query/aiScanTargets.js";
+import { useUpsertAiScanTargetMutation } from "@gram/client/react-query/upsertAiScanTarget.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -65,7 +65,7 @@ type EditorState = { mode: EditorMode; draft: Draft } | null;
 
 function Catalog(): JSX.Element {
   const queryClient = useQueryClient();
-  const list = useDeviceAgentAiScanTargets(undefined, undefined, {
+  const list = useAiScanTargets(undefined, undefined, {
     throwOnError: false,
   });
   const [search, setSearch] = useState("");
@@ -74,9 +74,9 @@ function Catalog(): JSX.Element {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
 
-  const invalidate = () => invalidateAllDeviceAgentAiScanTargets(queryClient);
+  const invalidate = () => invalidateAllAiScanTargets(queryClient);
 
-  const save = useUpsertDeviceAgentAiScanTargetMutation({
+  const save = useUpsertAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
         `Saved ${result.target.id}. List version ${result.listVersion} reaches agents on their next poll.`,
@@ -89,7 +89,7 @@ function Catalog(): JSX.Element {
       setEditorError(errorMessage(err, "Failed to save the target"));
     },
   });
-  const toggle = useUpsertDeviceAgentAiScanTargetMutation({
+  const toggle = useUpsertAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
         `${result.target.enabled ? "Enabled" : "Disabled"} ${result.target.id}.`,
@@ -101,7 +101,7 @@ function Catalog(): JSX.Element {
     },
     onSettled: () => setPendingId(null),
   });
-  const remove = useDeleteDeviceAgentAiScanTargetMutation({
+  const remove = useDeleteAiScanTargetMutation({
     onSuccess: async () => {
       toast.success("Target deleted.");
       setDeleting(null);
@@ -112,7 +112,7 @@ function Catalog(): JSX.Element {
     },
     onSettled: () => setPendingId(null),
   });
-  const restore = useDeleteDeviceAgentAiScanTargetMutation({
+  const restore = useDeleteAiScanTargetMutation({
     onSuccess: async () => {
       toast.success("Speakeasy default restored.");
       await invalidate();
