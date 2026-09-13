@@ -35,7 +35,8 @@ func (q *Queries) RebuildUsageSummaries(ctx context.Context, snapshotAt time.Tim
 	if snapshotAt.IsZero() {
 		return errors.New("rebuild usage summaries: snapshot time is required")
 	}
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+	buildSettings := clickhouse.Settings{
+		"async_insert":                             0,
 		"max_threads":                              2,
 		"max_final_threads":                        2,
 		"max_block_size":                           1024,
@@ -46,11 +47,21 @@ func (q *Queries) RebuildUsageSummaries(ctx context.Context, snapshotAt time.Tim
 		"timeout_before_checking_execution_speed":  0,
 		"max_bytes_before_external_group_by":       134217728,
 		"max_bytes_ratio_before_external_group_by": 0.5,
-	}))
+	}
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(buildSettings))
 	snapshotAt = snapshotAt.UTC()
 	publishedBefore := utcUsageDay(snapshotAt.Add(-time.Hour))
-	if err := q.requireAtomicUsageSummaryExchange(ctx); err != nil {
+	publication, err := q.requireAtomicUsageSummaryExchange(ctx)
+	if err != nil {
 		return err
+	}
+	if publication.replicas != 0 {
+		buildSettings["insert_quorum"] = publication.replicas
+		buildSettings["insert_quorum_timeout"] = 15000
+		ctx = clickhouse.Context(ctx, clickhouse.WithSettings(buildSettings))
+		if err := q.verifyUsageSummaryReplicaCatalog(ctx, publication); err != nil {
+			return err
+		}
 	}
 
 	if err := q.clearUsageSummaryWorkTables(ctx); err != nil {
@@ -100,23 +111,98 @@ func (q *Queries) RebuildUsageSummaries(ctx context.Context, snapshotAt time.Tim
 	`, publishedBefore.Format(time.DateOnly), usageSummaryDateTime64(publishedBefore), usageSummaryDateTime64(snapshotAt)); err != nil {
 		return fmt.Errorf("stage usage summary publication marker: %w", err)
 	}
+	if err := q.verifyUsageSummaryReplicaCatalog(ctx, publication); err != nil {
+		return fmt.Errorf("verify usage summary publication topology: %w", err)
+	}
+	// A timeout can follow a successful local exchange. Never discard a table
+	// that a lagging replica may still expose as its live generation.
+	published = true
 	if err := q.conn.Exec(ctx, "EXCHANGE TABLES billing_meter_daily_summaries_staging AND billing_meter_daily_summaries"); err != nil {
 		return fmt.Errorf("publish usage summary generation: %w", err)
 	}
-	published = true
+	publication.liveUUID, publication.stagingUUID = publication.stagingUUID, publication.liveUUID
+	if err := q.verifyUsageSummaryReplicaCatalog(ctx, publication); err != nil {
+		return fmt.Errorf("await usage summary publication: %w", err)
+	}
 	if err := q.clearUsageSummaryWorkTables(ctx); err != nil {
 		return fmt.Errorf("clear usage summary work tables after publication: %w", err)
 	}
 	return nil
 }
 
-func (q *Queries) requireAtomicUsageSummaryExchange(ctx context.Context) error {
+type usageSummaryPublication struct {
+	database    string
+	replicas    uint64
+	liveUUID    string
+	stagingUUID string
+}
+
+func (q *Queries) requireAtomicUsageSummaryExchange(ctx context.Context) (usageSummaryPublication, error) {
+	var publication usageSummaryPublication
 	var engine string
-	if err := q.conn.QueryRow(ctx, "SELECT engine FROM system.databases WHERE name = currentDatabase()").Scan(&engine); err != nil {
-		return fmt.Errorf("inspect usage summary database engine: %w", err)
+	if err := q.conn.QueryRow(ctx, "SELECT name, engine FROM system.databases WHERE name = currentDatabase()").Scan(&publication.database, &engine); err != nil {
+		return publication, fmt.Errorf("inspect usage summary database engine: %w", err)
 	}
-	if engine != "Atomic" && engine != "Shared" {
-		return fmt.Errorf("rebuild usage summaries: database engine %q does not support the required atomic table exchange", engine)
+	if engine != "Atomic" && engine != "Shared" && engine != "Replicated" {
+		return publication, fmt.Errorf("rebuild usage summaries: database engine %q does not support the required atomic table exchange", engine)
+	}
+	var replicatedTables uint64
+	if err := q.conn.QueryRow(ctx, `
+		SELECT
+			countIf(startsWith(engine, 'Replicated')),
+			anyIf(toString(uuid), name = 'billing_meter_daily_summaries'),
+			anyIf(toString(uuid), name = 'billing_meter_daily_summaries_staging')
+		FROM system.tables
+		WHERE database = currentDatabase()
+			AND name IN ('billing_meter_daily_summaries', 'billing_meter_daily_summaries_staging')
+	`).Scan(&replicatedTables, &publication.liveUUID, &publication.stagingUUID); err != nil {
+		return publication, fmt.Errorf("inspect usage summary publication tables: %w", err)
+	}
+	if publication.liveUUID == "" || publication.stagingUUID == "" {
+		return publication, errors.New("rebuild usage summaries: publication tables are missing")
+	}
+	if engine != "Replicated" {
+		if replicatedTables != 0 {
+			return publication, errors.New("rebuild usage summaries: replicated tables require replicated database metadata for atomic publication")
+		}
+		return publication, nil
+	}
+	if replicatedTables != 2 {
+		return publication, errors.New("rebuild usage summaries: replicated database requires both publication tables to replicate data")
+	}
+	var shards uint64
+	if err := q.conn.QueryRow(ctx, `
+		SELECT count(), uniqExact(shard_num)
+		FROM system.clusters WHERE cluster = ?
+	`, publication.database).Scan(&publication.replicas, &shards); err != nil {
+		return publication, fmt.Errorf("inspect usage summary replicas: %w", err)
+	}
+	if publication.replicas == 0 || shards != 1 {
+		return publication, errors.New("rebuild usage summaries: publication requires one complete shard with known replicas")
+	}
+	return publication, nil
+}
+
+func (q *Queries) verifyUsageSummaryReplicaCatalog(ctx context.Context, publication usageSummaryPublication) error {
+	if publication.replicas == 0 {
+		return nil
+	}
+	var matchingTables uint64
+	if err := q.conn.QueryRow(ctx, `
+		SELECT countIf(
+			(name = 'billing_meter_daily_summaries' AND toString(uuid) = ?)
+			OR (name = 'billing_meter_daily_summaries_staging' AND toString(uuid) = ?)
+		)
+		FROM clusterAllReplicas(?, system.tables)
+		WHERE database = ?
+			AND name IN ('billing_meter_daily_summaries', 'billing_meter_daily_summaries_staging')
+		SETTINGS skip_unavailable_shards = 0,
+			connect_timeout_with_failover_ms = 1000, receive_timeout = 10
+	`, publication.liveUUID, publication.stagingUUID, publication.database, publication.database).Scan(&matchingTables); err != nil {
+		return fmt.Errorf("verify usage summary replica catalog: %w", err)
+	}
+	if matchingTables != 2*publication.replicas {
+		return errors.New("usage summary replica catalogs have not converged; preserving both generations")
 	}
 	return nil
 }
