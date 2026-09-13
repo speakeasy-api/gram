@@ -16,7 +16,10 @@ import (
 
 // DefaultsVersion counts revisions of Defaults. Bump it whenever the
 // compiled-in list changes, so agents can tell which defaults they hold.
-const DefaultsVersion int32 = 1
+//
+// 2: the registry grew past the original harnesses to cover assistants and
+// open model runners, and gained the gateway-client matchers.
+const DefaultsVersion int32 = 2
 
 // Source says where a target in an organization's list comes from.
 type Source string

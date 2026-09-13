@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"math"
 	"regexp"
 	"slices"
@@ -180,9 +181,18 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 			return fail("a gateway client list may hold at most %d entries", MaxGatewayClientEntries)
 		}
 	}
+	// A vendor key is a handle on the admission catalog, not free text, and
+	// the same rule that stops a built-in claiming a shared key has to hold
+	// for an organization writing one by hand: `anthropic` covers both Claude
+	// Code and Claude, so a block on a custom target claiming it would deny
+	// both. Rejecting the key at write time is the only place that reads as an
+	// error rather than as over-broad enforcement nobody asked for.
 	for _, key := range gateway.CIMDVendorKeys {
 		if !vendorKeyPattern.MatchString(key) {
 			return fail("cimd vendor key %q must match %s", key, vendorKeyPattern)
+		}
+		if !aivendors.BlockableVendorKey(key) {
+			return fail("cimd vendor key %q does not name a single CIMD-publishing vendor Gram can recognize at the gateway; name the client id metadata document url instead", key)
 		}
 	}
 	// Blocking is CIMD-only, and a CIMD client_id IS the https URL its
@@ -202,6 +212,9 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 		case !strings.HasPrefix(id, "https://"):
 			return fail("client id metadata document url %q must be an https URL; only CIMD-published clients can be blocked at the gateway", id)
 		}
+		if err := validateClientIDURLShape(id); err != nil {
+			return fail("client id metadata document url %q %s", id, err)
+		}
 	}
 	for _, name := range gateway.ClientInfoNames {
 		switch {
@@ -209,6 +222,43 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 			return fail("client info name must not be blank")
 		case utf8.RuneCountInString(name) > MaxClientInfoNameLength:
 			return fail("client info name %q exceeds %d characters", name, MaxClientInfoNameLength)
+		}
+	}
+	return nil
+}
+
+// validateClientIDURLShape holds an OAuth matcher to the same URL syntax the
+// CIMD spec holds a presented client_id to, minus the wildcard segment a
+// catalog pattern is allowed to carry. Without it a matcher can be written in
+// a shape no client_id can ever take — a fragment, a bare origin, a userinfo
+// component — and read afterwards as a block that quietly never fires.
+//
+// The rules are cimd.ValidateClientIDURL's, restated rather than called: that
+// function is the authorization-time gate and rejects the `*` a catalog
+// pattern needs, and importing the OAuth surface into the scan-target model to
+// borrow four line-noise checks is the wrong dependency to take on.
+func validateClientIDURLShape(id string) error {
+	if strings.Contains(id, "#") {
+		return errors.New("must not contain a fragment")
+	}
+	rest := strings.TrimPrefix(id, "https://")
+	if query := strings.IndexByte(rest, '?'); query >= 0 {
+		rest = rest[:query]
+	}
+	slash := strings.IndexByte(rest, '/')
+	if slash < 0 {
+		return errors.New("must include a path component; a bare origin is not a client id")
+	}
+	host, path := rest[:slash], rest[slash:]
+	if host == "" {
+		return errors.New("must include a host")
+	}
+	if strings.Contains(host, "@") {
+		return errors.New("must not contain a userinfo component")
+	}
+	for segment := range strings.SplitSeq(path, "/") {
+		if segment == "." || segment == ".." {
+			return errors.New(`must not contain "." or ".." path segments`)
 		}
 	}
 	return nil

@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,12 +30,7 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	organizationID := ac.ActiveOrganizationID
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   organizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
 		return nil, err
 	}
 
@@ -53,6 +47,12 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := agentrepo.New(dbtx)
+	// Taken before the read below, which cannot lock a decision that has no
+	// row yet: two admins deciding the same undecided target would otherwise
+	// both audit a transition out of unreviewed.
+	if err := queries.AcquireAIToolDecisionsLock(ctx, organizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai tool decision update").LogError(ctx, s.logger)
+	}
 
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
 	if err != nil {

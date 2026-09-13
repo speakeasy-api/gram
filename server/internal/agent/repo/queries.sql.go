@@ -23,6 +23,21 @@ func (q *Queries) AcquireAIScanTargetsLock(ctx context.Context, organizationID s
 	return err
 }
 
+const acquireAIToolDecisionsLock = `-- name: AcquireAIToolDecisionsLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('ai_tool_decisions:' || $1::text, 0))
+`
+
+// Serializes an organization's AI tool decision writes. Transaction-scoped.
+// FOR UPDATE below cannot lock a row that does not exist yet, so without this
+// two admins deciding the same undecided target both read "unreviewed" and
+// both audit a transition from it; the second one's record would claim the
+// first never happened.
+func (q *Queries) AcquireAIToolDecisionsLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireAIToolDecisionsLock, organizationID)
+	return err
+}
+
 const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
 
 SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))

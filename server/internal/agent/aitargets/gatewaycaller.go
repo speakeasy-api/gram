@@ -24,11 +24,17 @@ type GatewayCaller struct {
 // MatchGatewayCaller resolves a caller to the served target whose matchers
 // claim it, by verified client_id, then admitting catalog URL, then vendor key.
 //
-// CIMD only. A dynamically registered id is minted per install, so naming one
-// would block a single laptop rather than a product. Self-reported client
-// names are not consulted; MatchGatewayClientInfo is that door.
+// CIMD only, enforced in the data rather than here: validateGatewayClient
+// holds OAuthClientIDs to https URLs, which is what a CIMD client_id is and
+// what a dynamically registered client's opaque id is not. So the literal
+// client_id layer runs for every verified caller, including one admitted by an
+// issuer's own CIMD entry rather than the compile-time catalog — those resolve
+// to no preset, and requiring one here would have made a block on them inert.
+// The catalog layers below still need their own values and skip themselves
+// when the caller has none. Self-reported client names are not consulted;
+// MatchGatewayClientInfo is that door.
 func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
-	if caller.OAuthClientID == "" || caller.CIMDCatalogURL == "" {
+	if caller.OAuthClientID == "" {
 		return ZeroTarget(), false
 	}
 	for _, layer := range []struct {

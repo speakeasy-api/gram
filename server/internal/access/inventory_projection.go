@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -37,7 +38,14 @@ func (s *Service) resolveAIInventoryProjection(ctx context.Context, ac *contextv
 
 // resolveShadowMCPInventoryProjection is the projection for the MCP servers
 // half, whose rows are project-scoped already. It proves the attributed tier
-// the way every other shadow MCP endpoint does.
+// the way every other shadow MCP endpoint does, prepared grants included.
+//
+// Deliberately not the live check the AI half uses. The AI half is a new
+// organization-wide surface, so its upper tier is new too; here the upper tier
+// is what every shadow MCP endpoint has always accepted, and tightening only
+// this one read while the mutations beside it stay on prepared grants would
+// buy nothing and read as an inconsistency. Moving the whole surface to live
+// membership is worth doing on its own.
 func (s *Service) resolveShadowMCPInventoryProjection(ctx context.Context, ac *contextvalues.AuthContext, projectID uuid.UUID) (inventoryProjection, error) {
 	return s.resolveInventoryProjection(ctx, ac, projectID, func() error {
 		return s.authz.Require(ctx, authz.Check{
@@ -91,7 +99,7 @@ func (s *Service) resolveInventoryProjection(ctx context.Context, ac *contextval
 // redactAIDetectionAttribution drops the fields a project-read caller may not
 // see. Every attribution-bearing field of gen.AIDetection must be listed here;
 // adding one to the design without adding it here leaks it, which is what
-// TestProjectReadProjectionCarriesNoAttribution exists to catch.
+// TestService_ListAIDetections_ProjectReaderGetsNoAttribution exists to catch.
 func redactAIDetectionAttribution(detections []*gen.AIDetection) {
 	for _, detection := range detections {
 		detection.UserCount = nil
@@ -109,9 +117,40 @@ func redactAIDetectionAttribution(detections []*gen.AIDetection) {
 
 // redactShadowMCPInventoryAttribution is the same rule for the MCP half of the
 // section, so one status vocabulary does not come with two privacy postures.
+// Every attribution-bearing field of gen.ShadowMCPInventoryServer must be
+// listed here, LatestRequest included: its summary names the person who asked
+// for the server, by user id and by email.
 func redactShadowMCPInventoryAttribution(servers []*gen.ShadowMCPInventoryServer) {
 	for _, server := range servers {
 		server.UserCount = nil
 		server.TopUsers = nil
+		// Dropped whole rather than blanked: requester_user_id and
+		// requester_email are required on the summary, so an emptied one would
+		// claim a request was made by nobody. What a project reader needs off
+		// this row — that requests exist, and where they stand — is already in
+		// RequestCount and ApprovalRequest.
+		server.LatestRequest = nil
 	}
+}
+
+// requireLiveOrgAdmin proves org:admin against the organization's current
+// membership rather than the grants prepared when the session was minted.
+//
+// Writing a gateway decision is an organization-wide security control, so an
+// administrator whose role was revoked after their session was prepared must
+// not still be able to reach it. Support sessions keep the prepared-grant
+// path: their grants are minted per operator action and are the audited thing.
+func (s *Service) requireLiveOrgAdmin(ctx context.Context, ac *contextvalues.AuthContext) error {
+	if contextvalues.IsSupportSession(ctx) {
+		return s.authz.Require(ctx, authz.Check{
+			Scope:        authz.ScopeOrgAdmin,
+			ResourceKind: "",
+			ResourceID:   ac.ActiveOrganizationID,
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireUserOrganizationScope(ctx, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
+		return fmt.Errorf("authorize organization administrator: %w", err)
+	}
+	return nil
 }

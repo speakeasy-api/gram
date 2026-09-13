@@ -398,6 +398,15 @@ WHERE organization_id = @organization_id
   AND decision = 'blocked'
 ORDER BY target_id;
 
+-- Serializes an organization's AI tool decision writes. Transaction-scoped.
+-- FOR UPDATE below cannot lock a row that does not exist yet, so without this
+-- two admins deciding the same undecided target both read "unreviewed" and
+-- both audit a transition from it; the second one's record would claim the
+-- first never happened.
+
+-- name: AcquireAIToolDecisionsLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_tool_decisions:' || @organization_id::text, 0));
+
 -- name: GetAIToolDecisionForUpdate :one
 SELECT *
 FROM ai_tool_decisions

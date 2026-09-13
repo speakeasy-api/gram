@@ -86,25 +86,36 @@ func TestMatchGatewayCallerMatchesCatalogURLThenVendorKey(t *testing.T) {
 	require.Equal(t, "claude-code", matched.ID)
 }
 
-// TestMatchGatewayCallerRequiresACatalogEntry: blocking is CIMD-only. A
-// dynamically registered client gets an opaque id minted per registration, so
-// naming one would block a single install and the next registration would
-// walk past it.
-func TestMatchGatewayCallerRequiresACatalogEntry(t *testing.T) {
+// A CIMD client_id is the https URL its document is served from, and that is
+// the only shape validateGatewayClient lets into OAuthClientIDs — a
+// dynamically registered client's opaque id cannot be written there at all. So
+// the literal layer does not need a catalog entry to be safe, and requiring
+// one would have made a block inert for exactly the clients an organization
+// admitted itself: an issuer's own CIMD entry resolves to no compile-time
+// preset.
+func TestMatchGatewayCallerMatchesAnIssuerAdmittedClientWithNoPreset(t *testing.T) {
 	t.Parallel()
 
-	targets := []aitargets.Target{gatewayTarget("some-tool", aitargets.GatewayClient{
+	targets := []aitargets.Target{gatewayTarget("acme-tool", aitargets.GatewayClient{
 		CIMDVendorKeys:  nil,
-		OAuthClientIDs:  []string{"dcr-opaque-client-id"},
+		OAuthClientIDs:  []string{"https://acme.example/mcp/client.json"},
 		ClientInfoNames: nil,
 	})}
 
-	_, ok := aitargets.MatchGatewayCaller(targets, aitargets.GatewayCaller{
-		OAuthClientID:  "dcr-opaque-client-id",
+	target, ok := aitargets.MatchGatewayCaller(targets, aitargets.GatewayCaller{
+		OAuthClientID:  "https://acme.example/mcp/client.json",
 		CIMDVendorKey:  "",
 		CIMDCatalogURL: "",
 	})
-	require.False(t, ok, "a client that did not come from the CIMD catalog never matches")
+	require.True(t, ok, "a verified client_id matches its literal matcher without a catalog preset")
+	require.Equal(t, "acme-tool", target.ID)
+
+	_, ok = aitargets.MatchGatewayCaller(targets, aitargets.GatewayCaller{
+		OAuthClientID:  "https://other.example/mcp/client.json",
+		CIMDVendorKey:  "",
+		CIMDCatalogURL: "",
+	})
+	require.False(t, ok, "a different document is a different client")
 }
 
 func TestMatchGatewayCallerIgnoresUnverifiedAndDisabledTargets(t *testing.T) {
@@ -117,14 +128,24 @@ func TestMatchGatewayCallerIgnoresUnverifiedAndDisabledTargets(t *testing.T) {
 	})
 	disabled.Enabled = false
 
-	// A self-reported name is never an authorization key, and a target the
-	// organization does not scan for is not enforced on either.
+	// A caller with no verified client_id is not identified at all, whatever
+	// the catalog says about it.
 	_, ok := aitargets.MatchGatewayCaller([]aitargets.Target{disabled}, aitargets.GatewayCaller{
 		OAuthClientID:  "",
 		CIMDVendorKey:  "cursor",
 		CIMDCatalogURL: "",
 	})
-	require.False(t, ok)
+	require.False(t, ok, "an unverified caller is never matched")
+
+	// And a target the organization does not scan for is not enforced on,
+	// even when the caller is fully identified — the case the early return
+	// above would otherwise hide.
+	_, ok = aitargets.MatchGatewayCaller([]aitargets.Target{disabled}, aitargets.GatewayCaller{
+		OAuthClientID:  "https://cursor.com/mcp/client.json",
+		CIMDVendorKey:  "cursor",
+		CIMDCatalogURL: "https://cursor.com/mcp/client.json",
+	})
+	require.False(t, ok, "a disabled target never matches")
 
 	enabled := gatewayTarget("cursor", disabled.GatewayClient)
 	_, ok = aitargets.MatchGatewayCaller([]aitargets.Target{enabled}, aitargets.GatewayCaller{
@@ -152,16 +173,33 @@ func TestMatchGatewayClientInfoIsCaseInsensitive(t *testing.T) {
 	require.False(t, ok)
 }
 
+// firstBlockableVendorKey borrows a vendor key the registry says the gateway
+// can resolve. Which vendor that is moves as the registry grows.
+func firstBlockableVendorKey() (string, bool) {
+	for _, target := range aitargets.Defaults() {
+		for _, key := range target.GatewayClient.CIMDVendorKeys {
+			return key, true
+		}
+	}
+	return "", false
+}
+
 func TestValidateRejectsTwoServedTargetsClaimingOneMatcher(t *testing.T) {
 	t.Parallel()
 
+	// A key only one target may claim, so the failure under test is the
+	// duplicate rather than the key itself: `anthropic` covers two products
+	// and validateGatewayClient turns it away before this check is reached.
+	shared, found := firstBlockableVendorKey()
+	require.True(t, found)
+
 	first := gatewayTarget("claude-code", aitargets.GatewayClient{
-		CIMDVendorKeys:  []string{"anthropic"},
+		CIMDVendorKeys:  []string{shared},
 		OAuthClientIDs:  nil,
 		ClientInfoNames: nil,
 	})
 	second := gatewayTarget("claude-desktop", aitargets.GatewayClient{
-		CIMDVendorKeys:  []string{"anthropic"},
+		CIMDVendorKeys:  []string{shared},
 		OAuthClientIDs:  nil,
 		ClientInfoNames: nil,
 	})

@@ -11,6 +11,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -21,6 +22,11 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
+
+// ErrAIToolBlockCheckUnavailable reports that the organization has blocked at
+// least one AI tool but the catalog needed to tell whether this caller is one
+// of them could not be read. Callers turn it into a retryable failure.
+var ErrAIToolBlockCheckUnavailable = errors.New("ai tool gateway block check unavailable")
 
 // AIToolBlockedError reports that the presented client belongs to an AI tool
 // the organization has blocked. Like admission.DenialError it owns only why
@@ -67,10 +73,13 @@ func (e *AIToolBlockedError) Description() string {
 // The first query asks only whether the organization blocks anything at all,
 // so the common case never touches the scan-target catalog.
 //
-// Fails OPEN on infrastructure trouble, unlike the killswitch checkpoints:
-// this is on the connection path for every MCP client, and a database blip
-// that locked everyone out would be a worse outage than a blocked tool
-// connecting. Blocking is a policy posture; the killswitch fails closed.
+// The two failure modes are answered differently, because they know different
+// things. If the first query fails there is no evidence the organization
+// blocks anything, and refusing every MCP client in an organization that has
+// never used the feature is a worse outage than the one it would prevent, so
+// it allows. Once that query says a block IS in force, a failure to load the
+// catalog means the answer is unknown rather than absent, and the request is
+// refused as retryable instead of quietly bypassing the control.
 func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logger, organizationID string, clientID string) error {
 	if organizationID == "" || clientID == "" {
 		return nil
@@ -88,8 +97,8 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "ai scan targets unavailable; allowing the connection", attr.SlogError(err))
-		return nil
+		logger.ErrorContext(ctx, "ai scan targets unavailable while a block is in force", attr.SlogError(err))
+		return fmt.Errorf("%w: %w", ErrAIToolBlockCheckUnavailable, err)
 	}
 
 	caller := aitargets.GatewayCaller{

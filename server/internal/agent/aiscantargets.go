@@ -71,20 +71,6 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	if key := strings.TrimSpace(conv.PtrValOr(payload.VersionPlistKey, "")); key != "" {
 		target.VersionHint = &aitargets.VersionHint{PlistKey: key}
 	}
-	if err := aitargets.ValidateTarget(target); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
-	}
-	// Built-in targets are system-supplied and read-only, the same contract
-	// Detection Rules holds its built-ins to. The one change an organization
-	// may make is switching one off, so a write under a built-in's id is
-	// accepted only when it carries that built-in's definition unchanged.
-	//
-	// Enforced here and not only in the dashboard because the API is the
-	// contract: a hand-rolled call must not be able to silently redefine what
-	// every agent in the organization probes for.
-	if builtin, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin && !aitargets.SameDefinition(builtin, target) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target and cannot be edited; it can only be enabled or disabled", target.ID)
-	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -99,6 +85,30 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	before, err := aiScanTargetBefore(ctx, queries, organizationID, target.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read existing ai scan target").LogError(ctx, s.logger)
+	}
+	// gateway_client is the one attribute an omitted field leaves alone rather
+	// than clearing. Every other field is a full replacement, but a client that
+	// predates gateway matchers — or one just flipping a built-in off — would
+	// otherwise silently unlink the target from the caller it blocks, and for a
+	// built-in that carries matchers the read-only check below would reject the
+	// toggle outright. Sending gateway_client with empty lists still clears it.
+	if payload.GatewayClient == nil && before != nil {
+		target.GatewayClient = before.GatewayClient.Clone()
+	}
+
+	if err := aitargets.ValidateTarget(target); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
+	}
+	// Built-in targets are system-supplied and read-only, the same contract
+	// Detection Rules holds its built-ins to. The one change an organization
+	// may make is switching one off, so a write under a built-in's id is
+	// accepted only when it carries that built-in's definition unchanged.
+	//
+	// Enforced here and not only in the dashboard because the API is the
+	// contract: a hand-rolled call must not be able to silently redefine what
+	// every agent in the organization probes for.
+	if builtin, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin && !aitargets.SameDefinition(builtin, target) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target and cannot be edited; it can only be enabled or disabled", target.ID)
 	}
 	if _, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)

@@ -175,7 +175,10 @@ func GatewayMatchersFor(product Product) GatewayMatchers {
 	if !product.SpeaksCIMD() {
 		return matchers
 	}
-	if soleProductForVendor(product.VendorKey) {
+	// The key is also only worth claiming when some document is enabled: with
+	// none, no catalog entry can admit the product, so the key would report a
+	// target as enforceable that the gateway can never resolve.
+	if soleProductForVendor(product.VendorKey) && hasEnabledDocument(product) {
 		matchers.VendorKeys = []string{product.VendorKey}
 	}
 	for _, document := range product.Documents {
@@ -226,4 +229,33 @@ func (p Product) clone() Product {
 	out.ClientInfoNames = slices.Clone(p.ClientInfoNames)
 	out.Documents = slices.Clone(p.Documents)
 	return out
+}
+
+// hasEnabledDocument reports whether any of the product's CIMD documents is
+// still admitted.
+func hasEnabledDocument(product Product) bool {
+	for _, document := range product.Documents {
+		if document.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+// BlockableVendorKey reports whether a vendor key names something the gateway
+// could actually resolve a caller to: a vendor the registry knows, publishing
+// exactly one product, with at least one admitted document. It is the same
+// rule GatewayMatchersFor applies to a built-in, exported so an organization
+// writing its own matcher is held to it too — otherwise a custom target
+// claiming `anthropic` would block every Anthropic product at once.
+func BlockableVendorKey(vendorKey string) bool {
+	if !soleProductForVendor(vendorKey) {
+		return false
+	}
+	for _, product := range registry {
+		if product.VendorKey == vendorKey {
+			return product.SpeaksCIMD() && hasEnabledDocument(product)
+		}
+	}
+	return false
 }

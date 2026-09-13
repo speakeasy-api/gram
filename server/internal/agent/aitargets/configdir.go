@@ -8,8 +8,12 @@ import "strings"
 // The device agent does the real matching; this is the reference for it.
 // Callers pass an expanded, cleaned path.
 func MatchConfigDir(signature, path string) bool {
+	// A Windows agent hands over a native path, whose separator is `\`.
+	// Splitting only on `/` would leave the whole thing in one segment and let
+	// a `*` swallow directory boundaries, which is the one thing single-segment
+	// globbing exists to prevent. Signatures are always authored with `/`.
 	sigSegments := strings.Split(signature, "/")
-	pathSegments := strings.Split(path, "/")
+	pathSegments := strings.Split(strings.ReplaceAll(path, `\`, "/"), "/")
 	if len(sigSegments) != len(pathSegments) {
 		return false
 	}
@@ -24,6 +28,9 @@ func MatchConfigDir(signature, path string) bool {
 // matchSegment globs within one segment. Not path.Match, which treats `\` as
 // an escape everywhere but Windows — a signature may not contain one at all.
 func matchSegment(pattern, segment string) bool {
+	if strings.Contains(pattern, `\`) {
+		return false
+	}
 	if !strings.Contains(pattern, "*") {
 		return pattern == segment
 	}

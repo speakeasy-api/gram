@@ -213,6 +213,72 @@ func TestUpsertAiScanTargetDisablesADefaultAndDeleteRestoresIt(t *testing.T) {
 	require.Equal(t, deleted+1, deletedAfter)
 }
 
+// firstDefaultWithGatewayMatchers picks a built-in that names a gateway caller.
+// Which one that is moves as the registry grows — a vendor key is claimed only
+// when the vendor publishes exactly one product — so the test asks rather than
+// naming a product.
+func firstDefaultWithGatewayMatchers() (aitargets.Target, bool) {
+	for _, target := range aitargets.Defaults() {
+		if !target.GatewayClient.IsZero() {
+			return target, true
+		}
+	}
+	return aitargets.ZeroTarget(), false
+}
+
+// gateway_client is optional on the wire, and a client that omits it is
+// toggling the target, not unlinking it from the caller it blocks. For a
+// built-in that carries matchers, treating the omission as a clear would make
+// the built-in look edited and reject the toggle outright.
+func TestUpsertAiScanTargetKeepsGatewayMatchersWhenTheFieldIsOmitted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	builtin, found := firstDefaultWithGatewayMatchers()
+	require.True(t, found, "the case only bites for a built-in that has matchers")
+
+	payload := defaultPayload(t, builtin.ID, false)
+	payload.GatewayClient = nil
+
+	result, err := ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err, "omitting gateway_client is a toggle, not an edit")
+	require.False(t, result.Target.Enabled)
+	require.ElementsMatch(t, builtin.GatewayClient.CIMDVendorKeys, result.Target.GatewayClient.CimdVendorKeys)
+	require.ElementsMatch(t, builtin.GatewayClient.OAuthClientIDs, result.Target.GatewayClient.OauthClientIds)
+	require.ElementsMatch(t, builtin.GatewayClient.ClientInfoNames, result.Target.GatewayClient.ClientInfoNames)
+}
+
+// A custom target keeps its matchers the same way, so an older client editing
+// a display name cannot silently drop what a block rests on.
+func TestUpsertAiScanTargetKeepsACustomTargetsMatchersWhenTheFieldIsOmitted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	payload := chatgptDesktopPayload()
+	payload.GatewayClient = &gen.AiScanTargetGatewayClient{
+		CimdVendorKeys:  nil,
+		OauthClientIds:  nil,
+		ClientInfoNames: []string{"acme-desktop"},
+	}
+	_, err := ti.service.UpsertAiScanTarget(ctx, payload)
+	require.NoError(t, err)
+
+	renamed := chatgptDesktopPayload()
+	renamed.DisplayName = "Acme Desktop"
+	renamed.GatewayClient = nil
+	result, err := ti.service.UpsertAiScanTarget(ctx, renamed)
+	require.NoError(t, err)
+	require.Equal(t, []string{"acme-desktop"}, result.Target.GatewayClient.ClientInfoNames)
+
+	cleared := chatgptDesktopPayload()
+	cleared.GatewayClient = &gen.AiScanTargetGatewayClient{CimdVendorKeys: nil, OauthClientIds: nil, ClientInfoNames: nil}
+	result, err = ti.service.UpsertAiScanTarget(ctx, cleared)
+	require.NoError(t, err)
+	require.Empty(t, result.Target.GatewayClient.ClientInfoNames, "sending the field empty still clears it")
+}
+
 func TestDeleteAiScanTargetRefusesIdsTheOrganizationDoesNotOwn(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
