@@ -328,9 +328,12 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Connection:   ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
+	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
-		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget).
-		WithDistributionAdmission(config.DistributionAdmission)
+		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithDistributionAdmission(config.DistributionAdmission).
+		WithDistributionAdmissionReads(distributionAdmissionReads)
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {
@@ -411,11 +414,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 // local-fixture surfaces. Missing dependencies degrade to stable unavailable
 // descriptors, but the capability loss is logged rather than silently hidden.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) bool {
-	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budget, config.JWTSigningKey)
+	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
+	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budget, config.JWTSigningKey)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
+	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs))
 	reader.WithShadowInventory(shadowInventory)
 	return true
 }
@@ -711,9 +716,12 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Connection:   ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
+	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
-		WithAssignmentMutations(config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.AuditLogger, pluginAssignmentMutationBudget).
-		WithDistributionAdmission(config.DistributionAdmission)
+		WithAssignmentMutations(config.FeatureFlags, organizationSlugs, config.AuditLogger, pluginAssignmentMutationBudget).
+		WithDistributionAdmission(config.DistributionAdmission).
+		WithDistributionAdmissionReads(distributionAdmissionReads)
 	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
 	accessRoleMutations, accessRoleMutationErr := platformmcp.NewAccessRoleMutationService(accessReads, config.FeatureFlags, budgets.AccessRoleMutations, config.JWTSigningKey, access.NewRoleManager(config.Logger, config.DB, config.AccessRoles, config.AuditLogger))
 	if accessRoleMutationErr != nil {
@@ -727,10 +735,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
-	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
+	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
 	} else {
+		shadowInventory.WithDistributionAdmissionReads(distributionAdmissionReads)
 		platformReader.WithShadowInventory(shadowInventory)
 		shadowDecisionBudget := platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionConnectionLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
