@@ -46,7 +46,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: "role:developers"})
 	require.NoError(t, err)
-	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil, MessageTypes: nil, ScopeInclude: pgtype.Text{}, ScopeExempt: pgtype.Text{}, Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{}})
+	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil, Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{}})
 	require.NoError(t, err)
 
 	flags := newFeatureRollout(principal.OrganizationID)
