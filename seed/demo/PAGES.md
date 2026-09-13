@@ -160,6 +160,7 @@ present in a developer's org and deliberately absent from the shared demo org.
 | Settings                 | Render fine without seed data                                |
 | ChatGPT/Work usage split | Later phase (`chatgpt:usage:metrics` rows)                   |
 | Logs page content        | Enterprise-gated for the demo account type (README change 7) |
+| Remote MCP identity settings                                   | PG Remote MCP fixtures span User (Linear: `remote_session_issuers` + `remote_session_clients` + issuer binding), Agent (Slack: inert static Authorization header), and None (GitHub: no client/header); all values are deterministic and nonfunctional                                                                                                                                                                                                                                                                                                                                                                              | `[x]`  |
 
 ## Rules when extending
 
