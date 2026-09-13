@@ -10,6 +10,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
@@ -65,6 +66,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+		Surface:           requestSurface(m),
 	}, findings)
 
 	published := 0
@@ -99,4 +101,17 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		}
 	}
 	return publishErr
+}
+
+// requestSurface is the text the request's offsets index. Producers before
+// finding_surface existed already sent tool requests over the composed scan
+// surface, so an unmarked tool request still resolves to it.
+func requestSurface(m *riskv1.GitleaksAnalysis) string {
+	if surface := m.GetFindingSurface(); surface != "" {
+		return surface
+	}
+	if m.GetMessageType() == message.ToolRequest {
+		return "scan_surface"
+	}
+	return ""
 }

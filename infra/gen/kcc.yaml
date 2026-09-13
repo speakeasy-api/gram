@@ -937,6 +937,7 @@ pubsub:
           string message_type = 21;
           string policy_link_reason = 22;
           string external_conversation_id = 23;
+          string finding_surface = 24;
         }
       type: PROTOCOL_BUFFER
   - labels:

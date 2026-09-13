@@ -180,6 +180,10 @@ type Finding struct {
 	Path                string
 }
 
+// FieldToolCalls marks a judge verdict over a tool request's calls as a
+// whole; no stored text can reveal it.
+const FieldToolCalls = "tool_calls"
+
 // Surface values published on Finding.surface and stored in the ClickHouse
 // risk_findings.surface column — which text the finding's start_pos/end_pos
 // offsets index. Kept in sync with the column's schema comment
@@ -224,6 +228,8 @@ func FindingSurface(source, field, path string) string {
 		return SurfaceContent
 	case field == "tool.server", field == "tool.function":
 		return SurfaceDerived
+	case field == FieldToolCalls:
+		return SurfaceNone
 	case field != "":
 		return ""
 	}

@@ -301,6 +301,8 @@ func spanSurface(source, field, path string) string {
 		return surfaceContent
 	case field == "tool.server", field == "tool.function":
 		return surfaceDerived
+	case field == "tool_calls":
+		return surfaceNone
 	case field == "":
 		return sourceSurface(source)
 	default:
