@@ -7,14 +7,15 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
+ * Target category the agent scanned under: harness, assistant, or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
  */
 export const AIScanMatchCategory = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**
- * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
+ * Target category the agent scanned under: harness, assistant, or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
  */
 export type AIScanMatchCategory = ClosedEnum<typeof AIScanMatchCategory>;
 
@@ -35,7 +36,7 @@ export type Signal = ClosedEnum<typeof Signal>;
  */
 export type AIScanMatch = {
   /**
-   * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
+   * Target category the agent scanned under: harness, assistant, or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
    */
   category: AIScanMatchCategory;
   /**

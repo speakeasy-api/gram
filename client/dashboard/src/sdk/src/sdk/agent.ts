@@ -27,9 +27,9 @@ import {
   CreateAgentSessionHandoffSecurity,
 } from "../models/operations/createagentsessionhandoff.js";
 import {
-  DeleteDeviceAgentAiScanTargetRequest,
-  DeleteDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/deletedeviceagentaiscantarget.js";
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
@@ -43,9 +43,9 @@ import {
   GetDeviceAgentConfigurationSecurity,
 } from "../models/operations/getdeviceagentconfiguration.js";
 import {
-  ListDeviceAgentAiScanTargetsRequest,
-  ListDeviceAgentAiScanTargetsSecurity,
-} from "../models/operations/listdeviceagentaiscantargets.js";
+  ListAiScanTargetsRequest,
+  ListAiScanTargetsSecurity,
+} from "../models/operations/listaiscantargets.js";
 import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
@@ -63,9 +63,9 @@ import {
   UpdateDeviceAgentConfigurationSecurity,
 } from "../models/operations/updatedeviceagentconfiguration.js";
 import {
-  UpsertDeviceAgentAiScanTargetRequest,
-  UpsertDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/upsertdeviceagentaiscantarget.js";
+  UpsertAiScanTargetRequest,
+  UpsertAiScanTargetSecurity,
+} from "../models/operations/upsertaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agent extends ClientSDK {
@@ -92,11 +92,11 @@ export class Agent extends ClientSDK {
    * deleteAiScanTarget agent
    *
    * @remarks
-   * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+   * Remove a target the organization added, or drop its on/off choice for a built-in so the built-in is served again as supplied. Requires a session with the org:admin scope.
    */
   async deleteAiScanTarget(
-    request: DeleteDeviceAgentAiScanTargetRequest,
-    security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
+    request: DeleteAiScanTargetRequest,
+    security?: DeleteAiScanTargetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<DeleteAiScanTargetResult> {
     return unwrapAsync(agentDeleteAiScanTarget(
@@ -168,11 +168,11 @@ export class Agent extends ClientSDK {
    * listAiScanTargets agent
    *
    * @remarks
-   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy defaults overlaid with the organization's own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.
+   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins overlaid with the organization's own additions and its on/off choices, with the catalog version agents echo on scan receipts. Requires a session with the org:admin scope.
    */
   async listAiScanTargets(
-    request?: ListDeviceAgentAiScanTargetsRequest | undefined,
-    security?: ListDeviceAgentAiScanTargetsSecurity | undefined,
+    request?: ListAiScanTargetsRequest | undefined,
+    security?: ListAiScanTargetsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListAiScanTargetsResult> {
     return unwrapAsync(agentListAiScanTargets(
@@ -263,11 +263,11 @@ export class Agent extends ClientSDK {
    * upsertAiScanTarget agent
    *
    * @remarks
-   * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+   * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged, which is how a built-in is switched on or off. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
    */
   async upsertAiScanTarget(
-    request: UpsertDeviceAgentAiScanTargetRequest,
-    security?: UpsertDeviceAgentAiScanTargetSecurity | undefined,
+    request: UpsertAiScanTargetRequest,
+    security?: UpsertAiScanTargetSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AiScanTargetMutationResult> {
     return unwrapAsync(agentUpsertAiScanTarget(

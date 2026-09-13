@@ -81,6 +81,14 @@ func defaultPayload(t *testing.T, id string, enabled bool) *gen.UpsertAiScanTarg
 				ConfigDirs:   target.Signatures.ConfigDirs,
 				ProcessNames: target.Signatures.ProcessNames,
 			},
+			// Carried through, like the dashboard's own toggle does: a write
+			// under a built-in's id must present that built-in unchanged, and
+			// dropping the matchers here would read as an edit.
+			GatewayClient: &gen.AiScanTargetGatewayClient{
+				CimdVendorKeys:  target.GatewayClient.CIMDVendorKeys,
+				OauthClientIds:  target.GatewayClient.OAuthClientIDs,
+				ClientInfoNames: target.GatewayClient.ClientInfoNames,
+			},
 			VersionPlistKey: nil,
 			Enabled:         enabled,
 		}
@@ -134,7 +142,7 @@ func TestUpsertAiScanTargetAddsATargetAgentsReceive(t *testing.T) {
 
 	before, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
-	created, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetCreate)
+	created, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetCreate)
 	require.NoError(t, err)
 
 	result, err := ti.service.UpsertAiScanTarget(ctx, chatgptDesktopPayload())
@@ -158,10 +166,10 @@ func TestUpsertAiScanTargetAddsATargetAgentsReceive(t *testing.T) {
 	require.Len(t, listed.Targets, len(aitargets.Defaults())+1)
 	require.EqualValues(t, aitargets.DefaultsVersion+1, listed.ListVersion)
 
-	createdAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetCreate)
+	createdAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetCreate)
 	require.NoError(t, err)
 	require.Equal(t, created+1, createdAfter)
-	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetCreate)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAiScanTargetCreate)
 	require.NoError(t, err)
 	require.Equal(t, ti.orgID+"/chatgpt-desktop", entry.SubjectID)
 }
@@ -170,9 +178,9 @@ func TestUpsertAiScanTargetDisablesADefaultAndDeleteRestoresIt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
-	updated, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetUpdate)
+	updated, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetUpdate)
 	require.NoError(t, err)
-	deleted, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetDelete)
+	deleted, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetDelete)
 	require.NoError(t, err)
 
 	result, err := ti.service.UpsertAiScanTarget(ctx, defaultPayload(t, "aider", false))
@@ -190,7 +198,7 @@ func TestUpsertAiScanTargetDisablesADefaultAndDeleteRestoresIt(t *testing.T) {
 	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Targets, len(aitargets.Defaults()), "a customized default stays in the list")
-	updatedAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetUpdate)
+	updatedAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetUpdate)
 	require.NoError(t, err)
 	require.Equal(t, updated+1, updatedAfter, "customizing a default is recorded as an update of that default")
 
@@ -200,7 +208,7 @@ func TestUpsertAiScanTargetDisablesADefaultAndDeleteRestoresIt(t *testing.T) {
 	poll, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
 	require.Contains(t, servedTargetIDs(t, aiScanEnvelope(t, poll)), "aider", "dropping the customization serves the default again")
-	deletedAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDeviceAgentAiScanTargetDelete)
+	deletedAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetDelete)
 	require.NoError(t, err)
 	require.Equal(t, deleted+1, deletedAfter)
 }
@@ -262,7 +270,7 @@ func TestUpsertAiScanTargetRefusesToGrowTheServedSetPastWhatAgentsAccept(t *test
 			VersionHint: nil,
 			Enabled:     true,
 		}
-		_, err := queries.UpsertDeviceAgentAIScanTarget(ctx, aitargets.UpsertParams(ti.orgID, filler))
+		_, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(ti.orgID, filler))
 		require.NoError(t, err)
 	}
 
@@ -275,6 +283,37 @@ func TestUpsertAiScanTargetRefusesToGrowTheServedSetPastWhatAgentsAccept(t *test
 	require.NoError(t, err)
 	_, err = ti.service.DeleteAiScanTarget(ctx, &gen.DeleteAiScanTargetPayload{SessionToken: nil, ID: "aider"})
 	requireAiScanErrorCode(t, err, oops.CodeBadRequest, "restoring the default would overfill the served set")
+}
+
+// TestUpsertAiScanTargetRefusesToEditABuiltIn: built-ins are system-supplied
+// and read-only. Enforced on the API and not only in the dashboard, because a
+// hand-rolled call must not be able to silently redefine what every agent in
+// the organization probes for.
+func TestUpsertAiScanTargetRefusesToEditABuiltIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAgentService(t)
+
+	edited := defaultPayload(t, "cursor", true)
+	edited.Signatures.Binaries = []string{"cursor", "cursor-nightly"}
+
+	_, err := ti.service.UpsertAiScanTarget(ctx, edited)
+	requireAiScanErrorCode(t, err, oops.CodeBadRequest, "a built-in's signatures cannot be rewritten")
+
+	// Dropping a built-in's gateway matchers is an edit too: it would quietly
+	// make a blocked tool unenforceable.
+	unlinked := defaultPayload(t, "claude-code", true)
+	unlinked.GatewayClient = &gen.AiScanTargetGatewayClient{
+		CimdVendorKeys:  []string{},
+		OauthClientIds:  []string{},
+		ClientInfoNames: []string{},
+	}
+	_, err = ti.service.UpsertAiScanTarget(ctx, unlinked)
+	requireAiScanErrorCode(t, err, oops.CodeBadRequest, "a built-in's gateway matchers cannot be dropped")
+
+	// The one change an organization may make still works.
+	_, err = ti.service.UpsertAiScanTarget(ctx, defaultPayload(t, "cursor", false))
+	require.NoError(t, err, "switching a built-in off is not an edit")
 }
 
 func TestAiScanTargetEndpointsRequireOrganizationAdmin(t *testing.T) {

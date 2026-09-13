@@ -3307,6 +3307,7 @@ func DecodeListAIDetectionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			category         *string
 			directoryGroupID *string
 			sessionToken     *string
+			projectSlugInput *string
 			err              error
 		)
 		qp := r.URL.Query()
@@ -3315,8 +3316,8 @@ func DecodeListAIDetectionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			category = &categoryRaw
 		}
 		if category != nil {
-			if !(*category == "harness" || *category == "local_model") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "local_model"}))
+			if !(*category == "harness" || *category == "assistant" || *category == "local_model") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "assistant", "local_model"}))
 			}
 		}
 		directoryGroupIDRaw := qp.Get("directory_group_id")
@@ -3330,15 +3331,26 @@ func DecodeListAIDetectionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListAIDetectionsPayload(category, directoryGroupID, sessionToken)
+		payload = NewListAIDetectionsPayload(category, directoryGroupID, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 
@@ -3710,6 +3722,219 @@ func EncodeListEmployeeAIDetectionsError(encoder func(context.Context, http.Resp
 				body = formatter(ctx, res)
 			} else {
 				body = NewListEmployeeAIDetectionsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSetAIToolDecisionResponse returns an encoder for responses returned by
+// the access setAIToolDecision endpoint.
+func EncodeSetAIToolDecisionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*access.SetAIToolDecisionResult)
+		enc := encoder(ctx, w)
+		body := NewSetAIToolDecisionResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSetAIToolDecisionRequest returns a decoder for requests sent to the
+// access setAIToolDecision endpoint.
+func DecodeSetAIToolDecisionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.SetAIToolDecisionPayload, error) {
+	return func(r *http.Request) (*access.SetAIToolDecisionPayload, error) {
+		var payload *access.SetAIToolDecisionPayload
+		var (
+			body SetAIToolDecisionRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetAIToolDecisionRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewSetAIToolDecisionPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetAIToolDecisionError returns an encoder for errors returned by the
+// setAIToolDecision access endpoint.
+func EncodeSetAIToolDecisionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetAIToolDecisionGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -5808,8 +6033,6 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		for i, val := range v.TopUsers {
 			res.TopUsers[i] = val
 		}
-	} else {
-		res.TopUsers = []string{}
 	}
 	if v.AccessSummary != nil {
 		res.AccessSummary = marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody(v.AccessSummary)
@@ -5962,6 +6185,25 @@ func marshalAccessAIDetectionToAIDetectionResponseBody(v *access.AIDetection) *A
 		}
 	} else {
 		res.Versions = []string{}
+	}
+	if v.Access != nil {
+		res.Access = marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v.Access)
+	}
+
+	return res
+}
+
+// marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody builds a
+// value of type *AIToolAccessSummaryResponseBody from a value of type
+// *access.AIToolAccessSummary.
+func marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *access.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	res := &AIToolAccessSummaryResponseBody{
+		State:       v.State,
+		Decision:    v.Decision,
+		Enforceable: v.Enforceable,
+		Rationale:   v.Rationale,
+		DecidedBy:   v.DecidedBy,
+		DecidedAt:   v.DecidedAt,
 	}
 
 	return res

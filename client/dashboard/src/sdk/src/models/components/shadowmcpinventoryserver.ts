@@ -78,9 +78,15 @@ export type ShadowMCPInventoryServer = {
    * What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.
    */
   targetKind?: TargetKind | undefined;
-  topUsers: Array<string>;
+  /**
+   * The users who reached this server most. Attribution: omitted for callers who hold project:read but not org:admin.
+   */
+  topUsers?: Array<string> | undefined;
   urlHost: string;
-  userCount: number;
+  /**
+   * Distinct users who reached this server. Attribution: omitted for callers who hold project:read but not org:admin.
+   */
+  userCount?: number | undefined;
 };
 
 /** @internal */
@@ -123,9 +129,9 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     server_name: z.optional(z.string()),
     server_slug: z.string(),
     target_kind: z.optional(TargetKind$inboundSchema),
-    top_users: z.array(z.string()),
+    top_users: z.optional(z.array(z.string())),
     url_host: z.string(),
-    user_count: z.int(),
+    user_count: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {

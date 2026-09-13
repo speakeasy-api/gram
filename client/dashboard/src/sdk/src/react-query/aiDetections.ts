@@ -60,7 +60,7 @@ export type AiDetectionsQueryError =
  * listAIDetections access
  *
  * @remarks
- * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+ * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
  */
 export function useAiDetections(
   request?: ListAIDetectionsRequest | undefined,
@@ -83,7 +83,7 @@ export function useAiDetections(
  * listAIDetections access
  *
  * @remarks
- * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+ * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
  */
 export function useAiDetectionsSuspense(
   request?: ListAIDetectionsRequest | undefined,
@@ -112,6 +112,7 @@ export function setAiDetectionsData(
       category?: Category | undefined;
       directoryGroupId?: string | undefined;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
   ],
   data: AiDetectionsQueryData,
@@ -128,6 +129,7 @@ export function invalidateAiDetections(
       category?: Category | undefined;
       directoryGroupId?: string | undefined;
       gramSession?: string | undefined;
+      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

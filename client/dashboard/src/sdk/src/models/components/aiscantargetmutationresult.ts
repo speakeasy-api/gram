@@ -15,7 +15,7 @@ export type AiScanTargetMutationResult = {
    */
   listVersion: number;
   /**
-   * One Shadow AI scan target in an organization's list: a Speakeasy default, or a target the organization added or customized.
+   * One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.
    */
   target: AiScanTarget;
 };

@@ -14,85 +14,85 @@ import (
 )
 
 const (
-	ActionDeviceAgentAiScanTargetCreate Action = "device_agent_ai_scan_target:create"
-	ActionDeviceAgentAiScanTargetUpdate Action = "device_agent_ai_scan_target:update"
-	ActionDeviceAgentAiScanTargetDelete Action = "device_agent_ai_scan_target:delete"
+	ActionAiScanTargetCreate Action = "device_agent_ai_scan_target:create"
+	ActionAiScanTargetUpdate Action = "device_agent_ai_scan_target:update"
+	ActionAiScanTargetDelete Action = "device_agent_ai_scan_target:delete"
 )
 
-type LogDeviceAgentAiScanTargetCreateEvent struct {
+type LogAiScanTargetCreateEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	AiScanTargetURN   urn.DeviceAgentAiScanTarget
+	AiScanTargetURN   urn.AiScanTarget
 	TargetDisplayName string
 
 	AiScanTargetSnapshotAfter *aitargets.Target
 }
 
-type LogDeviceAgentAiScanTargetUpdateEvent struct {
+type LogAiScanTargetUpdateEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	AiScanTargetURN   urn.DeviceAgentAiScanTarget
+	AiScanTargetURN   urn.AiScanTarget
 	TargetDisplayName string
 
 	AiScanTargetSnapshotBefore *aitargets.Target
 	AiScanTargetSnapshotAfter  *aitargets.Target
 }
 
-type LogDeviceAgentAiScanTargetDeleteEvent struct {
+type LogAiScanTargetDeleteEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	AiScanTargetURN   urn.DeviceAgentAiScanTarget
+	AiScanTargetURN   urn.AiScanTarget
 	TargetDisplayName string
 
 	AiScanTargetSnapshotBefore *aitargets.Target
 }
 
-func (l *Logger) LogDeviceAgentAiScanTargetCreate(ctx context.Context, dbtx repo.DBTX, event LogDeviceAgentAiScanTargetCreateEvent) error {
+func (l *Logger) LogAiScanTargetCreate(ctx context.Context, dbtx repo.DBTX, event LogAiScanTargetCreateEvent) error {
 	afterSnapshot, err := marshalAuditPayload(event.AiScanTargetSnapshotAfter)
 	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", ActionDeviceAgentAiScanTargetCreate, err)
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionAiScanTargetCreate, err)
 	}
 	return l.log(ctx, dbtx, auditEntry{
-		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionDeviceAgentAiScanTargetCreate, event.AiScanTargetURN, event.TargetDisplayName, nil, afterSnapshot),
-		OutboxEvent: events.DeviceAgentAiScanTargetV1,
+		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionAiScanTargetCreate, event.AiScanTargetURN, event.TargetDisplayName, nil, afterSnapshot),
+		OutboxEvent: events.AiScanTargetV1,
 	})
 }
 
-func (l *Logger) LogDeviceAgentAiScanTargetUpdate(ctx context.Context, dbtx repo.DBTX, event LogDeviceAgentAiScanTargetUpdateEvent) error {
+func (l *Logger) LogAiScanTargetUpdate(ctx context.Context, dbtx repo.DBTX, event LogAiScanTargetUpdateEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.AiScanTargetSnapshotBefore)
 	if err != nil {
-		return fmt.Errorf("marshal %s before snapshot: %w", ActionDeviceAgentAiScanTargetUpdate, err)
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionAiScanTargetUpdate, err)
 	}
 	afterSnapshot, err := marshalAuditPayload(event.AiScanTargetSnapshotAfter)
 	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", ActionDeviceAgentAiScanTargetUpdate, err)
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionAiScanTargetUpdate, err)
 	}
 	return l.log(ctx, dbtx, auditEntry{
-		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionDeviceAgentAiScanTargetUpdate, event.AiScanTargetURN, event.TargetDisplayName, beforeSnapshot, afterSnapshot),
-		OutboxEvent: events.DeviceAgentAiScanTargetV1,
+		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionAiScanTargetUpdate, event.AiScanTargetURN, event.TargetDisplayName, beforeSnapshot, afterSnapshot),
+		OutboxEvent: events.AiScanTargetV1,
 	})
 }
 
-func (l *Logger) LogDeviceAgentAiScanTargetDelete(ctx context.Context, dbtx repo.DBTX, event LogDeviceAgentAiScanTargetDeleteEvent) error {
+func (l *Logger) LogAiScanTargetDelete(ctx context.Context, dbtx repo.DBTX, event LogAiScanTargetDeleteEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.AiScanTargetSnapshotBefore)
 	if err != nil {
-		return fmt.Errorf("marshal %s before snapshot: %w", ActionDeviceAgentAiScanTargetDelete, err)
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionAiScanTargetDelete, err)
 	}
 	return l.log(ctx, dbtx, auditEntry{
-		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionDeviceAgentAiScanTargetDelete, event.AiScanTargetURN, event.TargetDisplayName, beforeSnapshot, nil),
-		OutboxEvent: events.DeviceAgentAiScanTargetV1,
+		Params:      aiScanTargetAuditParams(event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, ActionAiScanTargetDelete, event.AiScanTargetURN, event.TargetDisplayName, beforeSnapshot, nil),
+		OutboxEvent: events.AiScanTargetV1,
 	})
 }
 
@@ -102,7 +102,7 @@ func aiScanTargetAuditParams(
 	actorDisplayName *string,
 	actorSlug *string,
 	action Action,
-	target urn.DeviceAgentAiScanTarget,
+	target urn.AiScanTarget,
 	targetDisplayName string,
 	beforeSnapshot []byte,
 	afterSnapshot []byte,
@@ -119,7 +119,7 @@ func aiScanTargetAuditParams(
 		Action: string(action),
 
 		SubjectID:          target.ID,
-		SubjectType:        string(subjectTypeDeviceAgentAiScanTarget),
+		SubjectType:        string(subjectTypeAiScanTarget),
 		SubjectDisplayName: conv.ToPGTextEmpty(targetDisplayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

@@ -124,11 +124,20 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		Reason:     nil,
 		Detail:     result.Detail,
 		ClientName: nil,
+		Document:   nil,
 	}
 	view.HTTPStatus = conv.PtrEmpty(result.HTTPStatus)
 	view.Reason = conv.PtrEmpty(result.Reason)
 	if result.Document != nil {
 		view.ClientName = conv.PtrEmpty(result.Document.ClientName)
+		// A failure to render is not a failure to verify: the probe answered
+		// the operator's question either way, so log it and omit the body
+		// rather than turning a good result into an error.
+		if rendered, renderErr := cimd.CanonicalJSON(result.Document); renderErr != nil {
+			s.logger.WarnContext(ctx, "cimd document could not be rendered", attr.SlogError(renderErr))
+		} else {
+			view.Document = conv.PtrEmpty(rendered)
+		}
 	}
 
 	return view, nil

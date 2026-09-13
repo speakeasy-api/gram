@@ -65,7 +65,7 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 		"empty display name":         func(x *aitargets.Target) { x.DisplayName = "" },
 		"padded display name":        func(x *aitargets.Target) { x.DisplayName = " ChatGPT " },
 		"display name too long":      func(x *aitargets.Target) { x.DisplayName = strings.Repeat("a", 129) },
-		"unknown category":           func(x *aitargets.Target) { x.Category = "assistant" },
+		"unknown category":           func(x *aitargets.Target) { x.Category = "future_category" },
 		"too many bundle ids":        func(x *aitargets.Target) { x.Signatures.BundleIDs = repeat("com.example.app", 17) },
 		"bundle id with slash":       func(x *aitargets.Target) { x.Signatures.BundleIDs = []string{"com/openai/chat"} },
 		"empty bundle id":            func(x *aitargets.Target) { x.Signatures.BundleIDs = []string{""} },

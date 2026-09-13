@@ -36,6 +36,7 @@ type Server struct {
 	ResolveShadowMCPInventoryRequest     http.Handler
 	ListAIDetections                     http.Handler
 	ListEmployeeAIDetections             http.Handler
+	SetAIToolDecision                    http.Handler
 	ListResourceAudience                 http.Handler
 	SetResourceAudience                  http.Handler
 	ListAudienceOptions                  http.Handler
@@ -90,6 +91,7 @@ func New(
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
 			{"ListAIDetections", "GET", "/rpc/access.listAIDetections"},
 			{"ListEmployeeAIDetections", "GET", "/rpc/access.listEmployeeAIDetections"},
+			{"SetAIToolDecision", "POST", "/rpc/access.setAIToolDecision"},
 			{"ListResourceAudience", "GET", "/rpc/access.listResourceAudience"},
 			{"SetResourceAudience", "POST", "/rpc/access.setResourceAudience"},
 			{"ListAudienceOptions", "GET", "/rpc/access.listAudienceOptions"},
@@ -116,6 +118,7 @@ func New(
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
 		ListAIDetections:                     NewListAIDetectionsHandler(e.ListAIDetections, mux, decoder, encoder, errhandler, formatter),
 		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsHandler(e.ListEmployeeAIDetections, mux, decoder, encoder, errhandler, formatter),
+		SetAIToolDecision:                    NewSetAIToolDecisionHandler(e.SetAIToolDecision, mux, decoder, encoder, errhandler, formatter),
 		ListResourceAudience:                 NewListResourceAudienceHandler(e.ListResourceAudience, mux, decoder, encoder, errhandler, formatter),
 		SetResourceAudience:                  NewSetResourceAudienceHandler(e.SetResourceAudience, mux, decoder, encoder, errhandler, formatter),
 		ListAudienceOptions:                  NewListAudienceOptionsHandler(e.ListAudienceOptions, mux, decoder, encoder, errhandler, formatter),
@@ -149,6 +152,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
 	s.ListAIDetections = m(s.ListAIDetections)
 	s.ListEmployeeAIDetections = m(s.ListEmployeeAIDetections)
+	s.SetAIToolDecision = m(s.SetAIToolDecision)
 	s.ListResourceAudience = m(s.ListResourceAudience)
 	s.SetResourceAudience = m(s.SetResourceAudience)
 	s.ListAudienceOptions = m(s.ListAudienceOptions)
@@ -181,6 +185,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
 	MountListAIDetectionsHandler(mux, h.ListAIDetections)
 	MountListEmployeeAIDetectionsHandler(mux, h.ListEmployeeAIDetections)
+	MountSetAIToolDecisionHandler(mux, h.SetAIToolDecision)
 	MountListResourceAudienceHandler(mux, h.ListResourceAudience)
 	MountSetResourceAudienceHandler(mux, h.SetResourceAudience)
 	MountListAudienceOptionsHandler(mux, h.ListAudienceOptions)
@@ -1080,6 +1085,59 @@ func NewListEmployeeAIDetectionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listEmployeeAIDetections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetAIToolDecisionHandler configures the mux to serve the "access"
+// service "setAIToolDecision" endpoint.
+func MountSetAIToolDecisionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setAIToolDecision", f)
+}
+
+// NewSetAIToolDecisionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "setAIToolDecision" endpoint.
+func NewSetAIToolDecisionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetAIToolDecisionRequest(mux, decoder)
+		encodeResponse = EncodeSetAIToolDecisionResponse(encoder)
+		encodeError    = EncodeSetAIToolDecisionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setAIToolDecision")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

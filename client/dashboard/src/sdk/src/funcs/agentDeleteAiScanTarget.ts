@@ -31,10 +31,10 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DeleteDeviceAgentAiScanTargetRequest,
-  DeleteDeviceAgentAiScanTargetRequest$outboundSchema,
-  DeleteDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/deletedeviceagentaiscantarget.js";
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetRequest$outboundSchema,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -42,12 +42,12 @@ import { Result } from "../types/fp.js";
  * deleteAiScanTarget agent
  *
  * @remarks
- * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+ * Remove a target the organization added, or drop its on/off choice for a built-in so the built-in is served again as supplied. Requires a session with the org:admin scope.
  */
 export function agentDeleteAiScanTarget(
   client: GramCore,
-  request: DeleteDeviceAgentAiScanTargetRequest,
-  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
+  request: DeleteAiScanTargetRequest,
+  security?: DeleteAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function agentDeleteAiScanTarget(
 
 async function $do(
   client: GramCore,
-  request: DeleteDeviceAgentAiScanTargetRequest,
-  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined,
+  request: DeleteAiScanTargetRequest,
+  security?: DeleteAiScanTargetSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,8 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(DeleteDeviceAgentAiScanTargetRequest$outboundSchema, value),
+    (value) => z.parse(DeleteAiScanTargetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -131,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteDeviceAgentAiScanTarget",
+    operationID: "deleteAiScanTarget",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

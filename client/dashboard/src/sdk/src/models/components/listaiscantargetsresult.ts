@@ -15,7 +15,7 @@ export type ListAiScanTargetsResult = {
    */
   etag: string;
   /**
-   * Version of the served list; the value agents echo as target_list_version once they receive it.
+   * Version of the served catalog; the value agents echo as target_list_version once they receive it.
    */
   listVersion: number;
   /**
