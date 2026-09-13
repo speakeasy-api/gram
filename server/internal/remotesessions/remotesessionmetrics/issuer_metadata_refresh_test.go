@@ -19,7 +19,7 @@ func TestIssuerMetadataRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	m := NewIssuerMetadataRefresh(testenv.NewLogger(t), provider)
-	m.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshOutcomeTransientFailure)
+	m.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshReasonTokenEndpointMissing, IssuerMetadataRefreshOutcomeTransientFailure)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
@@ -30,6 +30,7 @@ func TestIssuerMetadataRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	require.Equal(t, meterIssuerMetadataRefresh, got.Name)
 	metricdatatest.AssertHasAttributes(t, got,
 		attr.OAuthIssuer("https://idp.example.com"),
+		attr.OAuthIssuerMetadataRefreshReason(IssuerMetadataRefreshReasonTokenEndpointMissing),
 		attr.Outcome(IssuerMetadataRefreshOutcomeTransientFailure),
 	)
 
@@ -43,8 +44,8 @@ func TestIssuerMetadataRefreshRecord_NilSafe(t *testing.T) {
 	t.Parallel()
 
 	var m *IssuerMetadataRefresh
-	m.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshOutcomeRefreshed)
+	m.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshReasonOnUse, IssuerMetadataRefreshOutcomeRefreshed)
 
 	empty := &IssuerMetadataRefresh{attempts: nil}
-	empty.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshOutcomeRefreshed)
+	empty.Record(t.Context(), "https://idp.example.com", IssuerMetadataRefreshReasonOnUse, IssuerMetadataRefreshOutcomeRefreshed)
 }

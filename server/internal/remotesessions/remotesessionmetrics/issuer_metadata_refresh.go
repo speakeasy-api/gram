@@ -45,8 +45,25 @@ const (
 	// IssuerMetadataRefreshOutcomeSkippedShutdown: the replica is shutting down and admits no new refresh.
 	IssuerMetadataRefreshOutcomeSkippedShutdown IssuerMetadataRefreshOutcome = "skipped_shutdown"
 
+	// IssuerMetadataRefreshOutcomeSkippedRecent: a reactive request found the issuer visited within the reactive interval.
+	IssuerMetadataRefreshOutcomeSkippedRecent IssuerMetadataRefreshOutcome = "skipped_recent"
+
 	// IssuerMetadataRefreshOutcomeInternalError: Gram could not load or persist the row.
 	IssuerMetadataRefreshOutcomeInternalError IssuerMetadataRefreshOutcome = "internal_error"
+)
+
+// IssuerMetadataRefreshReason names why a metadata refresh was requested.
+type IssuerMetadataRefreshReason string
+
+const (
+	// IssuerMetadataRefreshReasonOnUse: the on-use cadence found the row stale or never fetched.
+	IssuerMetadataRefreshReasonOnUse IssuerMetadataRefreshReason = "on_use"
+
+	// IssuerMetadataRefreshReasonTokenEndpointMissing: the stored token endpoint answered 404 or 410.
+	IssuerMetadataRefreshReasonTokenEndpointMissing IssuerMetadataRefreshReason = "token_endpoint_missing"
+
+	// IssuerMetadataRefreshReasonUnknownSigningKey: an ID token named a kid the issuer's key set lacks even after a forced key refresh.
+	IssuerMetadataRefreshReasonUnknownSigningKey IssuerMetadataRefreshReason = "unknown_signing_key"
 )
 
 // IssuerMetadataRefresh holds the on-use issuer metadata refresh instrument.
@@ -59,7 +76,7 @@ func NewIssuerMetadataRefresh(logger *slog.Logger, meterProvider metric.MeterPro
 
 	attempts, err := meter.Int64Counter(
 		meterIssuerMetadataRefresh,
-		metric.WithDescription("RFC 8414 metadata refreshes triggered by Remote Session issuer use, by outcome and issuer."),
+		metric.WithDescription("RFC 8414 metadata refreshes triggered by Remote Session issuer use or upstream drift, by outcome, reason, and issuer."),
 		metric.WithUnit("{attempt}"),
 	)
 	if err != nil {
@@ -69,13 +86,14 @@ func NewIssuerMetadataRefresh(logger *slog.Logger, meterProvider metric.MeterPro
 	return &IssuerMetadataRefresh{attempts: attempts}
 }
 
-// Record counts one refresh attempt by its outcome and the issuer.
-func (m *IssuerMetadataRefresh) Record(ctx context.Context, issuerURL string, outcome IssuerMetadataRefreshOutcome) {
+// Record counts one refresh attempt by its outcome, the reason it was requested, and the issuer.
+func (m *IssuerMetadataRefresh) Record(ctx context.Context, issuerURL string, reason IssuerMetadataRefreshReason, outcome IssuerMetadataRefreshOutcome) {
 	if m == nil || m.attempts == nil {
 		return
 	}
 	m.attempts.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
+		attr.OAuthIssuerMetadataRefreshReason(reason),
 		attr.Outcome(outcome),
 	))
 }

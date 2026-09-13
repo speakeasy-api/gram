@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"reflect"
 	"sync"
@@ -42,6 +43,9 @@ const (
 
 	// issuerMetadataRetryAfter is how soon a transiently unreadable candidate is retried on use.
 	issuerMetadataRetryAfter = time.Hour
+
+	// issuerMetadataReactiveInterval is the least time between two reactive refreshes of one issuer; a visit inside it, successful or not, absorbs the request.
+	issuerMetadataReactiveInterval = 10 * time.Minute
 
 	// issuerMetadataRefreshSlots bounds the refreshes one replica runs at once; a use that finds no slot is skipped and the next use tries again.
 	issuerMetadataRefreshSlots = 4
@@ -106,21 +110,24 @@ func issuerUseFromClientListRow(row repo.ListRemoteSessionClientsForUserSessionI
 	}
 }
 
-// issuerMetadataPlan is what one use of an issuer should do to its metadata.
+// issuerMetadataPlan is what one use of an issuer should do to its metadata; skipped, when set on an empty plan, is the outcome to record for doing nothing.
 type issuerMetadataPlan struct {
 	reproject bool
 	fetch     bool
+	skipped   remotesessionmetrics.IssuerMetadataRefreshOutcome
 }
 
 func (p issuerMetadataPlan) empty() bool { return !p.reproject && !p.fetch }
+
+// issuerMetadataPlanner decides from a row snapshot what to do; it runs at flow time and again on the detached reload.
+type issuerMetadataPlanner func(use IssuerMetadataUse, now time.Time) issuerMetadataPlan
 
 // planIssuerMetadataRefresh: fetch when never visited, when the last visit (fetched_at or last_error_at) is stale, or when an outright transient failure is past its retry window; re-project when a stored document has a NULL capability column, no definitive failure stands, and no fetch is due (a fetch writes every column the re-projection would).
 //
 // An error stands only when it is newer than the last successful fetch. A partial read stamps both together, so its unread candidate waits for the daily cadence rather than the hourly retry.
 func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
 	visited, visitedAt := lastIssuerMetadataVisit(use)
-	errorStands := use.MetadataLastErrorAt.Valid && (!use.MetadataFetchedAt.Valid || use.MetadataLastErrorAt.Time.After(use.MetadataFetchedAt.Time))
-	transient := errorStands && use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
+	errorStands, transient := issuerMetadataFailureState(use)
 	definitiveFailure := errorStands && !transient
 
 	fetch := !visited ||
@@ -129,7 +136,27 @@ func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetad
 	return issuerMetadataPlan{
 		reproject: use.NeedsReprojection && !definitiveFailure && !fetch,
 		fetch:     fetch,
+		skipped:   "",
 	}
+}
+
+// planReactiveIssuerMetadataRefresh: fetch regardless of the daily cadence, unless the last visit is inside the reactive interval; a standing definitive failure widens the interval to the hourly retry so a permanently refused issuer is not re-audited every ten minutes.
+func planReactiveIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
+	interval := issuerMetadataReactiveInterval
+	if errorStands, transient := issuerMetadataFailureState(use); errorStands && !transient {
+		interval = issuerMetadataRetryAfter
+	}
+	if visited, visitedAt := lastIssuerMetadataVisit(use); visited && now.Sub(visitedAt) < interval {
+		return issuerMetadataPlan{reproject: false, fetch: false, skipped: remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedRecent}
+	}
+	return issuerMetadataPlan{reproject: false, fetch: true, skipped: ""}
+}
+
+// issuerMetadataFailureState: an error stands when it is newer than the last successful fetch; it is transient when a retry URL was kept.
+func issuerMetadataFailureState(use IssuerMetadataUse) (errorStands, transient bool) {
+	errorStands = use.MetadataLastErrorAt.Valid && (!use.MetadataFetchedAt.Valid || use.MetadataLastErrorAt.Time.After(use.MetadataFetchedAt.Time))
+	transient = errorStands && use.MetadataLastErrorUrl.Valid && use.MetadataLastErrorUrl.String != ""
+	return errorStands, transient
 }
 
 func lastIssuerMetadataVisit(use IssuerMetadataUse) (bool, time.Time) {
@@ -182,18 +209,30 @@ func NewIssuerMetadataRefresher(logger *slog.Logger, meterProvider metric.MeterP
 
 // NoteUse records that a session flow is using the issuer and, when its metadata is due, refreshes it off the request path. The caller keeps the stored row; the next use sees the result. Safe on a nil receiver.
 func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadataUse) {
+	r.admit(ctx, use, remotesessionmetrics.IssuerMetadataRefreshReasonOnUse, planIssuerMetadataRefresh)
+}
+
+// RequestRefresh refreshes the issuer's metadata because an upstream answer says the stored endpoints drifted, regardless of the daily cadence. A visit inside the reactive interval, at flow time or on the detached reload, absorbs the request as skipped_recent. Safe on a nil receiver.
+func (r *IssuerMetadataRefresher) RequestRefresh(ctx context.Context, use IssuerMetadataUse, reason remotesessionmetrics.IssuerMetadataRefreshReason) {
+	r.admit(ctx, use, reason, planReactiveIssuerMetadataRefresh)
+}
+
+// admit plans from the flow-time snapshot, takes a slot on the request path, and runs the work detached; the row is planned again from a fresh read before anything is written.
+func (r *IssuerMetadataRefresher) admit(ctx context.Context, use IssuerMetadataUse, reason remotesessionmetrics.IssuerMetadataRefreshReason, plan issuerMetadataPlanner) {
 	if r == nil {
 		return
 	}
-	plan := planIssuerMetadataRefresh(use, time.Now())
-	if plan.empty() {
+	candidate := use.candidate()
+	if p := plan(use, time.Now()); p.empty() {
+		if p.skipped != "" {
+			r.record(ctx, candidate.IssuerURL, reason, p.skipped)
+		}
 		return
 	}
-	candidate := use.candidate()
-	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(use.ID.String()), attr.SlogOAuthIssuer(use.IssuerURL))
+	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(use.ID.String()), attr.SlogOAuthIssuer(use.IssuerURL), attr.SlogOAuthIssuerMetadataRefreshReason(reason))
 
 	if _, running := r.inflight.LoadOrStore(use.ID, struct{}{}); running {
-		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight)
+		r.record(ctx, candidate.IssuerURL, reason, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedInFlight)
 		return
 	}
 	// The slot is taken on the request path so a busy replica answers at once; the work runs detached, so a client that disconnects mid-render still gets the refresh.
@@ -201,7 +240,7 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 	case r.slots <- struct{}{}:
 	default:
 		r.inflight.Delete(use.ID)
-		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedBusy)
+		r.record(ctx, candidate.IssuerURL, reason, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedBusy)
 		return
 	}
 
@@ -213,7 +252,7 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		r.mu.Unlock()
 		<-r.slots
 		r.inflight.Delete(use.ID)
-		r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedShutdown)
+		r.record(ctx, candidate.IssuerURL, reason, remotesessionmetrics.IssuerMetadataRefreshOutcomeSkippedShutdown)
 		return
 	}
 	r.wg.Add(1)
@@ -231,27 +270,76 @@ func (r *IssuerMetadataRefresher) NoteUse(ctx context.Context, use IssuerMetadat
 		defer func() {
 			if rec := recover(); rec != nil {
 				logger.ErrorContext(ctx, "issuer metadata refresh panicked", attr.SlogError(fmt.Errorf("%v", rec)))
-				r.metrics.Record(ctx, candidate.IssuerURL, remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError)
+				r.record(ctx, candidate.IssuerURL, reason, remotesessionmetrics.IssuerMetadataRefreshOutcomeInternalError)
 			}
 		}()
 
 		// The flow-time snapshot may be stale by now: another visit may have refreshed or failed since, so plan again from the row.
 		existing, outcome, err := r.load(ctx, candidate)
 		if err != nil || outcome != "" {
-			r.record(ctx, candidate.IssuerURL, outcome)
+			r.record(ctx, candidate.IssuerURL, reason, outcome)
 			if err != nil {
 				logger.ErrorContext(ctx, "reload issuer metadata before refresh", attr.SlogError(err))
 			}
 			return
 		}
-		plan = planIssuerMetadataRefresh(issuerMetadataUseFromRow(existing), time.Now())
-		if !plan.empty() {
-			r.run(ctx, logger, existing, plan)
+		p := plan(issuerMetadataUseFromRow(existing), time.Now())
+		if p.empty() {
+			if p.skipped != "" {
+				r.record(ctx, candidate.IssuerURL, reason, p.skipped)
+			}
+			return
 		}
+		r.run(ctx, logger, existing, p, reason)
 	}()
 }
 
-// Wait blocks until every refresh NoteUse started has finished; later uses may still start more.
+// tokenEndpointMissing reports a token endpoint answer that says the stored endpoint is gone; a 404 or 410 carrying an OAuth error body is the endpoint refusing the client or grant, not drift.
+func tokenEndpointMissing(statusCode int, oauthErrorBody bool) bool {
+	return (statusCode == http.StatusNotFound || statusCode == http.StatusGone) && !oauthErrorBody
+}
+
+// noteTokenEndpointMissing requests a reactive refresh when the stored token endpoint answered 404 or 410 without an OAuth error body; the caller's error is untouched.
+func noteTokenEndpointMissing(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, statusCode int, oauthErrorBody bool) {
+	if tokenEndpointMissing(statusCode, oauthErrorBody) {
+		r.RequestRefresh(ctx, issuerUseFromClientRow(client), remotesessionmetrics.IssuerMetadataRefreshReasonTokenEndpointMissing)
+	}
+}
+
+// noteUnknownSigningKey requests a reactive refresh when an ID token named a kid the key set lacks even after the forced key refresh: the jwks_uri itself may have moved. Signature and claim failures, kid-less tokens, and rate-limited lookups (ErrRefreshRateLimited, ErrFetchRateLimited) are not drift evidence.
+func noteUnknownSigningKey(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, err error) {
+	if errors.Is(err, errUnknownSigningKey) {
+		r.RequestRefresh(ctx, issuerUseFromClientRow(client), remotesessionmetrics.IssuerMetadataRefreshReasonUnknownSigningKey)
+	}
+}
+
+// detach runs fn off the request path, covered by Wait and Shutdown, with only the trace carried over. Safe on a nil receiver.
+func (r *IssuerMetadataRefresher) detach(ctx context.Context, budget time.Duration, fn func(ctx context.Context)) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	r.wg.Add(1)
+	r.mu.Unlock()
+	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
+	go func() {
+		defer r.wg.Done()
+		ctx, cancel := context.WithTimeout(detached, budget)
+		defer cancel()
+		defer func() {
+			if rec := recover(); rec != nil {
+				r.logger.ErrorContext(ctx, "detached issuer metadata work panicked", attr.SlogError(fmt.Errorf("%v", rec)))
+			}
+		}()
+		fn(ctx)
+	}()
+}
+
+// Wait blocks until every refresh NoteUse or RequestRefresh started, and every detached lookup, has finished; later uses may still start more.
 func (r *IssuerMetadataRefresher) Wait() {
 	if r == nil {
 		return
@@ -271,22 +359,22 @@ func (r *IssuerMetadataRefresher) Shutdown() {
 }
 
 // run does the one thing the plan asks for: a fetch writes every column a re-projection would, so the two never run in one visit.
-func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, plan issuerMetadataPlan) {
+func (r *IssuerMetadataRefresher) run(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, plan issuerMetadataPlan, reason remotesessionmetrics.IssuerMetadataRefreshReason) {
 	switch {
 	case plan.fetch:
-		if _, err := r.refresh(ctx, existing); err != nil {
-			logger.ErrorContext(ctx, "refresh issuer metadata on use", attr.SlogError(err))
+		if _, err := r.refresh(ctx, existing, reason); err != nil {
+			logger.ErrorContext(ctx, "refresh issuer metadata", attr.SlogError(err))
 		}
 	case plan.reproject:
-		if _, err := r.reproject(ctx, existing); err != nil {
-			logger.ErrorContext(ctx, "reproject issuer metadata on use", attr.SlogError(err))
+		if _, err := r.reproject(ctx, existing, reason); err != nil {
+			logger.ErrorContext(ctx, "reproject issuer metadata", attr.SlogError(err))
 		}
 	}
 }
 
 // reproject fills an issuer's NULL capability columns from its stored document, leaving set columns, the document, and the tracking columns alone.
-func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
-	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
+func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.RemoteSessionIssuer, reason remotesessionmetrics.IssuerMetadataRefreshReason) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer), attr.SlogOAuthIssuerMetadataRefreshReason(reason))
 
 	doc, err := decodeStoredIssuerDocument(existing)
 	if err != nil {
@@ -296,7 +384,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 			msg = ude.reason
 		}
 		outcome, err := r.recordReprojectionFailure(ctx, existing, msg)
-		return r.record(ctx, existing.Issuer, outcome), err
+		return r.record(ctx, existing.Issuer, reason, outcome), err
 	}
 
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
@@ -313,12 +401,12 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 			OrganizationID: existing.OrganizationID,
 		})
 	}, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected)
-	return r.record(ctx, existing.Issuer, outcome), err
+	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 
 // refresh fetches an issuer's upstream metadata and applies it; discovery failures are outcomes, not errors.
-func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
-	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer))
+func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.RemoteSessionIssuer, reason remotesessionmetrics.IssuerMetadataRefreshReason) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	logger := r.logger.With(attr.SlogRemoteSessionIssuerID(existing.ID.String()), attr.SlogOAuthIssuer(existing.Issuer), attr.SlogOAuthIssuerMetadataRefreshReason(reason))
 
 	params, _, err := refreshIssuerMetadata(ctx, r.policy, existing)
 	if err != nil {
@@ -328,9 +416,9 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 		if retryURL != "" {
 			failure = remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure
 		}
-		logger.WarnContext(ctx, "issuer metadata refresh on use failed", attr.SlogOutcome(string(failure)), attr.SlogError(err))
+		logger.WarnContext(ctx, "issuer metadata refresh failed", attr.SlogOutcome(string(failure)), attr.SlogError(err))
 		outcome, err := r.recordFailure(ctx, existing, msg, retryURL, failure)
-		return r.record(ctx, existing.Issuer, outcome), err
+		return r.record(ctx, existing.Issuer, reason, outcome), err
 	}
 
 	success := remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshed
@@ -340,7 +428,7 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
-	return r.record(ctx, existing.Issuer, outcome), err
+	return r.record(ctx, existing.Issuer, reason, outcome), err
 }
 
 // load reads the row under the listed identity; a miss is a conflict outcome.
@@ -397,8 +485,8 @@ func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Docum
 	return doc, nil
 }
 
-func (r *IssuerMetadataRefresher) record(ctx context.Context, issuerURL string, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) remotesessionmetrics.IssuerMetadataRefreshOutcome {
-	r.metrics.Record(ctx, issuerURL, outcome)
+func (r *IssuerMetadataRefresher) record(ctx context.Context, issuerURL string, reason remotesessionmetrics.IssuerMetadataRefreshReason, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) remotesessionmetrics.IssuerMetadataRefreshOutcome {
+	r.metrics.Record(ctx, issuerURL, reason, outcome)
 	return outcome
 }
 
