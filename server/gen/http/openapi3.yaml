@@ -11760,6 +11760,14 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+                  in: query
+                  name: toolset_id
+                  schema:
+                    description: 'Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
