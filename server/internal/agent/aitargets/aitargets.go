@@ -81,8 +81,9 @@ type VersionHint struct {
 //
 // The three lists are not interchangeable. CIMDVendorKeys and OAuthClientIDs
 // name credentials the server itself verified, so a decision may be enforced
-// on them. ClientInfoNames names what the client called itself, which is
-// attribution only; see MatchGatewayCaller.
+// on them, and MatchGatewayCaller resolves a caller through those two alone.
+// ClientInfoNames names what the client called itself: it is carried on the
+// target as a label for operators, and nothing matches on it.
 type GatewayClient struct {
 	// CIMDVendorKeys match the VendorKey of the CIMD catalog entry that
 	// admitted the caller's client_id. Vendor-grained: two targets in one

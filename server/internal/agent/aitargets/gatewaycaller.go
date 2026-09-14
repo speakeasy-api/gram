@@ -1,9 +1,6 @@
 package aitargets
 
-import (
-	"slices"
-	"strings"
-)
+import "slices"
 
 // GatewayCaller is what an MCP gateway request proved about the client behind
 // it. Every field is optional: an OAuth bearer carries a verified client_id, a
@@ -31,8 +28,12 @@ type GatewayCaller struct {
 // issuer's own CIMD entry rather than the compile-time catalog — those resolve
 // to no preset, and requiring one here would have made a block on them inert.
 // The catalog layers below still need their own values and skip themselves
-// when the caller has none. Self-reported client names are not consulted;
-// MatchGatewayClientInfo is that door.
+// when the caller has none.
+//
+// Verified credentials are the only input. A client's self-reported name at
+// initialize is never consulted and there is deliberately no matcher for it:
+// any client may claim any name, so resolving a target that way would let a
+// caller pick which access decision it is judged under.
 func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
 	if caller.OAuthClientID == "" {
 		return ZeroTarget(), false
@@ -50,26 +51,6 @@ func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
 		}
 		for _, target := range targets {
 			if target.Enabled && slices.Contains(layer.lookup(target), layer.value) {
-				return target.Clone(), true
-			}
-		}
-	}
-	return ZeroTarget(), false
-}
-
-// MatchGatewayClientInfo resolves a self-reported client name to a served
-// target. Evidence, never permission. Case-insensitive: the casing varies
-// between a client's own releases.
-func MatchGatewayClientInfo(targets []Target, clientInfoName string) (Target, bool) {
-	if clientInfoName == "" {
-		return ZeroTarget(), false
-	}
-	for _, target := range targets {
-		if !target.Enabled {
-			continue
-		}
-		for _, name := range target.GatewayClient.ClientInfoNames {
-			if strings.EqualFold(name, clientInfoName) {
 				return target.Clone(), true
 			}
 		}

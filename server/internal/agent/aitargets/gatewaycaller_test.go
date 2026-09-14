@@ -156,23 +156,6 @@ func TestMatchGatewayCallerIgnoresUnverifiedAndDisabledTargets(t *testing.T) {
 	require.False(t, ok, "a caller with no verified client id never matches")
 }
 
-func TestMatchGatewayClientInfoIsCaseInsensitive(t *testing.T) {
-	t.Parallel()
-
-	targets := []aitargets.Target{gatewayTarget("cursor", aitargets.GatewayClient{
-		CIMDVendorKeys:  nil,
-		OAuthClientIDs:  nil,
-		ClientInfoNames: []string{"Cursor"},
-	})}
-
-	matched, ok := aitargets.MatchGatewayClientInfo(targets, "cursor")
-	require.True(t, ok)
-	require.Equal(t, "cursor", matched.ID)
-
-	_, ok = aitargets.MatchGatewayClientInfo(targets, "")
-	require.False(t, ok)
-}
-
 // firstBlockableVendorKey borrows a vendor key the registry says the gateway
 // can resolve. Which vendor that is moves as the registry grows.
 func firstBlockableVendorKey() (string, bool) {
