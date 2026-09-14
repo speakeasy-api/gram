@@ -1,11 +1,11 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // Audiences.Match reports the issuer label when a value is both the issuer

@@ -1,4 +1,4 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 func TestUnverifiedClientID(t *testing.T) {

@@ -2787,6 +2787,51 @@ WHERE id = @id
   AND (organization_id = @organization_id::text OR organization_id IS NULL)
   AND deleted IS FALSE;
 
+-- name: CreateTestTrustedIssuerJWKSCache :one
+-- Test fixture for conditional issuer-key cache writes.
+INSERT INTO remote_session_issuers (slug, issuer, jwks_uri)
+VALUES (@slug, @issuer, @jwks_uri)
+RETURNING id;
+
+-- name: GetTrustedIssuerJWKSCache :one
+-- Only administrator-configurable organization and global issuers can back
+-- ID-JAG verification. The row id is selected through a trusted link first.
+SELECT jwks, jwks_uri, jwks_fetched_at, jwks_cache_expires_at, jwks_etag
+FROM remote_session_issuers
+WHERE id = @id
+  AND project_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: UpdateTrustedIssuerJWKSCache :execrows
+-- A rotated URI or changed cache state must not be overwritten by the
+-- result of an older fetch. project_id IS NULL keeps this write on the
+-- organization/global trusted-issuer tiers.
+UPDATE remote_session_issuers
+SET jwks = @jwks::jsonb,
+    jwks_fetched_at = @fetched_at::timestamptz,
+    jwks_cache_expires_at = @cache_expires_at::timestamptz,
+    jwks_etag = NULLIF(@etag::text, ''),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id IS NULL
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
+
+-- name: MarkTrustedIssuerJWKSConsultFailure :execrows
+UPDATE remote_session_issuers
+SET jwks_fetched_at = @consulted_at::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id IS NULL
+  AND jwks_uri = @jwks_uri
+  AND deleted IS FALSE
+  AND jwks IS NOT DISTINCT FROM @prior_jwks::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM @prior_fetched_at::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM @prior_cache_expires_at::timestamptz;
+
 -- name: ListConflictingClientBindingsForIssuerMigration :many
 -- The user_session_issuers that already have an active remote_session_client on
 -- BOTH the source and the target issuer, joined to the MCP servers those

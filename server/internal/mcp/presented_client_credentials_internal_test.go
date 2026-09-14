@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // newFormRequest builds a form-encoded POST carrying the given fields.

@@ -168,6 +168,27 @@ func TestResolverResolve_Non200IsFetchFailure(t *testing.T) {
 
 	_, err = resolver.Resolve(t.Context(), source, zeroCacheState())
 	require.ErrorContains(t, err, "status 503")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_TLSFailureDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	resolver := newResolver(newFetchClientFrom(&http.Client{}), testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err := resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
+}
+
+func TestResolverResolve_BlockedIPDoesNotPermitStaleKeys(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
+	require.NoError(t, err)
+	resolver := NewResolver(policy, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	_, err = resolver.Resolve(t.Context(), remoteSourceFor(t, server), zeroCacheState())
+	require.ErrorIs(t, err, guardian.ErrBlockedIP)
+	require.NotErrorIs(t, err, ErrKeySetUnavailable)
 }
 
 func TestResolverResolve_FetchedPrivateMaterialRejected(t *testing.T) {
@@ -220,7 +241,7 @@ func TestResolverResolve_ZeroSourceRejected(t *testing.T) {
 
 	resolver := newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 
-	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: ""}, zeroCacheState())
+	_, err := resolver.Resolve(t.Context(), Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", fetchScope: ""}, zeroCacheState())
 	require.ErrorContains(t, err, "zero Source")
 }
 

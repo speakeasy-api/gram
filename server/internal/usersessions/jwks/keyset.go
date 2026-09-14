@@ -252,6 +252,17 @@ func allowsVerification(members map[string]json.RawMessage) bool {
 	return slices.Contains(operations, "verify")
 }
 
+// VerificationKeyFromDocument re-screens a stored public JWK Set and selects
+// an already known key without fetching. It is used only for a bounded stale
+// fallback when an issuer's key endpoint is temporarily unavailable.
+func VerificationKeyFromDocument(raw json.RawMessage, kid string) (*jose.JSONWebKey, error) {
+	set, err := parseKeySet(raw)
+	if err != nil {
+		return nil, err
+	}
+	return selectKey(set, kid)
+}
+
 // selectKey picks the verification key for kid out of an already-screened
 // set. With a kid, the first key whose key ID matches wins. Without one —
 // RFC 7515 makes the header optional — the set must contain exactly one
