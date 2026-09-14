@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -301,6 +302,16 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 					s.logger.WarnContext(ctx, "failed to reconcile model provider key after Stripe Checkout conversion")
 				}
 			}
+		}
+		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
+			CustomerID:       preparedIntent.customerID,
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      string(billing.TierPayg),
+		}); updateErr != nil {
+			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity after checkout conversion", attr.SlogError(updateErr))
 		}
 	}
 

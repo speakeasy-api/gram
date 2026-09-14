@@ -324,3 +324,61 @@ describe("complementTools", () => {
     ).toEqual([]);
   });
 });
+
+describe("blocks against an agent", () => {
+  /** A rule on a role that reaches agent a1. */
+  function agentRole(
+    name: string,
+    overrides: Partial<ResourceAudienceEntry> = {},
+  ): ResourceAudienceEntry {
+    return entry({
+      principalUrn: `role:${name}`,
+      kind: "role",
+      displayName: name,
+      appliesTo: "all_resources",
+      agentIds: ["a1"],
+      ...overrides,
+    });
+  }
+
+  const agent = () =>
+    entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Releaser" });
+
+  it("leaves an agent connected when a role it holds is blocked", () => {
+    // The blocked_* scopes are not agent-runtime-safe, so this block is
+    // dropped when the agent's policy loads. Reporting it would tell an
+    // administrator the agent has no access while it can still connect.
+    const rows = buildAccessRows([
+      agent(),
+      agentRole("readers", { level: "blocked" }),
+    ]);
+    const row = rows.find((r) => r.principalUrn === "agent:a1")!;
+
+    expect(row.cells.use.blocks).toEqual([]);
+    expect(scopeState(row, "use", catalog).granted).toBe(true);
+    expect(scopeState(row, "use", catalog).capped).toBe(false);
+  });
+
+  it("still applies a role block to a person", () => {
+    const rows = buildAccessRows([
+      entry(),
+      role("readers", { level: "blocked" }),
+    ]);
+    const row = rows.find((r) => r.principalUrn === "user:u1")!;
+
+    expect(row.cells.use.blocks).toHaveLength(1);
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+  });
+
+  it("still gives an agent the access a role grants it", () => {
+    const rows = buildAccessRows([agentRole("readers")]);
+    const agentRow = rows.find((r) => r.principalUrn === "role:readers")!;
+
+    expect(agentRow).toBeTruthy();
+    expect(
+      buildAccessRows([agent(), agentRole("readers")]).find(
+        (r) => r.principalUrn === "agent:a1",
+      )!.cells.use.grants.length,
+    ).toBe(2);
+  });
+});

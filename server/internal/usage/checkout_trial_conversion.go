@@ -103,7 +103,8 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 	if err != nil || rows != 1 {
 		return false, fmt.Errorf("mark enterprise trial converted: rows=%d: %w", rows, err)
 	}
-	if _, err := trialsrepo.New(tx).RestoreOrganizationFromTrial(ctx, trialsrepo.RestoreOrganizationFromTrialParams{OrganizationID: organizationID, AccountType: "enterprise"}); err != nil {
+	// Self-serve Checkout is the PAYG conversion path. Admin conversion keeps enterprise.
+	if _, err := trialsrepo.New(tx).RestoreOrganizationFromTrial(ctx, trialsrepo.RestoreOrganizationFromTrialParams{OrganizationID: organizationID, AccountType: string(billing.TierPayg)}); err != nil {
 		return false, fmt.Errorf("restore organization after checkout conversion: %w", err)
 	}
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
@@ -129,7 +130,7 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 		Keys:         beforeKeys,
 	}
 	after := audit.OrganizationEnterpriseTrialConversionSnapshot{
-		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: "enterprise", Whitelisted: true, Disabled: organization.DisabledAt.Valid},
+		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: string(billing.TierPayg), Whitelisted: true, Disabled: organization.DisabledAt.Valid},
 		Trial:        checkoutConversionTrialSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt, now),
 		Keys:         afterKeys,
 	}

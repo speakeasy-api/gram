@@ -73,17 +73,6 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 		"binary absolute path":       func(x *aitargets.Target) { x.Signatures.Binaries = []string{"/usr/bin/claude"} },
 		"binary dot":                 func(x *aitargets.Target) { x.Signatures.Binaries = []string{"."} },
 		"binary dot dot":             func(x *aitargets.Target) { x.Signatures.Binaries = []string{".."} },
-		"config dir bare relative":   func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{".claude"} },
-		"config dir root only":       func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"/"} },
-		"config dir absolute walk":   func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"/opt/../etc"} },
-		"config dir home only":       func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/"} },
-		"config dir bare tilde":      func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~"} },
-		"config dir parent walk":     func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/../.ssh"} },
-		"config dir dot segment":     func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/./.ssh"} },
-		"config dir empty segment":   func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/.claude//x"} },
-		"config dir trailing slash":  func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/.claude/"} },
-		"config dir backslash":       func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{`~/.claude\x`} },
-		"config dir too long":        func(x *aitargets.Target) { x.Signatures.ConfigDirs = []string{"~/" + strings.Repeat("a", 256)} },
 		"process name regex meta":    func(x *aitargets.Target) { x.Signatures.ProcessNames = []string{".*"} },
 		"process name with slash":    func(x *aitargets.Target) { x.Signatures.ProcessNames = []string{"bin/claude"} },
 		"plist key with dot":         func(x *aitargets.Target) { x.VersionHint = &aitargets.VersionHint{PlistKey: "CF.Bundle"} },
@@ -98,6 +87,26 @@ func TestValidateTargetRejectsEachRule(t *testing.T) {
 		err := aitargets.ValidateTarget(target)
 		require.Error(t, err, "case %q must be rejected", name)
 		require.ErrorIs(t, err, aitargets.ErrInvalidTarget, "case %q must wrap ErrInvalidTarget", name)
+	}
+}
+
+// A config dir is whatever the device agent can resolve: a home-relative
+// prefix or an absolute path, however it was written. The agent only checks
+// whether the directory exists, so the shape is not worth policing here.
+func TestValidateTargetAcceptsAnyConfigDirShape(t *testing.T) {
+	t.Parallel()
+
+	for _, dir := range []string{
+		".claude",
+		"~/.claude",
+		"~/.claude/",
+		"/opt/homebrew/etc/claude",
+		"~/Library/Application Support/com.openai.chat/",
+		"Library/Application Support/Cursor",
+	} {
+		target := validTarget()
+		target.Signatures.ConfigDirs = []string{dir}
+		require.NoError(t, aitargets.ValidateTarget(target), "config dir %q", dir)
 	}
 }
 

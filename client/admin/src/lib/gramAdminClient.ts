@@ -1,4 +1,38 @@
 import {
+  buildAdminUploadPlatformImageMutation,
+  type AdminUploadPlatformImageMutationVariables,
+} from "@gram/admin-client/react-query/adminUploadPlatformImage";
+import {
+  buildAdminMigrateToGlobalIssuerMutation,
+  type AdminMigrateToGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateToGlobalIssuer";
+import {
+  buildAdminRefreshGlobalIssuerMetadataMutation,
+  type AdminRefreshGlobalIssuerMetadataMutationVariables,
+} from "@gram/admin-client/react-query/adminRefreshGlobalIssuerMetadata";
+import {
+  buildAdminFetchGlobalIssuerMetadataMutation,
+  type AdminFetchGlobalIssuerMetadataMutationVariables,
+} from "@gram/admin-client/react-query/adminFetchGlobalIssuerMetadata";
+import {
+  buildAdminDeleteGlobalIssuerMutation,
+  type AdminDeleteGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminDeleteGlobalIssuer";
+import {
+  buildAdminUpdateGlobalIssuerMutation,
+  type AdminUpdateGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminUpdateGlobalIssuer";
+import {
+  buildAdminCreateGlobalIssuerMutation,
+  type AdminCreateGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
+import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
+import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
+import { buildAdminListGlobalIssuerConvergenceCandidatesQuery } from "@gram/admin-client/react-query/adminListGlobalIssuerConvergenceCandidates.core";
+import { buildAdminListGlobalIssuersQuery } from "@gram/admin-client/react-query/adminListGlobalIssuers.core";
+import { buildAdminGetGlobalIssuerQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuer.core";
+import {
   infiniteQueryOptions,
   queryOptions,
   useMutation,
@@ -155,4 +189,212 @@ export function useSetAdminOrganizationFeatureMutation(
     mutationKey: ["@gram/admin-client", "admin", "adminSetOrganizationFeature"],
     mutationFn: setAdminOrganizationFeature,
   });
+}
+
+function createAdminGetGlobalIssuerQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerQuery>[1],
+) {
+  const generated = buildAdminGetGlobalIssuerQuery(redirectingClient, request);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminListGlobalIssuersQuery(
+  request: Parameters<typeof buildAdminListGlobalIssuersQuery>[1],
+) {
+  const generated = buildAdminListGlobalIssuersQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminListGlobalIssuerConvergenceCandidatesQuery(
+  request: Parameters<
+    typeof buildAdminListGlobalIssuerConvergenceCandidatesQuery
+  >[1],
+) {
+  const generated = buildAdminListGlobalIssuerConvergenceCandidatesQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminGetGlobalIssuerDuplicatePreflightQuery(
+  request: Parameters<
+    typeof buildAdminGetGlobalIssuerDuplicatePreflightQuery
+  >[1],
+) {
+  const generated = buildAdminGetGlobalIssuerDuplicatePreflightQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminGetGlobalIssuerMigratePreflightQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerMigratePreflightQuery>[1],
+) {
+  const generated = buildAdminGetGlobalIssuerMigratePreflightQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminCreateGlobalIssuer(
+  request: AdminCreateGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminCreateGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminCreateGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminUpdateGlobalIssuer(
+  request: AdminUpdateGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminUpdateGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminUpdateGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminDeleteGlobalIssuer(
+  request: AdminDeleteGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminDeleteGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminDeleteGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminFetchGlobalIssuerMetadata(
+  request: AdminFetchGlobalIssuerMetadataMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminFetchGlobalIssuerMetadataMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminFetchGlobalIssuerMetadataMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminRefreshGlobalIssuerMetadata(
+  request: AdminRefreshGlobalIssuerMetadataMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminRefreshGlobalIssuerMetadataMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminRefreshGlobalIssuerMetadataMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateToGlobalIssuer(
+  request: AdminMigrateToGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateToGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateToGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminUploadPlatformImage(
+  request: AdminUploadPlatformImageMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminUploadPlatformImageMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminUploadPlatformImageMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+function createAdminIssuerImageQuery(id: string) {
+  const generated = buildAdminServeImageQuery(redirectingClient, { id });
+  return queryOptions({
+    queryKey: generated.queryKey,
+    queryFn: async (context) => {
+      const response = await redirecting(generated.queryFn(context));
+      return new Response(response.result, {
+        headers: {
+          "Content-Type":
+            response.headers["Content-Type"]?.[0] ??
+            response.headers["content-type"]?.[0] ??
+            "application/octet-stream",
+        },
+      }).blob();
+    },
+  });
+}
+
+export function adminGetGlobalIssuerQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerQuery>[1],
+): ReturnType<typeof createAdminGetGlobalIssuerQuery> {
+  return createAdminGetGlobalIssuerQuery(request);
+}
+
+export function adminListGlobalIssuersQuery(
+  request: Parameters<typeof buildAdminListGlobalIssuersQuery>[1],
+): ReturnType<typeof createAdminListGlobalIssuersQuery> {
+  return createAdminListGlobalIssuersQuery(request);
+}
+
+export function adminListGlobalIssuerConvergenceCandidatesQuery(
+  request: Parameters<
+    typeof buildAdminListGlobalIssuerConvergenceCandidatesQuery
+  >[1],
+): ReturnType<typeof createAdminListGlobalIssuerConvergenceCandidatesQuery> {
+  return createAdminListGlobalIssuerConvergenceCandidatesQuery(request);
+}
+
+export function adminGetGlobalIssuerDuplicatePreflightQuery(
+  request: Parameters<
+    typeof buildAdminGetGlobalIssuerDuplicatePreflightQuery
+  >[1],
+): ReturnType<typeof createAdminGetGlobalIssuerDuplicatePreflightQuery> {
+  return createAdminGetGlobalIssuerDuplicatePreflightQuery(request);
+}
+
+export function adminGetGlobalIssuerMigratePreflightQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerMigratePreflightQuery>[1],
+): ReturnType<typeof createAdminGetGlobalIssuerMigratePreflightQuery> {
+  return createAdminGetGlobalIssuerMigratePreflightQuery(request);
+}
+
+export function adminIssuerImageQuery(
+  id: string,
+): ReturnType<typeof createAdminIssuerImageQuery> {
+  return createAdminIssuerImageQuery(id);
 }

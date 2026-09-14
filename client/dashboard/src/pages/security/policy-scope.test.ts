@@ -465,8 +465,9 @@ describe("policyScopeUpdateForCategoryEdit", () => {
   });
 
   it("never puts a scope the API rejects on the wire", () => {
-    // `custom` and session-scoped categories have no recommendation to
-    // replace; a scope for either fails the whole update.
+    // Session-scoped categories reject message scoping outright and a scope
+    // for one fails the whole update. `custom` is not one of them: it has no
+    // recommendation, but the API accepts a specified scope for it.
     const update = policyScopeUpdateForCategoryEdit({
       category: "secrets",
       kinds: ["user_message"],
@@ -476,20 +477,39 @@ describe("policyScopeUpdateForCategoryEdit", () => {
     });
 
     expect(update.detectionScopes.map((scope) => scope.category)).toEqual([
+      "custom",
       "secrets",
     ]);
-    expect(acceptsDetectionScope(categoryDefinitions[3])).toBe(false);
+    expect(acceptsDetectionScope(categoryDefinitions[3])).toBe(true);
     expect(acceptsDetectionScope(categoryDefinitions[4])).toBe(false);
   });
 
-  it("keeps the legacy list when a covered category cannot be pinned", () => {
-    // Custom rules cannot carry a category scope, so clearing message_types
-    // would widen them; the list survives, gaining only the edited kinds.
+  it("clears the legacy list once every covered category can be pinned", () => {
+    // `custom` accepts a scope now, so its share of the legacy narrowing is
+    // pinned onto it and the legacy list goes away entirely.
+    const update = policyScopeUpdateForCategoryEdit({
+      category: "secrets",
+      kinds: ["user_message"],
+      policyCategories: ["secrets", "custom"],
+      categoryDefinitions,
+      messageTypes: ["tool_request"],
+    });
+
+    expect(update.messageTypes).toEqual([]);
+    expect(update.detectionScopes).toContainEqual({
+      category: "custom",
+      scopeInclude: 'kind in ["tool_request"]',
+    });
+  });
+
+  it("keeps the legacy list for a category it has no definition for", () => {
+    // An unrecognized category cannot be pinned, so clearing message_types
+    // would widen it; the list survives, gaining only the edited kinds.
     expect(
       policyScopeUpdateForCategoryEdit({
         category: "secrets",
         kinds: ["user_message"],
-        policyCategories: ["secrets", "custom"],
+        policyCategories: ["secrets", "not_a_category"],
         categoryDefinitions,
         messageTypes: ["tool_request"],
       }).messageTypes,

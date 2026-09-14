@@ -164,6 +164,11 @@ DECLARE
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
 
+  -- Read-only tool verbs the destructive-command policy exempts. Declared once
+  -- because both of that policy's categories carry the same exemption.
+  ds_readonly_exempt CONSTANT text :=
+    'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))';
+
   excl_fixture CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec01';
   excl_testcard CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec02';
   excl_examplekey CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec03';
@@ -506,7 +511,8 @@ BEGIN
 
   -- Managed identities are distinct from OAuth client registrations below.
   -- Existing fictional owners exercise name/initials rendering without adding
-  -- external avatar dependencies. No policy grants means these cannot connect.
+  -- external avatar dependencies. None of these has a direct policy grant;
+  -- the first one reaches servers only through the roles assigned to it below.
   INSERT INTO agents
     (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
   VALUES
@@ -543,6 +549,7 @@ BEGIN
   DELETE FROM principal_grants
   WHERE organization_id = demo_org
     AND principal_urn LIKE 'role:organization:%';
+  DELETE FROM agent_role_assignments WHERE organization_id = demo_org;
   DELETE FROM organization_roles WHERE organization_id = demo_org;
 
   FOR custom_role IN
@@ -551,43 +558,51 @@ BEGIN
       ('session-reviewer', 'Session Reviewer',
        'Reads chat transcripts across the organization for quality review.',
        ARRAY['chat:read'],
-       ARRAY['user_demo_hana', 'user_demo_jonas']),
+       ARRAY['user_demo_hana', 'user_demo_jonas'],
+       ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers and skills, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
              'mcp:write', 'mcp:connect', 'skill:read', 'skill:write',
              'environment:read', 'agent:read'],
-       ARRAY['user_demo_jonas']),
+       ARRAY['user_demo_jonas'],
+       ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
        ARRAY['mcp:read', 'mcp:write'],
-       ARRAY['user_demo_priya', 'user_demo_mateo']),
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
        'Held by unattended agents, not people: authorizes an agent to act.',
        ARRAY['agent:read', 'agent:authorize'],
-       ARRAY[]::text[]),
+       ARRAY[]::text[],
+       ARRAY['gram-demo-managed-agent-1', 'gram-demo-managed-agent-2']),
       ('analyst', 'Analyst',
        'Read-only across servers, skills and sessions. No configuration changes.',
        ARRAY['org:read', 'project:read', 'mcp:read', 'mcp:connect',
              'skill:read', 'chat:read'],
-       ARRAY['user_demo_amara', 'user_demo_hana']),
+       ARRAY['user_demo_amara', 'user_demo_hana'],
+       ARRAY[]::text[]),
       ('read-only-tools', 'Read-only Tools',
        'Connects to every server, but only for tools annotated read-only.',
        ARRAY['mcp:connect'],
-       ARRAY['user_demo_amara']),
+       ARRAY['user_demo_amara'],
+       ARRAY['gram-demo-managed-agent-1']),
       ('environment-manager', 'Environment Manager',
        'Manages environments and the credentials they hold.',
        ARRAY['org:read', 'project:read', 'environment:read',
              'environment:write', 'mcp:read'],
-       ARRAY['user_demo_lucas']),
+       ARRAY['user_demo_lucas'],
+       ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
        ARRAY['org:read', 'org:admin', 'project:read', 'project:write',
              'mcp:read', 'mcp:write', 'mcp:connect', 'environment:read',
              'skill:read', 'skill:write', 'agent:read', 'agent:write',
              'chat:read'],
-       ARRAY['user_demo_priya', 'user_demo_mateo'])
-    ) AS r(slug, name, description, scopes, members)
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[])
+    ) AS r(slug, name, description, scopes, members, agents)
   LOOP
     INSERT INTO organization_roles
       (organization_id, workos_slug, workos_name, workos_description,
@@ -613,6 +628,15 @@ BEGIN
         (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
       VALUES (demo_org, 'workos_' || custom_role.members[i],
               custom_role.members[i], custom_role_urn, now());
+    END LOOP;
+
+    -- Agent members of a role. Automation Agent carries agent scopes no agent
+    -- can hold at runtime, so the role editor marks them; Read-only Tools is
+    -- the case that actually widens an agent, and the suspended agent shows a
+    -- membership that is kept rather than dropped.
+    FOR i IN 1 .. COALESCE(array_length(custom_role.agents, 1), 0) LOOP
+      INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+      VALUES (demo_org, demo.det_uuid(custom_role.agents[i]), custom_role_urn);
     END LOOP;
   END LOOP;
 
@@ -1498,20 +1522,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                              sources, presidio_entities, analyzer_config,
-                             custom_rule_ids, message_types, scope_exempt,
+                             custom_rule_ids,
                              enabled, action, audience_type,
                              shadow_mcp_disposition, auto_name, score, version)
   VALUES
     -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
      '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
-     '{}'::jsonb, '{}', NULL, NULL,
+     '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
     -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
     -- system-prompt-extraction half of the same category.
     (policy_pi, proj_a, demo_org, 'Acme prompt injection guardrail', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}',
-     '{user_message,tool_response}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1520,45 +1546,61 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- at the prefix, so a mutating tool whose name merely contains a verb
     -- (budget_update, reset_query_cache) still falls under the policy.
     (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
-     '{cli_destructive,destructive_tool}', NULL, '{}'::jsonb, '{}',
-     '{tool_request}',
-     'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))',
+     '{cli_destructive,destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'cli_destructive',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt),
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt))), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
-     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', '{tool_request}', NULL,
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}',
      TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
     -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
     -- off-domain AI account. flag-only source.
     (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
      '{account_identity}', NULL,
      '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
-     '{}', NULL, NULL,
+     '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
     (policy_cr, proj_a, demo_org, 'Acme agent guardrails', 'standard',
-     '{}', NULL, '{}'::jsonb,
+     '{}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'custom',
+                          'scope_include', 'kind in ["tool_request"]'))),
      '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
-     '{tool_request}', NULL,
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
     -- carry it by design). Scored well below the regulated/secret policies so
     -- the highest-volume findings do not drown the Watchdog list in the same
     -- severity as a leaked key — policy score IS the signal severity.
     (policy_cd, proj_a, demo_org, 'Acme customer contact data policy', 'standard',
-     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}', NULL, NULL,
+     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 6.4, 1),
     -- OWASP LLM07 / ASI01 tail: off-topic or boundary-testing conversations.
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
-     '{presidio}', '{}', '{}'::jsonb, '{}', '{user_message}', NULL,
+     '{presidio}', '{}',
+     -- presidio emits five categories; the legacy list narrowed the whole
+     -- policy, so every one of them carries the scope. Its own findings
+     -- (pii.topic_boundary_violation) classify as off_policy, not pii.
+     (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
+        jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
     (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
   -- The same canonical target has two grants, so Platform MCP demonstrates

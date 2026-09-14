@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/skills/server"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -937,6 +939,68 @@ func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *s
 	return slices.Equal(skillTagsOrEmpty(skill.Tags), skillTagsOrEmpty(tags))
 }
 
+// accessibleSkillIDs returns the skills at least one of these users is
+// authorized to reach across the organization.
+//
+// The rule — a grant on the user or on a role they hold, less any blocking
+// grant withdrawing the same scope — lives in the access service's query, and
+// is read from here rather than restated so the two surfaces cannot drift.
+// Several users union, matching how the listing filters read: a skill shows if
+// anyone named can reach it.
+//
+// The returned slice is never nil, so an empty result reads as "none" and not
+// as "unrestricted".
+func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs []string) ([]uuid.UUID, error) {
+	queries := accessrepo.New(s.db)
+	seen := make(map[uuid.UUID]struct{})
+	ids := make([]uuid.UUID, 0)
+
+	for _, userID := range userIDs {
+		// Checked before resolving: ResolveUserPrincipals answers for a
+		// non-member with the everyone principal alone rather than an error,
+		// so an unknown or cross-organization id would otherwise widen the
+		// listing to whatever user:all reaches instead of narrowing it.
+		isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+			UserID:         userID,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("check organization membership: %w", err)
+		}
+		if !isMember {
+			return nil, fmt.Errorf("%w: user %q", authz.ErrPrincipalNotFound, userID)
+		}
+
+		principals, err := authz.ResolveUserPrincipals(ctx, s.db, orgID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve user principals: %w", err)
+		}
+
+		urns := make([]string, 0, len(principals))
+		for _, p := range principals {
+			urns = append(urns, p.String())
+		}
+
+		rows, err := queries.ListAccessibleSkillsForUser(ctx, accessrepo.ListAccessibleSkillsForUserParams{
+			OrganizationID: orgID,
+			PrincipalUrns:  urns,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list accessible skills: %w", err)
+		}
+
+		for _, row := range rows {
+			if _, ok := seen[row.ID]; ok {
+				continue
+			}
+			seen[row.ID] = struct{}{}
+			ids = append(ids, row.ID)
+		}
+	}
+
+	return ids, nil
+}
+
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
@@ -967,6 +1031,23 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		}
 	}
 
+	// "Which skills may this person reach" is an authorization question, so it
+	// is answered by the access service's own query rather than restated here.
+	// A nil id slice leaves the listing unrestricted; an empty one is the real
+	// answer "none", and the queries distinguish the two.
+	var skillIDs []uuid.UUID
+	if payload.AccessibleBy != nil {
+		skillIDs, err = s.accessibleSkillIDs(ctx, authCtx.ActiveOrganizationID, payload.AccessibleBy)
+		switch {
+		case errors.Is(err, authz.ErrPrincipalInvalid):
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid accessible_by user id")
+		case errors.Is(err, authz.ErrPrincipalNotFound):
+			return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve accessible skills").LogError(ctx, logger)
+		}
+	}
+
 	queries := repo.New(s.db)
 	rows, err := queries.ListSkills(ctx, repo.ListSkillsParams{
 		ProjectID:       *authCtx.ProjectID,
@@ -974,6 +1055,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SourceKinds:     payload.SourceKinds,
 		Classifications: payload.Classifications,
 		Tags:            payload.Tags,
+		SkillIds:        skillIDs,
 		SortOrder:       sortOrder,
 		CursorName:      cursorName,
 		CursorUpdatedAt: cursorUpdatedAt,
@@ -1007,6 +1089,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			SourceKinds:     payload.SourceKinds,
 			Classifications: payload.Classifications,
 			Tags:            payload.Tags,
+			SkillIds:        skillIDs,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count skills").LogError(ctx, logger)

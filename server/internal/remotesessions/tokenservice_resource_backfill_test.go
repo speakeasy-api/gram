@@ -264,9 +264,9 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must have carried the derived resource")
 
-	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokens[refreshedClient.RemoteSessionIssuerID],
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]),
 		"the request that backfills the resource must itself carry it, not the pre-refresh empty value")
-	require.Equal(t, remotesessions.UpstreamToken{Token: "second-token", Resource: "https://second.example.com/mcp", RemoteSessionClientID: secondClient}, tokens[secondIssuer])
+	require.Equal(t, remotesessions.UpstreamToken{Token: "second-token", Resource: "https://second.example.com/mcp", RemoteSessionClientID: secondClient}, tokenCredential(tokens[secondIssuer]))
 
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must also have been persisted")
@@ -369,8 +369,8 @@ func TestResolveAccessTokens_BackfillStampsTheRefreshedClientsOwnResource(t *tes
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must stamp the refreshed client's own resource, never a sibling's")
 
-	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokens[refreshedClient.RemoteSessionIssuerID])
-	require.Equal(t, remotesessions.UpstreamToken{Token: "sibling-token", Resource: siblingResource, RemoteSessionClientID: siblingClient}, tokens[siblingIssuer])
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokenCredential(tokens[refreshedClient.RemoteSessionIssuerID]))
+	require.Equal(t, remotesessions.UpstreamToken{Token: "sibling-token", Resource: siblingResource, RemoteSessionClientID: siblingClient}, tokenCredential(tokens[siblingIssuer]))
 
 	siblingSess := getRemoteSessionRow(t, ctx, ti, siblingClient, subject)
 	require.Equal(t, siblingResource, conv.FromPGTextOrEmpty[string](siblingSess.Resource), "the sibling's own binding must survive a neighbour's backfill")

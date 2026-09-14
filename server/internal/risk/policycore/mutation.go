@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -195,6 +196,9 @@ func (c *Core) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 }
 
 func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (MutationResult, error) {
+	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
+		return MutationResult{}, mutationError("lock shadow mcp admission project", err)
+	}
 	queries := repo.New(tx)
 	if err := queries.LockRiskPolicyMutations(ctx, input.Params.ProjectID.String()); err != nil {
 		return MutationResult{}, mutationError("lock risk policy mutations", err)
@@ -310,6 +314,9 @@ func (c *Core) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 }
 
 func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation, deps *MutationDependencies) (MutationResult, error) {
+	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
+		return MutationResult{}, mutationError("lock shadow mcp admission project", err)
+	}
 	queries := repo.New(tx)
 	if err := queries.LockRiskPolicyMutations(ctx, input.Params.ProjectID.String()); err != nil {
 		return MutationResult{}, mutationError("lock risk policy mutations", err)

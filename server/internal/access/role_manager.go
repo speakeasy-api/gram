@@ -79,6 +79,11 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").LogError(ctx, r.logger)
 	}
 
+	agentIDs, err := r.agentIDsByRoleTx(ctx, r.db, gramOrgID)
+	if err != nil {
+		return nil, err
+	}
+
 	roles := make([]*gen.Role, 0, len(rows))
 	for _, row := range rows {
 		role, err := r.roleViewFromLocalRole(ctx, gramOrgID, localRole{
@@ -90,6 +95,7 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 			CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 			UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
 			MemberCount:  int(row.MemberCount),
+			AgentIDs:     agentIDs[row.RoleUrn],
 		})
 		if err != nil {
 			return nil, err
@@ -258,6 +264,7 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		CreatedAt:    conv.FromPGTimestamptz(createdRow.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(createdRow.WorkosUpdatedAt),
 		MemberCount:  int(createdRow.MemberCount),
+		AgentIDs:     nil,
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
@@ -289,12 +296,20 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		})
 	}}
 
-	if len(payload.MemberIds) > 0 {
-		var memberSyncs []workosSync
-		if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
+	if len(payload.AgentIds) > 0 {
+		if err := r.assignAgentsToRoleTx(ctx, tx, gramOrgID, createdRole.PrincipalURN, payload.AgentIds); err != nil {
 			return RoleCreateResult{}, RoleReconciliation{}, err
 		}
-		workosSyncs = append(workosSyncs, memberSyncs...)
+	}
+
+	if len(payload.MemberIds) > 0 || len(payload.AgentIds) > 0 {
+		if len(payload.MemberIds) > 0 {
+			var memberSyncs []workosSync
+			if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, roleSlug, payload.MemberIds); err != nil {
+				return RoleCreateResult{}, RoleReconciliation{}, err
+			}
+			workosSyncs = append(workosSyncs, memberSyncs...)
+		}
 		createdRole, err = r.getLocalRoleBySlugTx(ctx, tx, gramOrgID, roleSlug)
 		if err != nil {
 			return RoleCreateResult{}, RoleReconciliation{}, err
@@ -328,6 +343,7 @@ type localRole struct {
 	CreatedAt    string
 	UpdatedAt    string
 	MemberCount  int
+	AgentIDs     []string
 }
 
 type roleUpdateResult struct {
@@ -460,6 +476,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
 		}
 		updatedRole = localRole{
+			AgentIDs:     currentRole.AgentIDs,
 			ID:           updatedRow.ID.String(),
 			PrincipalURN: updatedRow.RoleUrn,
 			Name:         updatedRow.WorkosName,
@@ -501,12 +518,20 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		}
 	}
 
-	if payload.MemberIds != nil {
-		var memberSyncs []workosSync
-		if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, payload.MemberIds); err != nil {
+	if payload.AgentIds != nil {
+		if err := r.assignAgentsToRoleTx(ctx, tx, gramOrgID, currentRole.PrincipalURN, payload.AgentIds); err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
-		workosSyncs = append(workosSyncs, memberSyncs...)
+	}
+
+	if payload.MemberIds != nil || payload.AgentIds != nil {
+		if payload.MemberIds != nil {
+			var memberSyncs []workosSync
+			if _, memberSyncs, err = r.assignMembersToRoleTx(ctx, tx, gramOrgID, currentRole.Slug, payload.MemberIds); err != nil {
+				return RoleUpdateResult{}, RoleReconciliation{}, err
+			}
+			workosSyncs = append(workosSyncs, memberSyncs...)
+		}
 		updatedRole, err = r.getLocalRoleByIDTx(ctx, tx, gramOrgID, payload.ID)
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, err
@@ -565,6 +590,14 @@ func (r *RoleManager) DeleteRole(ctx context.Context, gramOrgID, workosOrgID, ro
 	if err != nil {
 		return localRole{}, err
 	}
+	if err := repo.New(tx).SoftDeleteAgentRoleAssignmentsByRole(ctx, repo.SoftDeleteAgentRoleAssignmentsByRoleParams{
+		OrganizationID: gramOrgID,
+		RoleUrn:        currentRole.PrincipalURN,
+	}); err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+		return localRole{}, oops.E(oops.CodeUnexpected, err, "soft-delete agent role assignments for deleted role").LogError(ctx, r.logger)
+	}
+
 	rows, err := repo.New(tx).ListOrganizationRoleAssignmentsBySlug(ctx, repo.ListOrganizationRoleAssignmentsBySlugParams{
 		OrganizationID: gramOrgID,
 		WorkosRoleSlug: currentRole.Slug,
@@ -1188,6 +1221,11 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").LogError(ctx, r.logger)
 	}
 
+	agentIDs, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return localRole{}, err
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
 		ID:           row.ID.String(),
@@ -1198,6 +1236,7 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
 		MemberCount:  int(row.MemberCount),
+		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
 
@@ -1213,6 +1252,11 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 		return localRole{}, oops.E(oops.CodeUnexpected, err, "get role").LogError(ctx, r.logger)
 	}
 
+	agentIDs, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return localRole{}, err
+	}
+
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSource("db"))
 	return localRole{
 		ID:           row.ID.String(),
@@ -1223,6 +1267,7 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 		CreatedAt:    conv.FromPGTimestamptz(row.WorkosCreatedAt),
 		UpdatedAt:    conv.FromPGTimestamptz(row.WorkosUpdatedAt),
 		MemberCount:  int(row.MemberCount),
+		AgentIDs:     agentIDs[row.RoleUrn],
 	}, nil
 }
 
@@ -1236,6 +1281,112 @@ type memberAssignmentTarget struct {
 type requestedMemberAssignment struct {
 	InputIDs []string
 	UserID   string
+}
+
+// agentIDsByRoleTx maps each role principal URN to the agents assigned to it.
+// Agent membership is small, and reading it once for the organization keeps the
+// roles page at one query rather than one per role.
+func (r *RoleManager) agentIDsByRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string) (map[string][]string, error) {
+	rows, err := repo.New(dbtx).ListAgentRoleAssignments(ctx, gramOrgID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments").LogError(ctx, r.logger)
+	}
+
+	byRole := make(map[string][]string, len(rows))
+	for _, row := range rows {
+		byRole[row.PrincipalUrn] = append(byRole[row.PrincipalUrn], row.AgentID.String())
+	}
+	return byRole, nil
+}
+
+// assignAgentsToRoleTx makes agentIDs the complete agent membership of one role.
+// Member assignment is additive because a member can be taken off a role from
+// the team page; an agent has no such surface, so this write is declarative and
+// an omitted agent loses the role.
+//
+// Agents that already hold the role stay assignable even once suspended or
+// revoked, so re-saving a role does not silently drop them. Only adding a
+// suspended or revoked agent is refused.
+func (r *RoleManager) assignAgentsToRoleTx(ctx context.Context, dbtx repo.DBTX, gramOrgID, rolePrincipalURN string, agentIDs []string) error {
+	// Serialize this role's agent membership for the transaction. The caller's
+	// role row lock only covers organization roles — a system role lives in
+	// global_roles and has no per-organization row — so without this two
+	// concurrent saves could each read the membership before either replaced
+	// it, and the later write would drop the earlier one's agents.
+	if err := repo.New(dbtx).LockAgentRoleAssignments(ctx, repo.LockAgentRoleAssignmentsParams{
+		OrganizationID: gramOrgID,
+		RoleUrn:        rolePrincipalURN,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock agent role assignments").LogError(ctx, r.logger)
+	}
+
+	assignable, err := repo.New(dbtx).ListAssignableAgents(ctx, gramOrgID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, r.logger)
+	}
+	allowed := make(map[uuid.UUID]struct{}, len(assignable))
+	for _, agent := range assignable {
+		allowed[agent.ID] = struct{}{}
+	}
+
+	assigned, err := r.agentIDsByRoleTx(ctx, dbtx, gramOrgID)
+	if err != nil {
+		return err
+	}
+	for _, existing := range assigned[rolePrincipalURN] {
+		agentID, err := uuid.Parse(existing)
+		if err != nil {
+			continue
+		}
+		allowed[agentID] = struct{}{}
+	}
+
+	retained := make([]uuid.UUID, 0, len(agentIDs))
+	seen := make(map[uuid.UUID]struct{}, len(agentIDs))
+	for _, raw := range agentIDs {
+		agentID, err := uuid.Parse(raw)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid agent ID").LogError(ctx, r.logger)
+		}
+		if _, ok := allowed[agentID]; !ok {
+			return oops.E(oops.CodeBadRequest, nil, "agent cannot be assigned a role").LogError(ctx, r.logger)
+		}
+		if _, duplicate := seen[agentID]; duplicate {
+			continue
+		}
+		seen[agentID] = struct{}{}
+		retained = append(retained, agentID)
+	}
+
+	slices.SortFunc(retained, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, agentID := range retained {
+		// The upsert selects the agent row, so it writes nothing when the agent
+		// was deleted between validation and here. Treating that as success
+		// would report a membership that does not exist.
+		written, err := repo.New(dbtx).UpsertAgentRoleAssignment(ctx, repo.UpsertAgentRoleAssignmentParams{
+			OrganizationID: gramOrgID,
+			RoleUrn:        rolePrincipalURN,
+			AgentID:        agentID,
+		})
+		if err != nil {
+			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+			return oops.E(oops.CodeUnexpected, err, "upsert agent role assignment").LogError(ctx, r.logger)
+		}
+		if written == 0 {
+			return oops.E(oops.CodeConflict, nil, "agent is no longer available to assign").LogError(ctx, r.logger)
+		}
+	}
+
+	if err := repo.New(dbtx).SoftDeleteAgentRoleAssignmentsExcept(ctx, repo.SoftDeleteAgentRoleAssignmentsExceptParams{
+		OrganizationID:   gramOrgID,
+		RoleUrn:          rolePrincipalURN,
+		RetainedAgentIds: retained,
+	}); err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
+		return oops.E(oops.CodeUnexpected, err, "remove agent role assignments").LogError(ctx, r.logger)
+	}
+
+	return nil
 }
 
 func (r *RoleManager) memberAssignmentTargetsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, memberIDs []string) ([]memberAssignmentTarget, error) {
@@ -1496,6 +1647,7 @@ func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *ge
 		IsSystem:     isSystemRole(role.Slug),
 		Grants:       grants,
 		MemberCount:  role.MemberCount,
+		AgentIds:     role.AgentIDs,
 		CreatedAt:    conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 		UpdatedAt:    conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}

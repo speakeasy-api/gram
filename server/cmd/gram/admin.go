@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"log/slog"
 	"net"
 	"net/http"
@@ -55,6 +57,25 @@ func newAdminStripeClient(
 		return nil
 	}
 	return client
+}
+
+// resolveAdminAssetStorage never guesses a filesystem location. A gs URI is
+// self-describing; other locations require an explicit backend.
+func resolveAdminAssetStorage(backend, uri string) (assetStorageOptions, error) {
+	if uri == "" {
+		return assetStorageOptions{}, errors.New("assets URI is not configured")
+	}
+	if backend == "fs" {
+		return assetStorageOptions{assetsBackend: backend, assetsURI: uri}, nil
+	}
+	if backend != "" && backend != "gcs" {
+		return assetStorageOptions{}, errors.New("unsupported explicit assets backend")
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "gs" || parsed.Hostname() == "" || parsed.Host != parsed.Hostname() || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return assetStorageOptions{}, errors.New("assets backend unresolved: GCS requires a valid gs URI with a bucket")
+	}
+	return assetStorageOptions{assetsBackend: "gcs", assetsURI: uri}, nil
 }
 
 func newAdminCommand() *cli.Command {
@@ -239,6 +260,8 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
 			Required: false,
 		},
+		&cli.StringFlag{Name: "assets-backend", EnvVars: []string{"GRAM_ASSETS_BACKEND"}, Usage: "Asset backend (fs or gcs); inferred only from a gs:// URI when omitted"},
+		&cli.StringFlag{Name: "assets-uri", EnvVars: []string{"GRAM_ASSETS_URI"}, Usage: "Shared asset storage location; logos are unavailable when unresolved"},
 		// The server's own flag names and environment variables, so a deployment
 		// already running gram-server needs no new secrets. The encryption key
 		// is the application-wide one, not admin-encryption-key.
@@ -427,7 +450,28 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL))
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+			if applicationEncryption != nil {
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+			} else {
+				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
+			if err != nil {
+				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
+			} else {
+				assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetOptions)
+				if err != nil {
+					return fmt.Errorf("initialize admin asset storage: %w", err)
+				}
+				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
+				adminService.SetAssetService(assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage))
+			}
+			admin.Attach(mux, adminService)
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -524,4 +568,16 @@ func newAdminCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+// newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.
+func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
+	if key == "" {
+		return nil, nil
+	}
+	client, err := encryption.New(key)
+	if err != nil {
+		return nil, fmt.Errorf("create remote session encryption client: %w", err)
+	}
+	return client, nil
 }

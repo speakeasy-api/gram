@@ -133,7 +133,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	result, err := ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID, targetID.String()))
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 	// client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	q := repo.New(ti.conn)
 	activeSessions, err := q.CountActiveRemoteSessionsByClientID(ctx, clientUUID)
