@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -28,16 +29,25 @@ const liveWorkloadSubject = "repo:acme/payments-api:ref:refs/heads/main"
 // liveWorkloadAudience is the authorization server the assertions address.
 const liveWorkloadAudience = "https://gram.example.com/mcp/workload-live"
 
-// liveWorkloadFixture is one organization with one project, a live issuer, and
-// a verifier that fetches that issuer's key set over HTTPS. Issuer and
-// admission rows are left to each test, since which tier holds them is what
-// the tests vary.
+// liveWorkloadFixture is one organization with one project, a dev-idp serving
+// as the workload issuer over HTTPS, and a verifier that fetches that issuer's
+// key set. Issuer and admission rows are left to each test, since which tier
+// holds them is what the tests vary.
 type liveWorkloadFixture struct {
 	conn           *pgxpool.Pool
 	verifier       *clientauth.Verifier
-	issuer         *oauthtest.WorkloadIssuer
+	issuer         *devidptest.Instance
 	organizationID string
 	projectID      uuid.UUID
+
+	// jwksURI is the key set the issuer's discovery document advertises,
+	// recorded on issuer rows exactly as registration would store it.
+	jwksURI string
+
+	// requestsAtSetup is how many requests had reached the issuer once the
+	// fixture was built. Discovery is one of them, so a test asserting that a
+	// rejection reached the issuer compares against this rather than zero.
+	requestsAtSetup int64
 }
 
 func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
@@ -46,7 +56,8 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	conn, err := infra.CloneTestDatabase(t, "workloadlive")
 	require.NoError(t, err)
 
-	issuer := oauthtest.LaunchWorkloadIssuer(t)
+	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
+	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -74,11 +85,13 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	organizationID := newLiveWorkloadOrganization(t, conn)
 
 	return liveWorkloadFixture{
-		conn:           conn,
-		verifier:       verifier,
-		issuer:         issuer,
-		organizationID: organizationID,
-		projectID:      newLiveWorkloadProject(t, conn, organizationID),
+		conn:            conn,
+		verifier:        verifier,
+		issuer:          issuer,
+		organizationID:  organizationID,
+		projectID:       newLiveWorkloadProject(t, conn, organizationID),
+		jwksURI:         jwksURI,
+		requestsAtSetup: issuer.Requests(),
 	}
 }
 
@@ -109,8 +122,8 @@ func newLiveWorkloadProject(t *testing.T, conn *pgxpool.Pool, organizationID str
 	return project.ID
 }
 
-// seedIssuer registers the live issuer in a tenancy, with its jwks_uri pointing
-// at the key set the issuer really serves.
+// seedIssuer registers the dev-idp in a tenancy, with the issuer identifier
+// and jwks_uri its discovery document advertises.
 func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, projectID uuid.NullUUID) uuid.UUID {
 	t.Helper()
 
@@ -120,7 +133,7 @@ func (f liveWorkloadFixture) seedIssuer(t *testing.T, organizationID string, pro
 		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, organizationID, projectID, "live-issuer", f.issuer.URL, f.issuer.URL+"/jwks.json").Scan(&id)
+	`, organizationID, projectID, "live-issuer", f.issuer.OAuth21URL, f.jwksURI).Scan(&id)
 	require.NoError(t, err)
 
 	return id
@@ -161,7 +174,7 @@ func (f liveWorkloadFixture) endpoint(organizationID string, projectID uuid.UUID
 func (f liveWorkloadFixture) present(t *testing.T, endpoint *mcp.ResolvedMcpEndpoint) error {
 	t.Helper()
 
-	raw := f.issuer.Mint(t, f.issuer.WorkloadClaims(liveWorkloadSubject, liveWorkloadAudience))
+	raw := oauthtest.MintWorkloadAssertion(t, f.issuer, oauthtest.WorkloadClaims(f.issuer, liveWorkloadSubject, liveWorkloadAudience))
 
 	err := mcp.AdmitWorkloadAssertion(t.Context(), f.conn, f.verifier, endpoint, clientauth.Audiences{
 		Issuer:   liveWorkloadAudience,
@@ -187,7 +200,7 @@ func TestWorkloadAssertionPipeline_AdmittedWorkloadFromALiveIssuerPasses(t *test
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.NoError(t, err)
-	require.Positive(t, f.issuer.Requests(), "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
+	require.Greater(t, f.issuer.Requests(), f.requestsAtSetup, "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
 }
 
 // An issuer registered by a different organization is not trusted here, and
@@ -208,7 +221,7 @@ func TestWorkloadAssertionPipeline_IssuerOutsideTheTenancyMakesNoOutboundRequest
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
-	require.Zero(t, f.issuer.Requests(), "an untrusted issuer must be refused before any key set is fetched")
+	require.Equal(t, f.requestsAtSetup, f.issuer.Requests(), "an untrusted issuer must be refused before any key set is fetched")
 }
 
 // A soft-deleted issuer row is how an administrator withdraws trust. It stops
@@ -225,7 +238,7 @@ func TestWorkloadAssertionPipeline_SoftDeletedIssuerIsUntrusted(t *testing.T) {
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
-	require.Zero(t, f.issuer.Requests(), "a withdrawn issuer must be refused before any key set is fetched")
+	require.Equal(t, f.requestsAtSetup, f.issuer.Requests(), "a withdrawn issuer must be refused before any key set is fetched")
 }
 
 // A subject admitted in one project is not admitted in a sibling project of the

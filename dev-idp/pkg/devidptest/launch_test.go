@@ -100,6 +100,102 @@ func TestFactories_UserOrgMembership(t *testing.T) {
 	require.Equal(t, org.Organization.ID, mem.Membership.OrganizationID)
 }
 
+// publishedKIDs reads the kids the instance's OAuth 2.1 JWKS currently serves.
+func publishedKIDs(t *testing.T, inst *devidptest.Instance) []string {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, inst.OAuth21URL+"/.well-known/jwks.json", nil)
+	require.NoError(t, err)
+	resp, err := inst.Client().Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var doc struct {
+		Keys []struct {
+			Kid string `json:"kid"`
+		} `json:"keys"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&doc))
+
+	kids := make([]string, 0, len(doc.Keys))
+	for _, key := range doc.Keys {
+		kids = append(kids, key.Kid)
+	}
+	return kids
+}
+
+func TestLaunch_TLSServesEverythingOverHTTPS(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{TLS: true})
+
+	require.True(t, strings.HasPrefix(inst.Issuer, "https://"), "issuer %q", inst.Issuer)
+	require.True(t, strings.HasPrefix(inst.OAuth21URL, "https://"), "oauth2-1 issuer %q", inst.OAuth21URL)
+	require.NotNil(t, inst.RootCAs())
+
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(inst.OAuth21Metadata(t), &meta))
+	require.Equal(t, inst.OAuth21URL, meta["issuer"], "discovery must advertise the https issuer it is served from")
+	require.Equal(t, inst.OAuth21URL+"/.well-known/jwks.json", meta["jwks_uri"])
+}
+
+func TestLaunch_PlainHTTPHasNoCertificateToTrust(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{})
+
+	require.True(t, strings.HasPrefix(inst.Issuer, "http://"), "issuer %q", inst.Issuer)
+	require.Nil(t, inst.RootCAs())
+}
+
+// The issuer URL stays put across a rotation, which is what makes it a
+// rotation rather than a second issuer.
+func TestLaunch_RotateKeyRepublishesTheKeySet(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{TLS: true})
+	issuer := inst.OAuth21URL
+	retired := inst.KeyID()
+	require.Equal(t, []string{retired}, publishedKIDs(t, inst))
+
+	inst.RotateKey(t)
+
+	require.NotEqual(t, retired, inst.KeyID())
+	require.Equal(t, []string{inst.KeyID()}, publishedKIDs(t, inst))
+	require.Equal(t, issuer, inst.OAuth21URL)
+}
+
+func TestLaunch_StopTakesTheServerOffTheNetwork(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{TLS: true})
+	require.NotEmpty(t, publishedKIDs(t, inst), "the server must answer before it is stopped, or the test proves nothing")
+
+	inst.Stop()
+	inst.Stop()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, inst.OAuth21URL+"/.well-known/jwks.json", nil)
+	require.NoError(t, err)
+	resp, err := inst.Client().Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	require.Error(t, err)
+}
+
+func TestLaunch_RequestsCountsWhatReachesTheServer(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{})
+	before := inst.Requests()
+
+	inst.OAuth21Metadata(t)
+	publishedKIDs(t, inst)
+
+	require.Equal(t, before+2, inst.Requests())
+}
+
 func TestLaunch_SeedsDefaultUserAndCurrentUsers(t *testing.T) {
 	t.Parallel()
 

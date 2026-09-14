@@ -111,6 +111,48 @@ func TestJWKSHandlerServesValidDocument(t *testing.T) {
 	require.NotEmpty(t, jwk.E)
 }
 
+// The handler is taken before the rotation on purpose: modes mount it once at
+// boot, so a handler that captured the key it was built with would keep
+// serving the retired set.
+func TestRotateRepublishesOnlyTheNewKey(t *testing.T) {
+	t.Parallel()
+
+	ks, err := keystore.New(nil, newLogger(t))
+	require.NoError(t, err)
+	handler := ks.JWKSHandler()
+	retired := ks.KID()
+
+	next, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	require.NoError(t, ks.Rotate(next))
+
+	require.True(t, ks.PrivateKey().Equal(next))
+	require.NotEqual(t, retired, ks.KID())
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
+
+	var doc struct {
+		Keys []struct {
+			Kid string `json:"kid"`
+		} `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
+	require.Len(t, doc.Keys, 1, "a rotation replaces the published key rather than adding to it")
+	require.Equal(t, ks.KID(), doc.Keys[0].Kid)
+}
+
+func TestRotateRejectsNilKey(t *testing.T) {
+	t.Parallel()
+
+	ks, err := keystore.New(nil, newLogger(t))
+	require.NoError(t, err)
+	kid := ks.KID()
+
+	require.Error(t, ks.Rotate(nil))
+	require.Equal(t, kid, ks.KID(), "a refused rotation keeps the current key")
+}
+
 func TestNewRejectsInvalidPEM(t *testing.T) {
 	t.Parallel()
 

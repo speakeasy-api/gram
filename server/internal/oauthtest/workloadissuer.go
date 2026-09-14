@@ -1,14 +1,8 @@
 package oauthtest
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"log/slog"
+	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,178 +11,77 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	mockoidc "github.com/speakeasy-api/gram/mock-oidc"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 )
 
-// WorkloadIssuer is a real OIDC issuer standing in for the platform that
-// vouches for a workload: it serves a discovery document and a key set over
-// HTTP, and mints assertions signed with the key it publishes.
+// A dev-idp stands in for the platform that vouches for a workload: its OAuth
+// 2.1 issuer, OAuth21URL, is the issuer identifier, and it serves a real
+// discovery document and key set over HTTP. Launch it with LaunchOpts.TLS,
+// because jwks.NewRemoteSource refuses a jwks_uri that is not https, which is
+// a rule worth exercising rather than working around.
 //
-// The point of it being real is what an in-process key source cannot express.
-// A synthetic source hands the verifier a key set directly, so "the issuer
-// rotated its key" and "the issuer is unreachable" have no honest
-// representation — there is nothing to rotate and nothing to take away. Here
-// both are the server doing what a real one does, and the verifier reaches it
-// the way it reaches any customer's issuer: discovery, a fetch, a cache.
-type WorkloadIssuer struct {
-	// URL is the issuer identifier, which is also where its documents live.
-	URL string
+// dev-idp mints id_tokens for its own users and clients, whose sub and aud do
+// not describe a workload addressed to Gram. So assertions are signed here
+// with the key the dev-idp publishes, and verification reaches the dev-idp the
+// way it reaches a customer's issuer: discovery, a fetch, a cache. What an
+// in-process key source cannot express becomes real as well: the dev-idp can
+// rotate its key, go offline, and count what reached it.
 
-	server  *httptest.Server
-	logger  *slog.Logger
-	config  *mockoidc.Config
-	mu      sync.Mutex
-	signer  jose.Signer
-	keyID   string
-	stopped bool
-
-	// requests counts every HTTP request the issuer has served.
-	requests atomic.Int64
-}
-
-// LaunchWorkloadIssuer starts an issuer and stops it when the test ends.
-func LaunchWorkloadIssuer(t *testing.T) *WorkloadIssuer {
+// DiscoverWorkloadJWKSURI reads the dev-idp's OpenID discovery document and
+// returns the jwks_uri it advertises, so a key source is built from what the
+// issuer publishes rather than a path the test assumes.
+//
+// This is a request to the dev-idp. A test counting requests takes its
+// baseline after calling it.
+func DiscoverWorkloadJWKSURI(t *testing.T, issuer *devidptest.Instance) string {
 	t.Helper()
 
-	config := &mockoidc.Config{Provider: mockoidc.ProviderConfig{}}
-	// Discarded: mock-oidc's request logging is noise for these tests, and
-	// nothing here asserts on it.
-	logger := slog.New(slog.DiscardHandler)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, issuer.OAuth21URL+"/.well-known/openid-configuration", nil)
+	require.NoError(t, err, "build discovery request")
 
-	// TLS because jwks.NewRemoteSource refuses a jwks_uri that is not https,
-	// which is a rule worth exercising rather than working around: a key set
-	// fetched in the clear is one an on-path attacker can replace.
-	//
-	// The issuer identifier has to be the URL the documents are served from,
-	// and that URL is only known once the listener is bound — so the server
-	// starts holding nothing and is given its handler afterwards.
-	server := httptest.NewUnstartedServer(http.NotFoundHandler())
-	server.StartTLS()
+	resp, err := issuer.Client().Do(req)
+	require.NoError(t, err, "fetch discovery document")
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode, "discovery status")
 
-	issuer := &WorkloadIssuer{
-		URL:      server.URL,
-		server:   server,
-		logger:   logger,
-		config:   config,
-		mu:       sync.Mutex{},
-		signer:   nil,
-		keyID:    "",
-		stopped:  false,
-		requests: atomic.Int64{},
+	var discovery struct {
+		Issuer  string `json:"issuer"`
+		JWKSURI string `json:"jwks_uri"`
 	}
-	issuer.rotate(t)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&discovery), "decode discovery document")
+	require.Equal(t, issuer.OAuth21URL, discovery.Issuer, "discovery must name the issuer it is served from")
+	require.NotEmpty(t, discovery.JWKSURI, "discovery must advertise a jwks_uri")
 
-	t.Cleanup(issuer.Stop)
-
-	return issuer
+	return discovery.JWKSURI
 }
 
-// rotate generates a key, publishes it, and mints with it from here on.
-func (w *WorkloadIssuer) rotate(t *testing.T) {
+// MintWorkloadAssertion signs claims with the dev-idp's current key, naming
+// its current kid. After RotateKey it signs with the new key, and anything
+// minted before names a kid the published set no longer contains.
+func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, claims jwt.Claims) string {
 	t.Helper()
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err, "generate issuer key")
-
-	provider, err := mockoidc.NewProvider(w.config, w.logger, w.URL, key)
-	require.NoError(t, err, "build provider")
-
-	// The provider derives its kid from the key it publishes, so the signer
-	// has to take that value rather than invent one: an assertion naming a kid
-	// absent from the served set is rejected as an unknown key, which is a
-	// real rejection but not the one any of these tests mean.
 	signer, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: jose.RS256, Key: key},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), provider.KeyID()),
+		jose.SigningKey{Algorithm: jose.RS256, Key: issuer.SigningKey()},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), issuer.KeyID()),
 	)
 	require.NoError(t, err, "build signer")
-
-	served := mockoidc.NewServer(provider, w.logger).Handler()
-
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.signer = signer
-	w.keyID = provider.KeyID()
-	w.server.Config.Handler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		w.requests.Add(1)
-		served.ServeHTTP(rw, r)
-	})
-}
-
-// Requests is how many HTTP requests have reached the issuer. A test asserting
-// that a rejection made no outbound request pins it here, at the only server
-// the request could have gone to, rather than inferring it from the verdict.
-func (w *WorkloadIssuer) Requests() int64 {
-	return w.requests.Load()
-}
-
-// Rotate replaces the issuer's signing key and publishes the new one, exactly
-// as an issuer rotating on its own schedule would. Assertions already minted
-// name a kid the served key set no longer contains.
-func (w *WorkloadIssuer) Rotate(t *testing.T) {
-	t.Helper()
-	w.rotate(t)
-}
-
-// Stop takes the issuer off the network. Its key set stops being reachable
-// while assertions it minted stay perfectly valid, which is the shape of a
-// real outage.
-func (w *WorkloadIssuer) Stop() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.stopped {
-		return
-	}
-	w.stopped = true
-	w.server.Close()
-}
-
-// RootCAs is the pool that trusts this issuer's certificate. A caller builds
-// its guardian policy with guardian.WithTLSRootCAs so the fetch reaches a
-// server whose certificate nothing else has heard of.
-func (w *WorkloadIssuer) RootCAs() *x509.CertPool {
-	pool := x509.NewCertPool()
-	pool.AddCert(w.server.Certificate())
-	return pool
-}
-
-// KeySource resolves this issuer's published key set over the network, rather
-// than handing the verifier a key set it never had to fetch.
-//
-// The jwks_uri is the one the discovery document advertises, so the path is
-// the server's to choose and this cannot drift from what it serves.
-func (w *WorkloadIssuer) KeySource(t *testing.T) jwks.Source {
-	t.Helper()
-
-	source, err := jwks.NewRemoteSource(w.URL + "/jwks.json")
-	require.NoError(t, err, "build remote key source")
-	return source
-}
-
-// Mint signs claims with the issuer's current key.
-func (w *WorkloadIssuer) Mint(t *testing.T, claims jwt.Claims) string {
-	t.Helper()
-
-	w.mu.Lock()
-	signer := w.signer
-	w.mu.Unlock()
 
 	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
 	require.NoError(t, err, "mint assertion")
 	return raw
 }
 
-// WorkloadClaims is an assertion this issuer vouching for externalSubject,
+// WorkloadClaims is an assertion the dev-idp vouching for externalSubject,
 // addressed to audience. Every field satisfies the verifier, so a test can
 // change exactly one and know what it is testing.
 //
-// iss is the issuer and sub is the workload — unlike a client assertion,
-// where RFC 7523 §3 requires both to be the client_id.
-func (w *WorkloadIssuer) WorkloadClaims(externalSubject, audience string) jwt.Claims {
+// iss is the issuer and sub is the workload, unlike a client assertion, where
+// RFC 7523 §3 requires both to be the client_id.
+func WorkloadClaims(issuer *devidptest.Instance, externalSubject, audience string) jwt.Claims {
 	now := time.Now()
 	return jwt.Claims{
-		Issuer:    w.URL,
+		Issuer:    issuer.OAuth21URL,
 		Subject:   externalSubject,
 		Audience:  jwt.Audience{audience},
 		Expiry:    jwt.NewNumericDate(now.Add(2 * time.Minute)),
