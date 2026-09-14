@@ -22,7 +22,7 @@ func IsAbsoluteHTTP(raw string) bool {
 		return false
 	}
 
-	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != "" && u.User == nil
 }
 
 // IsAbsoluteHTTPS reports whether raw is an absolute HTTPS URL carrying a host.
@@ -36,7 +36,7 @@ func IsAbsoluteHTTPS(raw string) bool {
 		return false
 	}
 
-	return u.Scheme == "https" && u.Host != "" && u.User == nil
+	return u.Scheme == "https" && u.Hostname() != "" && u.User == nil
 }
 
 // IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Gram may
