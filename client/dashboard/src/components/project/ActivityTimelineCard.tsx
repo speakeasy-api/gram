@@ -1,4 +1,9 @@
-import { IdentityLink } from "@/components/identity-link";
+import {
+  auditActorPrincipal,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { Link as TextLink } from "@/components/ui/Link";
@@ -22,6 +27,7 @@ export function ActivityTimelineCard({
   isPending,
   viewAllHref,
 }: Props): JSX.Element {
+  const identities = useAuditPrincipals(logs);
   const logGroups = groupLogsByDate(logs);
   const { orgSlug } = useSlugs();
 
@@ -57,6 +63,7 @@ export function ActivityTimelineCard({
                   const actor =
                     log.actorDisplayName ?? log.actorSlug ?? "Unknown";
                   const actionLabel = renderVerb(log);
+                  const subjectPrincipal = auditSubjectPrincipal(log);
                   const subjectLabel = log.subjectDisplayName
                     ? formatSubjectLabel(
                         log.subjectDisplayName,
@@ -72,23 +79,29 @@ export function ActivityTimelineCard({
                       <ActionIconTile action={log.action} className="mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm">
-                          <IdentityLink
-                            identifier={
-                              log.actorType === "user"
-                                ? { userId: log.actorId }
-                                : null
-                            }
+                          <AuditPrincipalLink
+                            principal={auditActorPrincipal(log)}
+                            identities={identities}
+                            fallback={actor}
                             className="font-medium"
-                          >
-                            {actor}
-                          </IdentityLink>{" "}
+                          />{" "}
                           <span className="text-muted-foreground">
                             {actionLabel}
                           </span>
-                          {log.subjectDisplayName && (
+                          {(log.subjectDisplayName || subjectPrincipal) && (
                             <>
                               {" "}
-                              {href ? (
+                              {subjectPrincipal ? (
+                                <AuditPrincipalLink
+                                  principal={subjectPrincipal}
+                                  identities={identities}
+                                  fallback={
+                                    log.subjectDisplayName ||
+                                    subjectPrincipal.urn
+                                  }
+                                  className="font-medium"
+                                />
+                              ) : href ? (
                                 <TextLink
                                   asChild
                                   size="sm"
