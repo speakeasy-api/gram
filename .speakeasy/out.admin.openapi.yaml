@@ -4752,11 +4752,16 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
           format: int64
-      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+          format: int64
+      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.'
       required:
         - issuer
         - global_client_count
         - tenant_client_count
+        - trusted_user_session_issuer_count
     IssuerConvergenceCandidate:
       type: object
       properties:
@@ -4820,7 +4825,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -4844,6 +4849,10 @@ components:
           type: integer
           description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
           format: int64
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of user_session_issuers that trust the source. Any non-zero value blocks migration.
+          format: int64
         warnings:
           type: array
           items:
@@ -4856,6 +4865,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuer_count
         - can_migrate
         - target_tenant_client_count
     ListGlobalRemoteSessionIssuersResult:
@@ -5097,6 +5107,14 @@ components:
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
+        jwks_cache_expires_at:
+          type: string
+          description: When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.
+          format: date-time
+        jwks_fetched_at:
+          type: string
+          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          format: date-time
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.

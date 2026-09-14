@@ -283,6 +283,12 @@ type CreateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -375,6 +381,9 @@ type GetGlobalIssuerResponseBody struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount *int `form:"tenant_client_count,omitempty" json:"tenant_client_count,omitempty" xml:"tenant_client_count,omitempty"`
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount *int `form:"trusted_user_session_issuer_count,omitempty" json:"trusted_user_session_issuer_count,omitempty" xml:"trusted_user_session_issuer_count,omitempty"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "adminRemoteSessions"
@@ -407,6 +416,12 @@ type UpdateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -710,8 +725,11 @@ type GetGlobalIssuerMigratePreflightResponseBody struct {
 	// sides' values. The target issuer's values become authoritative for the
 	// migrated clients.
 	Warnings []*IssuerFieldMismatchResponseBody `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// Number of user_session_issuers that trust the source. Any non-zero value
+	// blocks migration.
+	TrustedUserSessionIssuerCount *int `form:"trusted_user_session_issuer_count,omitempty" json:"trusted_user_session_issuer_count,omitempty" xml:"trusted_user_session_issuer_count,omitempty"`
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
 	CanMigrate *bool `form:"can_migrate,omitempty" json:"can_migrate,omitempty" xml:"can_migrate,omitempty"`
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -3811,6 +3829,9 @@ type GlobalRemoteSessionIssuerResponseBody struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount *int `form:"tenant_client_count,omitempty" json:"tenant_client_count,omitempty" xml:"tenant_client_count,omitempty"`
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount *int `form:"trusted_user_session_issuer_count,omitempty" json:"trusted_user_session_issuer_count,omitempty" xml:"trusted_user_session_issuer_count,omitempty"`
 }
 
 // RemoteSessionIssuerResponseBody is used to define fields on response body
@@ -3843,6 +3864,12 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// When Gram last successfully fetched or revalidated the JWK Set. Null until
+	// the first successful refresh.
+	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
+	// When the persisted JWK Set becomes stale under the upstream cache policy.
+	// Null until the first successful refresh.
+	JwksCacheExpiresAt *string `form:"jwks_cache_expires_at,omitempty" json:"jwks_cache_expires_at,omitempty" xml:"jwks_cache_expires_at,omitempty"`
 	// RFC 8414 service_documentation; developer documentation for the issuer. Null
 	// when not advertised.
 	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
@@ -4242,6 +4269,8 @@ func NewCreateGlobalIssuerRemoteSessionIssuerOK(body *CreateGlobalIssuerResponse
 		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		JwksFetchedAt:                     body.JwksFetchedAt,
+		JwksCacheExpiresAt:                body.JwksCacheExpiresAt,
 		ServiceDocumentation:              body.ServiceDocumentation,
 		OpPolicyURI:                       body.OpPolicyURI,
 		OpTosURI:                          body.OpTosURI,
@@ -4808,8 +4837,9 @@ func NewListGlobalIssuersGatewayError(body *ListGlobalIssuersGatewayErrorRespons
 // service "getGlobalIssuer" endpoint result from a HTTP "OK" response.
 func NewGetGlobalIssuerGlobalRemoteSessionIssuerOK(body *GetGlobalIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
 	v := &adminremotesessions.GlobalRemoteSessionIssuer{
-		GlobalClientCount: *body.GlobalClientCount,
-		TenantClientCount: *body.TenantClientCount,
+		GlobalClientCount:             *body.GlobalClientCount,
+		TenantClientCount:             *body.TenantClientCount,
+		TrustedUserSessionIssuerCount: *body.TrustedUserSessionIssuerCount,
 	}
 	v.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(body.Issuer)
 
@@ -4983,6 +5013,8 @@ func NewUpdateGlobalIssuerRemoteSessionIssuerOK(body *UpdateGlobalIssuerResponse
 		RevocationEndpoint:                body.RevocationEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
 		JwksURI:                           body.JwksURI,
+		JwksFetchedAt:                     body.JwksFetchedAt,
+		JwksCacheExpiresAt:                body.JwksCacheExpiresAt,
 		ServiceDocumentation:              body.ServiceDocumentation,
 		OpPolicyURI:                       body.OpPolicyURI,
 		OpTosURI:                          body.OpTosURI,
@@ -6804,9 +6836,10 @@ func NewListGlobalIssuerConvergenceCandidatesGatewayError(body *ListGlobalIssuer
 // result from a HTTP "OK" response.
 func NewGetGlobalIssuerMigratePreflightIssuerMigratePreflightOK(body *GetGlobalIssuerMigratePreflightResponseBody) *adminremotesessions.IssuerMigratePreflight {
 	v := &adminremotesessions.IssuerMigratePreflight{
-		ClientCount:             *body.ClientCount,
-		CanMigrate:              *body.CanMigrate,
-		TargetTenantClientCount: *body.TargetTenantClientCount,
+		ClientCount:                   *body.ClientCount,
+		TrustedUserSessionIssuerCount: *body.TrustedUserSessionIssuerCount,
+		CanMigrate:                    *body.CanMigrate,
+		TargetTenantClientCount:       *body.TargetTenantClientCount,
 	}
 	v.McpServerNames = make([]string, len(body.McpServerNames))
 	for i, val := range body.McpServerNames {
@@ -7190,6 +7223,12 @@ func ValidateCreateGlobalIssuerResponseBody(body *CreateGlobalIssuerResponseBody
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
+	if body.JwksFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_fetched_at", *body.JwksFetchedAt, goa.FormatDateTime))
+	}
+	if body.JwksCacheExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_cache_expires_at", *body.JwksCacheExpiresAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -7243,6 +7282,9 @@ func ValidateGetGlobalIssuerResponseBody(body *GetGlobalIssuerResponseBody) (err
 	if body.TenantClientCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tenant_client_count", "body"))
 	}
+	if body.TrustedUserSessionIssuerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_user_session_issuer_count", "body"))
+	}
 	if body.Issuer != nil {
 		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -7289,6 +7331,12 @@ func ValidateUpdateGlobalIssuerResponseBody(body *UpdateGlobalIssuerResponseBody
 	}
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.JwksFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_fetched_at", *body.JwksFetchedAt, goa.FormatDateTime))
+	}
+	if body.JwksCacheExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_cache_expires_at", *body.JwksCacheExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -7578,6 +7626,9 @@ func ValidateGetGlobalIssuerMigratePreflightResponseBody(body *GetGlobalIssuerMi
 	}
 	if body.Warnings == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.TrustedUserSessionIssuerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_user_session_issuer_count", "body"))
 	}
 	if body.CanMigrate == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_migrate", "body"))
@@ -11540,6 +11591,9 @@ func ValidateGlobalRemoteSessionIssuerResponseBody(body *GlobalRemoteSessionIssu
 	if body.TenantClientCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tenant_client_count", "body"))
 	}
+	if body.TrustedUserSessionIssuerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trusted_user_session_issuer_count", "body"))
+	}
 	if body.Issuer != nil {
 		if err2 := ValidateRemoteSessionIssuerResponseBody(body.Issuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -11586,6 +11640,12 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	}
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.JwksFetchedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_fetched_at", *body.JwksFetchedAt, goa.FormatDateTime))
+	}
+	if body.JwksCacheExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_cache_expires_at", *body.JwksCacheExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -155,7 +155,8 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    trusted_remote_session_issuer_id
 )
 VALUES (
     NULL,
@@ -163,16 +164,18 @@ VALUES (
     $2,
     $3,
     $4,
-    'open'
+    'open',
+    $5::uuid
 )
 RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOrganizationUserSessionIssuerParams struct {
-	OrganizationID     pgtype.Text
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
+	OrganizationID               pgtype.Text
+	Slug                         string
+	AuthnChallengeMode           string
+	SessionDuration              pgtype.Interval
+	TrustedRemoteSessionIssuerID uuid.NullUUID
 }
 
 func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg CreateOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
@@ -181,6 +184,7 @@ func (q *Queries) CreateOrganizationUserSessionIssuer(ctx context.Context, arg C
 		arg.Slug,
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
+		arg.TrustedRemoteSessionIssuerID,
 	)
 	var i UserSessionIssuer
 	err := row.Scan(
@@ -2888,10 +2892,15 @@ SET
     authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
     session_duration = COALESCE($3::interval, session_duration),
     client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
+    trusted_remote_session_issuer_id = CASE
+        WHEN $5::text IS NULL THEN trusted_remote_session_issuer_id
+        WHEN BTRIM($5::text) = '' THEN NULL
+        ELSE $5::text::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $5
+WHERE id = $6
   AND project_id IS NULL
-  AND organization_id = $6::text
+  AND organization_id = $7::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, created_at, updated_at, deleted_at, deleted
 `
@@ -2901,6 +2910,7 @@ type UpdateOrganizationUserSessionIssuerParams struct {
 	AuthnChallengeMode            pgtype.Text
 	SessionDuration               pgtype.Interval
 	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  pgtype.Text
 	ID                            uuid.UUID
 	OrganizationID                string
 }
@@ -2911,6 +2921,7 @@ func (q *Queries) UpdateOrganizationUserSessionIssuer(ctx context.Context, arg U
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
 		arg.ClientIDMetadataAdmissionMode,
+		arg.TrustedRemoteSessionIssuerID,
 		arg.ID,
 		arg.OrganizationID,
 	)
