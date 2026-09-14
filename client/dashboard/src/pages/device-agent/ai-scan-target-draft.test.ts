@@ -23,8 +23,8 @@ const classic: AiScanTarget = {
   },
   gatewayClient: {
     cimdVendorKeys: [],
-    clientInfoNames: [],
     oauthClientIds: [],
+    clientInfoNames: [],
   },
   origin: "default",
   customized: false,
@@ -129,6 +129,11 @@ describe("draftToUpsertBody", () => {
         configDirs: [],
         processNames: ["ChatGPT"],
       },
+      gatewayClient: {
+        cimdVendorKeys: [],
+        oauthClientIds: [],
+        clientInfoNames: [],
+      },
       versionPlistKey: undefined,
     });
   });
@@ -173,7 +178,7 @@ describe("categoryLabel", () => {
   it("labels every category the editor offers", () => {
     expect(categoryLabel("harness")).toBe("Harness");
     expect(categoryLabel("assistant")).toBe("Assistant");
-    expect(categoryLabel("local_model")).toBe("Local model");
+    expect(categoryLabel("local_model")).toBe("Open model");
   });
 
   it("falls back to the raw value for an unknown category", () => {

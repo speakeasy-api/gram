@@ -146,7 +146,7 @@ export function EmployeeShadowAISection({
       <InlineEmptyState
         icon="radar"
         heading="No detected AI tools"
-        description="No AI harnesses or local model runtimes have been detected for this identity."
+        description="No AI harnesses or open models have been detected for this identity."
         orientation="horizontal"
       />
     );
