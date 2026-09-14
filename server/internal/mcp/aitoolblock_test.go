@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -58,6 +59,15 @@ func blockTarget(t *testing.T, ctx context.Context, ti *testInstance, organizati
 	require.NoError(t, err)
 }
 
+// disableTarget switches a built-in off for the organization, leaving any
+// recorded decision on the row untouched.
+func disableTarget(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, targetID string) {
+	t.Helper()
+
+	_, err := agentrepo.New(ti.conn).UpsertAIScanTarget(ctx, aitargets.BuiltInUpsertParams(organizationID, targetID, false))
+	require.NoError(t, err)
+}
+
 func authorizeRequest(t *testing.T, mcpSlug string, clientID string, redirectURI string) *http.Request {
 	t.Helper()
 
@@ -99,11 +109,16 @@ func TestHandleAuthorize_BlockedAITool_RefusedBeforeATokenExists(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])
-	// The denial names the tool and points at the way out. It is the end
-	// user's only clue: their client picked this credential at discovery and
-	// will not fall back to registration when authorize refuses it.
+	// The denial names the tool and says an administrator has to act. It is
+	// the end user's only clue: their client picked this credential at
+	// discovery and will not fall back to registration when authorize refuses
+	// it.
 	require.Contains(t, body["error_description"], "Claude Code")
-	require.Contains(t, body["error_description"], "request-access")
+	require.Contains(t, body["error_description"], "administrator must approve")
+	// Deliberately no request-access link: the only self-service flow grants
+	// an MCP role and cannot clear the tool's block, so offering it sent the
+	// user to a form whose success changed nothing.
+	require.NotContains(t, body["error_description"], "request-access")
 }
 
 // TestHandleAuthorize_UnblockedAITool_ConnectsNormally pins the other half of
@@ -150,4 +165,31 @@ func TestHandleAuthorize_BlockedToolDoesNotReachDynamicallyRegisteredClients(t *
 	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, client.ClientID, client.RedirectUris[0])))
 
 	require.Equal(t, http.StatusFound, w.Code)
+}
+
+// TestHandleAuthorize_BlockOnADisabledTargetDoesNotFire: a disabled target is
+// skipped by MatchGatewayCaller, so a block recorded on one can never match.
+// Leaving such a row in the fast-path query kept it non-empty, which forces
+// the catalog load, and a failure there is answered with 503 rather than by
+// allowing — so a stale block on a switched-off tool turned a catalog outage
+// into a refusal for the whole organization.
+func TestHandleAuthorize_BlockOnADisabledTargetDoesNotFire(t *testing.T) {
+	t.Parallel()
+
+	idpURL, err := url.Parse("https://idp.example.com/authorize?state=challenge123")
+	require.NoError(t, err)
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: idpURL})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+	disableTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, claudeCodeCIMDClientID, cimdLoopbackRedirect)))
+
+	require.Equal(t, http.StatusFound, w.Code, "a block on a disabled target must not refuse the connection")
+	require.Contains(t, w.Header().Get("Location"), "idp.example.com/authorize")
 }

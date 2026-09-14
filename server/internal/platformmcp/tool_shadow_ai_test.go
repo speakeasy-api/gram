@@ -167,6 +167,17 @@ func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
 			Access:      &accessgen.AIToolAccessSummary{State: "unreviewed", Enforceable: true},
 		},
 		{
+			// The headline case: it reads unreviewed BECAUSE no decision about
+			// it could be enforced, not because nobody has looked at it. A
+			// caller has to be able to tell this apart from the row above,
+			// and enforceable is the only field that says which it is.
+			TargetID:    "unreviewed-because-unenforceable",
+			DisplayName: "Not blockable",
+			Category:    "harness",
+			Signals:     []string{"installed"},
+			Access:      &accessgen.AIToolAccessSummary{State: "unreviewed", Enforceable: false},
+		},
+		{
 			TargetID:    "no-summary-at-all",
 			DisplayName: "Unknown",
 			Category:    "local_model",
@@ -179,13 +190,21 @@ func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
 
 	out, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{})
 	require.NoError(t, err)
-	require.Len(t, out.Tools, 2)
+	require.Len(t, out.Tools, 3)
 
 	require.Equal(t, "unreviewed", out.Tools[0].State)
 	require.True(t, out.Tools[0].Enforceable, "nobody has decided, but a decision could be enforced")
 
-	require.Empty(t, out.Tools[1].State, "a detection with no summary carries no state")
-	require.False(t, out.Tools[1].Enforceable, "and nothing about it can be enforced")
+	require.Equal(t, "unreviewed", out.Tools[1].State, "a tool publishing no document always reads unreviewed")
+	require.False(t, out.Tools[1].Enforceable, "and enforceable is what says why")
+
+	require.Empty(t, out.Tools[2].State, "a detection with no summary carries no state")
+	require.False(t, out.Tools[2].Enforceable, "and nothing about it can be enforced")
+
+	// The two unreviewed rows differ only in enforceable, which is the whole
+	// distinction the feature exists to draw.
+	require.Equal(t, out.Tools[0].State, out.Tools[1].State)
+	require.NotEqual(t, out.Tools[0].Enforceable, out.Tools[1].Enforceable)
 }
 
 // TestShadowAIListToolsRejectsUnknownCategory: an unknown category is a

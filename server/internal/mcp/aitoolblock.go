@@ -18,8 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
@@ -38,10 +36,6 @@ type AIToolBlockedError struct {
 
 	// DisplayName is that target's human-readable name.
 	DisplayName string
-
-	// RequestAccessURL is where the end user asks for the block to be
-	// lifted. Empty when it could not be built.
-	RequestAccessURL string
 }
 
 func (e *AIToolBlockedError) Error() string {
@@ -53,18 +47,20 @@ func (e *AIToolBlockedError) Error() string {
 // It names the tool and says plainly that an administrator has to act,
 // because this failure is a dead end for the person hitting it: MCP clients
 // commit to a client id at metadata-discovery time and do not fall back to
-// dynamic registration when /authorize refuses them. The request-access link
-// is the only recourse the text can offer, and it is why the dashboard warns
-// an admin before they record the block.
+// dynamic registration when /authorize refuses them.
+//
+// It carries no request-access link. The only self-service flow available is
+// the MCP RBAC request, which grants a role on an MCP server and cannot clear
+// ai_scan_targets.status for the blocked tool, so the link sent the user to a
+// form whose successful submission changed nothing about why they were
+// refused. Saying an administrator must act, without a link that cannot
+// deliver, is the honest version. This is why the dashboard warns an admin
+// before they record the block.
 func (e *AIToolBlockedError) Description() string {
-	message := fmt.Sprintf(
+	return fmt.Sprintf(
 		"%s is not permitted to connect to this organization's MCP servers; an organization administrator must approve it",
 		e.DisplayName,
 	)
-	if e.RequestAccessURL != "" {
-		message += ". Request access: " + e.RequestAccessURL
-	}
-	return message
 }
 
 // checkAIToolGatewayBlock refuses clientID when the organization has blocked
@@ -129,23 +125,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 	)
 	return &AIToolBlockedError{
-		TargetID:         target.ID,
-		DisplayName:      target.DisplayName,
-		RequestAccessURL: s.aiToolRequestAccessURL(ctx, organizationID, target),
+		TargetID:    target.ID,
+		DisplayName: target.DisplayName,
 	}
-}
-
-// aiToolRequestAccessURL builds the link the denial hands the end user. It
-// runs only on the denial path, so the organization lookup it needs costs
-// nothing on a normal connection.
-func (s *Service) aiToolRequestAccessURL(ctx context.Context, organizationID string, target aitargets.Target) string {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return ""
-	}
-	return mcpaccess.RequestAccessURL(s.siteURL, organization.Slug, mcpaccess.RequestAccessURLParams{
-		Scope:        "mcp:connect",
-		ResourceID:   target.ID,
-		ResourceName: target.DisplayName,
-	})
 }

@@ -353,6 +353,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL)
 	attachShadowInventory(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
+	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
@@ -404,9 +405,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
 }
 
-// attachShadowInventory keeps the Shadow tools registered on both browser and
-// local-fixture surfaces. Missing dependencies degrade to stable unavailable
-// descriptors, but the capability loss is logged rather than silently hidden.
+// attachShadowInventory keeps the Shadow MCP tools registered on both browser
+// and local-fixture surfaces. Missing dependencies degrade to stable
+// unavailable descriptors, but the capability loss is logged rather than
+// silently hidden.
+//
+// It deliberately does NOT attach the Shadow AI reads. They are
+// organization-scoped and depend on the detection inventory and the scan
+// library, none of which this constructor supplies, so hanging them off its
+// success would report them unavailable whenever an unrelated Shadow MCP
+// dependency is missing. Callers attach the two independently.
 func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMCPConfig, authorizer platformmcp.Authorizer, budget platformmcp.OperationBudget) bool {
 	shadowInventory, err := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), platformrepo.New(config.DB), budget, config.JWTSigningKey)
 	if err != nil {
@@ -414,7 +422,6 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 		return false
 	}
 	reader.WithShadowInventory(shadowInventory)
-	attachShadowAI(reader, config, authorizer, budget)
 	return true
 }
 
@@ -743,13 +750,16 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
 	} else {
 		platformReader.WithShadowInventory(shadowInventory)
-		attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 		shadowDecisionBudget := platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionConnectionLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.ShadowAccessDecisionOrganizationLimitName, ratelimit.PerMinute(platformmcp.ShadowAccessDecisionsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		}
 		platformReader.WithShadowDecisions(platformmcp.NewShadowDecisionService(config.DB, shadowInventory, config.ShadowReview, pluginInventory, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), shadowDecisionBudget))
 	}
+	// Outside the branch on purpose: the Shadow AI reads answer an
+	// organization-scoped question and share none of the Shadow MCP
+	// inventory's dependencies, so a failure there must not take them down.
+	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))

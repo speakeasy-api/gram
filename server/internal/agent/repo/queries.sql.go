@@ -533,12 +533,26 @@ SELECT id
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND status = 'blocked'
+  AND enabled
 ORDER BY id
 `
 
 // The gateway hot path asks only "does this organization block anything?".
 // Nearly every organization answers with an empty set, and that answer costs
 // one indexed lookup rather than loading the whole scan-target catalog.
+//
+// Disabled rows are excluded because MatchGatewayCaller skips a disabled
+// target, so a block recorded on one can never fire. Leaving it in kept the
+// fast path non-empty, which forces the catalog load below it, and a failure
+// there is answered with 503 rather than by allowing — so a stale block on a
+// switched-off tool turned a catalog outage into a refusal for the whole
+// organization.
+//
+// The matchers are deliberately NOT filtered here as well. A built-in stores
+// its choices only: its definition columns, gateway matchers included, are
+// empty by design because the matchers are compiled in. Requiring a non-empty
+// matcher column would silently drop every blocked built-in, which is most of
+// the catalog.
 func (q *Queries) ListBlockedAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listBlockedAITargetIDs, organizationID)
 	if err != nil {

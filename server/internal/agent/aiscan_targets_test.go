@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -445,4 +446,47 @@ func TestStoredAIScanKeyIsNeverServedAndDoesNotShapeTheEtag(t *testing.T) {
 	clean, err := ti.service.GetConfiguration(ctx, &gen.GetConfigurationPayload{})
 	require.NoError(t, err)
 	require.Equal(t, clean.Etag, stored.Etag, "the etag must hash the served document, not the stored one")
+}
+
+// TestListBlockedAITargetIDsExcludesDisabledTargets guards the gateway's
+// fast-path query directly.
+//
+// The check reads "does this organization block anything at all?" first, and
+// only loads the catalog when the answer is yes. A disabled target is skipped
+// by MatchGatewayCaller, so a block on one can never fire — but while its row
+// still came back here the fast path stayed non-empty, forcing the catalog
+// load. That load is answered with 503 on failure rather than by allowing, so
+// a stale block on a switched-off tool turned a catalog outage into a refusal
+// for the whole organization.
+//
+// Asserted on the query rather than through the handler on purpose: the
+// handler allows either way, because MatchGatewayCaller skips the disabled
+// target. The difference only shows under a catalog read failure, which there
+// is no seam to inject today.
+func TestListBlockedAITargetIDsExcludesDisabledTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAgentService(t)
+	organizationID := ti.orgID
+
+	queries := repo.New(ti.conn)
+
+	_, err := queries.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+		OrganizationID: organizationID,
+		ID:             "claude-code",
+		Status:         "blocked",
+		Rationale:      conv.ToPGTextEmpty("not approved"),
+	})
+	require.NoError(t, err)
+
+	blocked, err := queries.ListBlockedAITargetIDs(ctx, organizationID)
+	require.NoError(t, err)
+	require.Contains(t, blocked, "claude-code", "an enabled blocked target must be on the fast path")
+
+	_, err = queries.UpsertAIScanTarget(ctx, aitargets.BuiltInUpsertParams(organizationID, "claude-code", false))
+	require.NoError(t, err)
+
+	blocked, err = queries.ListBlockedAITargetIDs(ctx, organizationID)
+	require.NoError(t, err)
+	require.NotContains(t, blocked, "claude-code", "a block on a disabled target cannot fire, so it must not force the catalog load")
 }
