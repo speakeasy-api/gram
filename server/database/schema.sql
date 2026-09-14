@@ -5492,6 +5492,11 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   user_session_issuer_id uuid,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  -- Operator-authored server instructions answered by the gateway's initialize
+  -- and server/discover responses. NULL serves Gram's built-in gateway
+  -- instructions instead, so an unset row keeps the drill-down guidance every
+  -- gateway needs. Length is validated in application code.
+  instructions TEXT,
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',
