@@ -151,7 +151,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	for _, id := range blocked {
 		blockedIDs[id] = struct{}{}
 	}
-	if _, isBlocked := blockedIDs[target.ID]; isBlocked {
+	if _, isBlocked := blockedIDs[target.ID]; !isBlocked {
 		return nil
 	}
 

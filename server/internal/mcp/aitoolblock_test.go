@@ -199,7 +199,11 @@ func TestHandleAuthorize_BlockedIDsReadFails_AllowsTheCaller(t *testing.T) {
 func TestHandleAuthorize_CatalogReadFailsWhileBlocked_RefusedAsRetryable(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	// A working IdP, so the only thing standing between this request and a
+	// redirect is the unreadable catalog.
+	idpURL, err := url.Parse("https://idp.example.com/authorize?state=challenge123")
+	require.NoError(t, err)
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: idpURL})
 	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
