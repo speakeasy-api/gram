@@ -2656,6 +2656,22 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	require.Contains(t, readme, "codex plugin marketplace add")
 }
 
+// The README is the only place a collaborator learns what their access to the
+// repo is good for, and the Cursor sync is the reason they hold admin at all.
+func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "**Admin access.**")
+	require.Contains(t, readme, "Serve Marketplace From Cursor")
+	require.NotContains(t, readme, "Collaborators are granted pull permission")
+}
+
 func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
 	t.Parallel()
 	files, err := GeneratePluginPackages(nil, GenerateConfig{

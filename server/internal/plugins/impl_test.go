@@ -49,7 +49,10 @@ type mockGitHubPublisher struct {
 	addCollaboratorCalled bool
 	getRepoFilesCalled    bool
 	collaborators         []string
-	lastPushedFiles       map[string][]byte
+	// collaboratorPermissions records the permission each AddCollaborator call
+	// asked for, positionally aligned with collaborators.
+	collaboratorPermissions []string
+	lastPushedFiles         map[string][]byte
 	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
 	// to lastPushedFiles so a second publish carries the first publish's files.
 	repoFiles       map[string][]byte
@@ -110,9 +113,10 @@ func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ s
 	return "abc123", nil
 }
 
-func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, _ string) error {
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, permission string) error {
 	m.addCollaboratorCalled = true
 	m.collaborators = append(m.collaborators, username)
+	m.collaboratorPermissions = append(m.collaboratorPermissions, permission)
 	return nil
 }
 
@@ -1785,6 +1789,10 @@ func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, mock.addCollaboratorCalled)
 	require.Equal(t, []string{"octocat", "hubot", "monalisa"}, mock.collaborators)
+	// Admin, not read: Cursor gates "Serve Marketplace From Cursor" — and other
+	// platforms gate parts of their marketplace setup — on repository admin, and
+	// nothing in Gram can escalate a collaborator afterwards.
+	require.Equal(t, []string{"admin", "admin", "admin"}, mock.collaboratorPermissions)
 }
 
 func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.T) {

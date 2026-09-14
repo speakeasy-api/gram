@@ -64,6 +64,21 @@ import (
 // Strict enough to prevent path traversal in API URL construction.
 var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 
+// marketplaceCollaboratorPermission is the repository permission granted to
+// every GitHub user added through the publish and manage-collaborators flows.
+//
+// Admin rather than read: the platform marketplaces this repo exists to feed
+// gate parts of their setup on repository admin. Cursor's "Serve marketplace
+// from Cursor" — which keeps a synced copy so teammates can install plugins
+// without GitHub access to the source repo — is disabled for anyone who is
+// only a collaborator. Read access cannot be escalated from inside Gram, so a
+// team that needs it would otherwise have to hand-edit the repo on GitHub.
+//
+// The repository is Gram-managed and disposable, which bounds the extra
+// power: its contents are overwritten on every publish, and CreateRepo
+// recreates it from the stored connection if an admin deletes it.
+const marketplaceCollaboratorPermission = "admin"
+
 // GitHubPublisher is the interface for creating repos and pushing files to GitHub.
 type GitHubPublisher interface {
 	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
@@ -2317,7 +2332,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	for _, username := range input.GitHubUsernames {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, "pull"); err != nil {
+		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),
