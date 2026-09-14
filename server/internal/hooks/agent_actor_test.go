@@ -2,12 +2,14 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -303,6 +305,100 @@ func TestCodexOTELUserInfo_AgentDropsSelfReportedEmail(t *testing.T) {
 	require.Empty(t, email)
 	require.Empty(t, userID)
 	require.NotContains(t, attrs, attr.UserEmailKey, "the persisted row must not carry the payload email")
+}
+
+// stubAuthorizer returns the same result for every scheme.
+type stubAuthorizer func() (context.Context, error)
+
+func (a stubAuthorizer) Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error) {
+	return a()
+}
+
+func claudePluginPrompt(sessionID string) *gen.ClaudePayload {
+	key := "gram_local_test"
+	slug := "project"
+	prompt := "agent prompt"
+	return &gen.ClaudePayload{HookEventName: "UserPromptSubmit", SessionID: &sessionID, ApikeyToken: &key, ProjectSlugInput: &slug, Prompt: &prompt}
+}
+
+func requireNothingRecorded(t *testing.T, ctx context.Context, ti *testInstance, sessionID string, projectID uuid.UUID) {
+	t.Helper()
+	var buffered []gen.ClaudePayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Empty(t, buffered, "a denied agent event is never buffered for OTEL attribution")
+	_, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: projectID})
+	require.Error(t, err, "a denied agent event is never persisted")
+}
+
+func TestClaude_UngrantedAgentKeyRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	deniedCtx, err := admittedAgentContext(t, ctx, ti, false, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) { return deniedCtx, nil })
+
+	sessionID := "agent-denied-" + uuid.NewString()
+	_, err = ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	requireNothingRecorded(t, ctx, ti, sessionID, *authCtx.ProjectID)
+}
+
+func TestClaude_AgentKeyFailingAdmissionRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) {
+		return agentCtx, errors.New("principal credential admission failed")
+	})
+
+	sessionID := "agent-unadmitted-" + uuid.NewString()
+	_, err := ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	requireNothingRecorded(t, ctx, ti, sessionID, *authCtx.ProjectID)
+}
+
+func TestClaude_InvalidCredentialsStillFallBack(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) {
+		return t.Context(), errors.New("invalid api key")
+	})
+
+	sessionID := "invalid-key-" + uuid.NewString()
+	_, err := ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
+	require.NoError(t, err, "bad or missing credentials keep the unauthenticated fallback")
+
+	var buffered []gen.ClaudePayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1)
+}
+
+func TestClearAgentAccountIdentity(t *testing.T) {
+	t.Parallel()
+	meta := SessionMetadata{
+		SessionID: "s", ServiceName: "claude-code", UserEmail: "", UserID: "", Provider: providerAnthropic,
+		ExternalOrgID: "eo", ExternalAccountUUID: "ea", ExternalAccountID: "eid", DeviceID: "d", Hostname: "host", Cwd: "/w",
+		AccountType: "", BillingMode: "", UserAccountID: "ua", ObservedUserEmail: "h@example.com",
+		GramOrgID: "org", ProjectID: "proj",
+	}
+	clearAgentAccountIdentity(&meta)
+	require.Empty(t, meta.ExternalOrgID)
+	require.Empty(t, meta.ExternalAccountUUID)
+	require.Empty(t, meta.ExternalAccountID)
+	require.Empty(t, meta.DeviceID)
+	require.Empty(t, meta.UserAccountID)
+	require.Empty(t, meta.ObservedUserEmail)
+	require.Equal(t, "host", meta.Hostname, "surface fields stay")
 }
 
 func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {

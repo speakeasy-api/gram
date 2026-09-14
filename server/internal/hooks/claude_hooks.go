@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -263,7 +264,16 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		// same path a no-headers request takes — recordHook buffers the event
 		// in Redis, and the OTEL Logs endpoint flushes it once the session is
 		// validated. Policies that need auth context degrade gracefully.
-		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); err != nil {
+		if authedCtx, err := s.authorizePluginRequest(ctx, conv.PtrValOr(payload.ApikeyToken, ""), projectSlugHint); errors.Is(err, errAgentHooksDenied) {
+			// An authenticated agent key that fails its grant never falls back
+			// to the unauthenticated buffer, where OTEL could attribute it to a human.
+			outcome = hookMetricOutcomeUnauthorized
+			logger.WarnContext(ctx, "agent key denied on claude hook",
+				attr.SlogEvent("claude_hook_agent_denied"),
+				attr.SlogError(err),
+			)
+			return nil, oops.E(oops.CodeForbidden, err, "agent key is not permitted to send hook events")
+		} else if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
 			logger.WarnContext(ctx, "plugin auth failed on claude hook; falling back to OTEL-buffered path",
 				attr.SlogEvent("claude_hook_auth_failed"),
@@ -645,10 +655,14 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
+		// Admission failures still carry the agent actor: reject, don't downgrade.
+		if isAgentActor(ctx) {
+			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
+		}
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
 	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
@@ -657,6 +671,9 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
 	if err != nil {
+		if isAgentActor(ctx) {
+			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
+		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
 	}
 	return ctx, nil

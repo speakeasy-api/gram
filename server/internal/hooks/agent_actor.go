@@ -14,6 +14,21 @@ import (
 
 var errAgentHookUnscoped = errors.New("agent hook request has no project scope")
 
+// errAgentHooksDenied marks an authenticated agent key that failed admission,
+// its hooks grant, or project access; it is rejected, never downgraded.
+var errAgentHooksDenied = errors.New("agent key denied hooks ingest")
+
+// clearAgentAccountIdentity drops the AI-account identity a batch self-reports
+// so agent rows never carry a human's account or device attribution.
+func clearAgentAccountIdentity(meta *SessionMetadata) {
+	meta.ExternalOrgID = ""
+	meta.ExternalAccountUUID = ""
+	meta.ExternalAccountID = ""
+	meta.DeviceID = ""
+	meta.UserAccountID = ""
+	meta.ObservedUserEmail = ""
+}
+
 // isAgentActor reports whether an agent-principal credential authenticated the
 // request. The agent is then the actor: self-reported emails and cached session
 // identity never re-attribute its events to a human.

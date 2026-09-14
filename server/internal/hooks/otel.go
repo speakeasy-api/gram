@@ -168,6 +168,9 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			GramOrgID:         orgID,
 			ProjectID:         projectID,
 		}
+		if agent {
+			clearAgentAccountIdentity(&completeMetadata)
+		}
 
 		sessionLogger := logger.With(
 			attr.SlogServiceName(session.ServiceName),

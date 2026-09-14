@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -181,6 +182,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		authedCtx, err := s.authorizePluginRequest(ctx, apikey, strings.TrimSpace(conv.PtrValOr(payload.ProjectSlugInput, "")))
 		if err != nil {
 			outcome = hookMetricOutcomeUnauthorized
+			if errors.Is(err, errAgentHooksDenied) {
+				return nil, oops.E(oops.CodeForbidden, err, "forbidden")
+			}
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized")
 		}
 		ctx = authedCtx
