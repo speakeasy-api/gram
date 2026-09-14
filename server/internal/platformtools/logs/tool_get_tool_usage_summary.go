@@ -85,6 +85,7 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		UserFilters:        nil,
 		AccountType:        nil,
 		HookSources:        input.HookSources,
+		ClientKeys:         nil,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {
