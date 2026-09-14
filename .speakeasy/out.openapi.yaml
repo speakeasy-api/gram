@@ -55841,6 +55841,218 @@ paths:
       x-speakeasy-react-hook:
         name: GetProjectOverview
         type: query
+  /rpc/telemetry.getToolUsageClientToolBreakdown:
+    post:
+      description: Get per-tool MCP and tool usage grouped by MCP client
+      operationId: getToolUsageClientToolBreakdown
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetToolUsageClientToolBreakdownResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolUsageClientToolBreakdown telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getToolUsageClientToolBreakdown
+      x-speakeasy-react-hook:
+        name: GetToolUsageClientToolBreakdown
+        type: query
+  /rpc/telemetry.getToolUsageClients:
+    post:
+      description: Get top MCP clients by tool usage
+      operationId: getToolUsageClients
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetToolUsageClientsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolUsageClients telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getToolUsageClients
+      x-speakeasy-react-hook:
+        name: GetToolUsageClients
+        type: query
   /rpc/telemetry.getToolUsageFilterOptions:
     post:
       description: Get filter options for target-aware MCP and tool usage metrics
@@ -75418,6 +75630,28 @@ components:
         - drift
         - assistant_count
         - prompt_injection_findings
+    GetToolUsageClientToolBreakdownResult:
+      type: object
+      properties:
+        client_tool_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+          description: Per-tool usage rows grouped by MCP client
+      description: Per-tool MCP and tool usage grouped by MCP client
+      required:
+        - client_tool_breakdown
+    GetToolUsageClientsResult:
+      type: object
+      properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientSummary'
+          description: Top MCP clients for the selected filters and time range
+      description: Top MCP clients for the selected filters and time range
+      required:
+        - clients
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
@@ -75436,6 +75670,7 @@ components:
               - shadow_servers
               - gateways
               - users
+              - clients
           description: Filter option types to include. Empty means all option types.
         to:
           type: string
@@ -75449,6 +75684,11 @@ components:
     GetToolUsageFilterOptionsResult:
       type: object
       properties:
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientFilterOption'
+          description: MCP clients with usage in the selected time range
         gateways:
           type: array
           items:
@@ -75475,12 +75715,18 @@ components:
         - shadow_servers
         - gateways
         - users
+        - clients
     GetToolUsageSummaryPayload:
       type: object
       properties:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal').
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
         from:
           type: string
           description: Start time in ISO 8601 format
@@ -75536,6 +75782,16 @@ components:
     GetToolUsageSummaryResult:
       type: object
       properties:
+        client_tool_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientToolBreakdownRow'
+          description: Per-tool usage rows grouped by MCP client
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageClientSummary'
+          description: Top MCP clients for the selected filters and time range
         target_time_series:
           type: array
           items:
@@ -75577,6 +75833,8 @@ components:
         - user_time_series
         - users_by_target
         - target_tool_breakdown
+        - clients
+        - client_tool_breakdown
     GetToolUsageTargetTimeSeriesResult:
       type: object
       properties:
@@ -78938,6 +79196,11 @@ components:
         account_type:
           type: string
           description: Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.
+        client_keys:
+          type: array
+          items:
+            type: string
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
         cursor:
           type: string
           description: Cursor for pagination
@@ -89593,6 +89856,99 @@ components:
         - count
         - success_count
         - failure_count
+    ToolUsageClientFilterOption:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Number of tool usage events observed for the MCP client
+          format: int64
+      description: MCP client filter option with usage in the selected time window
+      required:
+        - client_key
+        - client_label
+        - event_count
+    ToolUsageClientSummary:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters and chart grouping
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Total number of tool usage events for the MCP client
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed tool usage events for the MCP client
+          format: int64
+        failure_rate:
+          type: number
+          description: Fraction of completed tool usage events for the MCP client that failed
+          format: double
+        success_count:
+          type: integer
+          description: Number of successful tool usage events for the MCP client
+          format: int64
+        unique_tools:
+          type: integer
+          description: Number of distinct tools observed for the MCP client
+          format: int64
+      description: Aggregated tool usage metrics for one MCP client
+      required:
+        - client_key
+        - client_label
+        - event_count
+        - unique_tools
+        - success_count
+        - failure_count
+        - failure_rate
+    ToolUsageClientToolBreakdownRow:
+      type: object
+      properties:
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters and chart grouping
+        client_label:
+          type: string
+          description: User-facing label for the MCP client
+        event_count:
+          type: integer
+          description: Total number of tool usage events for the MCP client and tool
+          format: int64
+        failure_count:
+          type: integer
+          description: Number of failed tool usage events for the MCP client and tool
+          format: int64
+        failure_rate:
+          type: number
+          description: Fraction of completed tool usage events for the MCP client and tool that failed
+          format: double
+        success_count:
+          type: integer
+          description: Number of successful tool usage events for the MCP client and tool
+          format: int64
+        tool_name:
+          type: string
+          description: Observed tool name
+      description: Aggregated tool usage metrics for one MCP client and tool
+      required:
+        - client_key
+        - client_label
+        - tool_name
+        - event_count
+        - success_count
+        - failure_count
+        - failure_rate
     ToolUsageGatewayFilterOption:
       type: object
       properties:
@@ -89869,6 +90225,15 @@ components:
         block_reason:
           type: string
           description: Hook block reason when hook_status is blocked
+        client_key:
+          type: string
+          description: Stable MCP client identity used by filters; 'unattributed' when the caller never reported one
+        client_label:
+          type: string
+          description: User-facing MCP client label as the client reported it
+        client_version:
+          type: string
+          description: MCP client version when the client reported one alongside its name
         event_source:
           type: string
           description: Telemetry event source
@@ -89967,6 +90332,8 @@ components:
         - user_label
         - user_kind
         - event_source
+        - client_key
+        - client_label
     ToolUsageUserFilter:
       type: object
       properties:

@@ -317,6 +317,13 @@ type mcpInputs struct {
 	wrapperIsPublic *bool
 	// metaMcpServerID is the gateway the call was dispatched through; attribution only.
 	metaMcpServerID string
+	// clientInfoScope overrides the key the session client-info record is
+	// stored and loaded under. The hosted path leaves it empty and keys by
+	// toolset slug. The gateway sets it to its own scope, because a gateway
+	// handshakes once for the whole session while each member dispatch carries
+	// a different member's toolset slug — keying by slug would never find the
+	// record the handshake wrote.
+	clientInfoScope string
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -1254,6 +1261,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
+		clientInfoScope:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
 		protocolVersion:          protocolVersion,

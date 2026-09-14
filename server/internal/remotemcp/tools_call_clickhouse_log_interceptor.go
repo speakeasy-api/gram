@@ -174,6 +174,11 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if authCtx.ExternalUserID != "" {
 		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 	}
+	// The gateway resolved the caller before dialing this member; without it
+	// proxied dispatches would be the one tool-call flavour with no client.
+	if client, ok := contextvalues.GetMCPClientInfo(ctx); ok {
+		logAttrs.RecordMCPClient(client.Name, client.Version)
+	}
 
 	params := tm.LogParams{
 		Timestamp: end,
