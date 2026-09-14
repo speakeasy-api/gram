@@ -579,6 +579,8 @@ export function StackedTimeSeriesPanel({
     formatExactValue,
     formatAxisValue,
     rolled.datasets,
+    rolled.starts,
+    rolled.ends,
   ]);
 
   return (

@@ -80,7 +80,7 @@ export function MeterUsageSection(): JSX.Element {
   const request = {
     family,
     breakdown,
-    ...(period ? { from: period.from, to: period.to } : {}),
+    ...periodState.requestPeriod,
   };
   const query = useGetMeterUsage(request, undefined, { throwOnError: false });
   const data: MeterUsageData | undefined = query.data;
@@ -202,6 +202,7 @@ export function MeterUsageSection(): JSX.Element {
           />
         </MetricCard.Group>
         <StackedTimeSeriesPanel
+          key={`${data.family}:${data.breakdown.dimension}`}
           title={`${definition.label} over time`}
           headerHint={`${definition.description} Click or drag the chart to drill into a date range.`}
           bucketsMs={chart.bucketsMs}
@@ -270,7 +271,7 @@ export function MeterUsageSection(): JSX.Element {
                     timezone="UTC"
                     onCustomRangeChange={periodState.setPickedRange}
                     onClearCustomRange={periodState.clearCustomRange}
-                    className="bg-background py-1.5 text-sm"
+                    className={CONTROL_HEIGHT}
                   />
                 </div>
               )}

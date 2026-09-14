@@ -3,6 +3,7 @@ import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { handleError, toError } from "@/lib/errors";
 import { useGetTokensUnderManagement } from "@gram/client/react-query/getTokensUnderManagement.js";
 import { useMemo } from "react";
@@ -144,17 +145,24 @@ function ContractPosition({
                 : "Cycle"
             }
             availablePresets={[]}
+            timezone="UTC"
+            className={CONTROL_HEIGHT}
             onCustomRangeChange={selection.setPickedRange}
             onClearCustomRange={selection.clearCustomRange}
           />
         </Page.Toolbar.Leading>
         <Page.Toolbar.Actions>
-          <Button variant="secondary" size="sm" onClick={selection.reset}>
+          <Button
+            variant="secondary"
+            className={CONTROL_HEIGHT}
+            onClick={selection.reset}
+          >
             Reset billing period
           </Button>
         </Page.Toolbar.Actions>
       </Page.Toolbar>
       <PeriodUsageCard
+        key={selection.viewNonce}
         period={period}
         cycles={cycles}
         figures={figures}

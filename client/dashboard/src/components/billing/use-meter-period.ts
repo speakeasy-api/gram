@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export type MeterCycleWindow = { from: Date; to: Date };
 export type MeterPeriod = { from: Date; to: Date };
@@ -19,6 +20,8 @@ function rangeFromPicker(from: Date, to: Date): MeterPeriod {
 
 export function useMeterPeriod(cycles: MeterCycleWindow[]): {
   period: MeterPeriod | null;
+  // Omit bounds until the user selects a period; the API defaults to the active cycle.
+  requestPeriod: MeterPeriod | null;
   selectedCycle: MeterCycleWindow | null;
   customRange: MeterCustomRange | null;
   viewNonce: number;
@@ -47,6 +50,20 @@ export function useMeterPeriod(cycles: MeterCycleWindow[]): {
   const setPickedRange = useCallback((from: Date, to: Date) => {
     const range = rangeFromPicker(from, to);
     if (range.to.getTime() <= range.from.getTime()) return;
+    const lastDay = new Date(
+      Date.UTC(range.from.getUTCFullYear(), range.from.getUTCMonth() + 4, 0),
+    ).getUTCDate();
+    const maxTo = new Date(
+      Date.UTC(
+        range.from.getUTCFullYear(),
+        range.from.getUTCMonth() + 3,
+        Math.min(range.from.getUTCDate(), lastDay),
+      ),
+    );
+    if (range.to > maxTo) {
+      toast.error("Select a range of at most three calendar months.");
+      return;
+    }
     setCustomRange(range);
   }, []);
   const clearCustomRange = useCallback(() => setCustomRange(null), []);
@@ -75,6 +92,7 @@ export function useMeterPeriod(cycles: MeterCycleWindow[]): {
 
   return {
     period,
+    requestPeriod: customRange ?? (selectedKey === null ? null : selectedCycle),
     selectedCycle,
     customRange,
     viewNonce,

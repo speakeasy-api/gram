@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { type MeterCycleWindow } from "./use-meter-period";
 const cycleMonthFormat = new Intl.DateTimeFormat("en-US", {
   month: "long",
@@ -45,9 +46,11 @@ export function BillingCyclePicker({
       value={selected ? cycleKey(selected) : ""}
       onValueChange={handleChange}
     >
-      <SelectTrigger className="bg-background h-auto w-auto gap-1.5 py-1.5 text-sm">
-        <SelectValue placeholder="Billing cycle" />
-      </SelectTrigger>
+      <div className={CONTROL_HEIGHT}>
+        <SelectTrigger className="bg-background h-full! w-auto gap-1.5 py-1.5 text-sm">
+          <SelectValue placeholder="Billing cycle" />
+        </SelectTrigger>
+      </div>
       <SelectContent>
         {cycles.map((c) => (
           <SelectItem key={cycleKey(c)} value={cycleKey(c)}>

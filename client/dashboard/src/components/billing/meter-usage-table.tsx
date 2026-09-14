@@ -3,6 +3,7 @@ import {
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
 import { type Column, Table } from "@/components/ui/Table";
+import { meterBreakdownLabel } from "./meter-breakdown-options";
 import {
   type MeterUsageData,
   formatMeterQuantity,
@@ -78,7 +79,7 @@ export function MeterUsageTable({
       width: "220px",
       render: (row) => (
         <span
-          className="block text-right tabular-nums"
+          className="block w-full text-right tabular-nums"
           title={formatMeterQuantity(row.total, data.unit, "standard")}
         >
           {formatMeterQuantity(row.total, data.unit)}
@@ -92,7 +93,7 @@ export function MeterUsageTable({
       <div className="border-border flex items-baseline justify-between border-b px-4 py-3">
         <span className="font-medium">Cumulative breakdown</span>
         <span className="text-muted-foreground text-sm">
-          By {data.breakdown.dimension.replaceAll("_", " ")}
+          By {meterBreakdownLabel(data.family, data.breakdown.dimension)}
         </span>
       </div>
       <Table
