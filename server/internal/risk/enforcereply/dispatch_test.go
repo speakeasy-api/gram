@@ -148,6 +148,61 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NotEqual(t, message.GetRequestId(), correlationID)
 }
 
+func TestDispatchAcceptsOpaqueOperationID(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-urn")
+	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	publisher.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
+
+	origins := testOrigins(gitleaksLane)
+	origin := origins[gitleaksLane]
+	origin.OperationID = "anthropic-inference:req_011CT4Xy9nqPbFjR2hQ7wK8L:3"
+	origins[gitleaksLane] = origin
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.NotNil(t, outcome.ByLane[gitleaksLane])
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, origin.OperationID, publisher.messages[0].GetRequestId())
+}
+
+func TestDispatchRejectsEmptyOperationID(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-empty")
+	dispatcher := testDispatcher(te.inbox, &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}, time.Second)
+
+	origins := testOrigins(gitleaksLane)
+	origin := origins[gitleaksLane]
+	origin.OperationID = " "
+	origins[gitleaksLane] = origin
+
+	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-dispatch",
+		ProjectID:      "project-dispatch",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane},
+		Origins:        origins,
+	})
+	require.ErrorContains(t, err, "operation id is required")
+}
+
 func TestDispatchPreservesExplicitNoPolicyGitleaksOrigin(t *testing.T) {
 	t.Parallel()
 

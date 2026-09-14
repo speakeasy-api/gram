@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -174,9 +175,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		}
 	}
 
-	requestID, err := uuid.Parse(request.Origins[request.Lanes[0]].OperationID)
-	if err != nil {
-		return Outcome{}, fmt.Errorf("parse enforcement operation id: %w", err)
+	// The operation id is an opaque string shared with metering; callers shape
+	// it differently (UUIDs, URNs) and nothing downstream parses it.
+	requestID := strings.TrimSpace(request.Origins[request.Lanes[0]].OperationID)
+	if requestID == "" {
+		return Outcome{}, errors.New("enforcement operation id is required")
 	}
 	createdAt := time.Now().UTC()
 	createdAtText := createdAt.Format(time.RFC3339Nano)
@@ -195,7 +198,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			case riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO:
 				laneBroker = d.presidio
 				origin := request.Origins[lane]
-				origin.RequestID = requestID.String()
+				origin.RequestID = requestID
 				origin.OperationID = scanners.AsyncRiskOperationID(
 					origin.ExecutionPath, origin.RiskPolicyID.String(), origin.RiskPolicyVersion,
 					"", "", origin.OperationID,
@@ -209,7 +212,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 					}
 				}
 				enforcement = riskv1.PresidioEnforcement_builder{
-					RequestId:               new(requestID.String()),
+					RequestId:               new(requestID),
 					ChatMessageId:           stringPointer(origin.ChatMessageID),
 					ProjectId:               new(request.ProjectID),
 					OrganizationId:          new(request.OrganizationID),
@@ -236,7 +239,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 				laneBroker = d.gitleaks
 				origin := request.Origins[lane]
 				enforcement = riskv1.GitleaksEnforcement_builder{
-					RequestId:               new(requestID.String()),
+					RequestId:               new(requestID),
 					ChatMessageId:           stringPointer(origin.ChatMessageID),
 					ProjectId:               new(request.ProjectID),
 					OrganizationId:          new(request.OrganizationID),
