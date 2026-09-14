@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  CommitServerUserIdentityConfigurationResult,
-  CommitServerUserIdentityConfigurationResult$inboundSchema,
-} from "../models/components/commitserveruseridentityconfigurationresult.js";
+  CommitServerIdentityConfigurationResult,
+  CommitServerIdentityConfigurationResult$inboundSchema,
+} from "../models/components/commitserveridentityconfigurationresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  CommitServerUserIdentityConfigurationRequest,
-  CommitServerUserIdentityConfigurationRequest$outboundSchema,
-  CommitServerUserIdentityConfigurationSecurity,
-} from "../models/operations/commitserveruseridentityconfiguration.js";
+  CommitServerIdentityConfigurationRequest,
+  CommitServerIdentityConfigurationRequest$outboundSchema,
+  CommitServerIdentityConfigurationSecurity,
+} from "../models/operations/commitserveridentityconfiguration.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * commitServerUserIdentityConfiguration remoteSessions
+ * commitServerIdentityConfiguration remoteSessions
  *
  * @remarks
- * Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+ * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
  */
-export function remoteSessionsCommitServerUserIdentityConfiguration(
+export function remoteSessionsCommitServerIdentityConfiguration(
   client: GramCore,
-  request: CommitServerUserIdentityConfigurationRequest,
-  security?: CommitServerUserIdentityConfigurationSecurity | undefined,
+  request: CommitServerIdentityConfigurationRequest,
+  security?: CommitServerIdentityConfigurationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    CommitServerUserIdentityConfigurationResult,
+    CommitServerIdentityConfigurationResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function remoteSessionsCommitServerUserIdentityConfiguration(
 
 async function $do(
   client: GramCore,
-  request: CommitServerUserIdentityConfigurationRequest,
-  security?: CommitServerUserIdentityConfigurationSecurity | undefined,
+  request: CommitServerIdentityConfigurationRequest,
+  security?: CommitServerIdentityConfigurationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      CommitServerUserIdentityConfigurationResult,
+      CommitServerIdentityConfigurationResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,10 +96,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        CommitServerUserIdentityConfigurationRequest$outboundSchema,
-        value,
-      ),
+      z.parse(CommitServerIdentityConfigurationRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,12 +105,12 @@ async function $do(
   const payload = parsed.value;
   const body = encodeJSON(
     "body",
-    payload.CommitServerUserIdentityConfigurationForm,
+    payload.CommitServerIdentityConfigurationForm,
     { explode: true },
   );
 
   const path = pathToFunc(
-    "/rpc/remoteSessions.commitServerUserIdentityConfiguration",
+    "/rpc/remoteSessions.commitServerIdentityConfiguration",
   )();
 
   const headers = new Headers(compactMap({
@@ -163,7 +160,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "commitServerUserIdentityConfiguration",
+    operationID: "commitServerIdentityConfiguration",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -207,7 +204,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    CommitServerUserIdentityConfigurationResult,
+    CommitServerIdentityConfigurationResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -218,7 +215,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, CommitServerUserIdentityConfigurationResult$inboundSchema),
+    M.json(200, CommitServerIdentityConfigurationResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

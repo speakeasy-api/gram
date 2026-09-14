@@ -49241,10 +49241,10 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateRemoteSessionIssuer
-    /rpc/remoteSessions.commitServerUserIdentityConfiguration:
+    /rpc/remoteSessions.commitServerIdentityConfiguration:
         post:
-            description: Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
-            operationId: commitServerUserIdentityConfiguration
+            description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+            operationId: commitServerIdentityConfiguration
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -49271,14 +49271,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CommitServerUserIdentityConfigurationForm'
+                            $ref: '#/components/schemas/CommitServerIdentityConfigurationForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/CommitServerUserIdentityConfigurationResult'
+                                $ref: '#/components/schemas/CommitServerIdentityConfigurationResult'
                     description: OK response.
                 "400":
                     content:
@@ -49339,12 +49339,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: commitServerUserIdentityConfiguration remoteSessions
+            summary: commitServerIdentityConfiguration remoteSessions
             tags:
                 - remoteSessions
-            x-speakeasy-name-override: commitServerUserIdentityConfiguration
+            x-speakeasy-name-override: commitServerIdentityConfiguration
             x-speakeasy-react-hook:
-                name: CommitServerUserIdentityConfiguration
+                name: CommitServerIdentityConfiguration
     /rpc/remoteSessions.list:
         get:
             description: List remote_sessions in the caller's project. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
@@ -75388,11 +75388,11 @@ components:
                     type: string
                     description: Reason for the decision, shown to the user
             description: Result for Codex hook events
-        CommitServerUserIdentityConfigurationForm:
+        CommitServerIdentityConfigurationForm:
             type: object
             properties:
                 client_configuration:
-                    $ref: '#/components/schemas/ServerUserIdentityClientConfiguration'
+                    $ref: '#/components/schemas/ServerIdentityClientConfiguration'
                 client_mode:
                     type: string
                     description: How to provide the OAuth client.
@@ -75414,11 +75414,11 @@ components:
                     type: string
                     description: An existing Remote Identity Provider visible to the target project.
                     format: uuid
-            description: 'A complete plan for configuring user identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
+            description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
             required:
                 - mcp_server_id
                 - client_mode
-        CommitServerUserIdentityConfigurationResult:
+        CommitServerIdentityConfigurationResult:
             type: object
             properties:
                 client:
@@ -75433,7 +75433,7 @@ components:
                         - project-specific
                         - organization-level
                 failure:
-                    $ref: '#/components/schemas/ServerUserIdentityRegistrationFailure'
+                    $ref: '#/components/schemas/ServerIdentityRegistrationFailure'
                 manual_setup_required:
                     type: boolean
                     description: True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.
@@ -92261,24 +92261,7 @@ components:
                 - content_type
                 - content_length
                 - last_modified
-        ServerNameOverride:
-            type: object
-            properties:
-                display_name:
-                    type: string
-                    description: User-friendly display name
-                id:
-                    type: string
-                    description: Override ID
-                raw_server_name:
-                    type: string
-                    description: Original server name from hooks
-            description: User-defined display name for a hooks server
-            required:
-                - id
-                - raw_server_name
-                - display_name
-        ServerUserIdentityClientConfiguration:
+        ServerIdentityClientConfiguration:
             type: object
             properties:
                 audience:
@@ -92307,7 +92290,7 @@ components:
                         - client_secret_post
                         - none
             description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
-        ServerUserIdentityRegistrationFailure:
+        ServerIdentityRegistrationFailure:
             type: object
             properties:
                 http_status:
@@ -92340,6 +92323,23 @@ components:
                 - outcome
                 - reason
                 - retryable
+        ServerNameOverride:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: User-friendly display name
+                id:
+                    type: string
+                    description: Override ID
+                raw_server_name:
+                    type: string
+                    description: Original server name from hooks
+            description: User-defined display name for a hooks server
+            required:
+                - id
+                - raw_server_name
+                - display_name
         ServerVariable:
             type: object
             properties:
@@ -100599,7 +100599,7 @@ tags:
     - name: organizationRemoteSessions
       description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
     - name: remoteSessions
-      description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+      description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
     - name: resources
       description: Dashboard API for interacting with resources.
     - name: risk

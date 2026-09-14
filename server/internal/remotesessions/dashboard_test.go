@@ -26,7 +26,7 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func TestCommitServerUserIdentityConfigurationManualCreatesConfigurationAtomically(t *testing.T) {
+func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -37,7 +37,7 @@ func TestCommitServerUserIdentityConfigurationManualCreatesConfigurationAtomical
 	clientAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -46,7 +46,7 @@ func TestCommitServerUserIdentityConfigurationManualCreatesConfigurationAtomical
 		CreateProvider:   serverIdentityProviderForm("manual-provider", nil, false),
 		ClientMode:       "manual",
 		ExistingClientID: nil,
-		ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("manual-client"),
 			ClientSecret:            conv.PtrEmpty("manual-secret"),
 			TokenEndpointAuthMethod: conv.PtrEmpty("client_secret_basic"),
@@ -91,14 +91,14 @@ func TestCommitServerUserIdentityConfigurationManualCreatesConfigurationAtomical
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
 }
 
-func TestCommitServerUserIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
+func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "cimd-target")
 	providerID := createServerIdentityProvider(t, ctx, ti, "cimd-provider", "https://registration.invalid", true, []string{"none", "client_secret_basic"})
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
 	require.NoError(t, err)
 	require.Equal(t, "registered", *result.Status)
 	require.Equal(t, "cimd", *result.RegistrationMethod)
@@ -108,7 +108,7 @@ func TestCommitServerUserIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
 	require.Equal(t, *result.Client.ClientIDMetadataURI, result.Client.ClientID)
 }
 
-func TestCommitServerUserIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -143,7 +143,7 @@ func TestCommitServerUserIdentityConfigurationAutoRegistersOnceWithDCR(t *testin
 	payload.ClientConfiguration.Scope = []string{"openid", "profile"}
 	payload.ClientConfiguration.TokenEndpointAuthMethod = conv.PtrEmpty("client_secret_post")
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, payload)
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), requests.Load())
 	require.Equal(t, "registered", *result.Status)
@@ -163,7 +163,7 @@ func TestCommitServerUserIdentityConfigurationAutoRegistersOnceWithDCR(t *testin
 	require.NotEqual(t, "registered-secret", stored.RemoteSessionClient.ClientSecretEncrypted.String)
 }
 
-func TestCommitServerUserIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
+func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -176,7 +176,7 @@ func TestCommitServerUserIdentityConfigurationReturnsDCRRefusalWithoutChangingSt
 	t.Cleanup(registrationServer.Close)
 	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-refusal-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
 	require.NoError(t, err)
 	require.Nil(t, result.Status)
 	require.Equal(t, "dcr", *result.RegistrationMethod)
@@ -190,7 +190,7 @@ func TestCommitServerUserIdentityConfigurationReturnsDCRRefusalWithoutChangingSt
 	require.Zero(t, clients)
 }
 
-func TestCommitServerUserIdentityConfigurationValidatesPlanBeforeDCR(t *testing.T) {
+func TestCommitServerIdentityConfigurationValidatesPlanBeforeDCR(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -205,12 +205,12 @@ func TestCommitServerUserIdentityConfigurationValidatesPlanBeforeDCR(t *testing.
 	payload := autoServerIdentityPayload(targetID, providerID)
 	payload.ExistingClientID = conv.PtrEmpty(uuid.NewString())
 
-	_, err := ti.service.CommitServerUserIdentityConfiguration(ctx, payload)
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, payload)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Zero(t, requests.Load())
 }
 
-func TestCommitServerUserIdentityConfigurationDCRAuditFailureRollsBackWithoutRetry(t *testing.T) {
+func TestCommitServerIdentityConfigurationDCRAuditFailureRollsBackWithoutRetry(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -230,7 +230,7 @@ func TestCommitServerUserIdentityConfigurationDCRAuditFailureRollsBackWithoutRet
 	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-rollback-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 	testenv.RejectWritesTo(t, ctx, ti.conn, "audit_logs")
 
-	_, err := ti.service.CommitServerUserIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
 	requireOopsCode(t, err, oops.CodeUnexpected)
 	require.Equal(t, int64(1), requests.Load(), "a local failure after DCR must not retry or compensate upstream")
 	clients, err := repo.New(ti.conn).CountRemoteSessionClientsByIssuerID(ctx, providerID)
@@ -244,7 +244,7 @@ func TestCommitServerUserIdentityConfigurationDCRAuditFailureRollsBackWithoutRet
 	require.False(t, target.RemoteSessionIssuerID.Valid, "derived MCP identity state must roll back too")
 }
 
-func TestCommitServerUserIdentityConfigurationAutoRequiresManualSetupWithoutChangingState(t *testing.T) {
+func TestCommitServerIdentityConfigurationAutoRequiresManualSetupWithoutChangingState(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -253,7 +253,7 @@ func TestCommitServerUserIdentityConfigurationAutoRequiresManualSetupWithoutChan
 	clientsBefore, err := repo.New(ti.conn).CountRemoteSessionClientsByIssuerID(ctx, providerID)
 	require.NoError(t, err)
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
 	require.NoError(t, err)
 	require.True(t, result.ManualSetupRequired)
 	require.Nil(t, result.Status)
@@ -272,7 +272,7 @@ func TestCommitServerUserIdentityConfigurationAutoRequiresManualSetupWithoutChan
 	require.False(t, storedTarget.RemoteSessionIssuerID.Valid)
 }
 
-func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *testing.T) {
+func TestCommitServerIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -288,7 +288,7 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 	require.NoError(t, err)
 	restrictedCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(restrictedCtx, &gen.CommitServerUserIdentityConfigurationPayload{
+	result, err := ti.service.CommitServerIdentityConfiguration(restrictedCtx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
@@ -304,7 +304,7 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 	require.Equal(t, "existing", *result.RegistrationMethod)
 	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
 
-	_, err = ti.service.CommitServerUserIdentityConfiguration(restrictedCtx, &gen.CommitServerUserIdentityConfigurationPayload{
+	_, err = ti.service.CommitServerIdentityConfiguration(restrictedCtx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -313,7 +313,7 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 		CreateProvider:   serverIdentityProviderForm("denied-provider", nil, false),
 		ClientMode:       "manual",
 		ExistingClientID: nil,
-		ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("denied-client"),
 			ClientSecret:            nil,
 			TokenEndpointAuthMethod: conv.PtrEmpty("none"),
@@ -324,7 +324,7 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	projectOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectWrite, projectIDFromContext(t, ctx).String()))
-	_, err = ti.service.CommitServerUserIdentityConfiguration(projectOnlyCtx, &gen.CommitServerUserIdentityConfigurationPayload{
+	_, err = ti.service.CommitServerIdentityConfiguration(projectOnlyCtx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
@@ -338,7 +338,7 @@ func TestCommitServerUserIdentityConfigurationExistingClientNeedsOnlyMCPWrite(t 
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestCommitServerUserIdentityConfigurationAllowsDuplicateClientIDs(t *testing.T) {
+func TestCommitServerIdentityConfigurationAllowsDuplicateClientIDs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -346,8 +346,8 @@ func TestCommitServerUserIdentityConfigurationAllowsDuplicateClientIDs(t *testin
 	secondTargetID, _ := createServerIdentityTarget(t, ctx, ti, "duplicate-client-second")
 	providerID := createServerIdentityProvider(t, ctx, ti, "duplicate-client-provider", "", false, []string{"none"})
 
-	create := func(targetID uuid.UUID) *gen.CommitServerUserIdentityConfigurationPayload {
-		return &gen.CommitServerUserIdentityConfigurationPayload{
+	create := func(targetID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
+		return &gen.CommitServerIdentityConfigurationPayload{
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
@@ -356,7 +356,7 @@ func TestCommitServerUserIdentityConfigurationAllowsDuplicateClientIDs(t *testin
 			CreateProvider:   nil,
 			ClientMode:       "manual",
 			ExistingClientID: nil,
-			ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+			ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 				ClientID:                conv.PtrEmpty("shared-upstream-client-id"),
 				ClientSecret:            nil,
 				TokenEndpointAuthMethod: conv.PtrEmpty("none"),
@@ -366,21 +366,21 @@ func TestCommitServerUserIdentityConfigurationAllowsDuplicateClientIDs(t *testin
 		}
 	}
 
-	first, err := ti.service.CommitServerUserIdentityConfiguration(ctx, create(firstTargetID))
+	first, err := ti.service.CommitServerIdentityConfiguration(ctx, create(firstTargetID))
 	require.NoError(t, err)
-	second, err := ti.service.CommitServerUserIdentityConfiguration(ctx, create(secondTargetID))
+	second, err := ti.service.CommitServerIdentityConfiguration(ctx, create(secondTargetID))
 	require.NoError(t, err)
 	require.NotEqual(t, first.Client.ID, second.Client.ID)
 	require.Equal(t, first.Client.ClientID, second.Client.ClientID)
 }
 
-func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t *testing.T) {
+func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "replace-target")
 
-	initial, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+	initial, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -389,7 +389,7 @@ func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t 
 		CreateProvider:   serverIdentityProviderForm("replace-initial-provider", nil, false),
 		ClientMode:       "manual",
 		ExistingClientID: nil,
-		ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("replace-initial-client"),
 			ClientSecret:            nil,
 			TokenEndpointAuthMethod: conv.PtrEmpty("none"),
@@ -413,7 +413,7 @@ func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t 
 	detachAuditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
 	require.NoError(t, err)
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:        nil,
 		ApikeyToken:         nil,
 		ProjectSlugInput:    nil,
@@ -452,7 +452,7 @@ func TestCommitServerUserIdentityConfigurationReplacesCurrentClientAtomically(t 
 	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
 }
 
-func TestCommitServerUserIdentityConfigurationLocksUserSessionIssuerBeforeReplacingBindings(t *testing.T) {
+func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingBindings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -472,7 +472,7 @@ func TestCommitServerUserIdentityConfigurationLocksUserSessionIssuerBeforeReplac
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := ti.service.CommitServerUserIdentityConfiguration(ctx, &gen.CommitServerUserIdentityConfigurationPayload{
+		_, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
 			SessionToken:        nil,
 			ApikeyToken:         nil,
 			ProjectSlugInput:    nil,
@@ -544,8 +544,8 @@ func createServerIdentityProvider(t *testing.T, ctx context.Context, ti *testIns
 	return provider.ID
 }
 
-func autoServerIdentityPayload(targetID, providerID uuid.UUID) *gen.CommitServerUserIdentityConfigurationPayload {
-	return &gen.CommitServerUserIdentityConfigurationPayload{
+func autoServerIdentityPayload(targetID, providerID uuid.UUID) *gen.CommitServerIdentityConfigurationPayload {
+	return &gen.CommitServerIdentityConfigurationPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -554,7 +554,7 @@ func autoServerIdentityPayload(targetID, providerID uuid.UUID) *gen.CommitServer
 		CreateProvider:   nil,
 		ClientMode:       "auto",
 		ExistingClientID: nil,
-		ClientConfiguration: &gen.ServerUserIdentityClientConfiguration{
+		ClientConfiguration: &gen.ServerIdentityClientConfiguration{
 			ClientID:                nil,
 			ClientSecret:            nil,
 			TokenEndpointAuthMethod: nil,
@@ -605,4 +605,72 @@ func projectIDFromContext(t *testing.T, ctx context.Context) uuid.UUID {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	return *authCtx.ProjectID
+}
+
+func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "shared-issuer-target")
+
+	// A second MCP server on the same user session issuer. The client binding
+	// this RPC rewrites is keyed by issuer, not by server, so committing on the
+	// target re-stamps this sibling too.
+	siblingRemote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		Name:          conv.ToPGText("shared-issuer-sibling"),
+		Slug:          conv.ToPGText("shared-issuer-sibling"),
+		TransportType: "streamable-http",
+		Url:           "https://mcp.example.com/shared-issuer-sibling",
+	})
+	require.NoError(t, err)
+	sibling, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("shared-issuer-sibling"),
+		Slug:                conv.ToPGText("shared-issuer-sibling"),
+		UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
+		RemoteMcpServerID:   conv.ToNullUUID(siblingRemote.ID),
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+
+	providerID := createServerIdentityProvider(t, ctx, ti, "shared-issuer-provider", "", false, []string{"client_secret_basic"})
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGText(activeOrganizationID(t, ctx)),
+		RemoteSessionIssuerID: providerID,
+		ClientID:              "shared-issuer-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+
+	payload := func() *gen.CommitServerIdentityConfigurationPayload {
+		return &gen.CommitServerIdentityConfigurationPayload{
+			SessionToken:        nil,
+			ApikeyToken:         nil,
+			ProjectSlugInput:    nil,
+			McpServerID:         targetID.String(),
+			ProviderID:          conv.PtrEmpty(providerID.String()),
+			CreateProvider:      nil,
+			ClientMode:          "existing",
+			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
+			ClientConfiguration: nil,
+		}
+	}
+
+	targetOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetID.String()))
+	_, err = ti.service.CommitServerIdentityConfiguration(targetOnlyCtx, payload())
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	bothCtx := withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPWrite, targetID.String()),
+		authz.NewGrant(authz.ScopeMCPWrite, sibling.ID.String()),
+	)
+	result, err := ti.service.CommitServerIdentityConfiguration(bothCtx, payload())
+	require.NoError(t, err)
+	require.Equal(t, "linked", *result.Status)
+	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
 }

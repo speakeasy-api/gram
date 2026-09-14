@@ -20,14 +20,14 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildCommitServerUserIdentityConfigurationRequest instantiates a HTTP
-// request object with method and path set to call the "remoteSessions" service
-// "commitServerUserIdentityConfiguration" endpoint
-func (c *Client) BuildCommitServerUserIdentityConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CommitServerUserIdentityConfigurationRemoteSessionsPath()}
+// BuildCommitServerIdentityConfigurationRequest instantiates a HTTP request
+// object with method and path set to call the "remoteSessions" service
+// "commitServerIdentityConfiguration" endpoint
+func (c *Client) BuildCommitServerIdentityConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CommitServerIdentityConfigurationRemoteSessionsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("remoteSessions", "commitServerUserIdentityConfiguration", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "commitServerIdentityConfiguration", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -36,14 +36,13 @@ func (c *Client) BuildCommitServerUserIdentityConfigurationRequest(ctx context.C
 	return req, nil
 }
 
-// EncodeCommitServerUserIdentityConfigurationRequest returns an encoder for
-// requests sent to the remoteSessions commitServerUserIdentityConfiguration
-// server.
-func EncodeCommitServerUserIdentityConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeCommitServerIdentityConfigurationRequest returns an encoder for
+// requests sent to the remoteSessions commitServerIdentityConfiguration server.
+func EncodeCommitServerIdentityConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*remotesessions.CommitServerUserIdentityConfigurationPayload)
+		p, ok := v.(*remotesessions.CommitServerIdentityConfigurationPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("remoteSessions", "commitServerUserIdentityConfiguration", "*remotesessions.CommitServerUserIdentityConfigurationPayload", v)
+			return goahttp.ErrInvalidType("remoteSessions", "commitServerIdentityConfiguration", "*remotesessions.CommitServerIdentityConfigurationPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -57,19 +56,19 @@ func EncodeCommitServerUserIdentityConfigurationRequest(encoder func(*http.Reque
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewCommitServerUserIdentityConfigurationRequestBody(p)
+		body := NewCommitServerIdentityConfigurationRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+			return goahttp.ErrEncodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 		}
 		return nil
 	}
 }
 
-// DecodeCommitServerUserIdentityConfigurationResponse returns a decoder for
-// responses returned by the remoteSessions
-// commitServerUserIdentityConfiguration endpoint. restoreBody controls whether
-// the response body should be restored after having been read.
-// DecodeCommitServerUserIdentityConfigurationResponse may return the following
+// DecodeCommitServerIdentityConfigurationResponse returns a decoder for
+// responses returned by the remoteSessions commitServerIdentityConfiguration
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeCommitServerIdentityConfigurationResponse may return the following
 // errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
@@ -82,7 +81,7 @@ func EncodeCommitServerUserIdentityConfigurationRequest(encoder func(*http.Reque
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeCommitServerUserIdentityConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeCommitServerIdentityConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -99,169 +98,169 @@ func DecodeCommitServerUserIdentityConfigurationResponse(decoder func(*http.Resp
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body CommitServerUserIdentityConfigurationResponseBody
+				body CommitServerIdentityConfigurationResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			res := NewCommitServerUserIdentityConfigurationResultOK(&body)
+			res := NewCommitServerIdentityConfigurationResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body CommitServerUserIdentityConfigurationUnauthorizedResponseBody
+				body CommitServerIdentityConfigurationUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationUnauthorizedResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationUnauthorized(&body)
+			return nil, NewCommitServerIdentityConfigurationUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body CommitServerUserIdentityConfigurationForbiddenResponseBody
+				body CommitServerIdentityConfigurationForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationForbiddenResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationForbidden(&body)
+			return nil, NewCommitServerIdentityConfigurationForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body CommitServerUserIdentityConfigurationBadRequestResponseBody
+				body CommitServerIdentityConfigurationBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationBadRequestResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationBadRequest(&body)
+			return nil, NewCommitServerIdentityConfigurationBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body CommitServerUserIdentityConfigurationNotFoundResponseBody
+				body CommitServerIdentityConfigurationNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationNotFoundResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationNotFound(&body)
+			return nil, NewCommitServerIdentityConfigurationNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body CommitServerUserIdentityConfigurationConflictResponseBody
+				body CommitServerIdentityConfigurationConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationConflictResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationConflict(&body)
+			return nil, NewCommitServerIdentityConfigurationConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody
+				body CommitServerIdentityConfigurationUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationUnsupportedMedia(&body)
+			return nil, NewCommitServerIdentityConfigurationUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body CommitServerUserIdentityConfigurationInvalidResponseBody
+				body CommitServerIdentityConfigurationInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationInvalidResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationInvalid(&body)
+			return nil, NewCommitServerIdentityConfigurationInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body CommitServerUserIdentityConfigurationInvariantViolationResponseBody
+					body CommitServerIdentityConfigurationInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 				}
-				err = ValidateCommitServerUserIdentityConfigurationInvariantViolationResponseBody(&body)
+				err = ValidateCommitServerIdentityConfigurationInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 				}
-				return nil, NewCommitServerUserIdentityConfigurationInvariantViolation(&body)
+				return nil, NewCommitServerIdentityConfigurationInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body CommitServerUserIdentityConfigurationUnexpectedResponseBody
+					body CommitServerIdentityConfigurationUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+					return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 				}
-				err = ValidateCommitServerUserIdentityConfigurationUnexpectedResponseBody(&body)
+				err = ValidateCommitServerIdentityConfigurationUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+					return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 				}
-				return nil, NewCommitServerUserIdentityConfigurationUnexpected(&body)
+				return nil, NewCommitServerIdentityConfigurationUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerUserIdentityConfiguration", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerIdentityConfiguration", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body CommitServerUserIdentityConfigurationGatewayErrorResponseBody
+				body CommitServerIdentityConfigurationGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrDecodingError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			err = ValidateCommitServerUserIdentityConfigurationGatewayErrorResponseBody(&body)
+			err = ValidateCommitServerIdentityConfigurationGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+				return nil, goahttp.ErrValidationError("remoteSessions", "commitServerIdentityConfiguration", err)
 			}
-			return nil, NewCommitServerUserIdentityConfigurationGatewayError(&body)
+			return nil, NewCommitServerIdentityConfigurationGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerUserIdentityConfiguration", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "commitServerIdentityConfiguration", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -836,14 +835,14 @@ func marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssu
 	return res
 }
 
-// marshalRemotesessionsServerUserIdentityClientConfigurationToServerUserIdentityClientConfigurationRequestBody
-// builds a value of type *ServerUserIdentityClientConfigurationRequestBody
-// from a value of type *remotesessions.ServerUserIdentityClientConfiguration.
-func marshalRemotesessionsServerUserIdentityClientConfigurationToServerUserIdentityClientConfigurationRequestBody(v *remotesessions.ServerUserIdentityClientConfiguration) *ServerUserIdentityClientConfigurationRequestBody {
+// marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody
+// builds a value of type *ServerIdentityClientConfigurationRequestBody from a
+// value of type *remotesessions.ServerIdentityClientConfiguration.
+func marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody(v *remotesessions.ServerIdentityClientConfiguration) *ServerIdentityClientConfigurationRequestBody {
 	if v == nil {
 		return nil
 	}
-	res := &ServerUserIdentityClientConfigurationRequestBody{
+	res := &ServerIdentityClientConfigurationRequestBody{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
@@ -947,14 +946,14 @@ func marshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemote
 	return res
 }
 
-// marshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration
-// builds a value of type *remotesessions.ServerUserIdentityClientConfiguration
-// from a value of type *ServerUserIdentityClientConfigurationRequestBody.
-func marshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration(v *ServerUserIdentityClientConfigurationRequestBody) *remotesessions.ServerUserIdentityClientConfiguration {
+// marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration
+// builds a value of type *remotesessions.ServerIdentityClientConfiguration
+// from a value of type *ServerIdentityClientConfigurationRequestBody.
+func marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(v *ServerIdentityClientConfigurationRequestBody) *remotesessions.ServerIdentityClientConfiguration {
 	if v == nil {
 		return nil
 	}
-	res := &remotesessions.ServerUserIdentityClientConfiguration{
+	res := &remotesessions.ServerIdentityClientConfiguration{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
@@ -1099,14 +1098,14 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 	return res
 }
 
-// unmarshalServerUserIdentityRegistrationFailureResponseBodyToRemotesessionsServerUserIdentityRegistrationFailure
-// builds a value of type *remotesessions.ServerUserIdentityRegistrationFailure
-// from a value of type *ServerUserIdentityRegistrationFailureResponseBody.
-func unmarshalServerUserIdentityRegistrationFailureResponseBodyToRemotesessionsServerUserIdentityRegistrationFailure(v *ServerUserIdentityRegistrationFailureResponseBody) *remotesessions.ServerUserIdentityRegistrationFailure {
+// unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServerIdentityRegistrationFailure
+// builds a value of type *remotesessions.ServerIdentityRegistrationFailure
+// from a value of type *ServerIdentityRegistrationFailureResponseBody.
+func unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServerIdentityRegistrationFailure(v *ServerIdentityRegistrationFailureResponseBody) *remotesessions.ServerIdentityRegistrationFailure {
 	if v == nil {
 		return nil
 	}
-	res := &remotesessions.ServerUserIdentityRegistrationFailure{
+	res := &remotesessions.ServerIdentityRegistrationFailure{
 		Outcome:         *v.Outcome,
 		Reason:          *v.Reason,
 		Retryable:       *v.Retryable,

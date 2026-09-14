@@ -16,9 +16,9 @@ import (
 
 // Endpoints wraps the "remoteSessions" service endpoints.
 type Endpoints struct {
-	CommitServerUserIdentityConfiguration goa.Endpoint
-	ListRemoteSessions                    goa.Endpoint
-	RevokeRemoteSession                   goa.Endpoint
+	CommitServerIdentityConfiguration goa.Endpoint
+	ListRemoteSessions                goa.Endpoint
+	RevokeRemoteSession               goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteSessions" service with
@@ -27,26 +27,26 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CommitServerUserIdentityConfiguration: NewCommitServerUserIdentityConfigurationEndpoint(s, a.APIKeyAuth),
-		ListRemoteSessions:                    NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
-		RevokeRemoteSession:                   NewRevokeRemoteSessionEndpoint(s, a.APIKeyAuth),
+		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationEndpoint(s, a.APIKeyAuth),
+		ListRemoteSessions:                NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
+		RevokeRemoteSession:               NewRevokeRemoteSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "remoteSessions" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.CommitServerUserIdentityConfiguration = m(e.CommitServerUserIdentityConfiguration)
+	e.CommitServerIdentityConfiguration = m(e.CommitServerIdentityConfiguration)
 	e.ListRemoteSessions = m(e.ListRemoteSessions)
 	e.RevokeRemoteSession = m(e.RevokeRemoteSession)
 }
 
-// NewCommitServerUserIdentityConfigurationEndpoint returns an endpoint
-// function that calls the method "commitServerUserIdentityConfiguration" of
-// service "remoteSessions".
-func NewCommitServerUserIdentityConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewCommitServerIdentityConfigurationEndpoint returns an endpoint function
+// that calls the method "commitServerIdentityConfiguration" of service
+// "remoteSessions".
+func NewCommitServerIdentityConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CommitServerUserIdentityConfigurationPayload)
+		p := req.(*CommitServerIdentityConfigurationPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -97,7 +97,7 @@ func NewCommitServerUserIdentityConfigurationEndpoint(s Service, authAPIKeyFn se
 		if err != nil {
 			return nil, err
 		}
-		return s.CommitServerUserIdentityConfiguration(ctx, p)
+		return s.CommitServerIdentityConfiguration(ctx, p)
 	}
 }
 

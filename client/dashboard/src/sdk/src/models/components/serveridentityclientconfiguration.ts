@@ -9,7 +9,7 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How the client authenticates at the provider token endpoint, or the preferred method for DCR.
  */
-export const ServerUserIdentityClientConfigurationTokenEndpointAuthMethod = {
+export const ServerIdentityClientConfigurationTokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
@@ -17,15 +17,13 @@ export const ServerUserIdentityClientConfigurationTokenEndpointAuthMethod = {
 /**
  * How the client authenticates at the provider token endpoint, or the preferred method for DCR.
  */
-export type ServerUserIdentityClientConfigurationTokenEndpointAuthMethod =
-  ClosedEnum<
-    typeof ServerUserIdentityClientConfigurationTokenEndpointAuthMethod
-  >;
+export type ServerIdentityClientConfigurationTokenEndpointAuthMethod =
+  ClosedEnum<typeof ServerIdentityClientConfigurationTokenEndpointAuthMethod>;
 
 /**
  * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
  */
-export type ServerUserIdentityClientConfiguration = {
+export type ServerIdentityClientConfiguration = {
   /**
    * Optional upstream OAuth audience.
    */
@@ -46,18 +44,18 @@ export type ServerUserIdentityClientConfiguration = {
    * How the client authenticates at the provider token endpoint, or the preferred method for DCR.
    */
   tokenEndpointAuthMethod?:
-    | ServerUserIdentityClientConfigurationTokenEndpointAuthMethod
+    | ServerIdentityClientConfigurationTokenEndpointAuthMethod
     | undefined;
 };
 
 /** @internal */
-export const ServerUserIdentityClientConfigurationTokenEndpointAuthMethod$outboundSchema:
+export const ServerIdentityClientConfigurationTokenEndpointAuthMethod$outboundSchema:
   z.ZodMiniEnum<
-    typeof ServerUserIdentityClientConfigurationTokenEndpointAuthMethod
-  > = z.enum(ServerUserIdentityClientConfigurationTokenEndpointAuthMethod);
+    typeof ServerIdentityClientConfigurationTokenEndpointAuthMethod
+  > = z.enum(ServerIdentityClientConfigurationTokenEndpointAuthMethod);
 
 /** @internal */
-export type ServerUserIdentityClientConfiguration$Outbound = {
+export type ServerIdentityClientConfiguration$Outbound = {
   audience?: string | undefined;
   client_id?: string | undefined;
   client_secret?: string | undefined;
@@ -66,35 +64,34 @@ export type ServerUserIdentityClientConfiguration$Outbound = {
 };
 
 /** @internal */
-export const ServerUserIdentityClientConfiguration$outboundSchema:
-  z.ZodMiniType<
-    ServerUserIdentityClientConfiguration$Outbound,
-    ServerUserIdentityClientConfiguration
-  > = z.pipe(
-    z.object({
-      audience: z.optional(z.string()),
-      clientId: z.optional(z.string()),
-      clientSecret: z.optional(z.string()),
-      scope: z.optional(z.array(z.string())),
-      tokenEndpointAuthMethod: z.optional(
-        ServerUserIdentityClientConfigurationTokenEndpointAuthMethod$outboundSchema,
-      ),
-    }),
-    z.transform((v) => {
-      return remap$(v, {
-        clientId: "client_id",
-        clientSecret: "client_secret",
-        tokenEndpointAuthMethod: "token_endpoint_auth_method",
-      });
-    }),
-  );
+export const ServerIdentityClientConfiguration$outboundSchema: z.ZodMiniType<
+  ServerIdentityClientConfiguration$Outbound,
+  ServerIdentityClientConfiguration
+> = z.pipe(
+  z.object({
+    audience: z.optional(z.string()),
+    clientId: z.optional(z.string()),
+    clientSecret: z.optional(z.string()),
+    scope: z.optional(z.array(z.string())),
+    tokenEndpointAuthMethod: z.optional(
+      ServerIdentityClientConfigurationTokenEndpointAuthMethod$outboundSchema,
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      clientId: "client_id",
+      clientSecret: "client_secret",
+      tokenEndpointAuthMethod: "token_endpoint_auth_method",
+    });
+  }),
+);
 
-export function serverUserIdentityClientConfigurationToJSON(
-  serverUserIdentityClientConfiguration: ServerUserIdentityClientConfiguration,
+export function serverIdentityClientConfigurationToJSON(
+  serverIdentityClientConfiguration: ServerIdentityClientConfiguration,
 ): string {
   return JSON.stringify(
-    ServerUserIdentityClientConfiguration$outboundSchema.parse(
-      serverUserIdentityClientConfiguration,
+    ServerIdentityClientConfiguration$outboundSchema.parse(
+      serverIdentityClientConfiguration,
     ),
   );
 }

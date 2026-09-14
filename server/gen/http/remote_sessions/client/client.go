@@ -17,9 +17,9 @@ import (
 
 // Client lists the remoteSessions service endpoint HTTP clients.
 type Client struct {
-	// CommitServerUserIdentityConfiguration Doer is the HTTP client used to make
-	// requests to the commitServerUserIdentityConfiguration endpoint.
-	CommitServerUserIdentityConfigurationDoer goahttp.Doer
+	// CommitServerIdentityConfiguration Doer is the HTTP client used to make
+	// requests to the commitServerIdentityConfiguration endpoint.
+	CommitServerIdentityConfigurationDoer goahttp.Doer
 
 	// ListRemoteSessions Doer is the HTTP client used to make requests to the
 	// listRemoteSessions endpoint.
@@ -50,27 +50,27 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CommitServerUserIdentityConfigurationDoer: doer,
-		ListRemoteSessionsDoer:                    doer,
-		RevokeRemoteSessionDoer:                   doer,
-		RestoreResponseBody:                       restoreBody,
-		scheme:                                    scheme,
-		host:                                      host,
-		decoder:                                   dec,
-		encoder:                                   enc,
+		CommitServerIdentityConfigurationDoer: doer,
+		ListRemoteSessionsDoer:                doer,
+		RevokeRemoteSessionDoer:               doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
 	}
 }
 
-// CommitServerUserIdentityConfiguration returns an endpoint that makes HTTP
-// requests to the remoteSessions service commitServerUserIdentityConfiguration
+// CommitServerIdentityConfiguration returns an endpoint that makes HTTP
+// requests to the remoteSessions service commitServerIdentityConfiguration
 // server.
-func (c *Client) CommitServerUserIdentityConfiguration() goa.Endpoint {
+func (c *Client) CommitServerIdentityConfiguration() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeCommitServerUserIdentityConfigurationRequest(c.encoder)
-		decodeResponse = DecodeCommitServerUserIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCommitServerIdentityConfigurationRequest(c.encoder)
+		decodeResponse = DecodeCommitServerIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCommitServerUserIdentityConfigurationRequest(ctx, v)
+		req, err := c.BuildCommitServerIdentityConfigurationRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -78,9 +78,9 @@ func (c *Client) CommitServerUserIdentityConfiguration() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.CommitServerUserIdentityConfigurationDoer.Do(req)
+		resp, err := c.CommitServerIdentityConfigurationDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerUserIdentityConfiguration", err)
+			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerIdentityConfiguration", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -15,24 +15,23 @@ import (
 
 // Client is the "remoteSessions" service client.
 type Client struct {
-	CommitServerUserIdentityConfigurationEndpoint goa.Endpoint
-	ListRemoteSessionsEndpoint                    goa.Endpoint
-	RevokeRemoteSessionEndpoint                   goa.Endpoint
+	CommitServerIdentityConfigurationEndpoint goa.Endpoint
+	ListRemoteSessionsEndpoint                goa.Endpoint
+	RevokeRemoteSessionEndpoint               goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(commitServerUserIdentityConfiguration, listRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(commitServerIdentityConfiguration, listRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
-		CommitServerUserIdentityConfigurationEndpoint: commitServerUserIdentityConfiguration,
-		ListRemoteSessionsEndpoint:                    listRemoteSessions,
-		RevokeRemoteSessionEndpoint:                   revokeRemoteSession,
+		CommitServerIdentityConfigurationEndpoint: commitServerIdentityConfiguration,
+		ListRemoteSessionsEndpoint:                listRemoteSessions,
+		RevokeRemoteSessionEndpoint:               revokeRemoteSession,
 	}
 }
 
-// CommitServerUserIdentityConfiguration calls the
-// "commitServerUserIdentityConfiguration" endpoint of the "remoteSessions"
-// service.
-// CommitServerUserIdentityConfiguration may return the following errors:
+// CommitServerIdentityConfiguration calls the
+// "commitServerIdentityConfiguration" endpoint of the "remoteSessions" service.
+// CommitServerIdentityConfiguration may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -44,13 +43,13 @@ func NewClient(commitServerUserIdentityConfiguration, listRemoteSessions, revoke
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CommitServerUserIdentityConfiguration(ctx context.Context, p *CommitServerUserIdentityConfigurationPayload) (res *CommitServerUserIdentityConfigurationResult, err error) {
+func (c *Client) CommitServerIdentityConfiguration(ctx context.Context, p *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error) {
 	var ires any
-	ires, err = c.CommitServerUserIdentityConfigurationEndpoint(ctx, p)
+	ires, err = c.CommitServerIdentityConfigurationEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*CommitServerUserIdentityConfigurationResult), nil
+	return ires.(*CommitServerIdentityConfigurationResult), nil
 }
 
 // ListRemoteSessions calls the "listRemoteSessions" endpoint of the
