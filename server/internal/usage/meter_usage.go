@@ -183,11 +183,8 @@ func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string
 	for _, accumulator := range seriesByIdentity {
 		accumulator.series.Total = accumulator.total.String()
 		if payload.Family == string(metering.UsageFamilyRiskContentScans) && breakdown == "scanner" && accumulator.series.Kind == "value" {
-			switch *accumulator.series.Key {
-			case string(metering.MeterRiskGitleaks):
-				accumulator.series.Label = "Secret scanning"
-			case string(metering.MeterRiskPresidio):
-				accumulator.series.Label = "Sensitive data"
+			if label, ok := metering.LookupRiskScannerLabel(metering.MeterID(*accumulator.series.Key)); ok {
+				accumulator.series.Label = label
 			}
 		}
 		series = append(series, accumulator.series)

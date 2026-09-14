@@ -66,6 +66,29 @@ var usageFamilySpecs = map[UsageFamily]usageFamilySpec{
 	},
 }
 
+// LookupRiskScannerLabel returns the API display label for a registered risk
+// scanner. Stored facet labels are not authoritative for scanner display names.
+func LookupRiskScannerLabel(id MeterID) (string, bool) {
+	switch id {
+	case MeterRiskGitleaks:
+		return "Secret scanning", true
+	case MeterRiskPresidio:
+		return "PII", true
+	case MeterRiskPromptInjection:
+		return "Prompt injection", true
+	case MeterRiskPromptPolicy:
+		return "Prompt policy", true
+	case MeterRiskCustomRules:
+		return "Custom rules", true
+	case MeterRiskCLIDestructive:
+		return "CLI destructive", true
+	case MeterAgentSessionStorage, MeterMCPBandwidthIngress, MeterMCPBandwidthEgress:
+		return "", false
+	default:
+		return "", false
+	}
+}
+
 // ResolveUsageSelection validates the API family/facet pair and returns the
 // exact internal repository selection plus the resolved default facet name.
 func ResolveUsageSelection(family UsageFamily, breakdown string) (string, chrepo.UsageSelection, error) {
