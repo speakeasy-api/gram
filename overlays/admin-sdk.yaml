@@ -126,6 +126,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminSetOrganizationFeature']
     update:
       x-speakeasy-name-override: setOrganizationFeature
+  - target: $.paths.*[?@.operationId=='adminStartTrial']
+    update:
+      x-speakeasy-name-override: startTrial
   - target: $.paths.*[?@.operationId=='adminSetStripeCustomer']
     update:
       x-speakeasy-name-override: setStripeCustomer
