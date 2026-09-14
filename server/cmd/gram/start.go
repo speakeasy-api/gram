@@ -1195,7 +1195,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			idTokenVerifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
 			remoteSessionEnricher := remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
-				ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))
+				ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), issuerMetadataRefresher)
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,

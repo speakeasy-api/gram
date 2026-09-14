@@ -297,14 +297,14 @@ func (r *IssuerMetadataRefresher) admit(ctx context.Context, use IssuerMetadataU
 	}()
 }
 
-// tokenEndpointMissing reports a token endpoint answer that says the stored endpoint is gone; a 404 or 410 carrying an OAuth error body is the endpoint refusing the client or grant, not drift.
-func tokenEndpointMissing(statusCode int, oauthErrorBody bool) bool {
+// upstreamEndpointMissing reports an upstream answer that says the stored endpoint is gone; a 404 or 410 carrying an OAuth error body is the endpoint refusing the client, grant, or token, not drift.
+func upstreamEndpointMissing(statusCode int, oauthErrorBody bool) bool {
 	return (statusCode == http.StatusNotFound || statusCode == http.StatusGone) && !oauthErrorBody
 }
 
 // noteTokenEndpointMissing requests a reactive refresh when the stored token endpoint answered 404 or 410 without an OAuth error body; the caller's error is untouched.
 func noteTokenEndpointMissing(ctx context.Context, r *IssuerMetadataRefresher, client repo.GetRemoteSessionClientWithIssuerByIDRow, statusCode int, oauthErrorBody bool) {
-	if tokenEndpointMissing(statusCode, oauthErrorBody) {
+	if upstreamEndpointMissing(statusCode, oauthErrorBody) {
 		r.RequestRefresh(ctx, issuerUseFromClientRow(client), remotesessionmetrics.IssuerMetadataRefreshReasonTokenEndpointMissing)
 	}
 }

@@ -144,11 +144,11 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		enricher:       nil,
 		restatements:   sync.WaitGroup{},
 	}
-	if policy != nil {
-		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
-	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.enricher == nil && policy != nil {
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, s.issuerMetadata)
 	}
 	return s
 }
