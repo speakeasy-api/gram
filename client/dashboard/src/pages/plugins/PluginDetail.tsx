@@ -257,7 +257,9 @@ export default function PluginDetail(): JSX.Element | null {
     await invalidateAllPublishStatus(queryClient);
   };
 
-  // Ref, not state, so switching modes does not re-render the memoized dialogs.
+  // Ref, not state: onSuccess/onError read the mode from a detached mutation
+  // callback, where a state capture would be stale; it also avoids re-rendering
+  // the memoized dialogs on mode switch.
   const publishModeRef = useRef<"publish" | "manage">("publish");
 
   const publishMutation = usePublishPluginsMutation({
