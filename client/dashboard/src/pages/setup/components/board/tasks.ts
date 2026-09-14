@@ -6,6 +6,7 @@ export type OnboardingTaskId =
   | "directory-sync"
   | "enable-logging"
   | "create-marketplace"
+  | "litellm"
   | "instrument-agents"
   | "additional-agent-config"
   | "confirm-traffic"
@@ -26,6 +27,7 @@ export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
   { id: "anthropic-admin-controls" },
   { id: "create-marketplace" },
   { id: "instrument-agents" },
+  { id: "litellm" },
   { id: "additional-agent-config" },
   { id: "confirm-traffic" },
   { id: "distribute-servers" },
@@ -56,6 +58,7 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
       "enable-logging",
       "anthropic-observability",
       "instrument-agents",
+      "litellm",
       "additional-agent-config",
       "confirm-traffic",
     ],
