@@ -745,10 +745,7 @@ func (s *RefreshService) restateIdentity(
 		target := enrichmentTargetFromClient(client, "")
 		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
 		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
-		// A token for another subject says nothing about this grant, its scope included.
-		if access.identity != nil && previousSubject != "" && access.identity.Subject != previousSubject {
-			s.enricher.rejectJWTAccessToken(ctx, target, &access, "subject mismatch")
-		}
+		s.enricher.rejectJWTForOtherSubject(ctx, target, &access, previousSubject)
 		if access.ran {
 			interfaces[IdentitySourceJWTAccessToken] = access.interfaceRecord
 		}

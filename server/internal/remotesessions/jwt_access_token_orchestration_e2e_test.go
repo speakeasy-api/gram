@@ -513,3 +513,67 @@ func TestJWTAccessTokenVerifiedRefreshIDTokenLiftsRejectedMarker(t *testing.T) {
 	require.Equal(t, []string{"jwt:new"}, sess.Scopes, "a verified ID token lets the JWT recover the omitted scope")
 	require.NotEqual(t, "rejected", decodeEnrichment(t, sess.Enrichment).Interfaces["id_token"].Status)
 }
+
+// At exchange a JWT for another subject lends neither scope nor claims to a
+// grant whose stronger identity it does not match, as it already cannot on refresh.
+func TestJWTAccessTokenExchangeRejectsJWTForAnotherSubjectBesideStrongerIdentity(t *testing.T) {
+	t.Parallel()
+	issuer := newIDTokenIssuer(t)
+	as := newEnrichmentAS(t)
+	as.script(jsonHandler(http.StatusOK, `{"sub":"user-123","email":"userinfo@example.com"}`), nil)
+	const slug = "jwt-exchange-other-subject"
+	clientID := "synthetic-cid-" + slug
+	initial := jwtGrant{subject: "other-user", scope: "jwt:new", scopeInToken: true}
+	_, env := newSyntheticExpiryEnv(t, slug, jwtGrantHandler(t, issuer, clientID, initial, initial),
+		withIDTokenIssuer(issuer), withEnrichmentAS(as))
+
+	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
+	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
+	require.NotContains(t, env.session.Scopes, "jwt:new", "a mismatched JWT recovers no scope")
+	doc := decodeEnrichment(t, env.session.Enrichment)
+	require.Equal(t, "failed", doc.Interfaces["jwt_access_token"].Status)
+	require.Equal(t, "subject mismatch", doc.Interfaces["jwt_access_token"].Reason)
+	require.NotContains(t, string(env.session.Enrichment), `"other-user"`, "claims for another account are not kept beside this identity")
+	label := remotesessions.RemoteSessionAccountLabel(env.session.UpstreamEmail.String, env.session.UpstreamDisplayName.String, env.session.UpstreamSubject.String, env.session.IdentitySource.String, env.session.Enrichment)
+	require.Equal(t, "userinfo@example.com", label.Identity())
+	require.Empty(t, label.Caveat, "a rejected token for another subject does not cast doubt on the verified account")
+}
+
+// Rotation retires the JWT display identity but keeps the subject binding, so
+// a later replacement token for another account is still rejected.
+func TestJWTAccessTokenRotationKeepsSubjectBinding(t *testing.T) {
+	t.Parallel()
+	issuer := newIDTokenIssuer(t)
+	const slug = "jwt-rotation-keeps-binding"
+	clientID := "synthetic-cid-" + slug
+	refreshes := 0
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		grant := jwtGrant{subject: "user-123", scope: "jwt:initial", scopeInToken: true}
+		if r.FormValue("grant_type") == "refresh_token" {
+			refreshes++
+			grant = jwtGrant{opaque: true}
+			if refreshes > 1 {
+				grant = jwtGrant{subject: "other-user", scope: "jwt:other", scopeInToken: true}
+			}
+		}
+		jwtGrantHandler(t, issuer, clientID, grant, grant)(w, r)
+	}
+	ctx, env := newSyntheticExpiryEnv(t, slug, handler, withIDTokenIssuer(issuer))
+	require.Equal(t, remotesessions.IdentitySourceJWTAccessToken, env.session.IdentitySource.String)
+	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
+
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	require.NoError(t, err)
+	sess := reloadSession(t, env)
+	require.False(t, sess.IdentitySource.Valid, "an opaque replacement retires the JWT display identity")
+	require.False(t, sess.UpstreamEmail.Valid)
+	require.Equal(t, "user-123", sess.UpstreamSubject.String, "the subject binding survives rotation")
+
+	_, err = env.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled)
+	require.NoError(t, err)
+	sess = reloadSession(t, env)
+	require.Equal(t, "user-123", sess.UpstreamSubject.String)
+	require.False(t, sess.IdentitySource.Valid, "a JWT for another account is not adopted")
+	require.NotContains(t, sess.Scopes, "jwt:other")
+	require.Equal(t, "subject mismatch", decodeEnrichment(t, sess.Enrichment).Interfaces["jwt_access_token"].Reason)
+}

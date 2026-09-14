@@ -548,6 +548,15 @@ func (e *SessionEnricher) rejectJWTAccessToken(ctx context.Context, target enric
 	logIdentityFailure(ctx, e.logger, "jwt access token rejected", errors.New(reason), attr.SlogOAuthIssuer(target.issuerURL))
 }
 
+// rejectJWTForOtherSubject discards a verified token naming someone other than subject: it says nothing about this grant, its scope included.
+func (e *SessionEnricher) rejectJWTForOtherSubject(ctx context.Context, target enrichmentTarget, out *jwtAccessTokenResult, subject string) {
+	if out.identity == nil || subject == "" || out.identity.Subject == subject {
+		return
+	}
+	e.rejectJWTAccessToken(ctx, target, out, interfaceReasonSubjectMismatch)
+	out.identity = nil
+}
+
 // introspect presents a token to the issuer's introspection endpoint,
 // authenticating as the client the way the token endpoint does. Only a 200
 // carrying an active member is a usable answer: a 403 or a body without one
@@ -757,7 +766,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	} {
 		if candidate.subject != "" && sess.UpstreamSubject.Valid && candidate.subject != sess.UpstreamSubject.String {
 			logIdentityFailure(ctx, m.logger, "enrichment identity rejected; stored identity kept", errIDTokenSubjectMismatch, attrs...)
-			candidate.res.fail("subject mismatch")
+			candidate.res.fail(interfaceReasonSubjectMismatch)
 		}
 	}
 	stored := storedInterfaceRecords(sess.Enrichment)
@@ -766,10 +775,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 	jwtCanWrite := !sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String)
 	if !idTokenRejected && !strongerIdentity && jwtCanWrite {
 		access = m.enricher.jwtAccessToken(callCtx, target, accessToken)
-		if subject := identitySubject(access.identity); subject != "" && sess.UpstreamSubject.Valid && subject != sess.UpstreamSubject.String {
-			m.enricher.rejectJWTAccessToken(ctx, target, &access, "subject mismatch")
-			access.identity = nil
-		}
+		m.enricher.rejectJWTForOtherSubject(ctx, target, &access, sess.UpstreamSubject.String)
 	}
 	if !userinfo.ran && !access.ran && !introspection.ran {
 		return none, nil

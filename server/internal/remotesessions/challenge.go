@@ -522,6 +522,8 @@ type RemoteSessionState struct {
 	ConnectedAs string
 	// AccountChips is the provider context beside it (workspace, team, login); empty when none.
 	AccountChips []string
+	// IdentityCaveat qualifies ConnectedAs when it was read from a stored interface answer rather than the recorded identity.
+	IdentityCaveat string
 	// IdentitySource names the interface ConnectedAs came from.
 	IdentitySource string
 	// Token is the introspection interface's last answer about the access token; nil when never asked or unanswered.
@@ -603,6 +605,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			Scopes:                 row.Scopes,
 			ConnectedAs:            label.Identity(),
 			AccountChips:           label.Context(),
+			IdentityCaveat:         label.Caveat,
 			IdentitySource:         row.IdentitySource.String,
 			Token:                  token,
 			ID:                     row.ID,
@@ -1412,6 +1415,10 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 	if needsIdentity {
 		selected = access.identity
 	} else {
+		m.enricher.rejectJWTForOtherSubject(ctx, target, &access, selected.Subject)
+		if access.ran {
+			interfaces[IdentitySourceJWTAccessToken] = access.interfaceRecord
+		}
 		// A stronger identity won; this verification supplies current-token metadata only.
 		access.identity = nil
 	}

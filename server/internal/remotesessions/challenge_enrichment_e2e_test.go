@@ -184,6 +184,12 @@ func TestRemoteLoginRejectedIDTokenDoesNotFallBackToUserinfo(t *testing.T) {
 	doc := decodeEnrichment(t, sess.Enrichment)
 	require.Equal(t, "ok", doc.Interfaces["userinfo"].Status)
 	require.Equal(t, "rejected", doc.Interfaces["id_token"].Status, "the marker survives the merge")
+
+	// The card still names the account from the stored userinfo answer, with the caveat that it was not recorded.
+	statuses, err := env.mgr.RemoteSessionStatuses(ctx, env.subject, env.projectID, env.organizationID, sess.UserSessionIssuerID)
+	require.NoError(t, err)
+	require.Equal(t, "grant-owner@example.com", statuses[env.clientID].ConnectedAs)
+	require.NotEmpty(t, statuses[env.clientID].IdentityCaveat)
 }
 
 // The exchange's id token rejection outlives a token response over the cap.

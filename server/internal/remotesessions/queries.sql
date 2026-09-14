@@ -1161,9 +1161,9 @@ SET
         ELSE COALESCE(@refresh_expires_at, refresh_expires_at) END,
     scopes = @scopes,
     resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
-    -- JWT-derived identity describes the access token being replaced. Higher
-    -- ranked identity sources survive rotation until they restate themselves.
-    upstream_subject = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_subject END,
+    -- JWT-derived display identity describes the access token being replaced;
+    -- the subject binding stays so a replacement token for another account is
+    -- still rejected. Higher ranked sources survive rotation until they restate.
     upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
     upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
     identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
