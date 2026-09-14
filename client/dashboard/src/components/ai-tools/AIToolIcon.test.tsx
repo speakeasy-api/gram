@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AIToolIcon, ICON_TARGET_IDS } from "./AIToolIcon";
+import { ICON_TARGET_IDS } from "./ai-tool-icon-sources";
+import { AIToolIcon } from "./AIToolIcon";
 
 describe("AIToolIcon", () => {
   it("renders the vendor mark for a tool Gram ships a target for", () => {
