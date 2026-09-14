@@ -2107,6 +2107,23 @@ type PrincipalGrant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PrincipalRemoteSessionBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	IssuerAttachmentScope string
+	ClientAttachmentScope string
+	GrantGeneration       int64
+	AttachedBySubjectID   string
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -2241,6 +2258,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -2272,6 +2290,7 @@ type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
 	RemoteSessionIssuerID           uuid.UUID
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
@@ -3235,6 +3254,7 @@ type UserSessionIssuer struct {
 	ID                            uuid.UUID
 	ProjectID                     uuid.NullUUID
 	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval
