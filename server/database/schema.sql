@@ -8450,3 +8450,31 @@ CREATE TABLE IF NOT EXISTS killswitch_operations (
   CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);
+
+-- Queries are Explore's one server-side object: a named, saved question
+-- against a catalog dataset, kept with the builder state it was built with.
+-- Columns are what the server reasons about (scope, listing, impact checks);
+-- everything only the client interprets lives in spec. dataset is hoisted out
+-- of spec so a catalog change can be impact-checked without deserialising
+-- every row.
+CREATE TABLE IF NOT EXISTS queries (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
+
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
+  dataset TEXT NOT NULL CHECK (dataset <> ''),
+  spec jsonb NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT queries_pkey PRIMARY KEY (id),
+  CONSTRAINT queries_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS queries_project_id_updated_at_idx
+ON queries (project_id, updated_at DESC) WHERE deleted IS FALSE;
