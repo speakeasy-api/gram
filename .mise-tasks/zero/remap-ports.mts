@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE dir="{{ config_root }}"
 //MISE hide=true
@@ -29,8 +29,9 @@
  * mise.toml changes -- a URL prefix rename, say -- the pinned copy silently
  * keeps the old shape and mise.toml's new default never applies. A pinned
  * value that still carries a template but no longer matches the current one
- * is therefore re-emitted. A hand-pinned value carries no template and is
- * left alone, whatever mise.toml now says.
+ * is therefore re-emitted. Numeric pins cannot be distinguished from manual
+ * overrides and remain untouched. Remove a stale numeric alias explicitly
+ * from mise.local.toml before syncing to adopt the current template.
  */
 
 import { execFileSync } from "node:child_process";
@@ -156,8 +157,13 @@ async function main() {
     }
   }
 
+  // Template ports are aliases, not separate listeners. Emit them through
+  // dependency traversal after their source port instead of randomizing them.
   const portEnvVars = Object.keys(config.env).filter(
-    (key) => key.endsWith("_PORT") && !SHARED_PORT_ENV_VARS.has(key),
+    (key) =>
+      key.endsWith("_PORT") &&
+      !SHARED_PORT_ENV_VARS.has(key) &&
+      !isGeneratedDeclaration(config.env[key]),
   );
 
   // Ports this worktree keeps (--preserve) are reserved too, so a newly-added
@@ -191,14 +197,16 @@ async function main() {
     for (const [key, value] of findDependentEnvVars(config.env, portEnvVar)) {
       if (preserve && key in existing) {
         const pinned = existing[key] ?? "";
-        if (!isGeneratedDeclaration(pinned) || pinned === value) continue;
+        const generatedTemplateChanged =
+          isGeneratedDeclaration(pinned) && pinned !== value;
+        if (!generatedTemplateChanged) continue;
         if (!refreshed.has(key)) {
           refreshed.add(key);
           // stderr on purpose: stdout is the declarations themselves when the
           // caller asked for them on `-`.
-          console.error(
-            `↻ ${key}: refreshing a generated declaration whose mise.toml template changed (was ${JSON.stringify(pinned)})`,
-          );
+          const reason =
+            "refreshing a generated declaration whose mise.toml template changed";
+          console.error(`↻ ${key}: ${reason} (was ${JSON.stringify(pinned)})`);
         }
       }
       emit(key, value);
