@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.119.0
+
+### Minor Changes
+
+- 8b5b56f: Add rollout-gated Tailscale private network setup and hosted MCP server network access controls.
+
 ## 0.118.0
 
 ### Minor Changes

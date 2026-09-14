@@ -1,5 +1,20 @@
 # server
 
+## 2.5.0
+
+### Minor Changes
+
+- 17a5d8a: Persist RFC 9728 protected-resource display metadata (resource_name, resource_documentation, resource_policy_uri, resource_tos_uri) on the issuer a direct-remote Platform MCP attachment creates, re-probe it when the remote MCP server is updated, expose it on remoteMcp.discoverProtectedResourceMetadata, and link documentation, policy, and terms on the consent card.
+- 8b5b56f: Add rollout-gated Tailscale private network setup and hosted MCP server network access controls.
+- 10bfee9: Allow organization administrators to link a user-session issuer to an organization-level or global trusted remote-session issuer. Remote-issuer lifecycle preflights and mutations now protect active trust links, and metadata refreshes persist and revalidate the trusted issuer's public JWK Set atomically.
+
+### Patch Changes
+
+- efa78b6: Fix realtime risk enforcement failing open for non-UUID operation ids.
+- 7fe38bd: Identity map syncs that lose the single-writer lock now defer to the running replacement instead of failing and retrying.
+- ed85d07: feat(platform-mcp): enforce Shadow MCP approvals across direct-remote distribution
+- 4b1bcd8: feat(platform-mcp): report Shadow MCP distribution admission and guide the reviewed workflow
+
 ## 2.4.0
 
 ### Minor Changes

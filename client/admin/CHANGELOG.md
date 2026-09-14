@@ -1,5 +1,11 @@
 # admin
 
+## 0.4.1
+
+### Patch Changes
+
+- fc61b11: Group standalone admin navigation into Account Management and Platform Management sections.
+
 ## 0.4.0
 
 ### Minor Changes
