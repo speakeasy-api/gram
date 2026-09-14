@@ -659,6 +659,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 	rotated, err := s.rotator.Rotate(ctx, RotateClientRegistrationParams{
 		ClientID:                 existing.RemoteSessionClient.ID,
 		Trigger:                  RotationTriggerManual,
+		ExpectedClientID:         "",
 		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:         authCtx.Email,
 		ConfirmUpstreamRejection: false,

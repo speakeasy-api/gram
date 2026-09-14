@@ -97,6 +97,14 @@ type RotateClientRegistrationParams struct {
 	// Trigger names why the rotation runs.
 	Trigger RotationTrigger
 
+	// ExpectedClientID is the upstream client_id the caller decided to
+	// replace. Automatic triggers set it: a login that decided on a snapshot
+	// and then waited for the lease may find the row already repaired by the
+	// caller that held it, and must adopt that repair rather than replace the
+	// replacement or send its user out with the snapshot. Empty skips the
+	// check; manual rotations always run.
+	ExpectedClientID string
+
 	// Actor is who the audit feed credits; automatic rotations pass the system
 	// principal.
 	Actor urn.Principal
@@ -208,6 +216,25 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
 	if endpoint == "" {
 		return zero, ErrIssuerHasNoRegistrationEndpoint
+	}
+
+	// The caller decided to rotate on a snapshot taken before it held the
+	// lease. If the row moved in between, another rotation already replaced
+	// the registration, or a probe already found the issuer still recognizes
+	// it; either way the current row is the one to use and the issuer is not
+	// contacted again. Rotating the replacement would revoke every session
+	// its users just re-established, and probing the replacement only to hand
+	// back the caller's snapshot would send its user out with the dead
+	// client_id.
+	if params.Trigger != RotationTriggerManual {
+		if params.ExpectedClientID != "" && current.ClientID != params.ExpectedClientID {
+			logger.InfoContext(ctx, "client registration was already replaced by a concurrent rotation; adopting the replacement")
+			return current, nil
+		}
+		if !rotationTriggerApplies(current, params.Trigger, time.Now()) {
+			logger.InfoContext(ctx, "client registration no longer needs rotation; adopting the current row")
+			return current, nil
+		}
 	}
 
 	if params.ConfirmUpstreamRejection {
@@ -338,14 +365,35 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	return updated, nil
 }
 
+// rotationTriggerApplies reports whether the condition that prompted a
+// rotation still holds on the row as it is now. A rejection is outstanding
+// while its marker is set; an expiry is outstanding while the recorded
+// client_secret_expires_at is in the past. A replaced registration clears the
+// marker and carries the issuer's new expiry, so either trigger stops applying
+// once another caller has repaired the row.
+func rotationTriggerApplies(row repo.RemoteSessionClient, trigger RotationTrigger, now time.Time) bool {
+	switch trigger {
+	case RotationTriggerUpstreamRejected:
+		return row.UpstreamRejectedAt.Valid
+	case RotationTriggerSecretExpired:
+		return row.ClientSecretExpiresAt.Valid && !row.ClientSecretExpiresAt.Time.After(now)
+	case RotationTriggerManual:
+		return true
+	default:
+		return true
+	}
+}
+
 // awaitRotation polls the client row while another caller holds the rotation
 // lease, returning the row once its client_id no longer matches staleClientID
-// or once the rejection marker has been cleared (the winner's probe found the
-// issuer still recognizes the client). It gives up after the refresh wait
-// budget, the same bound the refresh path puts on waiting for a concurrent
-// winner, and reports ErrClientRotationInProgress so the caller proceeds with
-// what it has.
-func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, staleClientID string) (repo.RemoteSessionClient, error) {
+// or once the trigger the caller acted on no longer applies to it: the
+// winner's probe cleared a rejection marker, or the winner's replacement
+// carries an expiry that has not passed. An expiry-triggered wait starts with
+// no rejection marker, so it must not treat the marker's absence as
+// completion. It gives up after the refresh wait budget, the same bound the
+// refresh path puts on waiting for a concurrent winner, and reports
+// ErrClientRotationInProgress so the caller proceeds with what it has.
+func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, staleClientID string, trigger RotationTrigger) (repo.RemoteSessionClient, error) {
 	var zero repo.RemoteSessionClient
 	q := repo.New(r.db)
 	deadline := time.Now().Add(refreshWaitBudget)
@@ -355,7 +403,7 @@ func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, s
 			return zero, fmt.Errorf("poll remote session client during rotation: %w", err)
 		}
 		current := row.RemoteSessionClient
-		if current.ClientID != staleClientID || !current.UpstreamRejectedAt.Valid {
+		if current.ClientID != staleClientID || !rotationTriggerApplies(current, trigger, time.Now()) {
 			return current, nil
 		}
 		if time.Now().After(deadline) {
@@ -372,10 +420,15 @@ func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, s
 // upstreamRecognizesClient asks the issuer's token endpoint whether it still
 // authenticates the stored client. A refresh_token grant with a made-up token
 // is enough: an issuer authenticates the client before it looks at the grant,
-// so invalid_client means the registration is gone and any other answer
-// (invalid_grant above all) means the client is still on file. An answer that
-// cannot be classified, a 5xx, or a transport failure is an error rather than
-// either verdict, so an issuer having a bad minute neither rotates nor
+// so invalid_client means the registration is gone, and an error the issuer
+// can only produce after authenticating the client (invalid_grant above all)
+// means the client is still on file. Anything else is an error rather than
+// either verdict: a 5xx, a 429, a transport failure, an answer that cannot be
+// classified, or an OAuth error such as temporarily_unavailable or
+// server_error that says nothing about the client. Treating those as
+// recognition would clear a genuine rejection marker while the grant is
+// already gone, leaving the client reconnecting with the dead client_id until
+// its next rejection; so an issuer having a bad minute neither rotates nor
 // exonerates the client.
 func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.GetRemoteSessionClientForRotationRow) (bool, error) {
 	client := row.RemoteSessionClient
@@ -421,7 +474,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 	if err != nil {
 		return false, fmt.Errorf("read probe response: %w", err)
 	}
-	if resp.StatusCode >= http.StatusInternalServerError {
+	if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests {
 		return false, fmt.Errorf("token endpoint answered the probe with HTTP %d", resp.StatusCode)
 	}
 	parsed, ok := oautherr.ParseTokenError(body)
@@ -433,7 +486,16 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 		}
 		return false, fmt.Errorf("token endpoint answered the probe with HTTP %d and no recognizable OAuth error", resp.StatusCode)
 	}
-	return oautherr.CanonicalTokenErrorCode(parsed.Code) != oautherr.CodeInvalidClient, nil
+	switch code := oautherr.CanonicalTokenErrorCode(parsed.Code); code {
+	case oautherr.CodeInvalidClient:
+		return false, nil
+	case oautherr.CodeInvalidGrant, oautherr.CodeUnauthorizedClient, oautherr.CodeInvalidScope, oautherr.CodeUnsupportedGrantType:
+		// Each of these is a verdict on the grant or the client's permissions,
+		// which the issuer only reaches after authenticating the client.
+		return true, nil
+	default:
+		return false, fmt.Errorf("token endpoint answered the probe with %q, which does not say whether the client is registered", code)
+	}
 }
 
 // rotateRejectedRegistration replaces the client's upstream registration when
@@ -451,6 +513,7 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 	rotated, err := m.rotator.Rotate(ctx, RotateClientRegistrationParams{
 		ClientID:                 client.ID,
 		Trigger:                  trigger,
+		ExpectedClientID:         client.ExternalClientID,
 		Actor:                    urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
 		ActorDisplayName:         &actorLabel,
 		ConfirmUpstreamRejection: trigger == RotationTriggerUpstreamRejected,
@@ -466,7 +529,7 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 		// user to the authorize endpoint with the client it is replacing would
 		// land them on the issuer's error page, so wait for the winner's row
 		// instead; it finishes within a few seconds.
-		rotated, err = m.rotator.awaitRotation(ctx, client.ID, client.ExternalClientID)
+		rotated, err = m.rotator.awaitRotation(ctx, client.ID, client.ExternalClientID, trigger)
 	}
 	if err != nil {
 		m.logger.WarnContext(ctx, "could not replace a client registration the issuer no longer recognizes; proceeding with the stored client",

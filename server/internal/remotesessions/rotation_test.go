@@ -99,11 +99,25 @@ func stageRegistration(t *testing.T, env syntheticExpiryEnv, registrationEndpoin
 // and returns the client_id the authorize redirect carries.
 func mintLogin(t *testing.T, env syntheticExpiryEnv) string {
 	t.Helper()
-	ctx := t.Context()
-	clients, err := env.mgr.ListClients(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID)
+	return mintLoginFor(t, env, listClient(t, env))
+}
+
+// listClient reads the fixture client the way the consent screen does. A test
+// that stages a concurrent writer between this read and mintLoginFor holds
+// the stale snapshot a login race produces.
+func listClient(t *testing.T, env syntheticExpiryEnv) remotesessions.Client {
+	t.Helper()
+	clients, err := env.mgr.ListClients(t.Context(), env.projectID, env.organizationID, env.session.UserSessionIssuerID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
+	return clients[0]
+}
 
+// mintLoginFor runs the connect leg for the given client snapshot and returns
+// the client_id the authorize redirect carries.
+func mintLoginFor(t *testing.T, env syntheticExpiryEnv, client remotesessions.Client) string {
+	t.Helper()
+	ctx := t.Context()
 	authURL, err := env.mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           env.projectID,
@@ -113,7 +127,7 @@ func mintLogin(t *testing.T, env syntheticExpiryEnv) string {
 		McpSlug:             "rotation-mcp",
 		FinalRedirectURI:    "",
 		Resource:            "",
-	}, clients[0])
+	}, client)
 	require.NoError(t, err)
 	parsed, err := url.Parse(authURL)
 	require.NoError(t, err)
@@ -382,4 +396,139 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentRotation(t *testing.T) {
 	require.Equal(t, "rotated-by-winner", mintLogin(t, env))
 	require.Zero(t, upstream.registrationAttempts.Load(), "the waiting login must not register a second replacement")
 	require.Zero(t, upstream.refreshAttempts.Load(), "nor probe while the winner holds the lease")
+}
+
+// replaceAsWinner lands the replacement a concurrent rotation would: a new
+// client_id, no rejection marker, and an expiry the issuer reported as far in
+// the future. It is what a login that lost the race must find and adopt. It
+// returns rather than asserts so a test can stage it from a goroutine.
+func replaceAsWinner(ctx context.Context, env syntheticExpiryEnv, before repo.RemoteSessionClient) error {
+	_, err := env.q.ReplaceRemoteSessionClientRegistration(context.WithoutCancel(ctx), repo.ReplaceRemoteSessionClientRegistrationParams{
+		ClientID:                "rotated-by-winner",
+		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		ClientSecretExpiresAt:   conv.ToPGTimestamptz(time.Now().Add(24 * time.Hour).UTC()),
+		TokenEndpointAuthMethod: before.TokenEndpointAuthMethod,
+		ID:                      before.ID,
+		ExpectedClientID:        before.ClientID,
+		ExpectedUpdatedAt:       before.UpdatedAt,
+	})
+	if err != nil {
+		return fmt.Errorf("replace registration as winner: %w", err)
+	}
+	return nil
+}
+
+// A probe answer that says nothing about the client (a 429, or an OAuth
+// error like temporarily_unavailable or server_error on a 4xx) must not count
+// as recognition. The refresh that recorded the rejection already cleared the
+// grant, so clearing the marker on such an answer would leave a client with no
+// recorded expiry reconnecting with the dead client_id indefinitely.
+func TestBuildAuthorizationUrl_InconclusiveProbeErrorKeepsRejection(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "rate-limited", status: http.StatusTooManyRequests, body: `{"error":"temporarily_unavailable"}`},
+		{name: "server-error-4xx", status: http.StatusBadRequest, body: `{"error":"server_error"}`},
+		{name: "unknown-code", status: http.StatusBadRequest, body: `{"error":"try_again_later"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			upstream := &rotationUpstream{refreshStatus: tc.status, refreshBody: tc.body}
+			_, env := newSyntheticExpiryEnv(t, "rotate-probe-"+tc.name, upstream.handler())
+			rejectedAt := time.Now().Add(-time.Hour)
+			stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
+
+			require.Equal(t, "synthetic-cid-rotate-probe-"+tc.name, mintLogin(t, env))
+
+			require.EqualValues(t, 1, upstream.refreshAttempts.Load())
+			require.Zero(t, upstream.registrationAttempts.Load())
+			client := loadClient(t, env)
+			require.True(t, client.UpstreamRejectedAt.Valid, "an inconclusive probe must leave the rejection marker for the next login to confirm")
+		})
+	}
+}
+
+// A login that decided to rotate on a stale snapshot, and only got the lease
+// after another caller had already replaced the registration, adopts that
+// replacement. Rotating again would register a third client and revoke the
+// sessions users just re-established.
+func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementInsteadOfRotatingExpiredAgain(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	_, env := newSyntheticExpiryEnv(t, "rotate-expired-stale", upstream.handler())
+	expiredAt := time.Now().Add(-time.Minute)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", nil, &expiredAt)
+
+	stale := listClient(t, env)
+	require.NoError(t, replaceAsWinner(t.Context(), env, loadClient(t, env)))
+
+	require.Equal(t, "rotated-by-winner", mintLoginFor(t, env, stale))
+
+	require.Zero(t, upstream.registrationAttempts.Load(), "the replacement must not be rotated again")
+	require.Zero(t, upstream.refreshAttempts.Load())
+	require.Equal(t, "rotated-by-winner", loadClient(t, env).ClientID)
+}
+
+// The same race on a rejection: the winner replaced the registration, so the
+// loser neither probes the replacement nor falls back to its snapshot, which
+// would send its user to the issuer with the dead client_id.
+func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementInsteadOfProbingRejected(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	_, env := newSyntheticExpiryEnv(t, "rotate-rejected-stale", upstream.handler())
+	rejectedAt := time.Now().Add(-time.Hour)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
+
+	stale := listClient(t, env)
+	require.NoError(t, replaceAsWinner(t.Context(), env, loadClient(t, env)))
+
+	require.Equal(t, "rotated-by-winner", mintLoginFor(t, env, stale))
+
+	require.Zero(t, upstream.refreshAttempts.Load(), "the replacement is not probed")
+	require.Zero(t, upstream.registrationAttempts.Load())
+}
+
+// An expiry-triggered login that finds the lease held waits for the winner's
+// replacement like a rejection-triggered one does. It starts with no rejection
+// marker, so the marker's absence must not be read as the rotation having
+// finished, which would send the user out with the expired client at once.
+func TestBuildAuthorizationUrl_WaitsForConcurrentExpiryRotation(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	ctx, env := newSyntheticExpiryEnv(t, "rotate-expiry-wait", upstream.handler())
+	expiredAt := time.Now().Add(-time.Minute)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", nil, &expiredAt)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	locks := cache.NewRedisCacheAdapter(redisClient)
+	leaseKey := remotesessions.ClientRotationLeaseKey(env.clientID)
+	held, err := locks.Add(ctx, leaseKey, 30*time.Second)
+	require.NoError(t, err)
+	require.True(t, held)
+	t.Cleanup(func() { _ = locks.Delete(context.WithoutCancel(ctx), leaseKey) })
+
+	before := loadClient(t, env)
+	winner := time.NewTimer(500 * time.Millisecond)
+	go func() {
+		<-winner.C
+		// Failures surface as the login timing out on the stale client below.
+		_ = replaceAsWinner(ctx, env, before)
+	}()
+
+	started := time.Now()
+	require.Equal(t, "rotated-by-winner", mintLogin(t, env))
+	require.GreaterOrEqual(t, time.Since(started), 400*time.Millisecond, "the login must wait for the winner rather than return the expired client at once")
+	require.Zero(t, upstream.registrationAttempts.Load())
+	require.Zero(t, upstream.refreshAttempts.Load())
 }
