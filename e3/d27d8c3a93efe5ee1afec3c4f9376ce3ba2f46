@@ -1,0 +1,19 @@
+server/internal/background/activities/sync_identity_map.go
+  s_3caededc838c21::t_70f1dc2cb98e7b 20,82-87,99,122,131-137,139-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e3d27d8c3a93efe5ee1afec3c4f9376ce3ba2f46",
+  "prompts": {},
+  "sessions": {
+    "s_3caededc838c21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb59aef5-e16c-4af8-ae00-4263295544f0",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
