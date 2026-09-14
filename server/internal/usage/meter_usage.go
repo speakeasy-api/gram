@@ -25,7 +25,7 @@ const maxMeterUsageMonths = 3
 // and a bounded full-period facet breakdown for the active organization.
 func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.MeterUsageResponse, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {

@@ -17,6 +17,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -111,6 +112,21 @@ func TestMeterUsageResponseOmitsKeysForMarkerSeries(t *testing.T) {
 		"unset":     nil,
 		"remainder": nil,
 	}, keys)
+}
+
+func TestGetMeterUsageRequiresActiveOrganization(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = ""
+
+	_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+		Family: string(metering.UsageFamilyAgentSessionStorage),
+	})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 func TestGetMeterUsageRequiresOrganizationRead(t *testing.T) {
