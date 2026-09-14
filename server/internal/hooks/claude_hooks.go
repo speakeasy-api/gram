@@ -647,6 +647,9 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
+	if err := s.requireAgentHooksIngest(ctx); err != nil {
+		return ctx, err
+	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
@@ -689,6 +692,15 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// list snapshot TTL so it survives long-running sessions and only
 	// expires after ~12h of true inactivity.
 	s.refreshMCPListTTL(ctx, sessionID)
+
+	// An agent actor persists on its auth identity at once; buffering would
+	// let a later OTEL export re-attribute the event to a human.
+	if isAgentActor(ctx) {
+		if metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, ""); err == nil {
+			go s.persistHook(ctx, payload, &metadata)
+		}
+		return
+	}
 
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 
@@ -779,6 +791,14 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 }
 
 func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, error) {
+	// An agent actor ignores the payload email and the cached session identity.
+	if isAgentActor(ctx) {
+		if metadata, ok := s.claudeAuthContextMetadata(ctx, sessionID, ""); ok {
+			return metadata, nil
+		}
+		return SessionMetadata{}, errAgentHookUnscoped
+	}
+
 	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, strings.TrimSpace(userEmail))
 
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
@@ -799,7 +819,7 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
 	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
-	if metadata.UserEmail == "" {
+	if metadata.UserEmail == "" && !isAgentActor(ctx) {
 		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
 			attr.SlogEvent("claude_hook_persist_no_user_email"),
 			attr.SlogHookSource("claude"),
@@ -813,7 +833,7 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 	// personal account's email won't resolve, but mergeClaudeAuthContextMetadata
 	// may have already supplied the owner via the device bridge — don't discard
 	// it by re-resolving from the (non-resolving) personal email.
-	if metadata.UserID == "" {
+	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	}
 
@@ -911,6 +931,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			// returns an error for an empty id and the ClickHouse write is
 			// skipped, so read it nil-safe instead of dereferencing.
 			metadata, metaErr := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
+			if isAgentActor(ctx) {
+				metadata, metaErr = s.resolveClaudeSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""), "")
+			}
 			if metaErr == nil {
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
@@ -921,6 +944,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
 				if metaErr == nil && strings.TrimSpace(metadata.UserEmail) != "" {
 					userEmail = metadata.UserEmail
+				}
+				if isAgentActor(ctx) {
+					userEmail = ""
 				}
 				asyncCtx := context.WithoutCancel(ctx)
 				// Resolve the owning user inside the goroutine so the DB lookup
@@ -1011,7 +1037,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		)
 		return denyUnverifiedMCP(denyCodeNoMetadata)
 	}
-	if strings.TrimSpace(metadata.UserEmail) == "" {
+	if strings.TrimSpace(metadata.UserEmail) == "" && !isAgentActor(ctx) {
 		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
 			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
 			attr.SlogHookSource("claude"),

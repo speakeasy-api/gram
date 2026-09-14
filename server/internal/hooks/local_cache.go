@@ -107,7 +107,7 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 }
 
 func (c *localSessionCache) enrichLocalSessionMetadata(ctx context.Context, metadata *SessionMetadata) error {
-	if metadata.UserID != "" {
+	if metadata.UserID != "" || isAgentActor(ctx) {
 		return nil
 	}
 

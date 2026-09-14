@@ -217,6 +217,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// device_id) onto every hook event row so per-tool-call telemetry can be
 	// split by personal vs team account, not just the OTEL log stream.
 	stampAccountAttribution(attrs, *metadata)
+	withAgentActor(ctx, attrs)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -461,6 +462,9 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if sessionMeta.UserID != "" {
 			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
+		}
+		if isAgentActor(ctx) {
+			userInfo = telemetry.UserInfoByEmail("")
 		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{

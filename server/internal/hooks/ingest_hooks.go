@@ -442,6 +442,10 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	// An agent key is the actor itself; it has no human identity to resolve.
+	if isAgentActor(ctx) {
+		return canonicalActor{UserID: "", Email: ""}
+	}
 	tokenEmail := ""
 	if authCtx.Email != nil {
 		tokenEmail = strings.TrimSpace(*authCtx.Email)
@@ -1112,7 +1116,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 		// ingest keys with no self-reported email): the device bridge may have
 		// attributed the owning employee. A resolved identity is never
 		// overwritten.
-		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback {
+		if authenticatedIngestOptions(ctx).AllowSessionIdentityFallback && !isAgentActor(ctx) {
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
 			}
@@ -1132,6 +1136,10 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	// to the OTEL path, which carries the account identity this payload lacks.
 	if strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "codex") {
 		metadata.Provider = providerOpenAI
+		// Account attribution links sessions to employees; an agent actor has none.
+		if isAgentActor(ctx) {
+			return metadata
+		}
 		identityChanged := !sameCodexIdentity(metadata.ObservedUserEmail, metadata.UserEmail)
 		if metadata.AccountType == "" || identityChanged {
 			if identityChanged {
@@ -1346,7 +1354,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 			FunctionID:     nil,
 		},
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 }
 

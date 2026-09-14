@@ -1,0 +1,260 @@
+package hooks
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+)
+
+// agentAuthContext clones the human test auth context into an agent-shaped one.
+func agentAuthContext(t *testing.T, ctx context.Context, ti *testInstance) (*contextvalues.AuthContext, urn.Principal, string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: authCtx.UserID, Name: "Hooks agent",
+	})
+	require.NoError(t, err)
+
+	clone := *authCtx
+	clone.UserID = ""
+	clone.Email = nil
+	clone.APIKeyScopes = nil
+	clone.SessionID = nil
+	return &clone, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authCtx.UserID
+}
+
+// agentKeyContext makes ctx look like an admitted agent-principal API key.
+func agentKeyContext(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
+	t.Helper()
+	authCtx, actor, ownerUserID := agentAuthContext(t, ctx, ti)
+	credential := contextvalues.PrincipalCredential{AuthorizerUserID: ownerUserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0}
+	return contextvalues.WithPrincipalAPIKeyAuthorization(ctx, authCtx, actor, credential)
+}
+
+func seedHooksIngestGrant(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, principal urn.Principal) {
+	t.Helper()
+	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, organizationID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   principal,
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+}
+
+// admittedAgentContext runs real credential admission for an agent whose
+// delegated policy grants org:hooks_ingest on policyOrgID.
+func admittedAgentContext(t *testing.T, ctx context.Context, ti *testInstance, grantAgent bool, policyOrgID string) (context.Context, error) {
+	t.Helper()
+	authCtx, actor, ownerUserID := agentAuthContext(t, ctx, ti)
+	if grantAgent {
+		seedHooksIngestGrant(t, ctx, ti, authCtx.ActiveOrganizationID, actor)
+	}
+	seedHooksIngestGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, ownerUserID))
+
+	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, []authz.Grant{authz.NewGrant(authz.ScopeOrgHooksIngest, policyOrgID)})
+	require.NoError(t, err)
+	raw, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, policy)
+	require.NoError(t, err)
+
+	ti.service.authz = authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
+		DevMode:                          false,
+		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+	})
+	requestCtx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, contextvalues.PrincipalCredential{
+		AuthorizerUserID:       ownerUserID,
+		DelegatedGrants:        raw,
+		DelegatedGrantsVersion: int32(runtimepolicy.DelegatedPolicyVersion2),
+	})
+	prepared, err := ti.service.authz.PrepareContext(requestCtx)
+	if err != nil {
+		return requestCtx, fmt.Errorf("admit agent credential: %w", err)
+	}
+	return prepared, nil
+}
+
+func TestRequireAgentHooksIngest_AllowsGrantedAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentCtx, err := admittedAgentContext(t, ctx, ti, true, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.requireAgentHooksIngest(agentCtx))
+}
+
+func TestRequireAgentHooksIngest_RejectsAgentWithoutGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentCtx, err := admittedAgentContext(t, ctx, ti, false, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, ti.service.requireAgentHooksIngest(agentCtx), &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestRequireAgentHooksIngest_RejectsGrantOnAnotherOrg(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	agentCtx, err := admittedAgentContext(t, ctx, ti, true, "org-other-"+uuid.NewString())
+	if err == nil {
+		err = ti.service.requireAgentHooksIngest(agentCtx)
+	}
+	require.Error(t, err)
+}
+
+func TestRequireAgentHooksIngest_HumanUnaffected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	require.NoError(t, ti.service.requireAgentHooksIngest(authztest.WithExactGrants(t, ctx)))
+}
+
+func TestResolveCanonicalActor_AgentIgnoresSelfReportedEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	humanID := "user-" + uuid.NewString()
+	humanEmail := humanID + "@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, humanID, humanEmail)
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "agent-actor-"+uuid.NewString())
+	payload.Source.UserEmail = &humanEmail
+
+	require.Equal(t, humanID, ti.service.resolveCanonicalActor(ctx, payload, authCtx).UserID)
+
+	agentCtx := agentKeyContext(t, ctx, ti)
+	agentAuth, ok := contextvalues.GetAuthContext(agentCtx)
+	require.True(t, ok)
+	require.Equal(t, canonicalActor{UserID: "", Email: ""}, ti.service.resolveCanonicalActor(agentCtx, payload, agentAuth))
+}
+
+func TestResolveClaudeSessionMetadata_AgentIgnoresCachedHuman(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "agent-claude-" + uuid.NewString()
+	humanEmail := "cached-human@example.com"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:           sessionID,
+		ServiceName:         "claude-code",
+		UserEmail:           humanEmail,
+		UserID:              authCtx.UserID,
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            "",
+		Cwd:                 "",
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   humanEmail,
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	metadata, err := ti.service.resolveClaudeSessionMetadata(agentKeyContext(t, ctx, ti), sessionID, humanEmail)
+	require.NoError(t, err)
+	require.Empty(t, metadata.UserEmail)
+	require.Empty(t, metadata.UserID)
+}
+
+func TestIngest_AgentKeyPersistsChatWithoutHumanIdentity(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	humanID := "user-" + uuid.NewString()
+	humanEmail := humanID + "@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, humanID, humanEmail)
+
+	sessionID := "agent-ingest-" + uuid.NewString()
+	prompt := "agent prompt " + uuid.NewString()
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Source.UserEmail = &humanEmail
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+
+	_, err := ti.service.Ingest(agentKeyContext(t, ctx, ti), payload)
+	require.NoError(t, err)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err, "agent sessions are stored, not skipped")
+	require.False(t, chat.UserID.Valid, "a self-reported email never attributes an agent session to a human")
+	require.False(t, chat.ExternalUserID.Valid)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+}
+
+func TestCursor_AgentKeyAcceptedWithoutEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	toolName := "Shell"
+	toolUseID := "tool-" + uuid.NewString()
+	payload := &gen.CursorPayload{HookEventName: "postToolUse", ToolName: &toolName, ToolUseID: &toolUseID}
+
+	_, err := ti.service.Cursor(ctx, payload)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr, "human requests still require user_email")
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	_, err = ti.service.Cursor(agentKeyContext(t, ctx, ti), payload)
+	require.NoError(t, err)
+}
+
+func TestCodex_AgentKeyAcceptedWithoutEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := "agent-codex-" + uuid.NewString()
+
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{HookEventName: "Stop", SessionID: &sessionID})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr, "human requests still require user_email")
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	agentCtx := agentKeyContext(t, ctx, ti)
+	_, err = ti.service.Codex(agentCtx, &gen.CodexPayload{HookEventName: "Stop", SessionID: &sessionID})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(agentCtx)
+	require.True(t, ok)
+	humanEmail := "codex-human@example.com"
+	metadata := ti.service.codexSessionMetadata(agentCtx, &gen.CodexPayload{HookEventName: "Stop", SessionID: &sessionID, UserEmail: &humanEmail}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	require.Empty(t, metadata.UserEmail)
+	require.Empty(t, metadata.UserID)
+}

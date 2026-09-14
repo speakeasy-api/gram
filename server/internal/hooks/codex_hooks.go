@@ -61,7 +61,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
-	if metadata.UserEmail == "" {
+	if metadata.UserEmail == "" && !isAgentActor(ctx) {
 		return nil, oops.E(oops.CodeInvalid, nil, "codex hook payload missing user_email")
 	}
 	logger = logger.With(
@@ -372,10 +372,15 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 }
 
 func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
+	agent := isAgentActor(ctx)
+	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	if agent {
+		userEmail = ""
+	}
 	metadata := &SessionMetadata{
 		SessionID:   conv.PtrValOr(payload.SessionID, ""),
 		ServiceName: "Codex",
-		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+		UserEmail:   userEmail,
 		UserID:      "",
 		Provider:    providerOpenAI,
 		// The Codex payload carries no account-scope identity (no account
@@ -403,7 +408,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		c, err := s.getSessionMetadata(ctx, metadata.SessionID)
 		if err == nil && c.ServiceName == "Codex" && c.GramOrgID == orgID && c.ProjectID == projectID {
 			cached, cachedOK = c, true
-			if metadata.UserEmail == "" {
+			if metadata.UserEmail == "" && !agent {
 				metadata.UserEmail = cached.UserEmail
 			}
 			if metadata.Hostname == "" {
@@ -419,6 +424,10 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 	// ChatGPT account), so it doubles as the observed email consumers keep
 	// separate from actor identity.
 	metadata.ObservedUserEmail = metadata.UserEmail
+	// Account attribution links sessions to employees; an agent actor has none.
+	if agent {
+		return metadata
+	}
 
 	// Attribute the account. Codex identity is the email alone, so when the
 	// cached classification was computed from the same email this event brings
@@ -496,7 +505,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "wrote Codex hook to ClickHouse",

@@ -64,6 +64,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 	payload = claudePayload
 
 	sessions := extractSessionMetadata(payload)
+	agent := isAgentActor(ctx)
 
 	// Resolve and attribute each session before writing the raw OTEL log rows so
 	// those rows can be stamped with the account attribution (provider,
@@ -108,7 +109,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
@@ -121,6 +122,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// identity rather than only the fields this single batch happened to carry.
 		userEmail := conv.Default(session.UserEmail, cached.UserEmail)
 		userID := ""
+		// The OTEL email is the AI account's report; for an agent actor it is
+		// observed only and never resolves to a human.
+		observedEmail := userEmail
+		if agent {
+			userEmail, observedEmail = "", session.UserEmail
+		}
 		if userEmail != "" {
 			lookup := conv.NormalizeEmail(userEmail)
 			id, ok := userIDByEmail[lookup]
@@ -154,7 +161,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
-			ObservedUserEmail: userEmail,
+			ObservedUserEmail: observedEmail,
 			GramOrgID:         orgID,
 			ProjectID:         projectID,
 		}
@@ -171,7 +178,9 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
 		// non-fatal — session capture/enforcement must continue regardless.
-		if err := s.attributeSession(ctx, &completeMetadata); err != nil {
+		if agent {
+			// Account attribution (incl. the device bridge) links to employees.
+		} else if err := s.attributeSession(ctx, &completeMetadata); err != nil {
 			sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
 				attr.SlogEvent("account_attribution_failed"),
 				attr.SlogError(err),
@@ -467,6 +476,9 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				userInfo := telemetry.UserInfoByEmail(stringAttr(logAttrs, attr.UserEmailKey))
 				if sessionMeta.UserID != "" {
 					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
+				}
+				if isAgentActor(ctx) {
+					userInfo = telemetry.UserInfoByEmail("")
 				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)

@@ -374,7 +374,7 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 // session-attribution path can reuse them without a second resolution.
 func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) (telemetry.UserInfo, string, string) {
 	email := strings.TrimSpace(stringAttr(attrs, attr.UserEmailKey))
-	if email == "" {
+	if email == "" || isAgentActor(ctx) {
 		return telemetry.UserInfoByEmail(""), "", ""
 	}
 
@@ -421,7 +421,8 @@ type codexOTELIdentity struct {
 // the zero metadata stamps nothing.
 func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[string]SessionMetadata, id codexOTELIdentity) SessionMetadata {
 	var none SessionMetadata
-	if id.SessionID == "" {
+	// An agent actor never adopts a cached or classified human identity.
+	if id.SessionID == "" || isAgentActor(ctx) {
 		return none
 	}
 	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {

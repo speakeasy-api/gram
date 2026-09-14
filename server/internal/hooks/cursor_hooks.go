@@ -69,10 +69,15 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
-	if userEmail == "" {
+	actorUserID := ""
+	switch {
+	case isAgentActor(ctx):
+		userEmail = ""
+	case userEmail == "":
 		return nil, oops.E(oops.CodeInvalid, nil, "cursor hook payload missing user_email")
+	default:
+		actorUserID = s.resolveUserByEmail(ctx, userEmail, orgID)
 	}
-	actorUserID := s.resolveUserByEmail(ctx, userEmail, orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -338,6 +343,9 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	ctx = context.WithoutCancel(ctx)
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
+	if isAgentActor(ctx) {
+		userEmail = ""
+	}
 
 	metadata := &SessionMetadata{
 		SessionID:           *payload.ConversationID,
@@ -454,7 +462,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
@@ -537,7 +545,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 
 	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
