@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -673,4 +674,94 @@ func TestCommitServerIdentityConfigurationRequiresWriteOnEveryServerSharingTheIs
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
 	require.Equal(t, []string{userIssuerID.String()}, result.Client.UserSessionIssuerIds)
+}
+
+func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "provider-lock")
+	providerID := createServerIdentityProvider(t, ctx, ti, "provider-lock-provider", "", false, []string{"none"})
+	projectID := projectIDFromContext(t, ctx)
+	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGText(activeOrganizationID(t, ctx)),
+		RemoteSessionIssuerID: providerID,
+		ClientID:              "provider-lock-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+
+	// Stand in for a concurrent UpdateRemoteSessionIssuer mid-edit. This must be
+	// an UPDATE, not SELECT ... FOR UPDATE: an UPDATE that leaves the key alone
+	// takes FOR NO KEY UPDATE, which does NOT conflict with the FOR KEY SHARE
+	// that the client insert's foreign key takes on this row. So only the
+	// handler's own FOR UPDATE read can block here, and a SELECT ... FOR UPDATE
+	// stand-in would block the insert on the foreign key instead and pass
+	// whether or not the handler locks anything.
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err = repo.New(tx).UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ID:        providerID,
+		ProjectID: conv.ToNullUUID(projectID),
+		// Every narg left NULL, so this keeps all values and only takes the
+		// row lock -- the state a real edit is in between its UPDATE and COMMIT.
+		Slug:                              pgtype.Text{String: "", Valid: false},
+		Issuer:                            pgtype.Text{String: "", Valid: false},
+		Name:                              pgtype.Text{String: "", Valid: false},
+		LogoAssetID:                       pgtype.Text{String: "", Valid: false},
+		ClientSetupDocumentationUrl:       pgtype.Text{String: "", Valid: false},
+		AuthorizationEndpoint:             pgtype.Text{String: "", Valid: false},
+		TokenEndpoint:                     pgtype.Text{String: "", Valid: false},
+		RevocationEndpoint:                pgtype.Text{String: "", Valid: false},
+		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
+		JwksUri:                           pgtype.Text{String: "", Valid: false},
+		ServiceDocumentation:              pgtype.Text{String: "", Valid: false},
+		OpPolicyUri:                       pgtype.Text{String: "", Valid: false},
+		OpTosUri:                          pgtype.Text{String: "", Valid: false},
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		CodeChallengeMethodsSupported:     nil,
+		ClientIDMetadataDocumentSupported: pgtype.Bool{Bool: false, Valid: false},
+		UserinfoEndpoint:                  pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpoint:             pgtype.Text{String: "", Valid: false},
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: false, Valid: false},
+		ScopeOverride:                              nil,
+		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		Oidc:                                       pgtype.Bool{Bool: false, Valid: false},
+		Passthrough:                                pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.CommitServerIdentityConfiguration(ctx, &gen.CommitServerIdentityConfigurationPayload{
+			SessionToken:        nil,
+			ApikeyToken:         nil,
+			ProjectSlugInput:    nil,
+			McpServerID:         targetID.String(),
+			ProviderID:          conv.PtrEmpty(providerID.String()),
+			CreateProvider:      nil,
+			ClientMode:          "existing",
+			ExistingClientID:    conv.PtrEmpty(client.ID.String()),
+			ClientConfiguration: nil,
+		})
+		done <- err
+	}()
+
+	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	select {
+	case err := <-done:
+		require.Fail(t, "atomic configuration completed while another transaction held the provider row", "%v", err)
+	default:
+	}
+	require.NoError(t, tx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"atomic configuration did not complete after the provider row lock was released")
+	require.NoError(t, <-done)
 }
