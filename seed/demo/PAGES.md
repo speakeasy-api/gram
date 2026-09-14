@@ -53,7 +53,7 @@ connection.
 
 ### Managed agents
 
-The Identities roster also reads these three existing registered-agent fixtures
+The Identities roster also reads these four existing registered-agent fixtures
 in an ordinary local session. Agent names open the existing agent-management
 screen; unmatched telemetry identifiers without an email are Unknown, not Agent.
 The shared demo skips the restricted inventory read and keeps its people roster.
@@ -61,15 +61,17 @@ The shared demo skips the restricted inventory read and keeps its people roster.
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×3 covers active, suspended,
-and revoked identities with three existing fictional owners (display names and
+management. PG `agents` ×4 includes Release assistant, Support triage, Retired
+documentation bot, and the active Release notes assistant. The roster covers
+active, suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
-delegation is empty. API keys deliberately remain empty in the shared demo: the
+delegation is empty. Release notes assistant adds an attachment-backed session
+and a scoped connect policy, reusing an existing fictional owner account. API keys deliberately remain empty in the shared demo: the
 seed deletes visitor-created keys and asserts none survive. Local-only usable
 keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
 grants only in the target organization, without removing human grants — so
-delegable-grant discovery starts empty and its editor is exercised by adding
+delegable-grant discovery retains only the scoped seeded policies and its editor is exercised by adding
 synthetic grants to the agent, its owner and the calling user locally. Follow
 check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
 

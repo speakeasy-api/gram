@@ -20,6 +20,7 @@ func TestFromContext_AbsentMeansUnattributed(t *testing.T) {
 	require.False(t, ok)
 	require.Empty(t, identity.Kind())
 	require.Empty(t, identity.UserID())
+	require.Empty(t, identity.AgentID())
 }
 
 type neverRevoked struct{}
@@ -47,10 +48,11 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 		subject urn.SessionSubject
 		want    mcpidentity.Kind
 		userID  string
+		agentID string
 	}{
 		{name: "user", subject: urn.NewUserSubject("user_01J8EXAMPLE"), want: mcpidentity.KindUserSession, userID: "user_01J8EXAMPLE"},
 		{name: "api key", subject: urn.NewAPIKeySubject(uuid.MustParse("11111111-1111-1111-1111-111111111111")), want: mcpidentity.KindAPIKey},
-		{name: "agent", subject: urn.NewAgentSubject(uuid.MustParse("22222222-2222-2222-2222-222222222222")), want: mcpidentity.KindAgent},
+		{name: "agent", subject: urn.NewAgentSubject(uuid.MustParse("22222222-2222-2222-2222-222222222222")), want: mcpidentity.KindAgent, agentID: "22222222-2222-2222-2222-222222222222"},
 		{name: "anonymous", subject: urn.NewAnonymousSubject("session"), want: mcpidentity.KindAnonymous},
 	}
 	for _, test := range tests {
@@ -60,6 +62,7 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, test.want, identity.Kind())
 			require.Equal(t, test.userID, identity.UserID())
+			require.Equal(t, test.agentID, identity.AgentID())
 		})
 	}
 }
@@ -89,6 +92,7 @@ func TestValidatorBoundaryNonUserStrategiesCannotCarryUser(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, tt.want, identity.Kind())
 		require.Empty(t, identity.UserID())
+		require.Empty(t, identity.AgentID())
 	}
 }
 
@@ -98,4 +102,24 @@ func TestZeroValidatorBoundaryIsInert(t *testing.T) {
 	var boundary mcpidentity.ValidatorBoundary
 	_, ok := mcpidentity.FromContext(boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_01J8EXAMPLE"))))
 	require.False(t, ok)
+}
+
+func TestValidatorBoundaryStampAgent(t *testing.T) {
+	t.Parallel()
+	id := uuid.New()
+	boundary := mcpidentity.NewValidatorBoundary()
+	identity, ok := mcpidentity.FromContext(boundary.StampAgent(t.Context(), id))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
+	require.Equal(t, id.String(), identity.AgentID())
+	require.Empty(t, identity.UserID())
+	// A subsequent non-agent credential must not retain an earlier agent claim.
+	identity, ok = mcpidentity.FromContext(boundary.StampAPIKey(boundary.StampAgent(t.Context(), id)))
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
+	require.Empty(t, identity.AgentID())
+	for _, inert := range []*mcpidentity.ValidatorBoundary{nil, {}} {
+		_, ok := mcpidentity.FromContext(inert.StampAgent(t.Context(), id))
+		require.False(t, ok)
+	}
 }

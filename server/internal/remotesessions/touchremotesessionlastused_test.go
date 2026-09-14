@@ -50,6 +50,7 @@ func TestTouchRemoteSessionLastUsed(t *testing.T) {
 
 	touch := func(now time.Time, subj urn.SessionSubject, client uuid.UUID) error {
 		return q.TouchRemoteSessionLastUsed(ctx, repo.TouchRemoteSessionLastUsedParams{
+			ID:                    session.ID,
 			NowTs:                 pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
 			SubjectUrn:            subj,
 			RemoteSessionClientID: client,
