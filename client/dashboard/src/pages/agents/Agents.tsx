@@ -364,6 +364,8 @@ function AgentSettings({
   agentID: string;
   onBack: () => void;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [credentialBusy, setCredentialBusy] = useState(false);
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const sdk = useSdkClient();
@@ -403,6 +405,31 @@ function AgentSettings({
     });
   };
 
+  if (searchParams.get("credential") === "new")
+    return (
+      <FormPage
+        title="Create API key"
+        description={`Choose what ${agentQuery.data.name} can access.`}
+        width="wide"
+        primaryAction={
+          <Button
+            variant="secondary"
+            onClick={() => setSearchParams({ id: agentID })}
+            disabled={credentialBusy}
+          >
+            Back to agent
+          </Button>
+        }
+      >
+        <AgentAPIKeys
+          agent={agentQuery.data}
+          creation
+          onBusy={setCredentialBusy}
+          onDone={() => setSearchParams({ id: agentID })}
+        />
+      </FormPage>
+    );
+
   return (
     <SettingsPage
       title={agentQuery.data.name}
@@ -425,7 +452,10 @@ function AgentSettings({
         key={`policy-${agentQuery.data.id}`}
         agent={agentQuery.data}
       />
-      <AgentAPIKeys agent={agentQuery.data} />
+      <AgentAPIKeys
+        agent={agentQuery.data}
+        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
+      />
       <ManagedAgentSessions
         key={`sessions-${agentQuery.data.id}`}
         agent={agentQuery.data}
