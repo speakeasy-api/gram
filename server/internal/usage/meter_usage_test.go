@@ -153,6 +153,7 @@ func TestGetMeterUsageWindowErrorsIdentifyInvalidBoundsWithoutLeakingInput(t *te
 	valid := "2026-04-01T00:00:00Z"
 	invalid := "private-invalid-timestamp"
 	for _, field := range []string{"from", "to"} {
+		logs.Reset()
 		from, to := valid, valid
 		if field == "from" {
 			from = invalid
