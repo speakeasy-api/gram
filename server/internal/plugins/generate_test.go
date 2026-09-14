@@ -2669,6 +2669,7 @@ func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {
 	readme := string(files["README.md"])
 	require.Contains(t, readme, "**Admin access.**")
 	require.Contains(t, readme, "Serve Marketplace From Cursor")
+	require.Contains(t, readme, "keep their original permission until they are re-added")
 	require.NotContains(t, readme, "Collaborators are granted pull permission")
 }
 
