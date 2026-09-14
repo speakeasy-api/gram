@@ -39,6 +39,7 @@ func newApp() *cli.App {
 		},
 		Commands: []*cli.Command{
 			newStartCommand(),
+			newNetworkIngressServerCommand(),
 			newNetingressAttestorCommand(),
 			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
