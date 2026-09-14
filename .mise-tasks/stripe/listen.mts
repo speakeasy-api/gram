@@ -86,6 +86,10 @@ try {
       "--latest",
       "--skip-update",
       "--skip-verify",
+      "--color",
+      "off",
+      "--log-level",
+      "debug",
       "--forward-to",
       config.target,
     ],
@@ -93,6 +97,7 @@ try {
   );
   // Raw CLI output includes the signing secret and must never reach Pitchfork logs.
   let verified = false;
+  let connected = false;
   const deadline = setTimeout(() => {
     save("stopped");
     child.kill("SIGTERM");
@@ -110,14 +115,25 @@ try {
       child.kill("SIGTERM");
       return;
     }
-    if (next === "ready") {
-      verified = true;
-      clearTimeout(deadline);
+    if (next === "disconnected") {
+      connected = false;
       save(next);
+      console.log(
+        "Stripe listener disconnected or reconnecting; delivery unverified.",
+      );
+      return;
+    }
+    // The Ready banner verifies the secret once; reconnects only emit Connected!.
+    if (next === "ready") verified = true;
+    if (next === "connected") connected = true;
+    if (next === "ready" || next === "connected") {
+      if (!verified || !connected) return;
+      clearTimeout(deadline);
+      save("ready");
       console.log(
         "Stripe listener ready (signing secret matched; delivery unverified).",
       );
-    } else if (verified) {
+    } else if (verified && phase !== "disconnected") {
       save(next);
       console.log(
         next === "delivered"

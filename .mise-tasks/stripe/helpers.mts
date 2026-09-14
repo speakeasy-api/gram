@@ -117,6 +117,7 @@ export function stripeFingerprint(config: StripeConfig): string {
 
 export type ListenerPhase =
   | "starting"
+  | "disconnected"
   | "ready"
   | "delivered"
   | "delivery-failed"
@@ -160,19 +161,52 @@ export function writeStripeState(path: string, state: ListenerState): void {
   renameSync(temporary, path);
 }
 
+function classifyStripeAuthError(
+  text: string,
+): "expired" | "auth-failed" | undefined {
+  if (/expired_api_key|api key.*expired|expired.*api key/i.test(text))
+    return "expired";
+  if (
+    /invalid_api_key|authentication.*fail|Authorization failed, status=401|invalid api key|401 unauthorized/i.test(
+      text,
+    )
+  )
+    return "auth-failed";
+  return undefined;
+}
+
 // Classify only; never forward raw CLI text into logs or persisted state.
 export function classifyStripeOutput(
   line: string,
   secret: string,
-): ListenerPhase | undefined {
-  if (/expired_api_key|api key.*expired|expired.*api key/i.test(line))
-    return "expired";
+): ListenerPhase | "connected" | undefined {
+  line = line.trimStart();
+  // Stripe CLI v1.50.11 pkg/websocket/client.go emits these at debug level.
+  // Match both fields, not payload text: debug output also contains event bodies.
   if (
-    /invalid_api_key|authentication.*fail|invalid api key|401 unauthorized/i.test(
+    /^time="[^"]+" level=debug msg="(?:Disconnected from Stripe|Resetting the connection|Attempting to connect to Stripe|Failed to connect to Stripe\. Retrying\.\.\.)" prefix=websocket\.Client\.Run$/.test(
       line,
     )
   )
-    return "auth-failed";
+    return "disconnected";
+  if (
+    /^time="[^"]+" level=debug msg="Connected!" prefix=websocket\.Client\.connect$/.test(
+      line,
+    )
+  )
+    return "connected";
+  // With piped output, the pinned prefixed formatter writes time/level/msg
+  // first, then sorted fields. It DOES NOT escape quotes in string values:
+  // readPump's message field can contain nested JSON and fake logfmt fields.
+  // Only the complete connection records above may affect connection state.
+  // The CLI's VisitError logs genuine authentication failures at fatal level;
+  // inspect those for auth errors only, never signing secrets or HTTP delivery.
+  if (line.startsWith("time=")) {
+    const fatal = line.match(/^time="[^"]+" level=fatal msg=([\s\S]*)$/);
+    return fatal ? classifyStripeAuthError(fatal[1] ?? "") : undefined;
+  }
+  const authError = classifyStripeAuthError(line);
+  if (authError) return authError;
   const actual = line.match(/whsec_[A-Za-z0-9]+/)?.[0];
   if (actual && actual !== secret) return "secret-mismatch";
   if (actual === secret && /ready/i.test(line)) return "ready";
@@ -229,6 +263,11 @@ export function evaluateStripeReadiness(
     return result(
       "not-running",
       "Listener stopped. Run mise run wake (or pitchfork start stripe-listener).",
+    );
+  if (state.phase === "disconnected")
+    return result(
+      "disconnected",
+      "Stripe connection lost or reconnecting. Waiting for the CLI to reconnect; webhook delivery is not verified.",
     );
   if (state.phase === "delivery-failed")
     return result(
