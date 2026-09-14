@@ -107,15 +107,18 @@ func capturingPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[]*riskv1
 
 func newRequest(p seededProject, content string, ruleIDs ...string) *riskv1.CustomRulesAnalysis {
 	return riskv1.CustomRulesAnalysis_builder{
-		RequestId:         new("req-1"),
-		ChatMessageId:     new("msg-1"),
-		ProjectId:         new(p.projectID.String()),
-		OrganizationId:    new(p.orgID),
-		RiskPolicyId:      new("policy-1"),
-		RiskPolicyVersion: new(int64(3)),
-		CreatedAt:         new("2026-06-20T00:00:00Z"),
-		Content:           &content,
-		Kind:              new("user_message"),
-		CustomRuleIds:     ruleIDs,
+		RequestId:               new("req-1"),
+		ChatMessageId:           new("018ffad2-1c32-7f73-8a54-85306c37a314"),
+		ProjectId:               new(p.projectID.String()),
+		OrganizationId:          new(p.orgID),
+		RiskPolicyId:            new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		RiskPolicyVersion:       new(int64(3)),
+		CreatedAt:               new("2026-06-20T00:00:00Z"),
+		Content:                 &content,
+		Kind:                    new("user_message"),
+		CustomRuleIds:           ruleIDs,
+		OriginRiskPolicyId:      new("018ffad2-1c32-7f73-8a54-85306c37a315"),
+		OriginRiskPolicyVersion: new(int64(3)),
+		ExecutionPath:           new("async"),
 	}.Build()
 }

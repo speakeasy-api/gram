@@ -8,32 +8,29 @@ package mcp
 import (
 	"fmt"
 
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-// workloadIssuerKeySource builds the key source a trusted workload issuer's
-// assertions verify against.
+// workloadIssuerKeySource builds the key source a workload issuer's assertions
+// verify against.
 //
-// Only one shape exists here, unlike clientKeySource's two: a workload
-// issuer publishes its keys and never registers them with us, so there is no
-// inline key set to consider. The jwks_uri arrives on the row from the RFC
-// 8414 / OIDC discovery the management API runs when an issuer is created or
-// refreshed, which is why nothing is fetched or probed on this path.
+// One shape only, unlike clientKeySource's two: a workload issuer publishes its
+// keys and never registers them with us. jwks_uri is stored on the row at
+// discovery time, so nothing is fetched or probed here.
 //
-// An issuer row with no jwks_uri is a setup error, not a bad assertion, and
-// says so: discovery either never ran or the issuer's document omitted the
-// field. Answering it like a rejected workload would send an operator
-// hunting through their platform's configuration for a problem that is on
-// ours.
-func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *remotesessions_repo.RemoteSessionIssuer) (jwks.Source, error) {
-	if !issuer.JwksUri.Valid || issuer.JwksUri.String == "" {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q records no jwks_uri: re-run discovery for it", issuer.Slug)
+// jwks_uri is NOT NULL on workload_issuers but carries no non-empty CHECK, so
+// the empty check guards invalid persisted data rather than an unstorable row.
+// Errors name the issuer by name; a workload issuer has no slug, its URL being
+// its canonical name.
+func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {
+	if issuer.JwksUri == "" {
+		return jwks.Source{}, fmt.Errorf("workload issuer %q records no jwks_uri", issuer.Name)
 	}
 
-	source, err := jwks.NewRemoteSource(issuer.JwksUri.String)
+	source, err := jwks.NewRemoteSource(issuer.JwksUri)
 	if err != nil {
-		return jwks.Source{}, fmt.Errorf("trusted issuer %q jwks_uri: %w", issuer.Slug, err)
+		return jwks.Source{}, fmt.Errorf("workload issuer %q jwks_uri: %w", issuer.Name, err)
 	}
 
 	return source.WithFetchScope(workloadFetchScope(endpoint)), nil

@@ -149,6 +149,13 @@ func expect(t *testing.T, fx consentActionFixture, connected, total int, reconne
 	}
 }
 
+func expectRechecks(t *testing.T, fx consentActionFixture, count int) {
+	t.Helper()
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Equal(t, count, strings.Count(html, "data-validate-link"), html)
+}
+
 // expectAutoReconnect asserts the page sent the subject straight to the
 // provider with the resource the new grant will record.
 func expectAutoReconnect(t *testing.T, fx consentActionFixture, resource string) {
@@ -174,6 +181,7 @@ func TestServeConsent_MetaRemoteMemberLegacyGrantAsksForReconnect(t *testing.T) 
 	expect(t, fx, 0, 1, true)
 	grant(t, ctx, fx, clientID, upstream+"/")
 	expect(t, fx, 1, 1, false)
+	expectRechecks(t, fx, 1)
 }
 
 // A tunneled member accepts an unqualified grant; only one qualified to
@@ -199,6 +207,7 @@ func TestServeConsent_MetaUnclaimedProviderKeepsStoredStatus(t *testing.T) {
 	ctx, fx, _, clientID, _ := metaConsent(t, "rt-unclaimed")
 	grant(t, ctx, fx, clientID, "")
 	expect(t, fx, 1, 1, false)
+	expectRechecks(t, fx, 0)
 }
 
 // Two grants naming one remote upstream make the runtime refuse both.
@@ -234,6 +243,46 @@ func TestServeConsent_RemoteServerLegacyGrantAsksForReconnect(t *testing.T) {
 	expect(t, fx, 1, 1, false)
 }
 
+// A client that recorded resource A's name and links, attached in resource
+// B's context, lends B none of them: the card falls back to the issuer's
+// own branding until it is rendered for A.
+func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
+	t.Parallel()
+	const upstreamA = "https://res-a.example.com/mcp"
+	const upstreamB = "https://res-b.example.com/mcp"
+	ctx, fx := standaloneConsent(t, "rt-display", upstreamB, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, projectID, upstreamB, slug, "public", issuerID)
+		return server.ID
+	})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-display", "", []uuid.UUID{fx.shared})
+	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessions_repo.UpdateRemoteSessionClientResourceDisplayParams{
+		ResourceIdentifier:    conv.ToPGText(upstreamA),
+		ResourceName:          "Resource A",
+		ResourceDocumentation: "",
+		ResourcePolicyUri:     "https://res-a.example.com/policy",
+		ResourceTosUri:        "",
+		ID:                    clientID,
+		ProjectID:             fx.projectID,
+		OrganizationID:        fx.orgID,
+	})
+	require.NoError(t, err)
+	grant(t, ctx, fx, clientID, upstreamB)
+
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.NotContains(t, html, "Resource A")
+	require.NotContains(t, html, "https://res-a.example.com/policy")
+	require.Contains(t, html, `aria-label="Disconnect rt-display-rsi"`)
+
+	// Rendered for A itself, with a grant A routes, the card is A's.
+	fx.endpoint.UpstreamResource = upstreamA
+	grant(t, ctx, fx, clientID, upstreamA)
+	code, html, _ = render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Contains(t, html, "Resource A")
+	require.Contains(t, html, `href="https://res-a.example.com/policy"`)
+}
+
 // A tunneled server reads only the entry keyed by its own derived issuer, so
 // another provider's grant is never judged.
 func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
@@ -251,6 +300,8 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	grant(t, ctx, fx, other, "https://unrelated.example.com/mcp")
 	grant(t, ctx, fx, own, "")
 	expect(t, fx, 2, 2, false)
+	expectRechecks(t, fx, 1)
 	grant(t, ctx, fx, own, "urn:gram:tunnel:other")
 	expect(t, fx, 1, 2, true)
+	expectRechecks(t, fx, 0)
 }

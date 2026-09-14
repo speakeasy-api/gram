@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -32,6 +34,8 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -50,6 +54,35 @@ func testCELEngine(t *testing.T) *celenv.Engine {
 	eng, err := celenv.New()
 	require.NoError(t, err)
 	return eng
+}
+func realtimeScanRequest(organizationID string, projectID uuid.UUID, userID, text string, messageType message.Type, toolName string) risk.RealtimeScanRequest {
+	return risk.RealtimeScanRequest{
+		Provenance: metering.RiskProvenance{
+			OrganizationID:         organizationID,
+			ProjectID:              projectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "external/session:local",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "realtime_not_persisted",
+			OperationID:            uuid.NewString(),
+			ExecutionPath:          "realtime_local",
+			RequestID:              "",
+			MessageType:            messageType,
+			HookSource:             "test",
+			UserID:                 userID,
+			ToolCallID:             "",
+			ToolName:               toolName,
+			Model:                  "",
+			Provider:               "",
+		},
+		Text:        text,
+		MessageType: messageType,
+		ToolName:    toolName,
+	}
 }
 
 func testPresetLibrary(t *testing.T) *presetlib.Library {
@@ -184,7 +217,8 @@ type testInstance struct {
 	cacheDeletes                 *countingCache
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
-	assetStorage blobio.Reader
+	assetStorage  blobio.Reader
+	riskPublisher gcp.Publisher[*meteringv1.MeterReading]
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -236,15 +270,19 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		riskPublisher:    nil,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
+	}
+	if ti.riskPublisher == nil {
+		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
 	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), ti.assetStorage)
+	}, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher))
 
 	return ctx, ti
 }

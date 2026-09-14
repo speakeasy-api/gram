@@ -67,6 +67,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  startTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   bulkUpdateAccountType:
     vi.fn<
       (
@@ -91,12 +93,20 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    bulkUpdateAccountType: mocks.bulkUpdateAccountType,
+    createOrganization: mocks.createOrganization,
+  };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
     rearmTrial: mocks.rearmTrial,
-    bulkUpdateAccountType: mocks.bulkUpdateAccountType,
-    createOrganization: mocks.createOrganization,
+    startTrial: mocks.startTrial,
   };
 });
 
@@ -156,7 +166,7 @@ const STATS: AdminOrganizationStats = {
   disabled_last_7_days: 1,
 };
 
-// A page the cursor leads to. Nothing it holds appears on the first page, so a
+// A second page. Nothing it holds appears on the first page, so a
 // row that survives the page change is a reused node rather than a match.
 const NEXT_PAGE_ORG: AdminOrganization = {
   id: "org_placeholder_three",
@@ -185,6 +195,7 @@ if (!FIRST_ORG.disabled_at || SECOND_ORG.disabled_at) {
 // carries so a row that failed to repaint cannot read as one that did.
 const DISABLED_AT = "2026-08-01T00:00:00Z";
 const EXTENDED_TRIAL_END = "2026-05-20T00:00:00Z";
+const STARTED_TRIAL_END = "2026-08-28T00:00:00Z";
 
 function orgByID(id: string): AdminOrganization {
   const org = ORGS.find((row) => row.id === id);
@@ -376,7 +387,10 @@ function urlFor(search: Record<string, unknown>): string {
 
 beforeEach(() => {
   mocks.listOrganizations.mockReset();
-  mocks.listOrganizations.mockResolvedValue({ organizations: ORGS });
+  mocks.listOrganizations.mockResolvedValue({
+    total: ORGS.length,
+    organizations: ORGS,
+  });
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -408,6 +422,16 @@ beforeEach(() => {
   // No default answer: the one describe that re-arms owns a record none of the
   // rows above it carry, so it supplies its own.
   mocks.rearmTrial.mockReset();
+  mocks.startTrial.mockReset();
+  mocks.startTrial.mockImplementation(({ id }) =>
+    Promise.resolve({
+      ...orgByID(id),
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "running",
+      trial_ends_at: STARTED_TRIAL_END,
+    }),
+  );
   // Everything the request asked for, and nothing missing. The reversal guards
   // nothing on its own, because only the length of this array is ever read;
   // "names the organizations the server could not find" is the test that holds
@@ -425,6 +449,58 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("organizations list", () => {
+  it("sorts only Created, resets paging, and restores direction on reload", async () => {
+    mocks.listOrganizations.mockResolvedValue({
+      organizations: ORGS,
+      total: 101,
+    });
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: "/organizations",
+    });
+    const created = await screen.findByRole("button", { name: "Created" });
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({
+        sort: "created_at",
+        direction: "desc",
+        page: 1,
+      }),
+    );
+    expect(created.closest("th")?.getAttribute("aria-sort")).toBe("descending");
+    expect(created.textContent).toContain("↓");
+    for (const name of [
+      "Name",
+      "Slug",
+      "Type",
+      "Members",
+      "WorkOS",
+      "Disabled",
+      "Trial",
+    ]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(lastListParams().page).toBe(2));
+    fireEvent.click(created);
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({ direction: "asc", page: 1 }),
+    );
+    expect(created.closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+    expect(created.textContent).toContain("↑");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({ direction: "asc", page: 2 }),
+    );
+    const reloadedPath = `/organizations${currentSearch(router)}`;
+    cleanup();
+    await renderRouteTree(routeTree, { initialPath: reloadedPath });
+    const restored = await screen.findByRole("button", { name: "Created" });
+    expect(restored.closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+    fireEvent.click(restored);
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({ direction: "desc", page: 1 }),
+    );
+  });
+
   it("takes the search term from the URL and sends it with the request", async () => {
     await renderRouteTree(routeTree, {
       initialPath: "/organizations?q=acme",
@@ -882,7 +958,7 @@ describe("organizations list", () => {
 
   it("keeps the sort when a filter is applied", async () => {
     const { router } = await renderRouteTree(routeTree, {
-      initialPath: urlFor({ sort: "name", dir: "asc" }),
+      initialPath: urlFor({ sort: "created_at", dir: "asc" }),
     });
 
     await openFilters("Status");
@@ -893,14 +969,18 @@ describe("organizations list", () => {
       expect(lastListParams().disabled_states).toEqual(["disabled"]);
     });
     const url = currentSearch(router);
-    expect(url).toContain("sort=name");
+    expect(url).toContain("sort=created_at");
     expect(url).toContain("dir=asc");
+    expect(lastListParams()).toMatchObject({
+      sort: "created_at",
+      direction: "asc",
+    });
   });
 
   it("returns to the first page when the sheet applies the set already on", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderRouteTree(routeTree, {
       initialPath: urlFor({ disabled: ["disabled"] }),
@@ -912,7 +992,7 @@ describe("organizations list", () => {
     });
     fireEvent.click(next);
     await waitFor(() => {
-      expect(lastListParams().cursor).toBe("cursor_page_two");
+      expect(lastListParams().page).toBe(2);
     });
 
     // Nothing in the URL moves, so the pager cannot notice on its own. Page
@@ -921,7 +1001,7 @@ describe("organizations list", () => {
     applyFilters();
 
     await waitFor(() => {
-      expect(lastListParams().cursor).toBeUndefined();
+      expect(lastListParams().page).toBe(1);
     });
   });
 
@@ -963,10 +1043,10 @@ describe("organizations list", () => {
     expect(lastListParams().q).toBe("acme");
   });
 
-  it("drops the cursor when a filter changes", async () => {
+  it("resets the page when a filter changes", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -976,7 +1056,7 @@ describe("organizations list", () => {
     });
     fireEvent.click(next);
     await waitFor(() => {
-      expect(lastListParams().cursor).toBe("cursor_page_two");
+      expect(lastListParams().page).toBe(2);
     });
 
     await openFilters("Status");
@@ -986,15 +1066,15 @@ describe("organizations list", () => {
     await waitFor(() => {
       expect(lastListParams().disabled_states).toEqual(["disabled"]);
     });
-    // The cursor was minted by the previous filter set and points into a
+    // The page was fetched under the previous filter set and belongs to a
     // different result set.
-    expect(lastListParams().cursor).toBeUndefined();
+    expect(lastListParams().page).toBe(1);
   });
 
-  it("drops the cursor when the search box changes the term", async () => {
+  it("resets the page when the search box changes the term", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -1004,7 +1084,7 @@ describe("organizations list", () => {
     });
     fireEvent.click(next);
     await waitFor(() => {
-      expect(lastListParams().cursor).toBe("cursor_page_two");
+      expect(lastListParams().page).toBe(2);
     });
 
     // The box writes to the URL itself, so nothing tells the pager. Only the
@@ -1019,7 +1099,7 @@ describe("organizations list", () => {
       },
       { timeout: 2000 },
     );
-    expect(lastListParams().cursor).toBeUndefined();
+    expect(lastListParams().page).toBe(1);
   });
 
   it("renders every cell of a row out of the record that produced it", async () => {
@@ -1051,7 +1131,7 @@ describe("organizations list", () => {
       "WorkOS",
       "Disabled",
       "Trial",
-      "Created",
+      "Created ↓",
       "Actions",
     ]);
     expect(
@@ -1152,9 +1232,9 @@ describe("organizations list", () => {
   it("drops focus rather than moving it to another organization on the next page", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG] }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { total: 101, organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -1337,7 +1417,7 @@ describe("organizations list peek", () => {
       "WorkOS",
       "Disabled",
       "Trial",
-      "Created",
+      "Created ↓",
       "Actions",
     ]);
   });
@@ -1397,9 +1477,9 @@ describe("organizations list peek", () => {
   it("drops peek when the operator pages away from the record", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG] }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { total: 101, organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -1431,7 +1511,7 @@ describe("organizations list peek", () => {
       "WorkOS",
       "Disabled",
       "Trial",
-      "Created",
+      "Created ↓",
       "Actions",
     ]);
   });
@@ -1538,6 +1618,7 @@ describe("organizations list peek", () => {
     // Three rows, because the trap only shows on the second press: the first
     // move works and leaves the keyboard behind on the row it moved off.
     mocks.listOrganizations.mockResolvedValue({
+      total: 3,
       organizations: [FIRST_ORG, SECOND_ORG, NEXT_PAGE_ORG],
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -1693,7 +1774,7 @@ describe("organizations list peek", () => {
   it("ignores the arrow keys pressed on the pager", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const first = await screen.findByRole("link", { name: FIRST_ORG.name });
@@ -1723,7 +1804,7 @@ describe("organizations list peek", () => {
   it("ignores Escape pressed on the pager", async () => {
     mocks.listOrganizations.mockResolvedValue({
       organizations: ORGS,
-      next_cursor: "cursor_page_two",
+      total: 101,
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(FIRST_ORG.name);
@@ -1862,6 +1943,7 @@ describe("organizations list peek", () => {
       name: FIRST_ORG.name,
     };
     mocks.listOrganizations.mockResolvedValue({
+      total: 2,
       organizations: [FIRST_ORG, TWIN],
     });
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -2262,9 +2344,9 @@ describe("organizations list peek", () => {
   it("puts the keyboard on the table, not on the body, when the peeked record leaves the list", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG] }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { total: 101, organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -2312,9 +2394,9 @@ describe("organizations list peek", () => {
   it("leaves the keyboard on the pager when the operator pages the peeked record away", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG], next_cursor: "cursor_page_three" }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { organizations: [NEXT_PAGE_ORG], total: 101 }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -2355,6 +2437,15 @@ describe("organizations list write actions", () => {
       fireEvent.click(screen.getByRole("button", { name: "Disable" }));
     });
   }
+
+  it("offers Start trial on a live organization that never trialled", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await openRowMenu(LIVE.name);
+
+    expect(screen.getByRole("menuitem", { name: "Start trial" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Extend trial" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Re-arm trial" })).toBeNull();
+  });
 
   it("repaints the row out of the answer rather than asking for the list again", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -3164,9 +3255,9 @@ describe("organizations list bulk account type", () => {
   it("clears the selection when the operator pages", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG] }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { total: 101, organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -3215,9 +3306,9 @@ describe("organizations list bulk account type", () => {
   it("does not bring the selection back when the operator pages back", async () => {
     mocks.listOrganizations.mockImplementation((params) =>
       Promise.resolve(
-        params?.cursor
-          ? { organizations: [NEXT_PAGE_ORG] }
-          : { organizations: ORGS, next_cursor: "cursor_page_two" },
+        (params?.page ?? 1) > 1
+          ? { total: 101, organizations: [NEXT_PAGE_ORG] }
+          : { organizations: ORGS, total: 101 },
       ),
     );
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
@@ -3265,12 +3356,12 @@ describe("organizations list bulk account type", () => {
 
     await tick(FIRST_ORG.name);
 
-    // The sort is in the URL and not in the list request, so a page that
+    // The sort is in the URL and the list request, so a page that
     // watched only the request would keep a selection across a reorder.
     await act(async () => {
       await router.navigate({
         to: "/organizations",
-        search: { sort: "name", dir: "asc" },
+        search: { sort: "created_at", dir: "asc" },
       });
     });
 
@@ -3767,7 +3858,7 @@ describe("organizations list create organization: a refusal", () => {
 
     // The read the write cancelled is dead: React Query drops its answer, so
     // the rows can only arrive from a request made after the failure.
-    releaseList({ organizations: ORGS });
+    releaseList({ total: ORGS.length, organizations: ORGS });
     // An open Radix modal hides the rest of the page from the accessibility
     // tree, so the rows are unreachable by role until the operator is out of
     // the dialog. Closing it is their next move anyway.
@@ -4104,7 +4195,10 @@ describe("re-arming a trial from the peek panel", () => {
   const REARMED_TRIAL_END = "2026-09-04T00:00:00Z";
 
   beforeEach(() => {
-    mocks.listOrganizations.mockResolvedValue({ organizations: [DEMOTED_ORG] });
+    mocks.listOrganizations.mockResolvedValue({
+      total: 1,
+      organizations: [DEMOTED_ORG],
+    });
     mocks.rearmTrial.mockResolvedValue({
       ...DEMOTED_ORG,
       account_type: "enterprise",
@@ -4161,6 +4255,57 @@ describe("re-arming a trial from the peek panel", () => {
     // The panel, and specifically not the body. Radix would have focused a
     // DialogTrigger that does not exist here, leaving the keyboard at the top
     // of the page with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(peekPanel());
+    });
+    expect(document.activeElement).not.toBe(document.body);
+  });
+});
+
+describe("starting a trial from the peek panel", () => {
+  const org = SECOND_ORG;
+  if (!org) throw new Error("the list fixture needs a never-trialled row");
+
+  async function pressStart(): Promise<HTMLElement> {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(org.name);
+    const control = within(peekPanel()).getByRole("button", {
+      name: `Start trial for ${org.name}`,
+    });
+    fireEvent.click(control);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start trial" }));
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    return control;
+  }
+
+  it("starts from the panel and repaints the panel with the answer", async () => {
+    await pressStart();
+
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: org.id,
+      days: 14,
+    });
+    expect(peekPanel().textContent).toContain(shortDate(STARTED_TRIAL_END));
+    expect(announcement()).toBe(`${org.name} trial started for 14 days.`);
+  });
+
+  it("gives the keyboard to the panel when the control that opened the dialog goes", async () => {
+    const control = await pressStart();
+
+    // Same sibling-slot unmount as re-arm: Start comes down and Extend comes
+    // up, so the node the dialog opened from is gone.
+    expect(control.isConnected).toBe(false);
+    expect(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${org.name}`,
+      }),
+    ).toBeTruthy();
+
     await waitFor(() => {
       expect(document.activeElement).toBe(peekPanel());
     });

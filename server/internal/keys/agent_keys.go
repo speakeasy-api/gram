@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -262,29 +261,11 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 }
 
 func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, policy runtimepolicy.DelegatedPolicy) (agentmanagement.HumanContext, error) {
-	human, observedAgent, err := s.authorizer.RequireAgent(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
+	human, agent, err := s.authorizer.RequireAgentOwnerForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
 		return agentmanagement.HumanContext{}, fmt.Errorf("authorize agent API key issuance: %w", err)
 	}
-
-	// Owner-loss paths lock the owner membership before the agent. Pin the
-	// observed owner in the same order, then lock and reauthorize the agent.
-	_, err = orgrepo.New(tx).LockActiveOrganizationUser(ctx, orgrepo.LockActiveOrganizationUserParams{
-		UserID:         conv.ToPGText(observedAgent.OwnerUserID),
-		OrganizationID: human.Auth.ActiveOrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
-	}
-	if err != nil {
-		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "lock active agent owner").LogError(ctx, s.logger)
-	}
-
-	human, agent, err := s.authorizer.RequireAgentForUpdate(ctx, tx, agentID, agentmanagement.OwnedAgentAuthorize)
-	if err != nil {
-		return agentmanagement.HumanContext{}, fmt.Errorf("reauthorize agent API key issuance: %w", err)
-	}
-	if agent.OwnerUserID != observedAgent.OwnerUserID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 
@@ -305,14 +286,17 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
 
-	checks := checksForDelegatedPolicy(policy)
-	if len(checks) > 0 {
-		if err := s.authz.EvaluateLoadedGrants(ctx, agentPolicy, checks...); err != nil {
-			return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
-		}
-		if err := s.authz.EvaluateLoadedGrants(ctx, ownerPolicy, checks...); err != nil {
-			return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
-		}
+	// Reuse the live caller policy loaded by RequireAgentOwnerForUpdate in
+	// this transaction; management authority alone cannot delegate access.
+	authorizerPolicy := human.LiveGrants()
+
+	// A broad selector must not hide a narrower exclusion in any parent policy.
+	contained, err := runtimepolicy.DelegationContained(policy, agentPolicy, ownerPolicy, authorizerPolicy)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "check delegated policy containment").LogError(ctx, s.logger)
+	}
+	if !contained {
+		return agentmanagement.HumanContext{}, oops.C(oops.CodeForbidden)
 	}
 	return human, nil
 }
@@ -419,23 +403,6 @@ func agentKeyAuditMetadata(key repo.ApiKey) (*audit.AgentKeyCredentialMetadata, 
 	}, nil
 }
 
-func checksForDelegatedPolicy(policy runtimepolicy.DelegatedPolicy) []authz.Check {
-	grants := policy.RuntimeGrants()
-	checks := make([]authz.Check, 0, len(grants))
-	for _, grant := range grants {
-		dimensions := make(map[string]string, len(grant.Selector))
-		for key, value := range grant.Selector {
-			if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
-				dimensions[key] = value
-			}
-		}
-		checks = append(checks, authz.Check{
-			Scope: grant.Scope, ResourceKind: grant.Selector[authz.SelectorKeyResourceKind], ResourceID: grant.Selector[authz.SelectorKeyResourceID], Dimensions: dimensions,
-		}.WithStrictSelectorMatch())
-	}
-	return checks
-}
-
 func selectorFromForm(selector *gen.AgentPolicySelector) authz.Selector {
 	result := authz.Selector{authz.SelectorKeyResourceKind: selector.ResourceKind, authz.SelectorKeyResourceID: selector.ResourceID}
 	for key, value := range map[string]*string{
@@ -520,7 +487,7 @@ func (s *Service) requireAgentCredentialsEnabled(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("require human session for agent credentials: %w", err)
 	}
-	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentCredentialsM2, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
+	evaluation, _ := feature.EvaluateFlag(ctx, s.features, feature.FlagAgentIdentityCredentials, human.Auth.ActiveOrganizationID, feature.OrgProjectGroups(human.Auth.OrganizationSlug, ""))
 	if evaluation != feature.EvaluationEnabled {
 		return oops.C(oops.CodeNotFound)
 	}

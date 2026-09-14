@@ -2,6 +2,7 @@ package keys_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -95,9 +96,9 @@ func TestKeysService_AgentKeyLifecycle(t *testing.T) {
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.NoError(t, err)
 
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "rollout disablement must not strand active credentials")
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, true)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
 	require.NoError(t, ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{ID: rotated.ID}), "direct revocation is idempotent")
 	_, err = ti.service.APIKeyAuth(t.Context(), *rotated.Key, agentAPIKeyScheme())
 	require.Error(t, err)
@@ -133,6 +134,8 @@ func TestKeysService_AgentKeyAllowsExactAuthorizeGrant(t *testing.T) {
 	upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), authz.ScopeProjectRead, authCtx.ProjectID.String())
 	upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeAgentAuthorize, agent.ID.String())
 
+	upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, authCtx.ProjectID.String())
+
 	created, err := ti.service.CreateKey(ctx, agentKeyPayload(agent.ID, *authCtx.ProjectID))
 	require.NoError(t, err)
 	require.Equal(t, authCtx.UserID, created.CreatedByUserID, "caller remains the immutable authorizer")
@@ -149,6 +152,184 @@ func TestKeysService_AgentKeyAllowsExactAuthorizeGrant(t *testing.T) {
 	require.EqualValues(t, 1, deleted)
 	_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agent.ID.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestKeysService_AgentKeyRequiresLiveAuthorizerResourceGrant(t *testing.T) {
+	t.Parallel()
+	for _, rotate := range []bool{false, true} {
+		name := "create"
+		if rotate {
+			name = "rotate"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestKeysService(t)
+			authCtx := testAuthContext(t, ctx)
+			ownerID := "owner-" + uuid.NewString()
+			_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+				ID: ownerID, Email: ownerID + "@example.com", DisplayName: ownerID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+			})
+			require.NoError(t, err)
+			_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+				OrganizationID: authCtx.ActiveOrganizationID, UserID: conv.ToPGText(ownerID),
+			})
+			require.NoError(t, err)
+			agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+				OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: ownerID, Name: "delegated-agent-" + uuid.NewString(),
+			})
+			require.NoError(t, err)
+			require.NotNil(t, authCtx.ProjectID)
+			serverID := uuid.NewString()
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authz.ScopeMCPConnect, serverID)
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), authz.ScopeMCPConnect, serverID)
+			upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeAgentAuthorize, agent.ID.String())
+
+			payload := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+			payload.RequestedGrants = []*gen.AgentPolicyGrantForm{{
+				Scope: string(authz.ScopeMCPConnect), Effect: "allow",
+				Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID, Tool: new("allowed-tool")},
+			}}
+			var keyID string
+			if rotate {
+				// Rotation must recheck resource authority even for an existing key.
+				empty := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+				empty.RequestedGrants = []*gen.AgentPolicyGrantForm{}
+				created, err := ti.service.CreateKey(ctx, empty)
+				require.NoError(t, err)
+				keyID = created.ID
+			}
+			issue := func() error {
+				if rotate {
+					_, err := ti.service.RotateKey(ctx, &gen.RotateKeyPayload{
+						ID: keyID, Name: "rotated constrained key", DelegatedGrantsVersion: 1, RequestedGrants: payload.RequestedGrants,
+					})
+					if err != nil {
+						return fmt.Errorf("rotate test key: %w", err)
+					}
+					return nil
+				}
+				_, err := ti.service.CreateKey(ctx, payload)
+				if err != nil {
+					return fmt.Errorf("create test key: %w", err)
+				}
+				return nil
+			}
+
+			// Cached org-admin grants must not replace the caller's live grants.
+			requireOopsCode(t, issue(), oops.CodeForbidden)
+			selector := authz.NewSelector(authz.ScopeMCPConnect, serverID)
+			selector[authz.SelectorKeyTool] = "allowed-tool"
+			upsertGrantSelector(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeMCPConnect, selector)
+
+			payload.RequestedGrants[0].Selector.Tool = nil
+			requireOopsCode(t, issue(), oops.CodeForbidden)
+			payload.RequestedGrants[0].Selector.Tool = new("other-tool")
+			requireOopsCode(t, issue(), oops.CodeForbidden)
+			payload.RequestedGrants[0].Selector.Tool = new("allowed-tool")
+			require.NoError(t, issue())
+		})
+	}
+}
+
+func TestKeysService_AgentKeyRejectsOverlappingAuthorizerExclusion(t *testing.T) {
+	t.Parallel()
+	for _, selector := range []struct {
+		name                string
+		resourceID          string
+		exclusionResourceID string
+	}{
+		{name: "specific", resourceID: "example-server", exclusionResourceID: "example-server"},
+		{name: "wildcard", resourceID: "*", exclusionResourceID: "example-excluded-server"},
+	} {
+		for _, rotate := range []bool{false, true} {
+			name := "create"
+			if rotate {
+				name = "rotate"
+			}
+			t.Run(selector.name+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestKeysService(t)
+				authCtx := testAuthContext(t, ctx)
+				ownerID := "owner-" + uuid.NewString()
+				_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+					ID: ownerID, Email: ownerID + "@example.com", DisplayName: ownerID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+				})
+				require.NoError(t, err)
+				_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+					OrganizationID: authCtx.ActiveOrganizationID, UserID: conv.ToPGText(ownerID),
+				})
+				require.NoError(t, err)
+				agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+					OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: ownerID, Name: "delegated-agent-" + uuid.NewString(),
+				})
+				require.NoError(t, err)
+				require.NotNil(t, authCtx.ProjectID)
+				serverID := selector.resourceID
+				upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), authz.ScopeMCPConnect, serverID)
+				upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, ownerID), authz.ScopeMCPConnect, serverID)
+				upsertGrant(t, ctx, ti, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeAgentAuthorize, agent.ID.String())
+
+				payload := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+				payload.RequestedGrants = []*gen.AgentPolicyGrantForm{{
+					Scope: string(authz.ScopeMCPConnect), Effect: "allow",
+					Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID, Tool: new("allowed-tool")},
+				}}
+				var keyID string
+				if rotate {
+					// Rotation must recheck resource authority even for an existing key.
+					empty := agentKeyPayload(agent.ID, *authCtx.ProjectID)
+					empty.RequestedGrants = []*gen.AgentPolicyGrantForm{}
+					created, err := ti.service.CreateKey(ctx, empty)
+					require.NoError(t, err)
+					keyID = created.ID
+				}
+				issue := func() error {
+					if rotate {
+						_, err := ti.service.RotateKey(ctx, &gen.RotateKeyPayload{
+							ID: keyID, Name: "rotated constrained key", DelegatedGrantsVersion: 1, RequestedGrants: payload.RequestedGrants,
+						})
+						if err != nil {
+							return fmt.Errorf("rotate test key: %w", err)
+						}
+						return nil
+					}
+					_, err := ti.service.CreateKey(ctx, payload)
+					if err != nil {
+						return fmt.Errorf("create test key: %w", err)
+					}
+					return nil
+				}
+
+				// Agent and owner remain broad. Only the caller has a tool exclusion,
+				// which must constrain the whole grant even when tool is omitted.
+				caller := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+				upsertGrant(t, ctx, ti, caller, authz.ScopeMCPConnect, serverID)
+				exclusion := authz.NewSelector(authz.ScopeMCPBlockedConnect, selector.exclusionResourceID)
+				exclusion[authz.SelectorKeyTool] = "excluded-tool"
+				upsertGrantSelector(t, ctx, ti, caller, authz.ScopeMCPBlockedConnect, exclusion)
+
+				// Keep successful rotation last: earlier denials must leave the old key usable.
+				for _, request := range []struct {
+					name    string
+					tool    *string
+					allowed bool
+				}{
+					{name: "broad", tool: nil, allowed: false},
+					{name: "excluded", tool: new("excluded-tool"), allowed: false},
+					{name: "disjoint", tool: new("allowed-tool"), allowed: true},
+				} {
+					payload.RequestedGrants[0].Selector.Tool = request.tool
+					err := issue()
+					if request.allowed {
+						require.NoError(t, err, request.name)
+					} else {
+						require.Error(t, err, request.name)
+						requireOopsCode(t, err, oops.CodeForbidden)
+					}
+				}
+			})
+		}
+	}
 }
 
 func TestKeysService_AgentKeyRejectsBroaderRequestThanLiveGrant(t *testing.T) {
@@ -180,7 +361,7 @@ func TestKeysService_AgentGateDoesNotBlockOrdinaryKeyCreation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestKeysService(t)
-	ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 	created, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "ordinary key", Scopes: []string{auth.APIKeyScopeConsumer.String()}})
 	require.NoError(t, err)
 	require.NotNil(t, created.Key)
@@ -239,10 +420,10 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 	base := agentKeyPayload(agentID, projectID)
 
 	t.Run("rollout gate fails closed", func(t *testing.T) {
-		ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, false)
+		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, false)
 		_, err := ti.service.CreateKey(ctx, base)
 		requireOopsCode(t, err, oops.CodeNotFound)
-		ti.features.SetFlag(feature.FlagAgentCredentialsM2, testAuthContext(t, ctx).ActiveOrganizationID, true)
+		ti.features.SetFlag(feature.FlagAgentIdentityCredentials, testAuthContext(t, ctx).ActiveOrganizationID, true)
 	})
 
 	tests := []struct {

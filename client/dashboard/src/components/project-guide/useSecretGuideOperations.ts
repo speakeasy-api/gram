@@ -7,6 +7,7 @@ import {
 } from "@/components/project-guide/projectGuideMachine";
 import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
+import { kindScopeForMessageTypes } from "@/pages/security/policy-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -450,7 +451,12 @@ export function useSecretGuideOperations(): {
             audienceType: "everyone",
             autoName: true,
             enabled: true,
-            messageTypes: ["tool_request", "tool_response"],
+            detectionScopes: [
+              {
+                category: "secrets",
+                ...kindScopeForMessageTypes(["tool_request", "tool_response"]),
+              },
+            ],
             policyType: "standard",
             sources: ["gitleaks"],
           },

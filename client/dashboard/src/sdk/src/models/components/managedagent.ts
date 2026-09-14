@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AgentOwnerProfile,
+  AgentOwnerProfile$inboundSchema,
+} from "./agentownerprofile.js";
+import {
   AgentPermissions,
   AgentPermissions$inboundSchema,
 } from "./agentpermissions.js";
@@ -25,6 +29,7 @@ export type ManagedAgent = {
   id: string;
   lifecycle: Lifecycle;
   name: string;
+  ownerProfile?: AgentOwnerProfile | undefined;
   /**
    * Stable reason that explicit reassignment is required
    */
@@ -54,6 +59,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
       id: z.string(),
       lifecycle: Lifecycle$inboundSchema,
       name: z.string(),
+      owner_profile: z.optional(AgentOwnerProfile$inboundSchema),
       owner_reassignment_reason: z.optional(z.string()),
       owner_reassignment_required_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -68,6 +74,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "owner_profile": "ownerProfile",
         "owner_reassignment_reason": "ownerReassignmentReason",
         "owner_reassignment_required_at": "ownerReassignmentRequiredAt",
         "owner_user_id": "ownerUserId",

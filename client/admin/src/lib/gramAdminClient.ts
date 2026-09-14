@@ -1,4 +1,50 @@
 import {
+  buildAdminUploadPlatformImageMutation,
+  type AdminUploadPlatformImageMutationVariables,
+} from "@gram/admin-client/react-query/adminUploadPlatformImage";
+import {
+  buildAdminMigrateToGlobalIssuerMutation,
+  type AdminMigrateToGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminMigrateToGlobalIssuer";
+import {
+  buildAdminRefreshGlobalIssuerMetadataMutation,
+  type AdminRefreshGlobalIssuerMetadataMutationVariables,
+} from "@gram/admin-client/react-query/adminRefreshGlobalIssuerMetadata";
+import {
+  buildAdminFetchGlobalIssuerMetadataMutation,
+  type AdminFetchGlobalIssuerMetadataMutationVariables,
+} from "@gram/admin-client/react-query/adminFetchGlobalIssuerMetadata";
+import {
+  buildAdminDeleteGlobalIssuerMutation,
+  type AdminDeleteGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminDeleteGlobalIssuer";
+import {
+  buildAdminUpdateGlobalIssuerMutation,
+  type AdminUpdateGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminUpdateGlobalIssuer";
+import {
+  buildAdminCreateGlobalIssuerMutation,
+  type AdminCreateGlobalIssuerMutationVariables,
+} from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
+import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
+import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
+import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
+import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
+import { buildAdminStartTrialMutation } from "@gram/admin-client/react-query/adminStartTrial";
+import type { AdminOrganization as SdkAdminOrganization } from "@gram/admin-client/models/components/adminorganization";
+import type { DisableOrganizationRequestBody } from "@gram/admin-client/models/components/disableorganizationrequestbody";
+import type { EnableOrganizationRequestBody } from "@gram/admin-client/models/components/enableorganizationrequestbody";
+import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
+import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
+import type { AdminOrganization } from "@/lib/gramAdminApi";
+import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
+import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
+import { buildAdminListGlobalIssuerConvergenceCandidatesQuery } from "@gram/admin-client/react-query/adminListGlobalIssuerConvergenceCandidates.core";
+import { buildAdminListGlobalIssuersQuery } from "@gram/admin-client/react-query/adminListGlobalIssuers.core";
+import { buildAdminGetGlobalIssuerQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuer.core";
+import {
   infiniteQueryOptions,
   queryOptions,
   useMutation,
@@ -155,4 +201,303 @@ export function useSetAdminOrganizationFeatureMutation(
     mutationKey: ["@gram/admin-client", "admin", "adminSetOrganizationFeature"],
     mutationFn: setAdminOrganizationFeature,
   });
+}
+
+// The organization list, peek and overview all read the hand-written
+// snake_case record with ISO-string dates, so every write that answers with
+// the organization in its new state is reduced to that shape before it reaches
+// the cache. Dates come back from the generated model as Date instances and go
+// out as ISO strings; a field the server left out stays absent.
+export function organizationFromSdk(
+  org: SdkAdminOrganization,
+): AdminOrganization {
+  return {
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+    account_type: org.accountType,
+    workos_id: org.workosId,
+    stripe_customer_id: org.stripeCustomerId,
+    stripe_subscription_id: org.stripeSubscriptionId,
+    whitelisted: org.whitelisted,
+    disabled_at: org.disabledAt?.toISOString(),
+    trial_state: org.trialState,
+    trial_ends_at: org.trialEndsAt?.toISOString(),
+    trial_tier: org.trialTier,
+    trial_converted_at: org.trialConvertedAt?.toISOString(),
+    trial_demoted_at: org.trialDemotedAt?.toISOString(),
+    member_count: org.memberCount,
+    created_at: org.createdAt.toISOString(),
+    updated_at: org.updatedAt.toISOString(),
+  };
+}
+
+// The organization lifecycle and trial writes below all answer with the record
+// in its new state, so a caller updates its cache from the response rather
+// than reading the record back. Disable, enable, extend and re-arm take the
+// login redirect on a 401 like every other read and write of the record.
+const disableOrganizationMutation =
+  buildAdminDisableOrganizationMutation(redirectingClient);
+const enableOrganizationMutation =
+  buildAdminEnableOrganizationMutation(redirectingClient);
+const extendTrialMutation = buildAdminExtendTrialMutation(redirectingClient);
+const rearmTrialMutation = buildAdminRearmTrialMutation(redirectingClient);
+
+export async function disableOrganization(
+  request: DisableOrganizationRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(disableOrganizationMutation.mutationFn({ request })),
+  );
+}
+
+export async function enableOrganization(
+  request: EnableOrganizationRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(enableOrganizationMutation.mutationFn({ request })),
+  );
+}
+
+// The days are added to the trial's current end date, not to today, so an
+// extension applied early does not shorten the trial.
+export async function extendTrial(
+  request: ExtendTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(extendTrialMutation.mutationFn({ request })),
+  );
+}
+
+// Not an extension with a different verb. The days are the whole length of a
+// fresh run counted from now, and the write also restores the organization's
+// account type and whitelist flag and revives its model provider keys. Only a
+// demoted trial can be re-armed; anything else is refused with a conflict.
+export async function rearmTrial(
+  request: RearmTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(rearmTrialMutation.mutationFn({ request })),
+  );
+}
+
+// Grants a new enterprise trial counted from now. Only an organization that
+// has never trialled, or whose trial has expired without converting or being
+// demoted, can be started; anything else is refused with a conflict. A start
+// reports its own 401 in place rather than taking the login redirect, which
+// would sign the operator back in behind the action they just took.
+const startTrialMutation = buildAdminStartTrialMutation(mutationClient);
+
+export async function startTrial(
+  request: StartTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(await startTrialMutation.mutationFn({ request }));
+}
+
+function createAdminGetGlobalIssuerQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerQuery>[1],
+) {
+  const generated = buildAdminGetGlobalIssuerQuery(redirectingClient, request);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminListGlobalIssuersQuery(
+  request: Parameters<typeof buildAdminListGlobalIssuersQuery>[1],
+) {
+  const generated = buildAdminListGlobalIssuersQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminListGlobalIssuerConvergenceCandidatesQuery(
+  request: Parameters<
+    typeof buildAdminListGlobalIssuerConvergenceCandidatesQuery
+  >[1],
+) {
+  const generated = buildAdminListGlobalIssuerConvergenceCandidatesQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminGetGlobalIssuerDuplicatePreflightQuery(
+  request: Parameters<
+    typeof buildAdminGetGlobalIssuerDuplicatePreflightQuery
+  >[1],
+) {
+  const generated = buildAdminGetGlobalIssuerDuplicatePreflightQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createAdminGetGlobalIssuerMigratePreflightQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerMigratePreflightQuery>[1],
+) {
+  const generated = buildAdminGetGlobalIssuerMigratePreflightQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function adminCreateGlobalIssuer(
+  request: AdminCreateGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminCreateGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminCreateGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminUpdateGlobalIssuer(
+  request: AdminUpdateGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminUpdateGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminUpdateGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminDeleteGlobalIssuer(
+  request: AdminDeleteGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminDeleteGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminDeleteGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminFetchGlobalIssuerMetadata(
+  request: AdminFetchGlobalIssuerMetadataMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminFetchGlobalIssuerMetadataMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminFetchGlobalIssuerMetadataMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminRefreshGlobalIssuerMetadata(
+  request: AdminRefreshGlobalIssuerMetadataMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminRefreshGlobalIssuerMetadataMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminRefreshGlobalIssuerMetadataMutation(redirectingClient).mutationFn(
+      { request },
+    ),
+  );
+}
+
+export function adminMigrateToGlobalIssuer(
+  request: AdminMigrateToGlobalIssuerMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminMigrateToGlobalIssuerMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminMigrateToGlobalIssuerMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+export function adminUploadPlatformImage(
+  request: AdminUploadPlatformImageMutationVariables["request"],
+): ReturnType<
+  ReturnType<typeof buildAdminUploadPlatformImageMutation>["mutationFn"]
+> {
+  return redirecting(
+    buildAdminUploadPlatformImageMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
+}
+
+function createAdminIssuerImageQuery(id: string) {
+  const generated = buildAdminServeImageQuery(redirectingClient, { id });
+  return queryOptions({
+    queryKey: generated.queryKey,
+    queryFn: async (context) => {
+      const response = await redirecting(generated.queryFn(context));
+      return new Response(response.result, {
+        headers: {
+          "Content-Type":
+            response.headers["Content-Type"]?.[0] ??
+            response.headers["content-type"]?.[0] ??
+            "application/octet-stream",
+        },
+      }).blob();
+    },
+  });
+}
+
+export function adminGetGlobalIssuerQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerQuery>[1],
+): ReturnType<typeof createAdminGetGlobalIssuerQuery> {
+  return createAdminGetGlobalIssuerQuery(request);
+}
+
+export function adminListGlobalIssuersQuery(
+  request: Parameters<typeof buildAdminListGlobalIssuersQuery>[1],
+): ReturnType<typeof createAdminListGlobalIssuersQuery> {
+  return createAdminListGlobalIssuersQuery(request);
+}
+
+export function adminListGlobalIssuerConvergenceCandidatesQuery(
+  request: Parameters<
+    typeof buildAdminListGlobalIssuerConvergenceCandidatesQuery
+  >[1],
+): ReturnType<typeof createAdminListGlobalIssuerConvergenceCandidatesQuery> {
+  return createAdminListGlobalIssuerConvergenceCandidatesQuery(request);
+}
+
+export function adminGetGlobalIssuerDuplicatePreflightQuery(
+  request: Parameters<
+    typeof buildAdminGetGlobalIssuerDuplicatePreflightQuery
+  >[1],
+): ReturnType<typeof createAdminGetGlobalIssuerDuplicatePreflightQuery> {
+  return createAdminGetGlobalIssuerDuplicatePreflightQuery(request);
+}
+
+export function adminGetGlobalIssuerMigratePreflightQuery(
+  request: Parameters<typeof buildAdminGetGlobalIssuerMigratePreflightQuery>[1],
+): ReturnType<typeof createAdminGetGlobalIssuerMigratePreflightQuery> {
+  return createAdminGetGlobalIssuerMigratePreflightQuery(request);
+}
+
+export function adminIssuerImageQuery(
+  id: string,
+): ReturnType<typeof createAdminIssuerImageQuery> {
+  return createAdminIssuerImageQuery(id);
 }

@@ -1,11 +1,13 @@
 package toolsets_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -16,8 +18,6 @@ import (
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolsetsService_ListToolSchemaStaticValues(t *testing.T) {
@@ -100,14 +100,6 @@ func TestToolsetsService_ListToolSchemaStaticValues_RejectsProxyTools(t *testing
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Name:           "Proxy Schema Review",
-		Slug:           "proxy-schema-review",
-	})
-	require.NoError(t, err)
-
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -149,15 +141,25 @@ func TestToolsetsService_ListToolSchemaStaticValues_RejectsProxyTools(t *testing
 		OauthScopesSupported:       []string{},
 	})
 	require.NoError(t, err)
-	parsedURN, err := urn.ParseTool(toolURN)
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
-		ToolsetID:    toolset.ID,
-		Version:      1,
-		ToolUrns:     []urn.Tool{parsedURN},
-		ResourceUrns: []urn.Resource{},
+
+	toolset, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		Name:                   "Proxy Schema Review",
+		Description:            nil,
+		ToolUrns:               []string{toolURN},
+		ResourceUrns:           nil,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
+	require.NotNil(t, toolset.McpEnabled)
+	require.True(t, *toolset.McpEnabled)
+
+	workflowID := fmt.Sprintf("v3:index-toolset:%s:%d:%s", toolset.ID, toolset.ToolsetVersion, deploymentID)
+	_, err = ti.temporalEnv.Client().DescribeWorkflowExecution(ctx, workflowID, "")
+	var notFound *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFound, "proxy-backed toolset must not start an indexing workflow")
 
 	_, err = ti.service.ListToolSchemaStaticValues(ctx, &gen.ListToolSchemaStaticValuesPayload{Slug: "proxy-schema-review"})
 	var oopsErr *oops.ShareableError

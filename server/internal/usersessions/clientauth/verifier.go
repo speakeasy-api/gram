@@ -155,7 +155,11 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 	}
 
 	var claims jwt.Claims
-	if err := token.Claims(key, &claims); err != nil {
+	var replayClaims replayIDClaims
+	// Both destinations are filled from the one verified payload; the extra
+	// claim set carries the replay identifiers the registered set has no
+	// field for.
+	if err := token.Claims(key, &claims, &replayClaims); err != nil {
 		return nil, rejectWith(ReasonSignatureInvalid, err)
 	}
 
@@ -185,7 +189,8 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 	// reports which member, for the log line.
 	audience, _ := expect.Audiences.Match(claims.Audience)
 
-	if claims.ID == "" {
+	replayID, exactID, haveID := resolveReplayID(expect.ReplayID, claims.ID, replayClaims, assertion.Value)
+	if !haveID {
 		return nil, reject(ReasonIDMissing, "jti is required")
 	}
 	// Last, so an assertion rejected for any other reason does not spend an
@@ -194,16 +199,20 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 		Issuer:  expect.ReplayIssuer,
 		Party:   expect.ReplayParty,
 		Subject: expect.ReplaySubject,
-		ID:      claims.ID,
+		ID:      replayID,
 	}, expiresAt.Add(MaxSkew))
 	if err != nil {
 		return nil, rejectWith(ReasonReplayStoreUnavailable, err)
 	}
-	if !claimed {
-		return nil, reject(ReasonReplayed, "jti has already been presented")
+	// A repeat of an identifier that names one token is a replay. A repeat
+	// of a digest is the same token arriving twice, which some platforms
+	// serve legitimately from a cache — accepted, and reported so the
+	// tolerance can be revisited with evidence rather than assumption.
+	if !claimed && exactID {
+		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
 	}
 
-	return &Result{Audience: audience, ExpiresAt: expiresAt}, nil
+	return &Result{Audience: audience, ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil
 }
 
 // reasonForClaimError maps the library's claim validation sentinels onto this

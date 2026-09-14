@@ -83,7 +83,6 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
-    setupWizard: { href: () => "/acme/setup/wizard" },
     headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
@@ -183,7 +182,7 @@ describe("OrgWelcomeBanner", () => {
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup/wizard");
+    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
     expect(screen.queryByText("Announcement")).toBeNull();
     expect(
       screen.getByRole("heading", { name: /Choose your\s+first move/ }),
@@ -208,7 +207,7 @@ describe("OrgWelcomeBanner", () => {
 
     expect(screen.queryByText("Enter demo org")).toBeNull();
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup/wizard");
+    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
     expect(screen.queryByText("Announcement")).toBeNull();
   });
 
@@ -219,7 +218,7 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Set up Platform MCP")).toBe(
       "/acme/headless?entrySource=organization_home",
     );
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup/wizard");
+    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
     expect(screen.queryByText("Announcement")).toBeNull();
     expect(
       screen.getByRole("heading", { name: /Pick up where\s+you left off/ }),
@@ -282,7 +281,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup/wizard");
+    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
     expect(screen.getByText("Announcement")).toBeTruthy();
   });
 
@@ -315,7 +314,7 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     render(<OrgWelcomeBanner />);
 
-    expect(screen.getByText("9 steps · resumable")).toBeTruthy();
+    expect(screen.getByText("Assignable · resumable")).toBeTruthy();
     fireEvent.click(screen.getByText("Begin rollout"));
 
     expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(
@@ -329,7 +328,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(screen.getByText("Continue enterprise rollout")).toBeTruthy();
-    expect(hrefFor("Resume rollout")).toBe("/acme/setup/wizard");
+    expect(hrefFor("Resume rollout")).toBe("/acme/setup");
   });
 
   it("drops the setup card when the org cannot run the wizard", () => {
@@ -353,7 +352,7 @@ describe("OrgWelcomeBanner", () => {
       )
         .closest("a")
         ?.getAttribute("href"),
-    ).toBe("/acme/setup/wizard");
+    ).toBe("/acme/setup");
     expect(screen.queryByText("Open project")).toBeNull();
   });
 

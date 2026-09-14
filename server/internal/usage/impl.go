@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
@@ -54,6 +55,7 @@ type Service struct {
 	billingRepo     billing.Repository
 	orgRepo         *orgRepo.Queries
 	telemetryRepo   *telemetryrepo.Queries
+	meterReadConn   clickhouse.Conn
 	auditLogger     *audit.Logger
 	posthogClient   *posthog.Posthog
 	openRouter      openrouter.Provisioner
@@ -84,7 +86,7 @@ type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -103,6 +105,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		billingRepo:     billingRepo,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   posthogClient,
 		openRouter:      openRouter,
@@ -134,6 +137,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		billingRepo:     nil,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   nil,
 		auditLogger:     auditLogger,
 		posthogClient:   nil,
 		openRouter:      nil,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,6 +19,8 @@ const (
 	PrincipalTypeRole  PrincipalType = "role"
 	PrincipalTypeEmail PrincipalType = "email"
 	PrincipalTypeAgent PrincipalType = "agent"
+	// PrincipalTypeSystem is a Gram component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
+	PrincipalTypeSystem PrincipalType = "system"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -30,16 +33,21 @@ const PrincipalWildcard = "*"
 const AllUsersPrincipalID = "all"
 
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser:  {},
-	PrincipalTypeRole:  {},
-	PrincipalTypeEmail: {},
-	PrincipalTypeAgent: {},
+	PrincipalTypeUser:   {},
+	PrincipalTypeRole:   {},
+	PrincipalTypeEmail:  {},
+	PrincipalTypeAgent:  {},
+	PrincipalTypeSystem: {},
 }
 
+// systemPrincipalIDPattern is the lowercase kebab-case component name a system principal carries.
+var systemPrincipalIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is "user", "role", "email", or "agent" and id
-// is the principal identifier (e.g. "user:user_01abc", "user:all",
-// "role:admin", "email:dev@example.com", or "agent:<uuid>").
+// Format: "type:id" where type is "user", "role", "email", "agent", or
+// "system" and id is the principal identifier (e.g. "user:user_01abc",
+// "user:all", "role:admin", "email:dev@example.com", "agent:<uuid>", or
+// "system:issuer-metadata-refresh").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -61,6 +69,11 @@ func NewPrincipal(typ PrincipalType, id string) Principal {
 	_ = p.validate()
 
 	return p
+}
+
+// NewSystemPrincipal names a Gram component acting on its own, for audit entries background work writes.
+func NewSystemPrincipal(component string) Principal {
+	return NewPrincipal(PrincipalTypeSystem, component)
 }
 
 // ParsePrincipal parses a string of the form "type:id" into a Principal.
@@ -225,6 +238,11 @@ func (u *Principal) validate() error {
 			u.err = fmt.Errorf("%w: agent principal id must be a canonical UUID", ErrInvalid)
 			return u.err
 		}
+	}
+
+	if u.Type == PrincipalTypeSystem && !systemPrincipalIDPattern.MatchString(u.ID) {
+		u.err = fmt.Errorf("%w: system principal id must be a lowercase kebab-case component name", ErrInvalid)
+		return u.err
 	}
 
 	if u.Type == PrincipalTypeEmail {

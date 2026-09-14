@@ -155,12 +155,10 @@ fn init_tracing(
     otel_protocol: Option<OtlpProtocol>,
     identity: Arc<SpanIdentity>,
 ) -> Option<SdkTracerProvider> {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        tracing_subscriber::EnvFilter::new(
-            "info,agentkit=trace,agentkit_loop=trace,agentkit_reporting=trace,agentkit_mcp=trace",
-        )
-    });
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     let fmt_layer = tracing_subscriber::fmt::layer()
+        .json()
         .with_writer(std::io::stderr)
         .with_target(true);
 

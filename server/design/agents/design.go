@@ -25,6 +25,7 @@ var Permissions = Type("AgentPermissions", func() {
 var CreateForm = Type("CreateAgentForm", func() {
 	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
 	Attribute("owner_user_id", String, "Eligible same-organization human owner; defaults to the caller")
+	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.")
 	Required("name")
 })
 
@@ -94,10 +95,18 @@ var UpdatePolicyGrantForm = Type("UpdateAgentPolicyGrantForm", func() {
 	Extend(PolicyGrantForm)
 })
 
+var OwnerProfile = Type("AgentOwnerProfile", func() {
+	Required("display_name")
+	Attribute("display_name", String)
+	Attribute("photo_url", String)
+
+})
+
 var Agent = Type("ManagedAgent", func() {
 	Required("id", "owner_user_id", "name", "lifecycle", "permissions", "created_at", "updated_at")
 	Attribute("id", String, func() { Format(FormatUUID) })
 	Attribute("owner_user_id", String)
+	Attribute("owner_profile", OwnerProfile, "Safe profile of the active same-organization owner; does not require directory access")
 	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
 	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
 	Attribute("name", String)
@@ -111,6 +120,20 @@ var _ = Service("agents", func() {
 	Description("Human-only management of first-class agent principals.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	sessionMethods()
+
+	Method("list", func() {
+		Meta("openapi:operationId", "listAgents")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Agents"}`)
+		Payload(func() { security.SessionPayload() })
+		Result(ArrayOf(Agent))
+		HTTP(func() {
+			GET("/rpc/agents.list")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
 
 	Method("create", func() {
 		Meta("openapi:operationId", "createAgent")
@@ -160,6 +183,24 @@ var _ = Service("agents", func() {
 			POST("/rpc/agents.rename")
 			security.SessionHeader()
 			Body(RenameForm)
+			Response(StatusOK)
+		})
+	})
+
+	Method("listDelegableGrants", func() {
+		Description("List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.")
+		Meta("openapi:operationId", "listAgentDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDelegableGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentDelegableGrants"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(AgentIDForm)
+		})
+		Result(ArrayOf(PolicyGrantForm))
+		HTTP(func() {
+			GET("/rpc/agents.listDelegableGrants")
+			Param("agent_id")
+			security.SessionHeader()
 			Response(StatusOK)
 		})
 	})

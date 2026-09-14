@@ -1634,6 +1634,27 @@ func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	require.NoFileExists(t, marker)
 }
 
+func TestHooksBootstrapAvoidsWindowsChecksumFilenameEscaping(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksBootstrap(GenerateConfig{}))
+
+	// Git Bash receives LOCALAPPDATA with native backslashes. Normalizing the
+	// cache root avoids mixed paths for every downstream MSYS utility.
+	require.Contains(t, script, `printf '%s' "$LOCALAPPDATA" | tr '\\' '/'`)
+
+	// More importantly, never give checksum utilities the filename: GNU
+	// coreutils prefixes the digest with an escape marker when that filename
+	// contains a backslash. Stdin produces an unconditionally plain digest.
+	for _, command := range []string{
+		`sha256sum < "$archive"`,
+		`shasum -a 256 < "$archive"`,
+		`openssl dgst -sha256 < "$archive"`,
+	} {
+		require.Contains(t, script, command)
+	}
+	require.NotContains(t, script, `sha256sum "$archive"`)
+}
+
 func TestHooksBootstrapInstallFailOpenExitsZeroWithoutExecuting(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -2901,6 +2922,77 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
+}
+
+func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const skillPath = "skills/review-shadow-mcp/SKILL.md"
+	claudeSkill := files["speakeasy/"+skillPath]
+	require.NotEmpty(t, claudeSkill)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+
+	workflow := string(claudeSkill)
+	cursor := 0
+	for _, tool := range []string{
+		"list_projects",
+		"list_shadow_mcp_inventory",
+		"get_shadow_mcp_review",
+		"list_plugin_assignments",
+		"get_plugin",
+		"get_shadow_mcp_review",
+		"decide_shadow_mcp_access",
+		"get_shadow_mcp_review",
+		"find_mcp",
+		"get_mcp",
+		"get_mcp_readiness",
+		"list_plugins",
+		"get_plugin",
+		"set_plugin_assignments",
+		"distribute_mcp_to_plugin",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(workflow[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the required workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"Never widen an audience to Everyone",
+		"project discovery is incomplete",
+		"obtain confirmation again",
+		"immediately preceding `expected_version`",
+		"a fresh idempotency key",
+		"`confirmed: true`",
+		"never reconstruct either",
+		"hand off to the AICP dashboard",
+		"changes who receives every MCP server in that plugin, not only this target",
+		"Confirm this exact distribution",
+		"denial or conflict",
+		"without automatically changing or renewing the approval",
+	} {
+		require.Contains(t, workflow, guardrail)
+	}
+	for _, forbidden := range []string{
+		"API key",
+		"client secret",
+		"password",
+		"access token",
+		"refresh token",
+		"OAuth code",
+		"Authorization header",
+		"speakeasy-skill-feedback",
+		"hooks/",
+		"Gram",
+		"list_shadow_mcp_audiences",
+		"get_shadow_mcp_audience",
+		"inspect_mcp_candidate",
+		"register_remote_mcp",
+	} {
+		require.NotContains(t, workflow, forbidden)
+	}
 }
 
 func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {

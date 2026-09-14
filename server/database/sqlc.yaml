@@ -351,16 +351,6 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../cmd/tools/migrations/legacypolicyscope/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "legacypolicyscope"
-        out: "../cmd/tools/migrations/legacypolicyscope"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
     queries: ../internal/openrouterkeys/queries.sql
     engine: postgresql
     gen:
@@ -886,5 +876,15 @@ sql:
       go:
         package: "repo"
         out: "../internal/metering/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/workloadidentity/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/workloadidentity/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

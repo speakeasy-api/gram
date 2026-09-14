@@ -64,7 +64,7 @@ func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, valu
 	return nil
 }
 
-func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return nil, nil
 }
 

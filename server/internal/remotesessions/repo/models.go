@@ -40,24 +40,31 @@ type RemoteSession struct {
 }
 
 type RemoteSessionClient struct {
-	ID                      uuid.UUID
-	ProjectID               uuid.NullUUID
-	OrganizationID          pgtype.Text
-	RemoteSessionIssuerID   uuid.UUID
-	ClientID                string
-	ClientSecretEncrypted   pgtype.Text
-	ClientIDIssuedAt        pgtype.Timestamptz
-	ClientSecretExpiresAt   pgtype.Timestamptz
-	TokenEndpointAuthMethod pgtype.Text
-	JsonWebKeySetID         uuid.NullUUID
-	Scope                   []string
-	Audience                pgtype.Text
-	ClientIDMetadataUri     pgtype.Text
-	LegacyCallbackUrl       bool
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID                              uuid.UUID
+	ProjectID                       uuid.NullUUID
+	OrganizationID                  pgtype.Text
+	RemoteSessionIssuerID           uuid.UUID
+	ClientID                        string
+	ClientSecretEncrypted           pgtype.Text
+	ClientIDIssuedAt                pgtype.Timestamptz
+	ClientSecretExpiresAt           pgtype.Timestamptz
+	TokenEndpointAuthMethod         pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	Scope                           []string
+	Audience                        pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	ClientIDMetadataUri             pgtype.Text
+	LegacyCallbackUrl               bool
+	ResourceIdentifier              pgtype.Text
+	ResourceName                    pgtype.Text
+	ResourceDocumentation           pgtype.Text
+	ResourcePolicyUri               pgtype.Text
+	ResourceTosUri                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
+	CreatedAt                       pgtype.Timestamptz
+	UpdatedAt                       pgtype.Timestamptz
+	DeletedAt                       pgtype.Timestamptz
+	Deleted                         bool
 }
 
 type RemoteSessionIssuer struct {
@@ -71,6 +78,10 @@ type RemoteSessionIssuer struct {
 	RevocationEndpoint                         pgtype.Text
 	RegistrationEndpoint                       pgtype.Text
 	JwksUri                                    pgtype.Text
+	Jwks                                       []byte
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
 	OpPolicyUri                                pgtype.Text
 	OpTosUri                                   pgtype.Text

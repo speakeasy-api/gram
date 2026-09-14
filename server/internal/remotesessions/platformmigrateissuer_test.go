@@ -133,7 +133,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	result, err := ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID, targetID.String()))
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 	// client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokenCredentials(tokens))
 
 	q := repo.New(ti.conn)
 	activeSessions, err := q.CountActiveRemoteSessionsByClientID(ctx, clientUUID)
@@ -325,6 +325,45 @@ func TestMigrateToGlobalIssuer_DuplicateBindingConflict(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
 	require.NotEmpty(t, preflight.ConflictingMcpServerNames)
+}
+
+func TestMigrateToGlobalIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "plat-trusted-source")
+	targetID := seedConvergencePlatformIssuer(t, ctx, ti.conn, "plat-trusted-target")
+	createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "plat-trusted-usi", sourceID)
+
+	preflight, err := ti.service.GetGlobalIssuerMigratePreflight(withAdmin(t, ctx), platformPreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.TrustedUserSessionIssuerCount)
+
+	_, err = ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestMigrateToGlobalIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "plat-foreign-trust-source")
+	targetID := seedConvergencePlatformIssuer(t, ctx, ti.conn, "plat-foreign-trust-target")
+	otherOrgID := createOrganization(t, ctx, ti.conn, "plat-foreign-trust-org")
+	createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, otherOrgID, "plat-foreign-trust-usi", sourceID)
+
+	preflight, err := ti.service.GetGlobalIssuerMigratePreflight(withAdmin(t, ctx), platformPreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.TrustedUserSessionIssuerCount)
+
+	_, err = ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 // TestMigrateToGlobalIssuer_GlobalSourceBadRequest proves a platform issuer named

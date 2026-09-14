@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
@@ -57,8 +58,9 @@ func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID
 	return out
 }
 
-func (a *AnalyzeBatch) scanDestructiveCLICommands(_ context.Context, messages []batchMessage) [][]scanners.Finding {
-	out := make([][]scanners.Finding, len(messages))
+func (a *AnalyzeBatch) scanDestructiveCLICommands(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage) ([][]scanners.Finding, error) {
+	results := make([]scanners.Result, len(messages))
+	startedAt := time.Now().UTC()
 	for i, msg := range messages {
 		calls := make([]clidestructive.ToolCall, 0, len(msg.ToolCalls))
 		for _, call := range msg.ToolCalls {
@@ -67,7 +69,8 @@ func (a *AnalyzeBatch) scanDestructiveCLICommands(_ context.Context, messages []
 				Arguments: call.Function.Arguments,
 			})
 		}
-		out[i] = a.cliDestructiveScanner.Scan(calls)
+		results[i] = a.cliDestructiveScanner.Scan(ctx, calls)
 	}
-	return out
+	a.recordBatchResults(ctx, metering.RiskCLIDestructive(), args, messages, results, startedAt)
+	return findingsFromResults(results), nil
 }

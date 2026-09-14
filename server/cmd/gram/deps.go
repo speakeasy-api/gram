@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -163,55 +164,104 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+type clickhouseClientOptions struct {
+	component    string
+	host         string
+	database     string
+	username     string
+	password     string
+	nativePort   string
+	insecure     bool
+	rootCAFile   string
+	maxOpenConns int
+	maxIdleConns int
+}
+
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
-	logger = logger.With(attr.SlogComponent("clickhouse"))
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse",
+		host:         c.String("clickhouse-host"),
+		database:     c.String("clickhouse-database"),
+		username:     c.String("clickhouse-username"),
+		password:     c.String("clickhouse-password"),
+		nativePort:   c.String("clickhouse-native-port"),
+		insecure:     c.Bool("clickhouse-insecure"),
+		maxOpenConns: 32,
+		maxIdleConns: 16,
+		rootCAFile:   "",
+	})
+}
+
+func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse-reader",
+		host:         c.String("clickhouse-read-host"),
+		database:     c.String("clickhouse-read-database"),
+		username:     c.String("clickhouse-read-username"),
+		password:     c.String("clickhouse-read-password"),
+		nativePort:   c.String("clickhouse-read-native-port"),
+		rootCAFile:   c.Path("clickhouse-read-ca-file"),
+		maxOpenConns: 8,
+		maxIdleConns: 4,
+		insecure:     false,
+	})
+}
+
+func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickhouseClientOptions) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent(opts.component))
 	nilFunc := noopShutdown
 
-	host := c.String("clickhouse-host")
-	database := c.String("clickhouse-database")
-	username := c.String("clickhouse-username")
-	password := c.String("clickhouse-password")
-	nativePort := c.String("clickhouse-native-port")
-	insecure := c.Bool("clickhouse-insecure")
-
-	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host must be set", host != "",
-		"clickhouse database must be set", database != "",
-		"clickhouse username must be set", username != "",
-		"clickhouse password must be set", password != "",
-		"clickhouse native port must be set", nativePort != "",
+		"clickhouse host must be set", opts.host != "",
+		"clickhouse database must be set", opts.database != "",
+		"clickhouse username must be set", opts.username != "",
+		"clickhouse password must be set", opts.password != "",
+		"clickhouse native port must be set", opts.nativePort != "",
+		"clickhouse max open connections must be positive", opts.maxOpenConns > 0,
+		"clickhouse max idle connections must not be negative", opts.maxIdleConns >= 0,
+		"clickhouse max idle connections must not exceed max open connections", opts.maxIdleConns <= opts.maxOpenConns,
 	)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
-	opts := &clickhouse.Options{
+	var rootCAs *x509.CertPool
+	if opts.rootCAFile != "" {
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("load system certificate pool: %w", err)
+		}
+		caPEM, err := os.ReadFile(opts.rootCAFile)
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("read clickhouse CA file: %w", err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, nilFunc, errors.New("clickhouse CA file contains no certificates")
+		}
+	}
+
+	driverOpts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
-		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
+		Addr:     []string{fmt.Sprintf("%s:%s", opts.host, opts.nativePort)},
 		Auth: clickhouse.Auth{
-			Database: database,
-			Username: username,
-			Password: password,
+			Database: opts.database,
+			Username: opts.username,
+			Password: opts.password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
-		// The driver defaults to MaxIdleConns+5 open connections, which is far
-		// too few for the streams process: one pool is shared by every
-		// subscription's ClickHouse writer. DialTimeout doubles as the pool
-		// acquisition timeout, so keep it short enough that saturation surfaces
-		// as a fast failure instead of parking each message for 30s.
-		MaxOpenConns: 32,
-		MaxIdleConns: 16,
+		MaxOpenConns: opts.maxOpenConns,
+		MaxIdleConns: opts.maxIdleConns,
 		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
-			// #nosec G402 -- we're reading the value from an environment variable.
-			InsecureSkipVerify: insecure,
+			RootCAs: rootCAs,
+			// #nosec G402 -- only the existing writer flag can enable this.
+			InsecureSkipVerify: opts.insecure,
 		},
 	}
 
-	conn, err := clickhouse.Open(opts)
+	conn, err := clickhouse.Open(driverOpts)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
@@ -248,6 +298,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	}
 
 	if pingErr != nil {
+		closeErr := conn.Close()
+		if closeErr != nil {
+			logger.ErrorContext(ctx, "failed to close clickhouse client after ping failure", attr.SlogError(closeErr))
+			pingErr = errors.Join(pingErr, fmt.Errorf("close clickhouse client connection: %w", closeErr))
+		}
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
@@ -644,6 +699,60 @@ func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 				return "", nil
 			}
 			return c.String("stripe-meter-event-name-mcp-bandwidth-egress"), nil
+		case metering.RiskGitleaks():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-gitleaks")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPresidio():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-presidio")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptInjection():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-injection")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskPromptPolicy():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-prompt-policy")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCustomRules():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-custom-rules")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
+		case metering.RiskCLIDestructive():
+			if !meterExportEnabled {
+				return "", nil
+			}
+			name := c.String("stripe-meter-event-name-risk-cli-destructive")
+			if !stripeclient.IsConfigured(name) {
+				return "", nil
+			}
+			return name, nil
 		default:
 			return "", errors.New("meter definition is not mapped to Stripe")
 		}

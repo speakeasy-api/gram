@@ -108,8 +108,7 @@ func Attach(mux goahttp.Muxer, logger *slog.Logger, processor Processor, resolve
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBytes))
 	if err != nil {
-		var limit *http.MaxBytesError
-		if errors.As(err, &limit) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
 		} else {
 			http.Error(w, "invalid request body", http.StatusBadRequest)

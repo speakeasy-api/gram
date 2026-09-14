@@ -23,6 +23,7 @@ export function ToolNarrowingDialog({
   serverId,
   serverName,
   catalog,
+  limitedBy,
   tools,
   dispositions,
   pending,
@@ -33,6 +34,11 @@ export function ToolNarrowingDialog({
   serverName?: string;
   /** The server's tools, when this surface has them. */
   catalog?: ToolSelectionTool[];
+  /**
+   * The principal whose block keeps the rest of the catalogue out of reach,
+   * when the list here is only part of the server.
+   */
+  limitedBy?: string;
   tools: string[];
   dispositions: string[];
   pending: boolean;
@@ -72,6 +78,9 @@ export function ToolNarrowingDialog({
           <Dialog.Description>
             An annotation keeps covering new tools as they are added. A list of
             names covers only the tools you pick.
+            {limitedBy
+              ? ` Only the tools ${limitedBy} leaves reachable on this server are listed; the rest are blocked there and cannot be granted here.`
+              : ""}
           </Dialog.Description>
         </Dialog.Header>
 

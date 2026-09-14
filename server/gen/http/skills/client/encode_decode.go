@@ -1040,6 +1040,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		for _, value := range p.Tags {
 			values.Add("tags", value)
 		}
+		for _, value := range p.AccessibleBy {
+			values.Add("accessible_by", value)
+		}
 		values.Add("sort", p.Sort)
 		req.URL.RawQuery = values.Encode()
 		return nil

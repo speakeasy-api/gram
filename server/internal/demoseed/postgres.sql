@@ -164,6 +164,11 @@ DECLARE
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
 
+  -- Read-only tool verbs the destructive-command policy exempts. Declared once
+  -- because both of that policy's categories carry the same exemption.
+  ds_readonly_exempt CONSTANT text :=
+    'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))';
+
   excl_fixture CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec01';
   excl_testcard CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec02';
   excl_examplekey CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec03';
@@ -370,6 +375,14 @@ BEGIN
   DELETE FROM killswitch_operations WHERE organization_id = demo_org;
   DELETE FROM killswitch_prescriptions WHERE organization_id = demo_org;
 
+  -- Private-network access is intentionally absent from the shared demo and
+  -- local seed. Remove both active rows and tombstones before recreating the
+  -- tenant so a prior admin test cannot retain credentials or expose controls
+  -- when the temporary rollout flag is enabled later.
+  DELETE FROM network_ingresses WHERE organization_id = demo_org;
+  DELETE FROM organization_features
+  WHERE organization_id = demo_org AND feature_name = 'network_ingress';
+
   -- Catalog registrations have both direct and transitive NO ACTION children.
   -- Evidence pins its distribution and selected workflow; feedback also pins
   -- selected workflows. Remove those rows first, then every project-scoped
@@ -446,6 +459,10 @@ BEGIN
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM organization_setup_tasks WHERE organization_id = demo_org;
   DELETE FROM business_memories WHERE organization_id = demo_org;
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -478,13 +495,20 @@ BEGIN
     (demo_org, 'instrument-agents', 'in_progress', 'user_demo_priya', NULL, NULL),
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
-    (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
+    (demo_org, 'configure-policies', 'done', NULL, NULL, now()),
     (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
   -- surfaces render. Real users still never join the demo org — access is by
   -- impersonation only. No WorkOS sync job iterates local rows, so fake
   -- workos_* ids are inert while organization_metadata.workos_id stays NULL.
+  -- Grants have no agent FK: clear stale policies before deterministic agent
+  -- IDs are recreated. Keep human grants and every other organization intact.
+  DELETE FROM principal_grants
+  WHERE organization_id = demo_org
+    AND principal_urn LIKE 'agent:%';
+  -- Agents RESTRICT owner membership deletion and are not project children.
+  DELETE FROM agents WHERE organization_id = demo_org;
   DELETE FROM organization_user_relationships WHERE organization_id = demo_org;
   FOR i IN 1 .. array_length(demo_user_ids, 1) LOOP
     INSERT INTO organization_user_relationships
@@ -492,6 +516,20 @@ BEGIN
     VALUES (demo_org, demo_user_ids[i], 'workos_' || demo_user_ids[i],
             'demo_mem_' || demo_user_ids[i], now() - (interval '40 days' * i));
   END LOOP;
+
+  -- Managed identities are distinct from OAuth client registrations below.
+  -- Existing fictional owners exercise name/initials rendering without adding
+  -- external avatar dependencies. None of these has a direct policy grant;
+  -- the first one reaches servers only through the roles assigned to it below.
+  INSERT INTO agents
+    (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
+  VALUES
+    (demo.det_uuid('gram-demo-managed-agent-1'), demo_org, demo_user_ids[1],
+     'Release assistant', NULL, NULL),
+    (demo.det_uuid('gram-demo-managed-agent-2'), demo_org, demo_user_ids[2],
+     'Support triage', now() - interval '2 days', NULL),
+    (demo.det_uuid('gram-demo-managed-agent-3'), demo_org, demo_user_ids[3],
+     'Retired documentation bot', NULL, now() - interval '5 days');
 
   -- Role assignments (Roles column on the team page). Global roles are synced
   -- from WorkOS in real envs; tolerate their absence locally.
@@ -519,6 +557,7 @@ BEGIN
   DELETE FROM principal_grants
   WHERE organization_id = demo_org
     AND principal_urn LIKE 'role:organization:%';
+  DELETE FROM agent_role_assignments WHERE organization_id = demo_org;
   DELETE FROM organization_roles WHERE organization_id = demo_org;
 
   FOR custom_role IN
@@ -527,43 +566,51 @@ BEGIN
       ('session-reviewer', 'Session Reviewer',
        'Reads chat transcripts across the organization for quality review.',
        ARRAY['chat:read'],
-       ARRAY['user_demo_hana', 'user_demo_jonas']),
+       ARRAY['user_demo_hana', 'user_demo_jonas'],
+       ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers and skills, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
              'mcp:write', 'mcp:connect', 'skill:read', 'skill:write',
              'environment:read', 'agent:read'],
-       ARRAY['user_demo_jonas']),
+       ARRAY['user_demo_jonas'],
+       ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
        ARRAY['mcp:read', 'mcp:write'],
-       ARRAY['user_demo_priya', 'user_demo_mateo']),
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
        'Held by unattended agents, not people: authorizes an agent to act.',
        ARRAY['agent:read', 'agent:authorize'],
-       ARRAY[]::text[]),
+       ARRAY[]::text[],
+       ARRAY['gram-demo-managed-agent-1', 'gram-demo-managed-agent-2']),
       ('analyst', 'Analyst',
        'Read-only across servers, skills and sessions. No configuration changes.',
        ARRAY['org:read', 'project:read', 'mcp:read', 'mcp:connect',
              'skill:read', 'chat:read'],
-       ARRAY['user_demo_amara', 'user_demo_hana']),
+       ARRAY['user_demo_amara', 'user_demo_hana'],
+       ARRAY[]::text[]),
       ('read-only-tools', 'Read-only Tools',
        'Connects to every server, but only for tools annotated read-only.',
        ARRAY['mcp:connect'],
-       ARRAY['user_demo_amara']),
+       ARRAY['user_demo_amara'],
+       ARRAY['gram-demo-managed-agent-1']),
       ('environment-manager', 'Environment Manager',
        'Manages environments and the credentials they hold.',
        ARRAY['org:read', 'project:read', 'environment:read',
              'environment:write', 'mcp:read'],
-       ARRAY['user_demo_lucas']),
+       ARRAY['user_demo_lucas'],
+       ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
        ARRAY['org:read', 'org:admin', 'project:read', 'project:write',
              'mcp:read', 'mcp:write', 'mcp:connect', 'environment:read',
              'skill:read', 'skill:write', 'agent:read', 'agent:write',
              'chat:read'],
-       ARRAY['user_demo_priya', 'user_demo_mateo'])
-    ) AS r(slug, name, description, scopes, members)
+       ARRAY['user_demo_priya', 'user_demo_mateo'],
+       ARRAY[]::text[])
+    ) AS r(slug, name, description, scopes, members, agents)
   LOOP
     INSERT INTO organization_roles
       (organization_id, workos_slug, workos_name, workos_description,
@@ -589,6 +636,15 @@ BEGIN
         (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
       VALUES (demo_org, 'workos_' || custom_role.members[i],
               custom_role.members[i], custom_role_urn, now());
+    END LOOP;
+
+    -- Agent members of a role. Automation Agent carries agent scopes no agent
+    -- can hold at runtime, so the role editor marks them; Read-only Tools is
+    -- the case that actually widens an agent, and the suspended agent shows a
+    -- membership that is kept rather than dropped.
+    FOR i IN 1 .. COALESCE(array_length(custom_role.agents, 1), 0) LOOP
+      INSERT INTO agent_role_assignments (organization_id, agent_id, role_urn)
+      VALUES (demo_org, demo.det_uuid(custom_role.agents[i]), custom_role_urn);
     END LOOP;
   END LOOP;
 
@@ -867,8 +923,8 @@ BEGIN
   -- user_sessions all cascade from projects, which is deleted and recreated
   -- above.
   ------------------------------------------------------------------
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
-  VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+  VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', interval '30 days');
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
 
@@ -948,6 +1004,25 @@ BEGIN
      now() - interval '30 hours', now() - interval '6 days');
 
   ------------------------------------------------------------------
+  -- A display-only managed-agent credential: no signing token, an invalid
+  -- refresh hash, and an empty delegation prevent usable programmatic access.
+  -- The issuer/project cascade above cleans this row on every reseed.
+  INSERT INTO user_sessions
+    (id, project_id, organization_id, user_session_issuer_id,
+     user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
+     delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
+     expires_at, last_used_at, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-managed-agent-session-1'), proj_a, demo_org,
+     us_issuer, usc_public,
+     'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
+     demo_user_ids[1], '[]'::jsonb, 1,
+     demo.det_uuid('gram-demo-managed-agent-jti-1')::text,
+     'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-managed-agent-refresh-1')::text,
+     now() + interval '7 days', now() - interval '10 minutes',
+     now() - interval '20 minutes', now() - interval '3 days');
+
+  ------------------------------------------------------------------
   -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
   -- Two backends so the gateway's member table shows both classes: the
   -- toolset-backed pair executes in-process, the third-party remotes are
@@ -967,15 +1042,15 @@ BEGIN
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode,
-                                    session_duration) VALUES
-    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-github'), proj_a, 'github',
+    (demo.det_uuid('gram-demo-issuer-github'), proj_a, demo_org, 'github',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
-    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
+    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
 
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
@@ -1455,20 +1530,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                              sources, presidio_entities, analyzer_config,
-                             custom_rule_ids, message_types, scope_exempt,
+                             custom_rule_ids,
                              enabled, action, audience_type,
                              shadow_mcp_disposition, auto_name, score, version)
   VALUES
     -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
      '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
-     '{}'::jsonb, '{}', NULL, NULL,
+     '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
     -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
     -- system-prompt-extraction half of the same category.
     (policy_pi, proj_a, demo_org, 'Acme prompt injection guardrail', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}',
-     '{user_message,tool_response}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1477,46 +1554,73 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- at the prefix, so a mutating tool whose name merely contains a verb
     -- (budget_update, reset_query_cache) still falls under the policy.
     (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
-     '{cli_destructive,destructive_tool}', NULL, '{}'::jsonb, '{}',
-     '{tool_request}',
-     'tool_calls.size() > 0 && tool_calls.all(t, ["get_","list_","search_","query_","fetch_","check_"].exists(v, t.function.matchPrefix(v)))',
+     '{cli_destructive,destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'cli_destructive',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt),
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request"]',
+                          'scope_exempt', ds_readonly_exempt))), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
-     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', '{tool_request}', NULL,
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}',
      TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
     -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
     -- off-domain AI account. flag-only source.
     (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
      '{account_identity}', NULL,
      '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
-     '{}', NULL, NULL,
+     '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
     (policy_cr, proj_a, demo_org, 'Acme agent guardrails', 'standard',
-     '{}', NULL, '{}'::jsonb,
+     '{}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'custom',
+                          'scope_include', 'kind in ["tool_request"]'))),
      '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
-     '{tool_request}', NULL,
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
     -- carry it by design). Scored well below the regulated/secret policies so
     -- the highest-volume findings do not drown the Watchdog list in the same
     -- severity as a leaked key — policy score IS the signal severity.
     (policy_cd, proj_a, demo_org, 'Acme customer contact data policy', 'standard',
-     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}', NULL, NULL,
+     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 6.4, 1),
     -- OWASP LLM07 / ASI01 tail: off-topic or boundary-testing conversations.
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
-     '{presidio}', '{}', '{}'::jsonb, '{}', '{user_message}', NULL,
+     '{presidio}', '{}',
+     -- presidio emits five categories; the legacy list narrowed the whole
+     -- policy, so every one of them carries the scope. Its own findings
+     -- (pii.topic_boundary_violation) classify as off_policy, not pii.
+     (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
+        jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
     (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
-     '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
+     '{prompt_injection}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'prompt_injection',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
+
+  -- The same canonical target has two grants, so Platform MCP demonstrates
+  -- target counts rather than leaking or counting the target audience.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo_org, 'user:' || demo_user_ids[1], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research')),
+    (demo_org, 'user:' || demo_user_ids[2], 'risk_policy:bypass',
+     jsonb_build_object('resource_kind', 'risk_policy', 'resource_id', policy_sm::text,
+                        'server_url', 'https://shadow-mcp.demo.getgram.ai/research'));
 
   INSERT INTO session_quarantines
     (id, organization_id, project_id, session_id, risk_policy_id,
@@ -2047,6 +2151,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 4 setup task overrides, found %', stray;
   END IF;
+  SELECT count(*) INTO stray FROM organization_features
+  WHERE organization_id = demo_org AND feature_name = 'network_ingress';
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: network_ingress entitlement remains';
+  END IF;
+  SELECT count(*) INTO stray FROM network_ingresses
+  WHERE organization_id = demo_org;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: network ingress rows remain';
+  END IF;
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
 
@@ -2319,6 +2433,16 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected >= 90 risk findings, found %', finding_count;
   END IF;
 
+  SELECT count(*) INTO stray
+  FROM principal_grants
+  WHERE organization_id = demo_org
+    AND scope = 'risk_policy:bypass'
+    AND selectors ->> 'resource_id' = policy_sm::text
+    AND selectors ->> 'server_url' = 'https://shadow-mcp.demo.getgram.ai/research';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 shadow policy target grants, found %', stray;
+  END IF;
+
   -- The Watchdog scores each signal from its findings' policy, so a rotation
   -- that collapsed onto one policy would render every signal at one severity.
   SELECT count(DISTINCT risk_policy_id) INTO stray
@@ -2535,6 +2659,23 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
   END IF;
 
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % agent grants survived the reseed', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 managed agents, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%';
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 managed agent session, found %', stray;
+  END IF;
+
   -- This External OAuth row drives the metadata recommendation. Keep its count
   -- stable so a rerun cannot duplicate it or silently drop the demo surface.
   SELECT count(*) INTO stray FROM external_oauth_server_metadata
@@ -2561,8 +2702,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
+  -- Managed-agent credentials are a separate surface from ordinary MCP
+  -- connections, even though both fixtures belong to the same project.
   SELECT count(*) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn LIKE 'agent:%';
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 project-scoped managed agent session, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn NOT LIKE 'agent:%';
   IF stray <> 11 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 11 MCP connections, found %', stray;
   END IF;
@@ -2570,7 +2721,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Spread across servers, not pooled on one: the connections tab groups by
   -- MCP server, and a single group makes that view look broken.
   SELECT count(DISTINCT user_session_issuer_id) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND subject_urn NOT LIKE 'agent:%';
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: connections span % MCP servers, expected 4', stray;
   END IF;
@@ -2589,7 +2741,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Every seeded connection hangs off a registration. One with none would be
   -- filed under "Unknown client" and carry no credential reading at all.
   SELECT count(*) INTO stray FROM user_sessions
-  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL;
+  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL
+    AND subject_urn NOT LIKE 'agent:%';
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // guardSingleClientPerRemoteIssuer enforces, at attach time, that at most one
@@ -108,6 +109,51 @@ func parseUserSessionIssuerIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// lockUserSessionIssuersForClientBinding serializes every client attachment
+// path against organization issuer deletion. Validate all ids before taking
+// advisory locks so an untrusted id from another tenant cannot consume a lock,
+// then recheck liveness under each lock before writing any binding.
+func lockUserSessionIssuersForClientBinding(
+	ctx context.Context,
+	logger *slog.Logger,
+	dbtx pgx.Tx,
+	txRepo *repo.Queries,
+	projectID uuid.UUID,
+	organizationID string,
+	userIssuerIDs []uuid.UUID,
+) error {
+	params := make([]repo.GetUserSessionIssuerForProjectParams, 0, len(userIssuerIDs))
+	for _, userIssuerID := range userIssuerIDs {
+		param := repo.GetUserSessionIssuerForProjectParams{
+			ID:             userIssuerID,
+			ProjectID:      projectID,
+			OrganizationID: organizationID,
+		}
+		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, param); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+		}
+		params = append(params, param)
+	}
+
+	userSessionRepo := usersessionsrepo.New(dbtx)
+	for _, param := range params {
+		if err := userSessionRepo.LockUserSessionIssuerForOwnerBinding(ctx, param.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock user session issuer for client binding").LogError(ctx, logger)
+		}
+		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, param); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeUnexpected, err, "recheck user session issuer").LogError(ctx, logger)
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -156,7 +202,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	if _, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
+	if _, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
 		return nil, err
 	}
 
@@ -216,7 +262,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 
 	txRepo := repo.New(dbtx)
 
-	issuer, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
+	issuer, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -263,13 +309,21 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 func (s *Service) validateNewClientIssuers(
 	ctx context.Context,
 	logger *slog.Logger,
+	dbtx pgx.Tx,
 	txRepo *repo.Queries,
 	projectID uuid.UUID,
 	organizationID string,
 	issuerID uuid.UUID,
 	userIssuerIDs []uuid.UUID,
 ) (repo.RemoteSessionIssuer, error) {
-	// Serialize against migrateIssuer before reading the issuer, so the
+	// Lock user issuers first. Organization issuer deletion takes the same
+	// advisory lock before scanning and detaching clients, so no create path can
+	// commit a new binding after deletion's ownership decision.
+	if err := lockUserSessionIssuersForClientBinding(ctx, logger, dbtx, txRepo, projectID, organizationID, userIssuerIDs); err != nil {
+		return repo.RemoteSessionIssuer{}, err
+	}
+
+	// Serialize against migrateIssuer before reading the remote issuer, so the
 	// deleted-IS-FALSE check below reflects committed migration state. Without
 	// the lock a concurrent migration could soft-delete this issuer in the window
 	// between the read and the client insert, leaving a client bound to a
@@ -299,23 +353,10 @@ func (s *Service) validateNewClientIssuers(
 		return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	// Reject any user session issuer the caller cannot reach, at either tier
-	// (so a binding can't cross a tenant boundary), and any pairing that would
-	// put a second client on the same (user_session_issuer,
-	// remote_session_issuer) pair. Validate every issuer before creating the row
-	// so a bad request never leaves a half-attached client behind.
+	// Reject any pairing that would put a second client on the same
+	// (user_session_issuer, remote_session_issuer) pair. Every user issuer was
+	// already tenancy-validated and locked above.
 	for _, userIssuerID := range userIssuerIDs {
-		if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
-			ID:             userIssuerID,
-			ProjectID:      projectID,
-			OrganizationID: organizationID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return repo.RemoteSessionIssuer{}, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-			}
-			return repo.RemoteSessionIssuer{}, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-		}
-
 		if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, organizationID, projectID, userIssuerID, issuerID, uuid.Nil); err != nil {
 			return repo.RemoteSessionIssuer{}, err
 		}
@@ -628,17 +669,8 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	// The user_session_issuer must belong to the caller's project so a binding
-	// can't cross a tenant boundary.
-	if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
-		ID:             userIssuerID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	if err := lockUserSessionIssuersForClientBinding(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, []uuid.UUID{userIssuerID}); err != nil {
+		return nil, err
 	}
 
 	// Exclude this client so re-attaching an existing binding is a no-op.

@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -77,8 +76,10 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -141,7 +142,6 @@ type Service struct {
 	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger             *tm.Logger
 	vectorToolStore         *rag.ToolsetVectorStore
-	temporal                *temporal.Environment
 	assistantTokens         *assistanttokens.Manager
 	sessions                *sessions.Manager
 	identityResolver        IdentityResolver
@@ -179,6 +179,14 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
+	// validationMetrics counts the consent page's live validation probes.
+	validationMetrics *remotesessionmetrics.Validation
+	// validationLimiter paces verifies per consent challenge; nil without Redis.
+	validationLimiter *ratelimit.Limiter
+	// autoVerifications admits and drains the probes a committed grant starts off the request path.
+	autoVerifications *autoVerifications
+	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
+	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
 	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
 	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
@@ -354,7 +362,6 @@ func NewService(
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
-	temporal *temporal.Environment,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
 	shadowMCPClient *shadowmcp.Client,
@@ -434,7 +441,6 @@ func NewService(
 		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:            telemLogger,
 		vectorToolStore:        vectorToolStore,
-		temporal:               temporal,
 		assistantTokens:        assistantTokens,
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
@@ -471,15 +477,19 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
-		identityResolver:   identityResolver,
-		identityValidator:  mcpidentity.NewValidatorBoundary(),
-		userSessionSigner:  userSessionSigner,
-		remoteChallengeMgr: remoteChallengeMgr,
-		remoteProxyManager: remoteProxyManager,
-		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
-		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
-		metaRuntime:        metaRuntimeConfig.withDefaults(),
+		sessionClientInfo:    sessionclientinfo.NewStore(redisClient, 0),
+		identityResolver:     identityResolver,
+		identityValidator:    mcpidentity.NewValidatorBoundary(),
+		userSessionSigner:    userSessionSigner,
+		remoteChallengeMgr:   remoteChallengeMgr,
+		validationMetrics:    remotesessionmetrics.NewValidation(logger, meterProvider),
+		validationLimiter:    newValidationLimiter(redisClient, meterProvider),
+		autoVerifications:    newAutoVerifications(),
+		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
+		remoteProxyManager:   remoteProxyManager,
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
+		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
+		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
 }
@@ -573,6 +583,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
+	// Public keys for outbound clients. This remains available independently of
+	// management entitlements so registered counterparties can keep verifying
+	// client assertions.
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
@@ -609,7 +623,25 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // same handler via the public method instead of reaching into the
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
-	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
+	if err != nil {
+		return err //nolint:wrapcheck // the manager's errors already carry the response
+	}
+	if result.Grant != nil {
+		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {
+			redirect, parseErr := url.Parse(result.RedirectURL)
+			if parseErr != nil {
+				return fmt.Errorf("parse remote login redirect: %w", parseErr)
+			}
+			query := redirect.Query()
+			query.Set("verifying_client", result.Grant.RemoteSessionClientID.String())
+			query.Set("verifying_until", strconv.FormatInt(deadline.UnixMilli(), 10))
+			redirect.RawQuery = query.Encode()
+			result.RedirectURL = redirect.String()
+		}
+	}
+	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
+	return nil
 }
 
 // HandleLegacyProxyCallback is the chi handler at `GET /oauth/callback`. Thin
@@ -626,6 +658,13 @@ func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Reque
 // remote-session handlers without reaching into the unexported manager field.
 func (s *Service) HandleClientMetadataDocument(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleClientMetadataDocument(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleClientJSONWebKeySet is the public outbound-client key set endpoint at
+// `GET /.well-known/oauth-client/{id}/jwks.json`. Thin passthrough to the
+// remote-session manager that owns client key publication.
+func (s *Service) HandleClientJSONWebKeySet(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleClientJSONWebKeySet(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleOpenAIAppsChallenge serves the domain-verification token configured
@@ -1581,10 +1620,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1771,7 +1810,6 @@ func (s *Service) HandleToolsList(
 		s.posthog,
 		&s.toolsetCache,
 		s.vectorToolStore,
-		s.temporal,
 		s.shadowMCPClient,
 		s.platformExtras,
 		s.sessionClientInfo,
@@ -1848,7 +1886,6 @@ func (s *Service) HandleToolsCall(
 		&s.toolsetCache,
 		s.telemLogger,
 		s.vectorToolStore,
-		s.temporal,
 		s.mcpMetadataRepo,
 		s.auditLogger,
 		s.platformExtras,

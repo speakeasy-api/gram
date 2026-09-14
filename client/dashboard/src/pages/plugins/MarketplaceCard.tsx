@@ -3,8 +3,7 @@ import type { PublishStatusResult } from "@gram/client/models/components/publish
 import { Badge } from "@/components/ui/Badge";
 
 // The connected-state marketplace card, shared verbatim across the plugins
-// list, plugin detail page, and the onboarding setup wizard
-// (create-marketplace-step.tsx) so the three surfaces never drift.
+// list and plugin detail page so the two surfaces never drift.
 export function MarketplaceCard({
   publishStatus,
   onManageCollaborators,

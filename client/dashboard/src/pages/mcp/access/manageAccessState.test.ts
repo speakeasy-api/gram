@@ -4,9 +4,9 @@ import {
   pageCount,
   pageOf,
   withAdded,
-  withLevel,
+  withRule,
+  withoutPrincipal,
   withoutRules,
-  ruleId,
 } from "./manageAccessState";
 
 function entry(
@@ -43,18 +43,28 @@ describe("audience edits", () => {
     entry({ principalUrn: "user:2", level: "manage" }),
   ];
 
-  it("changes one level and keeps the rest of the list intact", () => {
-    expect(withLevel(rows, "user:1::use", "manage")).toEqual([
-      { principalUrn: "user:1", level: "manage" },
+  it("adds a rule for a principal that has none at that level", () => {
+    expect(withRule(rows, "role:global:9", "blocked")).toEqual([
+      { principalUrn: "user:1", level: "use" },
       { principalUrn: "user:2", level: "manage" },
+      {
+        principalUrn: "role:global:9",
+        level: "blocked",
+        tools: [],
+        dispositions: [],
+      },
     ]);
   });
 
-  it("adds a principal that has no rule yet, which is how a block on an inherited rule is written", () => {
-    expect(withLevel(rows, "role:global:9::use", "blocked")).toEqual([
-      { principalUrn: "user:1", level: "use" },
+  it("replaces the rule a principal already holds at that level", () => {
+    expect(withRule(rows, "user:1", "use", { tools: ["search"] })).toEqual([
+      {
+        principalUrn: "user:1",
+        level: "use",
+        tools: ["search"],
+        dispositions: [],
+      },
       { principalUrn: "user:2", level: "manage" },
-      { principalUrn: "role:global:9", level: "blocked" },
     ]);
   });
 
@@ -65,33 +75,26 @@ describe("audience edits", () => {
       entry({ principalUrn: "user:1", level: "manage" }),
       entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
     ];
-    expect(
-      withLevel(
-        mixed,
-        ruleId({ principalUrn: "user:1", level: "use" }),
-        "view",
-      ),
-    ).toEqual([
+    expect(withRule(mixed, "user:1", "use")).toEqual([
       { principalUrn: "user:1", level: "manage" },
-      { principalUrn: "user:1", level: "view", tools: ["search"] },
+      { principalUrn: "user:1", level: "use", tools: [], dispositions: [] },
     ]);
-  });
-
-  it("writes to the right principal when its URN contains a delimiter", () => {
-    // The id is principal + level, and a principal URN carries colons of its
-    // own, so the level is read from the last delimiter rather than the first.
-    expect(
-      withLevel(
-        [],
-        ruleId({ principalUrn: "role:global:9", level: "use" }),
-        "blocked",
-      ),
-    ).toEqual([{ principalUrn: "role:global:9", level: "blocked" }]);
   });
 
   it("removes rules", () => {
     expect(withoutRules(rows, ["user:1::use"])).toEqual([
       { principalUrn: "user:2", level: "manage" },
+    ]);
+  });
+
+  it("removes every rule naming a principal, whatever its level", () => {
+    const mixed = [
+      entry({ principalUrn: "user:1", level: "manage" }),
+      entry({ principalUrn: "user:1", level: "use", tools: ["search"] }),
+      entry({ principalUrn: "user:2", level: "view" }),
+    ];
+    expect(withoutPrincipal(mixed, "user:1")).toEqual([
+      { principalUrn: "user:2", level: "view" },
     ]);
   });
 

@@ -44,13 +44,15 @@ type sessionAuthorizer interface {
 }
 
 type Service struct {
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	auth       sessionAuthorizer
-	authorizer *Authorizer
-	audit      *audit.Logger
-	features   feature.Provider
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	auth           sessionAuthorizer
+	authorizer     *Authorizer
+	audit          *audit.Logger
+	features       feature.Provider
+	sessionTokens  sessionTokenRevoker
+	sessionRevoker agentSessionRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,16 +66,20 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	features feature.Provider,
+	sessionTokens sessionTokenRevoker,
+	sessionRevoker agentSessionRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessionManager, authzEngine),
-		authorizer: NewAuthorizer(authzEngine),
-		audit:      auditLogger,
-		features:   features,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
+		logger:         logger,
+		db:             db,
+		auth:           auth.New(logger, db, sessionManager, authzEngine),
+		authorizer:     NewAuthorizer(authzEngine),
+		audit:          auditLogger,
+		features:       features,
+		sessionTokens:  sessionTokens,
+		sessionRevoker: sessionRevoker,
 	}
 }
 
@@ -152,7 +158,21 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		if err := s.logAgent(ctx, tx, human, audit.ActionAgentCreate, nil, &agent); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, agent)
+		// Policy grants are ceilings, not credentials. As with CreatePolicyGrant,
+		// intrinsic ownership permits setup; issuance still intersects live authority.
+		for _, grant := range payload.PolicyGrants {
+			if grant == nil {
+				return oops.E(oops.CodeBadRequest, nil, "agent policy grant is required")
+			}
+			scope, selectorRaw, err := validatePolicyGrant(grant.Scope, grant.Effect, grant.Selector)
+			if err != nil {
+				return err
+			}
+			if _, err := s.createPolicyGrant(ctx, tx, human, agent, scope, selectorRaw); err != nil {
+				return err
+			}
+		}
+		result, err = s.view(ctx, tx, human, agent)
 		return err
 	})
 	if err != nil {
@@ -170,7 +190,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Manage
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "read agent")
 	}
-	result, err := s.view(ctx, human, agent)
+	result, err := s.view(ctx, s.db, human, agent)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "build agent response")
 	}
@@ -238,7 +258,7 @@ func (s *Service) changeOwner(ctx context.Context, rawID, ownerUserID string, ex
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, after)
+		result, err = s.view(ctx, tx, human, after)
 		return err
 	})
 	if err != nil {
@@ -296,7 +316,7 @@ func (s *Service) mutate(ctx context.Context, rawID string, action audit.Action,
 		if err := s.logAgent(ctx, tx, human, action, &before, &after); err != nil {
 			return err
 		}
-		result, err = s.view(ctx, human, after)
+		result, err = s.view(ctx, tx, human, after)
 		return err
 	})
 	if err != nil {
@@ -326,12 +346,36 @@ func (s *Service) logAgent(ctx context.Context, tx pgx.Tx, human HumanContext, a
 	return nil
 }
 
-func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
+func (s *Service) view(ctx context.Context, db repo.DBTX, human HumanContext, agent repo.Agent) (*gen.ManagedAgent, error) {
 	permissions, err := s.authorizer.Permissions(ctx, human, agent)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate agent permissions: %w", err)
 	}
+	ownerProfile, err := s.ownerProfile(ctx, db, agent.OrganizationID, agent.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	return managedAgentView(agent, permissions, ownerProfile), nil
+}
+
+func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
+	profile, err := repo.New(db).GetAgentOwnerProfile(ctx, repo.GetAgentOwnerProfileParams{OrganizationID: organizationID, OwnerUserID: ownerUserID})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("load agent owner profile: %w", err)
+	}
+	var ownerProfile *gen.AgentOwnerProfile
+	if err == nil {
+		ownerProfile = &gen.AgentOwnerProfile{DisplayName: profile.DisplayName, PhotoURL: nil}
+		if profile.PhotoUrl.Valid {
+			ownerProfile.PhotoURL = &profile.PhotoUrl.String
+		}
+	}
+	return ownerProfile, nil
+}
+
+func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfile *gen.AgentOwnerProfile) *gen.ManagedAgent {
 	result := &gen.ManagedAgent{
+		OwnerProfile:                ownerProfile,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,
@@ -355,7 +399,7 @@ func (s *Service) view(ctx context.Context, human HumanContext, agent repo.Agent
 		value := agent.OwnerReassignmentReason.String
 		result.OwnerReassignmentReason = &value
 	}
-	return result, nil
+	return result
 }
 
 func agentAuditSnapshot(agent repo.Agent) *audit.AgentSnapshot {

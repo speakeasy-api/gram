@@ -36,6 +36,7 @@ export const ResourceAudienceEntryKind = {
   Everyone: "everyone",
   Role: "role",
   User: "user",
+  Agent: "agent",
   DirectoryGroup: "directory_group",
   DirectoryAttribute: "directory_attribute",
   Unknown: "unknown",
@@ -48,20 +49,26 @@ export type ResourceAudienceEntryKind = ClosedEnum<
 >;
 
 /**
- * Access this principal has on the resource.
+ * Access this principal has on the resource, or the access a rule takes away.
  */
 export const Level = {
   Use: "use",
   View: "view",
   Manage: "manage",
   Blocked: "blocked",
+  BlockedView: "blocked_view",
+  BlockedManage: "blocked_manage",
 } as const;
 /**
- * Access this principal has on the resource.
+ * Access this principal has on the resource, or the access a rule takes away.
  */
 export type Level = ClosedEnum<typeof Level>;
 
 export type ResourceAudienceEntry = {
+  /**
+   * Ids of the agents this rule currently reaches, whether it names them or a role they hold.
+   */
+  agentIds?: Array<string> | undefined;
   /**
    * Whether the rule names this resource or every resource of its kind.
    */
@@ -83,7 +90,7 @@ export type ResourceAudienceEntry = {
    */
   kind: ResourceAudienceEntryKind;
   /**
-   * Access this principal has on the resource.
+   * Access this principal has on the resource, or the access a rule takes away.
    */
   level: Level;
   /**
@@ -127,6 +134,7 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    agent_ids: z.optional(z.array(z.string())),
     applies_to: AppliesTo$inboundSchema,
     description: z.optional(z.string()),
     display_name: z.string(),
@@ -140,6 +148,7 @@ export const ResourceAudienceEntry$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_ids": "agentIds",
       "applies_to": "appliesTo",
       "display_name": "displayName",
       "member_count": "memberCount",

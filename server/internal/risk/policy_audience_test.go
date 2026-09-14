@@ -7,10 +7,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -77,6 +80,25 @@ func TestRiskPolicyAudience_InvalidTargetedPrincipalRejected(t *testing.T) {
 		AudiencePrincipalUrns: []string{"user:user_" + uuid.NewString()},
 	})
 	require.Error(t, err)
+}
+
+func TestRiskPolicyAudience_SystemPrincipalRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	targeted := "targeted"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("System Audience"),
+		Sources:               []string{"gitleaks"},
+		AudienceType:          targeted,
+		AudiencePrincipalUrns: []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()},
+	})
+	require.Error(t, err, "a system principal is never a policy audience")
 }
 
 func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudience(t *testing.T) {
@@ -187,15 +209,15 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		testCELEngine(t),
-	)
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
 	require.NoError(t, err)
 
-	otherUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, "")
+	otherUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, ""))
 	require.NoError(t, err)
 	require.Nil(t, otherUserResult)
 
-	targetedUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
+	targetedUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, targetedUserResult)
 	require.Equal(t, "Targeted Runtime", targetedUserResult.PolicyName)
@@ -232,21 +254,21 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		nil,
 		nil,
 		nil,
-		testCELEngine(t),
-	)
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
 	require.NoError(t, err)
 
-	emptyUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User, "")
+	emptyUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, emptyUserResult)
 	require.Equal(t, "Everyone Runtime", emptyUserResult.PolicyName)
 
-	unknownUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, "")
+	unknownUserResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, unknownUserResult)
 	require.Equal(t, "Everyone Runtime", unknownUserResult.PolicyName)
 
-	memberResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
+	memberResult, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, memberResult)
 	require.Equal(t, "Everyone Runtime", memberResult.PolicyName)
@@ -281,8 +303,8 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 		nil,
 		nil,
 		nil,
-		testCELEngine(t),
-	)
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+
 	require.NoError(t, err)
 
 	emptyUserPolicy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")

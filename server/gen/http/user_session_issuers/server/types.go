@@ -16,7 +16,8 @@ import (
 // CreateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
 // service "createUserSessionIssuer" endpoint HTTP request body.
 type CreateUserSessionIssuerRequestBody struct {
-	// Project-unique slug.
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
@@ -47,9 +48,12 @@ type UpdateUserSessionIssuerRequestBody struct {
 type CreateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -64,8 +68,11 @@ type CreateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -73,9 +80,12 @@ type CreateUserSessionIssuerResponseBody struct {
 type UpdateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -90,8 +100,11 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -107,9 +120,12 @@ type ListUserSessionIssuersResponseBody struct {
 type GetUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -124,8 +140,11 @@ type GetUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1083,9 +1102,12 @@ type DeleteUserSessionIssuerGatewayErrorResponseBody struct {
 type UserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -1100,8 +1122,11 @@ type UserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1111,10 +1136,12 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 	body := &CreateUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1128,10 +1155,12 @@ func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Updat
 	body := &UpdateUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1167,10 +1196,12 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 	body := &GetUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -2014,6 +2045,16 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
 	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
 	return
 }
 
@@ -2029,6 +2070,16 @@ func ValidateUpdateUserSessionIssuerRequestBody(body *UpdateUserSessionIssuerReq
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {

@@ -36,14 +36,13 @@ func NewPaygKeyRefreshHandler(logger *slog.Logger, refresher PaygKeyRefreshSched
 }
 
 func (h *PaygKeyRefreshHandler) Handle(ctx context.Context, event *webhooksv1.Event, _ gcp.MessageMetadata) error {
-	if event == nil {
-		h.logger.ErrorContext(ctx, "dropping nil PAYG key refresh event")
+	if event == nil || event.GetEventType() != string(events.OrganizationBillingV1.EventType()) {
 		return nil
 	}
 
 	eventID := event.GetEventId()
 	organizationID := event.GetOrganizationId()
-	if eventID == "" || organizationID == "" || event.GetEventType() != string(events.OrganizationBillingV1.EventType()) {
+	if eventID == "" || organizationID == "" {
 		h.logger.ErrorContext(ctx, "dropping invalid PAYG key refresh event",
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogOutboxPublicID(eventID),

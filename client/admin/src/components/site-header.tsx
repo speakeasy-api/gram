@@ -6,6 +6,7 @@ import {
   type LinkProps,
 } from "@tanstack/react-router";
 
+import { CommandPalette } from "@/components/command-palette";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -24,7 +25,11 @@ type CrumbRecord = { queryKey: QueryKey };
 // The cache hands back `unknown` for a key whose data tag the crumb type drops.
 function recordName(data: unknown): string | undefined {
   if (typeof data !== "object" || data === null) return undefined;
-  const { name } = data as { name?: unknown };
+  const record = data as {
+    name?: unknown;
+    issuer?: { name?: unknown; slug?: unknown };
+  };
+  const name = record.name ?? record.issuer?.name ?? record.issuer?.slug;
   return typeof name === "string" ? name : undefined;
 }
 
@@ -132,6 +137,10 @@ export function SiteHeader(): JSX.Element {
             ))}
           </BreadcrumbList>
         </Breadcrumb>
+
+        {/* Last in the bar and pushed right by its own margin, so it keeps its
+            place whatever the breadcrumb above it is currently reading. */}
+        <CommandPalette />
       </div>
     </header>
   );

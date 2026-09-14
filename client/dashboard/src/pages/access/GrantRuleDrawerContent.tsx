@@ -9,12 +9,10 @@ import {
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
 import { useOrganization } from "@/contexts/Auth";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { useRoutes } from "@/routes";
-import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
-import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
@@ -33,12 +31,29 @@ import {
   unrestrictedResourceLabel,
 } from "./types";
 import { computePanelState } from "./computePanelState";
-import {
-  mergeMcpServersIntoGroups,
-  type ServerGroup,
-  type ServerTool,
-} from "./serverMerge";
+import { type ServerGroup, type ServerTool } from "./serverMerge";
+import { useOrgMcpServers } from "./useOrgMcpServers";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
+
+/**
+ * What an empty server list means. The inventory is withheld until both org
+ * reads succeed, so an empty `groups` is only ever "this org has no servers"
+ * after a settled, successful read — while pending or failed it says so.
+ */
+function serverListMessage({
+  settled,
+  isError,
+  hasServers,
+}: {
+  settled: boolean;
+  isError: boolean;
+  hasServers: boolean;
+}): string {
+  if (isError) return "Servers unavailable";
+  if (!settled) return "Loading servers…";
+  if (!hasServers) return "No servers found";
+  return "No matching servers";
+}
 
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
@@ -61,78 +76,6 @@ interface GrantRuleDrawerContentProps {
   allowSelectors?: Selector[] | null;
 }
 
-function useMCPServers(enabled: boolean) {
-  const organization = useOrganization();
-  const { data } = useListToolsetsForOrg(undefined, undefined, { enabled });
-  const { data: mcpServersData } = useListMcpServersForOrg(
-    undefined,
-    undefined,
-    { enabled },
-  );
-
-  return useMemo((): ServerGroup[] => {
-    const projectInfo = new Map(
-      organization.projects.map((p) => [p.id, { name: p.name, slug: p.slug }]),
-    );
-    const baseUrl = getServerURL();
-    const groups = new Map<string, ServerGroup>();
-    for (const t of data?.toolsets ?? []) {
-      const project = projectInfo.get(t.projectId);
-      const projectName = project?.name ?? "Unknown";
-      let group = groups.get(t.projectId);
-      if (!group) {
-        group = { projectId: t.projectId, projectName, servers: [] };
-        groups.set(t.projectId, group);
-      }
-      const fullUrl = t.mcpSlug
-        ? `${baseUrl}/mcp/${t.mcpSlug}`
-        : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
-      const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
-      // External MCP "proxy" entries (name suffix ":proxy") represent servers
-      // whose tools/list requires user auth, so we can't enumerate them at
-      // deploy time. They still resolve at call-time via mcp:connect, so the
-      // grant model supports them; we just don't surface the proxy entry as a
-      // selectable tool in the picker.
-      const tools = t.tools
-        .filter(
-          (tool) =>
-            !(tool.type === "externalmcp" && tool.name.endsWith(":proxy")),
-        )
-        .map((tool) => ({
-          id: tool.id,
-          name: tool.name,
-          type: tool.type,
-          httpMethod: tool.httpMethod,
-          annotations: tool.annotations,
-        }));
-      const isExternalMcpProxy = t.tools.some(
-        (tool) => tool.type === "externalmcp" && tool.name.endsWith(":proxy"),
-      );
-      // Skip servers with nothing grantable: zero visible tools and not a
-      // proxy server (proxy servers stay listed so users can grant at the
-      // server level).
-      if (tools.length === 0 && !isExternalMcpProxy) continue;
-      group.servers.push({
-        id: t.id,
-        name: t.name,
-        slug: mcpUrl,
-        mcpSlug: t.mcpSlug ?? undefined,
-        tools,
-        dynamicTools: false,
-        remoteBacked: false,
-      });
-    }
-    // Fold in mcp_servers rows (remote/tunneled and toolset-backed servers
-    // the toolset list doesn't cover). See serverMerge.ts for the grant id
-    // invariant this maintains.
-    return mergeMcpServersIntoGroups(
-      [...groups.values()],
-      mcpServersData?.mcpServers ?? [],
-      new Map(organization.projects.map((p) => [p.id, p.name])),
-    );
-  }, [data, mcpServersData, organization.projects]);
-}
-
 export function GrantRuleDrawerContent({
   resourceType,
   scope,
@@ -145,7 +88,8 @@ export function GrantRuleDrawerContent({
   allowSelectors,
 }: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
-  const mcpServers = useMCPServers(resourceType === "mcp");
+  const inventory = useOrgMcpServers(resourceType === "mcp");
+  const mcpServers = inventory.groups;
   // Project slug per id, so the tool picker can name each remote server's
   // project when fetching its (project-scoped) stored tool metadata.
   const projectSlugById = useMemo(
@@ -468,9 +412,14 @@ export function GrantRuleDrawerContent({
           )
         ) : filteredMcpServers.length === 0 ? (
           <div className="text-muted-foreground px-3 py-3 text-sm">
-            {scopedMcpServers.length === 0
-              ? "No servers found"
-              : "No matching servers"}
+            {serverListMessage({
+              settled: inventory.settled,
+              isError: inventory.isError,
+              // The organization's own inventory, not the allow-scoped view:
+              // an exception that filters every server out does not mean the
+              // organization has none.
+              hasServers: mcpServers.length > 0,
+            })}
           </div>
         ) : (
           // Grouped under a project heading rather than prefixing every row
@@ -607,6 +556,24 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
+      {/* The server inventory is withheld unless both org listings succeeded,
+          so say why the lists are empty rather than implying the org has no
+          servers. */}
+      {inventory.isError && (
+        <div
+          role="alert"
+          className="border-border text-muted-foreground mt-3 flex items-center justify-between gap-2 border px-3 py-2 text-sm"
+        >
+          <span>Could not load this organization&rsquo;s MCP servers.</span>
+          <button
+            type="button"
+            onClick={inventory.refetch}
+            className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* The area below the options is a fixed height whichever option is
           chosen. Without it, picking "Specific servers" grew the dialog by
           the height of the list and moved the options out from under the

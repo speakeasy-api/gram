@@ -2,9 +2,15 @@ package remotesessions_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"log"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -30,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	jsonwebkeysetsrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,9 +55,17 @@ import (
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-var infra *testenv.Environment
+var (
+	infra                *testenv.Environment
+	testIssuerTLSRootCAs *x509.CertPool
+)
 
 func TestMain(m *testing.M) {
+	certificateServer := httptest.NewTLSServer(nil)
+	testIssuerTLSRootCAs = x509.NewCertPool()
+	testIssuerTLSRootCAs.AddCert(certificateServer.Certificate())
+	certificateServer.Close()
+
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
@@ -89,7 +104,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(testIssuerTLSRootCAs))
 	require.NoError(t, err)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
@@ -267,6 +282,45 @@ func seedOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, co
 	})
 	require.NoError(t, err)
 	return id
+}
+
+// createTrustedOrganizationTierUserSessionIssuer creates an organization-level
+// user-session issuer whose trust anchor is remoteIssuerID.
+func createTrustedOrganizationTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, conn, authCtx.ActiveOrganizationID, slug, remoteIssuerID)
+}
+
+// createTrustedOrganizationTierUserSessionIssuerForOrganization bypasses the
+// management API's tenant validation so lifecycle tests can cover malformed or
+// legacy cross-tenant references defensively.
+func createTrustedOrganizationTierUserSessionIssuerForOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string, remoteIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(organizationID),
+		Slug:                         slug,
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+func clearTrustedRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	empty := ""
+	_, err := usersessionsrepo.New(conn).UpdateOrganizationUserSessionIssuer(ctx, usersessionsrepo.UpdateOrganizationUserSessionIssuerParams{
+		TrustedRemoteSessionIssuerID: conv.PtrToPGText(&empty),
+		ID:                           issuerID,
+		OrganizationID:               authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
 }
 
 func countRemoteSessionClientUserSessionIssuerBindings(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID, userIssuerID uuid.UUID) int {
@@ -685,6 +739,54 @@ func createJsonWebKeySet(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 
 	return setID
+}
+
+// createJsonWebKey plants a valid public key in a fixture set without involving
+// the external KMS signer. Its private half exists only long enough to derive
+// the public modulus and is never persisted.
+func createJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, setID uuid.UUID, state, kid string) uuid.UUID {
+	t.Helper()
+
+	set, err := jsonwebkeysetsrepo.New(conn).GetJsonWebKeySet(ctx, jsonwebkeysetsrepo.GetJsonWebKeySetParams{
+		ID:             setID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	keyMaterial, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	publicJWK, err := json.Marshal(map[string]string{
+		"alg": "RS256",
+		"e":   "AQAB",
+		"kid": kid,
+		"kty": "RSA",
+		"n":   base64.RawURLEncoding.EncodeToString(keyMaterial.N.Bytes()),
+		"use": "sig",
+	})
+	require.NoError(t, err)
+
+	key, err := jsonwebkeysetsrepo.New(conn).CreateJsonWebKey(ctx, jsonwebkeysetsrepo.CreateJsonWebKeyParams{
+		OrganizationID:  organizationID,
+		JsonWebKeySetID: setID,
+		ExternalKeyID:   set.ExternalKeyID,
+		State:           state,
+		Kid:             kid,
+		PublicJwk:       publicJWK,
+	})
+	require.NoError(t, err)
+
+	return key.ID
+}
+
+func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, keyID uuid.UUID) {
+	t.Helper()
+
+	_, err := jsonwebkeysetsrepo.New(conn).RevokeJsonWebKey(ctx, jsonwebkeysetsrepo.RevokeJsonWebKeyParams{
+		ID:             keyID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
 }
 
 // forceTokenEndpointAuthMethod writes a token_endpoint_auth_method the Goa enum

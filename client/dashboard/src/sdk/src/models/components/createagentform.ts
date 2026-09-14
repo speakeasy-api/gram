@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  AgentPolicyGrantForm,
+  AgentPolicyGrantForm$Outbound,
+  AgentPolicyGrantForm$outboundSchema,
+} from "./agentpolicygrantform.js";
 
 export type CreateAgentForm = {
   name: string;
@@ -11,12 +16,17 @@ export type CreateAgentForm = {
    * Eligible same-organization human owner; defaults to the caller
    */
   ownerUserId?: string | undefined;
+  /**
+   * Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
+   */
+  policyGrants?: Array<AgentPolicyGrantForm> | undefined;
 };
 
 /** @internal */
 export type CreateAgentForm$Outbound = {
   name: string;
   owner_user_id?: string | undefined;
+  policy_grants?: Array<AgentPolicyGrantForm$Outbound> | undefined;
 };
 
 /** @internal */
@@ -27,10 +37,12 @@ export const CreateAgentForm$outboundSchema: z.ZodMiniType<
   z.object({
     name: z.string(),
     ownerUserId: z.optional(z.string()),
+    policyGrants: z.optional(z.array(AgentPolicyGrantForm$outboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
       ownerUserId: "owner_user_id",
+      policyGrants: "policy_grants",
     });
   }),
 );

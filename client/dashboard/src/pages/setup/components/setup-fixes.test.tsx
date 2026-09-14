@@ -3,24 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
 import { OnboardingHeader } from "./onboarding-header";
 import { SetupTaskAssignmentDialog } from "./setup-task-assignment-dialog";
-import { SetupTaskDialog } from "./setup-task-dialog";
 import { StepContainer, StepSupportProvider } from "./step-container";
 vi.mock("./setup-task-content", () => ({
   SetupTaskContent: ({
     onComplete,
-    onSkip,
-    onBack,
     onSupport,
   }: {
     onComplete: () => void;
-    onSkip: () => void;
-    onBack: () => void;
     onSupport: () => void;
   }) => (
     <>
       <button onClick={onComplete}>Complete</button>
-      <button onClick={onSkip}>Skip</button>
-      <button onClick={onBack}>Back</button>
       <button onClick={onSupport}>Get support</button>
     </>
   ),
@@ -63,110 +56,10 @@ describe("setup interaction fixes", () => {
     );
 
     const support = screen.getByRole("button", { name: "Get support" });
-    const primary = screen.getByRole("button", { name: "Continue" });
+    const primary = screen.getByRole("button", { name: "Mark done" });
     expect(support.nextElementSibling).toBe(primary);
     fireEvent.click(support);
     expect(onSupport).toHaveBeenCalledOnce();
-  });
-
-  it("keeps skip separate from task completion", () => {
-    const onComplete = vi.fn();
-    const onSkip = vi.fn();
-    render(
-      <SetupTaskDialog
-        task={task}
-        pending={false}
-        onClose={() => {}}
-        onComplete={() => void onComplete()}
-        onSupport={() => {}}
-        onSkip={() => void onSkip()}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
-
-    expect(onSkip).toHaveBeenCalledOnce();
-    expect(onComplete).not.toHaveBeenCalled();
-  });
-
-  it("prevents duplicate completion while the full handler is in flight", () => {
-    let finishCompletion = () => {};
-    const onComplete = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finishCompletion = resolve;
-        }),
-    );
-    render(
-      <SetupTaskDialog
-        task={task}
-        pending={false}
-        onClose={() => {}}
-        onComplete={onComplete}
-        onSupport={() => {}}
-        onSkip={() => {}}
-      />,
-    );
-
-    const complete = screen.getByRole("button", { name: "Complete" });
-    fireEvent.click(complete);
-    fireEvent.click(complete);
-
-    expect(onComplete).toHaveBeenCalledOnce();
-    finishCompletion();
-  });
-
-  it("prevents duplicate support requests while the handler is in flight", () => {
-    let finishSupport = () => {};
-    const onSupport = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finishSupport = resolve;
-        }),
-    );
-    render(
-      <SetupTaskDialog
-        task={task}
-        pending={false}
-        onClose={() => {}}
-        onComplete={() => {}}
-        onSupport={onSupport}
-        onSkip={() => {}}
-      />,
-    );
-
-    const support = screen.getByRole("button", { name: "Get support" });
-    fireEvent.click(support);
-    fireEvent.click(support);
-
-    expect(onSupport).toHaveBeenCalledOnce();
-    finishSupport();
-  });
-
-  it("does not dismiss or repeat task actions while pending", () => {
-    const onClose = vi.fn();
-    const onComplete = vi.fn();
-    const onSkip = vi.fn();
-    render(
-      <SetupTaskDialog
-        task={task}
-        pending
-        onClose={() => void onClose()}
-        onComplete={() => void onComplete()}
-        onSupport={() => {}}
-        onSkip={() => void onSkip()}
-      />,
-    );
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    fireEvent.pointerDown(document.body);
-    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-
-    expect(onClose).not.toHaveBeenCalled();
-    expect(onComplete).not.toHaveBeenCalled();
-    expect(onSkip).not.toHaveBeenCalled();
   });
 
   it("selects the task's current member when changing owners", () => {

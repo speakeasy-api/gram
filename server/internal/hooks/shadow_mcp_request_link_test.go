@@ -7,7 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -18,10 +21,11 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	service := &Service{
-		logger:    testenv.NewLogger(t),
-		siteURL:   siteURL,
-		jwtSecret: "test-jwt-secret",
-		cache:     cache.NoopCache,
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		siteURL:      siteURL,
+		jwtSecret:    "test-jwt-secret",
+		cache:        cache.NoopCache,
 	}
 
 	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -65,10 +69,11 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	service := &Service{
-		logger:    testenv.NewLogger(t),
-		siteURL:   siteURL,
-		jwtSecret: "test-jwt-secret",
-		cache:     cache.NoopCache,
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		siteURL:      siteURL,
+		jwtSecret:    "test-jwt-secret",
+		cache:        cache.NoopCache,
 	}
 
 	_, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -88,10 +93,11 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	service := &Service{
-		logger:    testenv.NewLogger(t),
-		siteURL:   siteURL,
-		jwtSecret: "test-jwt-secret",
-		cache:     cache.NoopCache,
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		siteURL:      siteURL,
+		jwtSecret:    "test-jwt-secret",
+		cache:        cache.NoopCache,
 	}
 
 	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
@@ -146,10 +152,11 @@ func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	service := &Service{
-		logger:    testenv.NewLogger(t),
-		siteURL:   siteURL,
-		jwtSecret: "test-jwt-secret",
-		cache:     cache.NoopCache,
+		logger:       testenv.NewLogger(t),
+		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		siteURL:      siteURL,
+		jwtSecret:    "test-jwt-secret",
+		cache:        cache.NoopCache,
 	}
 
 	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{

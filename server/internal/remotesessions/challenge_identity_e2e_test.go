@@ -39,8 +39,10 @@ type idTokenIssuer struct {
 	issuerURL string
 	jwksURI   string
 	pool      *x509.CertPool
-	signer    jose.Signer
-	key       *ecdsa.PrivateKey
+	// cert is the key-set server's certificate, for a pool that trusts several fixtures.
+	cert   *x509.Certificate
+	signer jose.Signer
+	key    *ecdsa.PrivateKey
 	// rsaKey signs RS256 tokens; newSharedKidIDTokenIssuer publishes it under the ES256 key's kid.
 	rsaKey *rsa.PrivateKey
 	// keySet is the published JWK Set document.
@@ -52,7 +54,14 @@ type idTokenIssuer struct {
 func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 	t.Helper()
 
-	return newIDTokenIssuerWithKeys(t, false)
+	return newIDTokenIssuerWithKeys(t, false, false)
+}
+
+// newAmbiguousIDTokenIssuer publishes a second ES256 key under another kid, so a kid-less token cannot be resolved.
+func newAmbiguousIDTokenIssuer(t *testing.T) *idTokenIssuer {
+	t.Helper()
+
+	return newIDTokenIssuerWithKeys(t, false, true)
 }
 
 // newSharedKidIDTokenIssuer publishes an undeclared-alg RSA key ahead of the
@@ -60,10 +69,10 @@ func newIDTokenIssuer(t *testing.T) *idTokenIssuer {
 func newSharedKidIDTokenIssuer(t *testing.T) *idTokenIssuer {
 	t.Helper()
 
-	return newIDTokenIssuerWithKeys(t, true)
+	return newIDTokenIssuerWithKeys(t, true, false)
 }
 
-func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
+func newIDTokenIssuerWithKeys(t *testing.T, sharedKid, secondES256 bool) *idTokenIssuer {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -86,6 +95,11 @@ func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
 			Use:       "sig",
 		}}, keys...)
 	}
+	if secondES256 {
+		other, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		keys = append(keys, jose.JSONWebKey{Key: other.Public(), KeyID: "synthetic-kid-2", Algorithm: string(jose.ES256), Use: "sig"})
+	}
 	body, err := json.Marshal(jose.JSONWebKeySet{Keys: keys})
 	require.NoError(t, err)
 
@@ -93,6 +107,7 @@ func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
 		issuerURL: "https://" + uuid.NewString() + ".idp.example.com",
 		jwksURI:   "",
 		pool:      nil,
+		cert:      nil,
 		signer:    nil,
 		key:       key,
 		rsaKey:    rsaKey,
@@ -116,6 +131,7 @@ func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
 
 	issuer.jwksURI = server.URL + "/jwks.json"
 	issuer.pool = pool
+	issuer.cert = server.Certificate()
 	issuer.signer = signer
 	return issuer
 }
@@ -156,6 +172,17 @@ func (i *idTokenIssuer) mintWithKid(t *testing.T, kid string, claims map[string]
 		jose.SigningKey{Algorithm: jose.ES256, Key: i.key},
 		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), kid),
 	)
+	require.NoError(t, err)
+	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+// mintWithoutKid signs with the issuer's key and no kid header.
+func (i *idTokenIssuer) mintWithoutKid(t *testing.T, claims map[string]any) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: i.key}, (&jose.SignerOptions{}).WithType("JWT"))
 	require.NoError(t, err)
 	raw, err := jwt.Signed(signer).Claims(claims).Serialize()
 	require.NoError(t, err)
@@ -214,6 +241,13 @@ func (f verifierFunc) Verify(ctx context.Context, raw string, expect remotesessi
 type enrichmentDoc struct {
 	IDToken       map[string]json.RawMessage `json:"id_token"`
 	TokenResponse map[string]json.RawMessage `json:"token_response"`
+	Userinfo      map[string]json.RawMessage `json:"userinfo"`
+	Introspection map[string]json.RawMessage `json:"introspection"`
+	Interfaces    map[string]struct {
+		Status     string `json:"status"`
+		HTTPStatus int    `json:"http_status"`
+		Reason     string `json:"reason"`
+	} `json:"interfaces"`
 }
 
 func decodeEnrichment(t *testing.T, raw []byte) enrichmentDoc {
@@ -322,7 +356,7 @@ func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {
 	states, err := env.mgr.RemoteSessionStatuses(ctx, env.subject, env.projectID, env.organizationID, sess.UserSessionIssuerID)
 	require.NoError(t, err)
 	state := states[env.clientID]
-	require.Equal(t, "grant-owner@example.com", state.ConnectedAs)
+	require.Equal(t, "Grant Owner · grant-owner@example.com", state.ConnectedAs)
 	require.Equal(t, remotesessions.IdentitySourceIDToken, state.IdentitySource)
 
 	// The tombstone keeps its credentials for upstream revocation but none

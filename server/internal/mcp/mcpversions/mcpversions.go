@@ -38,14 +38,17 @@ const DefaultInEffect = Version20250326
 // outside the set is answered with the newest member, per the spec's rule that
 // a server must respond with a version it supports and should pick its latest.
 //
-// The sets are split per surface deliberately, despite currently holding the
-// same values. The surfaces face different client populations, so raising one
-// is not the same decision as raising the other, and the ceilings are expected
-// to move on different schedules. The current ceiling is Version20251125;
-// advertising Version20260728 is its own project with its own preconditions.
-// The Version20241105 floor is evidence-based — clients on that revision still
-// make tool calls — and claims support on the Streamable HTTP transport only,
-// not the HTTP+SSE transport that revision also defined.
+// The hosted and platform sets are split deliberately, despite currently
+// holding the same values. The surfaces face different client populations, so
+// raising one is not the same decision as raising the other, and the ceilings
+// are expected to move on different schedules. The current ceiling is
+// Version20251125; advertising Version20260728 is its own project with its own
+// preconditions.
+// The hosted and platform Version20241105 floor is evidence-based — clients on
+// that revision still make tool calls — and claims support on the Streamable
+// HTTP transport only, not the HTTP+SSE transport that revision also defined.
+// The consent surface is a pinned first-party Streamable HTTP client and starts
+// at Version20250326, advancing independently from those external surfaces.
 //
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
@@ -55,6 +58,7 @@ const DefaultInEffect = Version20250326
 var (
 	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
+	supportedConsentToolset  = []string{Version20250326, Version20250618, Version20251125}
 )
 
 // supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
@@ -86,6 +90,15 @@ func SupportedHostedToolset() []string {
 // third-party exposure.
 func SupportedPlatformToolset() []string {
 	return slices.Clone(supportedPlatformToolset)
+}
+
+// SupportedConsentToolset returns the revisions supported by the consent
+// island's local toolset server, oldest first. This surface serves a pinned
+// first-party Streamable HTTP client, so it excludes the hosted surface's
+// evidence-based Version20241105 compatibility exception and advances on its
+// own schedule.
+func SupportedConsentToolset() []string {
+	return slices.Clone(supportedConsentToolset)
 }
 
 // Negotiate applies the MCP version-negotiation rule to an `initialize`

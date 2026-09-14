@@ -1257,6 +1257,229 @@ ORDER BY (organization_id, meter_id, project_id, id)
 SETTINGS index_granularity = 8192
 COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
+-- Usage quantity, occurrence time, and reporting attributes are frozen upstream.
+-- Redeliveries retain the full sorting key and occurrence month. Ledger readers
+-- that require logical-reading convergence use FINAL with
+-- do_not_merge_across_partitions_select_final = 1. Incremental reporting instead
+-- counts each physical delivery. Adjustments remain separate signed facts.
+CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
+    id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
+    organization_id String COMMENT 'Organization that owns the workload.',
+    project_id UUID COMMENT 'Project that owns the workload.',
+    meter_id LowCardinality(String) COMMENT 'Registered workload meter identifier.',
+    operation_id String COMMENT 'Domain operation that produced the reading.',
+    unit LowCardinality(String) COMMENT 'Measurement unit.',
+    measurement_method LowCardinality(String) DEFAULT if(unit = 'stokens', 'tiktoken_o200k_base', '') COMMENT 'Rating-critical measurement implementation.',
+    value Int64 COMMENT 'Signed workload value where usage is positive and adjustments may be positive or negative.',
+    occurred_at DateTime64(9, 'UTC') COMMENT 'Usage-effective UTC time when the metered work executed and the timestamp used for billing periods.',
+    produced_at DateTime64(9, 'UTC') COMMENT 'UTC time when the producer created the accepted reading.',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'UTC time when ClickHouse received the row for delivery-lag diagnostics.',
+    corrects_reading_id Nullable(UUID) COMMENT 'Original reading corrected by this immutable adjustment.',
+    reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
+    attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions frozen at acceptance.',
+    tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
+    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
+    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
+    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
+) ENGINE = ReplacingMergeTree
+PARTITION BY toYYYYMM(occurred_at)
+PRIMARY KEY (organization_id, meter_id, occurred_at)
+ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
+SETTINGS index_granularity = 8192
+COMMENT 'Time-windowed usage ledger with optional FINAL convergence for logical-reading queries';
+
+-- Each incoming delivery block is expanded into independent family facets and
+-- aggregated at UTC-day precision. SummingMergeTree combines partial sums from
+-- later blocks and background merges; duplicate physical deliveries therefore
+-- count independently.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
+    organization_id String,
+    family LowCardinality(String),
+    reading_kind LowCardinality(String),
+    facet LowCardinality(String),
+    day Date,
+    series_kind LowCardinality(String),
+    series_key String,
+    label String,
+    unit LowCardinality(String),
+    measurement_method LowCardinality(String),
+    quantity Int128,
+    reading_count Int64
+) ENGINE = SummingMergeTree((quantity, reading_count))
+PARTITION BY toYYYYMM(day)
+PRIMARY KEY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day
+)
+ORDER BY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day,
+    unit,
+    measurement_method,
+    label
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Incremental daily meter family and facet marginals';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summaries_mv TO billing_meter_daily_summaries AS
+SELECT
+    organization_id,
+    family,
+    reading_kind,
+    facet_identity.1 AS facet,
+    toDate(occurred_at, 'UTC') AS day,
+    facet_identity.2 AS series_kind,
+    facet_identity.3 AS series_key,
+    max(facet_label) AS label,
+    unit,
+    measurement_method,
+    sum(toInt128(value)) AS quantity,
+    toInt64(count()) AS reading_count
+FROM
+(
+    SELECT
+        organization_id,
+        reading_kind,
+        occurred_at,
+        unit,
+        measurement_method,
+        value,
+        multiIf(
+            meter_id = 'gram.agent_session.storage', 'agent_session_storage',
+            meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'), 'mcp_bandwidth',
+            'risk_content_scans'
+        ) AS family,
+        arrayJoin(
+            multiIf(
+                meter_id = 'gram.agent_session.storage',
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple('model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('billing_mode', if(billing_mode = '', 'unset', 'value'), billing_mode, if(billing_mode = '', '(unset)', billing_mode)),
+                    tuple('assistant', if(assistant_id = '', 'unset', 'value'), assistant_id, if(assistant_id = '', '(unset)', assistant_id)),
+                    tuple('billing_user', if(billing_user_id = '', 'unset', 'value'), billing_user_id, if(billing_user_id = '', '(unset)', billing_user_id)),
+                    tuple('division', if(billing_user_division_name = '', 'unset', 'value'), billing_user_division_name, if(billing_user_division_name = '', '(unset)', billing_user_division_name)),
+                    tuple('department', if(billing_user_department_name = '', 'unset', 'value'), billing_user_department_name, if(billing_user_department_name = '', '(unset)', billing_user_department_name)),
+                    tuple('job_title', if(billing_user_job_title = '', 'unset', 'value'), billing_user_job_title, if(billing_user_job_title = '', '(unset)', billing_user_job_title)),
+                    tuple('employee_type', if(billing_user_employee_type = '', 'unset', 'value'), billing_user_employee_type, if(billing_user_employee_type = '', '(unset)', billing_user_employee_type)),
+                    tuple('cost_center', if(billing_user_cost_center_name = '', 'unset', 'value'), billing_user_cost_center_name, if(billing_user_cost_center_name = '', '(unset)', billing_user_cost_center_name)),
+                    tuple(
+                        'directory_group_set',
+                        if(empty(normalized_directory_groups), 'unset', 'value'),
+                        if(empty(normalized_directory_groups), '', toJSONString(normalized_directory_groups)),
+                        if(empty(normalized_directory_groups), '(unset)', arrayStringConcat(normalized_directory_groups, ', '))
+                    )
+                ],
+                meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'),
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'direction',
+                        'value',
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'ingress', 'egress'),
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'Ingress', 'Egress')
+                    ),
+                    tuple(
+                        'mcp_server',
+                        if(mcp_server_type = '' OR mcp_server_id = '', 'unset', 'value'),
+                        if(mcp_server_type = '' OR mcp_server_id = '', '', concat(mcp_server_type, ':', mcp_server_id)),
+                        if(
+                            mcp_server_type = '' OR mcp_server_id = '',
+                            '(unset)',
+                            if(mcp_server_slug = '', concat(mcp_server_type, ':', mcp_server_id), mcp_server_slug)
+                        )
+                    ),
+                    tuple('server_type', if(mcp_server_type = '', 'unset', 'value'), mcp_server_type, if(mcp_server_type = '', '(unset)', mcp_server_type))
+                ],
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'scanner',
+                        'value',
+                        meter_id,
+                        multiIf(
+                            meter_id = 'gram.risk.scan.gitleaks', 'Gitleaks',
+                            meter_id = 'gram.risk.scan.presidio', 'Presidio',
+                            meter_id = 'gram.risk.scan.prompt_injection', 'Prompt injection',
+                            meter_id = 'gram.risk.scan.prompt_policy', 'Prompt policy',
+                            meter_id = 'gram.risk.scan.custom_rules', 'Custom rules',
+                            'CLI destructive'
+                        )
+                    ),
+                    tuple('policy', if(risk_policy_id = '', 'unset', 'value'), risk_policy_id, if(risk_policy_id = '', '(unset)', risk_policy_id)),
+                    tuple('judge_model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('judge_provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('tool_name', if(tool_name = '', 'unset', 'value'), tool_name, if(tool_name = '', '(unset)', tool_name))
+                ]
+            )
+        ) AS facet_identity,
+        facet_identity.4 AS facet_label
+    FROM
+    (
+        SELECT
+            organization_id,
+            project_id,
+            meter_id,
+            reading_kind,
+            occurred_at,
+            unit,
+            measurement_method,
+            value,
+            attributes['assistant_id'] AS assistant_id,
+            attributes['billing_mode'] AS billing_mode,
+            attributes['billing_user_cost_center_name'] AS billing_user_cost_center_name,
+            attributes['billing_user_department_name'] AS billing_user_department_name,
+            arraySort(arrayDistinct(JSONExtract(if(attributes['billing_user_directory_groups'] = '', '[]', attributes['billing_user_directory_groups']), 'Array(String)'))) AS normalized_directory_groups,
+            attributes['billing_user_division_name'] AS billing_user_division_name,
+            attributes['billing_user_employee_type'] AS billing_user_employee_type,
+            attributes['billing_user_id'] AS billing_user_id,
+            attributes['billing_user_job_title'] AS billing_user_job_title,
+            attributes['mcp_server_id'] AS mcp_server_id,
+            attributes['mcp_server_slug'] AS mcp_server_slug,
+            attributes['mcp_server_type'] AS mcp_server_type,
+            attributes['model'] AS model,
+            attributes['provider'] AS provider,
+            attributes['risk_policy_id'] AS risk_policy_id,
+            attributes['tool_name'] AS tool_name
+        FROM billing_meter_readings_by_time
+    )
+    WHERE meter_id IN (
+        'gram.agent_session.storage',
+        'gram.mcp.bandwidth.ingress',
+        'gram.mcp.bandwidth.egress',
+        'gram.risk.scan.gitleaks',
+        'gram.risk.scan.presidio',
+        'gram.risk.scan.prompt_injection',
+        'gram.risk.scan.prompt_policy',
+        'gram.risk.scan.custom_rules',
+        'gram.risk.scan.cli_destructive'
+    )
+)
+GROUP BY
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    day,
+    series_kind,
+    series_key,
+    unit,
+    measurement_method;
+
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the challenge entry.',

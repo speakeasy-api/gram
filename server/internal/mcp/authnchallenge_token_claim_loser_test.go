@@ -45,6 +45,7 @@ func TestHandleToken_AgentRefreshClaimLoserReleasesConnectionBeforeReplay(t *tes
 							config.MaxConns = 1
 							config.MinConns = 0
 						},
+						mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0},
 					)
 					require.EqualValues(t, 1, ti.conn.Config().MaxConns)
 					fx, agent, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)

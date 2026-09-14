@@ -580,3 +580,82 @@ func TestRetroExclusion_RegexSkipsReparentedCandidate(t *testing.T) {
 	require.False(t, attributed, "content from another chat must not be attributed to the stamped chat")
 	require.Equal(t, uuid.Nil, chatID, "a refused attribution never yields a usable chat id")
 }
+
+// TestRetroExclusion_FutureSourceVersion makes clock skew deterministic:
+// both apply and reversal receive timestamps older than the original row.
+func TestRetroExclusion_FutureSourceVersion(t *testing.T) {
+	t.Parallel()
+	for _, byIDs := range []bool{false, true} {
+		name := "predicate"
+		if byIDs {
+			name = "by_ids"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestRiskService(t)
+			authCtx, _ := contextvalues.GetAuthContext(ctx)
+			projectID := *authCtx.ProjectID
+			orgID := authCtx.ActiveOrganizationID
+			createdAt, scope := retroDay(orgID, projectID.String())
+			finding := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), createdAt,
+				"gitleaks", "secret.github_pat", "user@example.com")
+			q := chrepo.New(ti.chConn)
+			require.NoError(t, q.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+			supplied := time.Now().UTC()
+			future := supplied.Add(24 * time.Hour)
+			// Add a future-dated original copy without changing its partition,
+			// event kind or payload. All subsequent writes must outrank it.
+			require.NoError(t, ti.chConn.Exec(ctx, `INSERT INTO risk_findings
+				SELECT * REPLACE (toDateTime64(?, 9) AS inserted_at)
+				FROM risk_findings WHERE id = ?`, chrepo.FormatCHTime(future), finding.ID))
+			exclusionID := uuid.New()
+			predicate := chrepo.RetroExclusionPredicate{RuleID: finding.RuleID}
+			ids := []uuid.UUID{finding.ID}
+			assertVersion := func(want time.Time, copies uint64) {
+				t.Helper()
+				rows, err := ti.chConn.Query(ctx, `SELECT max(inserted_at), count()
+					FROM risk_findings WHERE id = ?`, finding.ID)
+				require.NoError(t, err)
+				defer func() { _ = rows.Close() }()
+				require.True(t, rows.Next())
+				var version time.Time
+				var count uint64
+				require.NoError(t, rows.Scan(&version, &count))
+				require.True(t, version.Equal(want), "version = %s, want %s", version, want)
+				require.Equal(t, copies, count)
+				require.NoError(t, rows.Err())
+			}
+			for range 2 { // A sequential retry must append nothing.
+				if byIDs {
+					require.NoError(t, q.AppendRetroExclusionApplyByIDs(ctx, scope, exclusionID,
+						chrepo.FormatCHTime(supplied), chrepo.FormatCHTime(supplied), ids))
+				} else {
+					require.NoError(t, q.AppendRetroExclusionApply(ctx, scope, exclusionID,
+						chrepo.FormatCHTime(supplied), chrepo.FormatCHTime(supplied), predicate))
+				}
+				assertVersion(future.Add(time.Nanosecond), 3)
+				excluded, exID, _ := latestExclusionState(t, ti, finding.ID)
+				require.True(t, excluded)
+				require.Equal(t, exclusionID.String(), exID)
+			}
+			for range 2 {
+				older := chrepo.FormatCHTime(supplied.Add(-time.Hour))
+				if byIDs {
+					require.NoError(t, q.AppendRetroExclusionReversalByIDs(ctx, scope, exclusionID, older, ids))
+				} else {
+					require.NoError(t, q.AppendRetroExclusionReversal(ctx, scope, exclusionID, older, chrepo.BlanketReversal()))
+				}
+				assertVersion(future.Add(2*time.Nanosecond), 4)
+				excluded, exID, _ := latestExclusionState(t, ti, finding.ID)
+				require.False(t, excluded)
+				require.Empty(t, exID)
+				// Also exercise production's state-rank-aware latest-copy read.
+				count, err := q.CountRetroExclusionApply(ctx, scope, predicate)
+				require.NoError(t, err)
+				require.Equal(t, uint64(1), count)
+			}
+		})
+	}
+}

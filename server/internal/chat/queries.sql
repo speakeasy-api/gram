@@ -242,8 +242,8 @@ VALUES (
 );
 
 -- name: UpsertCorrelatedChatMessage :one
--- Returns the persisted metering fields for both inserts and promotions so the
--- reading uses the durable row identity and measured content.
+-- Returns persisted metering fields and distinguishes initial inserts from
+-- native-hook promotions, which must not emit another storage reading.
 INSERT INTO chat_messages (
     id
   , chat_id
@@ -314,7 +314,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source;
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(

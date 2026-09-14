@@ -103,6 +103,7 @@ async function renderEditor(org: AdminOrganization = ORG): Promise<{
   qc.setQueryData(organizationQuery(org.id).queryKey, org);
   qc.setQueryData(organizationQuery(org.slug).queryKey, org);
   qc.setQueryData(organizationsListQuery().queryKey, {
+    total: 1,
     organizations: [org],
   });
   const announce = vi.fn<(message: string) => void>();

@@ -117,6 +117,10 @@ type WorkerOptions struct {
 	PluginPublisher          *plugins.Service
 	Publishers               *Publishers
 
+	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
+	// the constructing caller owns it and must call Wait after those producers stop.
+	IssuerMetadataRefresher *remotesessions.IssuerMetadataRefresher
+
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
 
@@ -183,6 +187,7 @@ func ForDeploymentProcessing(
 		TelemetryRepo:            nil,
 		TriggersApp:              nil,
 		CacheAdapter:             nil,
+		IssuerMetadataRefresher:  nil,
 		EmailService:             nil,
 		AssistantsCore:           nil,
 		TemporalEnv:              nil,
@@ -212,6 +217,14 @@ func ForDeploymentProcessing(
 		TrialEmailsService:        nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
+	}
+}
+
+func newWorkerInterceptors() []interceptor.WorkerInterceptor {
+	return []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
 	}
 }
 
@@ -252,6 +265,7 @@ func NewTemporalWorker(
 		TelemetryRepo:             nil,
 		TriggersApp:               nil,
 		CacheAdapter:              nil,
+		IssuerMetadataRefresher:   nil,
 		EmailService:              nil,
 		AssistantsCore:            nil,
 		TemporalEnv:               env,
@@ -302,6 +316,7 @@ func NewTemporalWorker(
 			TelemetryRepo:             conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:               conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:              conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:   conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			EmailService:              conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:            conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:               conv.Default(o.TemporalEnv, opts.TemporalEnv),
@@ -322,11 +337,7 @@ func NewTemporalWorker(
 		}
 	}
 
-	workerInterceptors := []interceptor.WorkerInterceptor{
-		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-	}
+	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
 		Interceptors: workerInterceptors,
@@ -360,11 +371,14 @@ func NewTemporalWorker(
 
 	// Identity capture is best effort: without a policy the sweep stores no identity.
 	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	var remoteSessionEnricher *remotesessions.SessionEnricher
 	if opts.GuardianPolicy != nil {
 		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
 			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))
 		}
 	}
 
@@ -420,6 +434,8 @@ func NewTemporalWorker(
 		opts.DisableRiskRetroReconcile,
 		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
+		opts.IssuerMetadataRefresher,
+		remoteSessionEnricher,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -463,6 +479,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
+	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
@@ -590,6 +608,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
@@ -663,14 +682,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
 
 	return &Workers{
-		main:              temporalWorker,
-		riskAnalysis:      riskWorker,
-		aiUsage:           aiUsageWorker,
-		skillEfficacy:     skillEfficacyWorker,
-		env:               env,
-		logger:            logger,
-		opts:              opts,
-		hasSkillSuggester: activities.skillSuggestionAnalyzer != nil,
+		main:                temporalWorker,
+		riskAnalysis:        riskWorker,
+		aiUsage:             aiUsageWorker,
+		skillEfficacy:       skillEfficacyWorker,
+		env:                 env,
+		logger:              logger,
+		opts:                opts,
+		hasSkillSuggester:   activities.skillSuggestionAnalyzer != nil,
+		networkIngressQueue: "",
 	}
 }
 
@@ -680,6 +700,11 @@ func NewTemporalWorker(
 // degrades a background pipeline rather than the request path.
 func (w *Workers) registerSchedules(ctx context.Context) {
 	env, logger, opts := w.env, w.logger, w.opts
+	if w.networkIngressQueue != "" {
+		if err := addNetworkIngressSweep(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))
+		}
+	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -769,6 +794,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
 	}
 
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add spend rule evaluation schedule", attr.SlogError(err))
@@ -854,10 +883,11 @@ type Workers struct {
 
 	// Retained so Run can install the recurring schedules; see
 	// registerSchedules.
-	env               *tenv.Environment
-	logger            *slog.Logger
-	opts              *WorkerOptions
-	hasSkillSuggester bool
+	env                 *tenv.Environment
+	logger              *slog.Logger
+	opts                *WorkerOptions
+	hasSkillSuggester   bool
+	networkIngressQueue string
 }
 
 // Run registers the recurring schedules, starts the dedicated workers, then

@@ -1,7 +1,10 @@
 package agentmanagement
 
 import (
+	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -139,4 +142,31 @@ func TestNameConflictIsScopedToActiveOrganizationAgents(t *testing.T) {
 	require.NoError(t, service.Delete(ctx, &gen.DeletePayload{AgentID: first.ID}))
 	_, err = service.Create(ctx, &gen.CreatePayload{Name: "case name"})
 	require.NoError(t, err)
+}
+
+func TestAgentViewsUseTransactionConnection(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedOrganizationUser(t, conn, "org-a", "next-owner")
+	config := conn.Config()
+	config.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	service := newTestService(pool, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx, cancel := context.WithTimeout(validatedHumanContext(t, "org-a", "owner"), 5*time.Second)
+	defer cancel()
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Single connection"})
+	require.NoError(t, err)
+	require.Equal(t, "owner", created.OwnerProfile.DisplayName)
+	suspended, err := service.Suspend(ctx, &gen.SuspendPayload{AgentID: created.ID})
+	require.NoError(t, err)
+	require.NotNil(t, suspended.OwnerProfile)
+	_, err = service.Resume(ctx, &gen.ResumePayload{AgentID: created.ID})
+	require.NoError(t, err)
+	transferred, err := service.Transfer(ctx, &gen.TransferPayload{AgentID: created.ID, OwnerUserID: "next-owner"})
+	require.NoError(t, err)
+	require.Equal(t, "next-owner", transferred.OwnerProfile.DisplayName)
 }

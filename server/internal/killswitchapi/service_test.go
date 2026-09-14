@@ -27,6 +27,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+func TestListMCPServersIncludesProjectNames(t *testing.T) {
+	t.Parallel()
+	service, db, orgID, userID, servers := newIntegrationService(t)
+	ctx := customerContext(t, orgID, userID)
+
+	var secondProjectID uuid.UUID
+	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('Second Project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&secondProjectID))
+	slug := "ts-" + uuid.NewString()[:12]
+	var toolsetID uuid.UUID
+	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, secondProjectID, slug).Scan(&toolsetID))
+	var secondServerID uuid.UUID
+	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, 'Second Server', $2, 'private') RETURNING id`, secondProjectID, toolsetID).Scan(&secondServerID))
+
+	listed, err := service.ListMCPServers(ctx, &gen.ListMCPServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Servers, 3)
+
+	byID := make(map[string]*gen.KillswitchMCPServer, len(listed.Servers))
+	for _, server := range listed.Servers {
+		byID[server.ID] = server
+	}
+	require.Equal(t, "project", byID[servers[0].String()].ProjectName)
+	require.Equal(t, "project", byID[servers[1].String()].ProjectName)
+	require.Equal(t, byID[servers[0].String()].ProjectID, byID[servers[1].String()].ProjectID)
+	require.Equal(t, "Second Project", byID[secondServerID.String()].ProjectName)
+	require.Equal(t, secondProjectID.String(), byID[secondServerID.String()].ProjectID)
+	require.NotEqual(t, byID[servers[0].String()].ProjectID, byID[secondServerID.String()].ProjectID)
+	require.Equal(t, "Second Server", byID[secondServerID.String()].Name)
+}
+
 func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	t.Parallel()
 	service, db, orgID, userID, servers := newIntegrationService(t)

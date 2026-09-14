@@ -1,5 +1,11 @@
-import { defineFilters, useFilterState } from "@/components/filters";
+import {
+  accessibleByFilterOptions,
+  defineFilters,
+  useFilterState,
+} from "@/components/filters";
 import type { FilterValue } from "@/components/filters/filter-schema";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useSession } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
@@ -62,6 +68,13 @@ const SKILL_FILTERS = defineFilters([
     kind: "multiselect",
     pinned: true,
     allLabel: "All tags",
+  },
+  {
+    id: "accessibleBy",
+    label: "Accessible by",
+    kind: "multiselect",
+    description:
+      "Who is authorized to reach the skill, through a grant on them or on a role they hold. Plugin distribution is not access, so it does not widen this.",
   },
 ]);
 
@@ -138,7 +151,15 @@ export default function SkillsList(): JSX.Element {
   const sourceKinds = filters.values.sourceKind as SourceKinds[];
   const classifications = filters.values.classification as Classifications[];
   const tags = filters.values.tags as string[];
+  const accessibleBy = filters.values.accessibleBy as string[];
   const tagsQuery = useSkillTags(undefined, undefined, { throwOnError: false });
+  // The org's people, for the "Accessible by" options. The filter itself is
+  // applied server-side — this list is paginated, so filtering the page in the
+  // browser would leave later pages looking empty and the count disagreeing.
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const { user } = useSession();
   const filterOptions = useMemo(
     () => ({
       ...FILTER_OPTIONS,
@@ -146,8 +167,12 @@ export default function SkillsList(): JSX.Element {
         value: tag,
         label: tag,
       })),
+      accessibleBy: accessibleByFilterOptions(
+        membersQuery.data?.members ?? [],
+        user.id,
+      ),
     }),
-    [tagsQuery.data?.tags],
+    [tagsQuery.data?.tags, membersQuery.data?.members, user.id],
   );
   const pageQuery = useSkills(
     {
@@ -157,6 +182,7 @@ export default function SkillsList(): JSX.Element {
       sourceKinds,
       classifications,
       tags,
+      accessibleBy,
       sort: "updated",
     },
     undefined,
@@ -169,6 +195,7 @@ export default function SkillsList(): JSX.Element {
       sourceKinds,
       classifications,
       tags,
+      accessibleBy,
     },
     undefined,
     {
@@ -214,7 +241,8 @@ export default function SkillsList(): JSX.Element {
     deferredSearch.trim().length > 0 ||
     filters.values.sourceKind.length > 0 ||
     filters.values.classification.length > 0 ||
-    filters.values.tags.length > 0;
+    filters.values.tags.length > 0 ||
+    filters.values.accessibleBy.length > 0;
   const insightsUnavailable = !!insightsQuery.error && !insightsQuery.data;
   const effectiveMetricSort = metricSort !== null && !insightsUnavailable;
   const effectiveSort = insightsUnavailable && metricSort ? null : sort;

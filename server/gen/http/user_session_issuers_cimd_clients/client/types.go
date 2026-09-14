@@ -81,8 +81,10 @@ type ListUserSessionIssuerCimdClientsResponseBody struct {
 type GetUserSessionIssuerCimdClientResponseBody struct {
 	// The user_session_issuer_cimd_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned entries.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The user_session_issuer this URL is allowed on.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The exact https URL admitted as a client_id.
@@ -1263,8 +1265,10 @@ type CimdClientPresetResponseBody struct {
 type UserSessionIssuerCimdClientResponseBody struct {
 	// The user_session_issuer_cimd_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned entries.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning organization id.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// The user_session_issuer this URL is allowed on.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// The exact https URL admitted as a client_id.
@@ -1981,6 +1985,7 @@ func NewGetUserSessionIssuerCimdClientUserSessionIssuerCimdClientOK(body *GetUse
 	v := &types.UserSessionIssuerCimdClient{
 		ID:                  *body.ID,
 		ProjectID:           *body.ProjectID,
+		OrganizationID:      *body.OrganizationID,
 		UserSessionIssuerID: *body.UserSessionIssuerID,
 		ClientIDMetadataURI: *body.ClientIDMetadataURI,
 		CreatedAt:           *body.CreatedAt,
@@ -2385,6 +2390,9 @@ func ValidateGetUserSessionIssuerCimdClientResponseBody(body *GetUserSessionIssu
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
 	}
@@ -2399,9 +2407,6 @@ func ValidateGetUserSessionIssuerCimdClientResponseBody(body *GetUserSessionIssu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
@@ -3920,6 +3925,9 @@ func ValidateUserSessionIssuerCimdClientResponseBody(body *UserSessionIssuerCimd
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.UserSessionIssuerID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
 	}
@@ -3934,9 +3942,6 @@ func ValidateUserSessionIssuerCimdClientResponseBody(body *UserSessionIssuerCimd
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))

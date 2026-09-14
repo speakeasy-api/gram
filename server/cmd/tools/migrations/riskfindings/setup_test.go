@@ -91,7 +91,6 @@ func seedTenant(t *testing.T) *tenant {
 		PolicyType:     "standard",
 		Sources:        []string{"presidio"},
 		CustomRuleIds:  []string{},
-		MessageTypes:   []string{},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",

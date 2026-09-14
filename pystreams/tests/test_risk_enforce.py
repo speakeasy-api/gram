@@ -1,17 +1,21 @@
 """Tests for the Presidio enforcement scanning domain."""
 
 import json
-from datetime import UTC, datetime, timedelta
-from typing import cast
+from datetime import UTC, datetime, timedelta, tzinfo
+from typing import Self, cast
 
+import anyio
 import fakeredis.aioredis
 import pytest
 import structlog
+from gram.metering.v1 import meter_reading_pb2
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
+from structlog.testing import capture_logs
 
 import pystreams.risk.enforce_handler as enforce_handler_mod
 from pystreams.risk import maskdisplay
+from pystreams.risk import metering as metering_mod
 from pystreams.risk.enforce_handler import (
     MAX_CONTENT_BYTES,
     MalformedEnforcementRequest,
@@ -39,6 +43,20 @@ _KEYRING = json.dumps(
 
 _REPLY_URN = "urn:gram:risk:enforce:replica-1:0198f1f4-0000-7000-8000-000000000000"
 _SCAN_ID = "0198f1f4-0000-7000-8000-000000000000"
+_SCAN_STARTED_AT = datetime(2025, 1, 2, 3, 4, 5, 123456, tzinfo=UTC)
+_METER_PRODUCED_AT = datetime(2025, 1, 2, 3, 4, 6, 654321, tzinfo=UTC)
+
+
+class _FrozenScanDateTime(datetime):
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> Self:
+        return cls.fromtimestamp(_SCAN_STARTED_AT.timestamp(), tz)
+
+
+class _FrozenMeterDateTime(datetime):
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> Self:
+        return cls.fromtimestamp(_METER_PRODUCED_AT.timestamp(), tz)
 
 
 class FakeScanner:
@@ -74,6 +92,22 @@ class FakeScanner:
         return None
 
 
+class _FakeResult:
+    async def get(self) -> str:
+        return "meter-message"
+
+
+class FakeMeterPublisher:
+    def __init__(self) -> None:
+        self.published: list[meter_reading_pb2.MeterReading] = []
+
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _FakeResult:
+        reading = meter_reading_pb2.MeterReading()
+        reading.CopyFrom(message)
+        self.published.append(reading)
+        return _FakeResult()
+
+
 def _message(
     *,
     content: str = "email jane.doe@example.com",
@@ -91,6 +125,36 @@ def _message(
     )
 
 
+def _meter_reading() -> meter_reading_pb2.MeterReading:
+    return meter_reading_pb2.MeterReading(
+        id="reading-1",
+        organization_id="org-123",
+        project_id="proj-1",
+        meter_id="risk.presidio",
+        operation_id="operation-1",
+        unit="stokens",
+        value=11,
+        occurred_at="2000-01-01T00:00:00Z",
+        produced_at="2000-01-01T00:00:00Z",
+        attributes={
+            "risk_policy_id": "policy-1",
+            "risk_policy_version": "2",
+            "execution_path": "realtime_streams",
+            "message_link_reason": "realtime_not_persisted",
+        },
+        meter_version=1,
+        kind=meter_reading_pb2.MeterReading.KIND_USAGE,
+        measurement_method="scanner_stokens_v1",
+        source="risk",
+    )
+
+
+def _metered_message(**kwargs) -> presidio_enforcement_pb2.PresidioEnforcement:
+    message = _message(**kwargs)
+    message.meter_reading = _meter_reading().SerializeToString()
+    return message
+
+
 def _meta(reply_urn: str = _REPLY_URN) -> MessageMetadata:
     return MessageMetadata(
         id="m1",
@@ -100,11 +164,14 @@ def _meta(reply_urn: str = _REPLY_URN) -> MessageMetadata:
 
 
 def _handler(
-    scanner: FakeScanner, client: fakeredis.aioredis.FakeRedis
+    scanner: FakeScanner,
+    client: fakeredis.aioredis.FakeRedis,
+    meter_publisher: FakeMeterPublisher | None = None,
 ) -> PresidioEnforceHandler:
     return PresidioEnforceHandler(
         structlog.get_logger(),
         ReplyWriter(client),
+        meter_publisher or FakeMeterPublisher(),
         scanner,
         parse_pepper_keyring(_KEYRING),
     )
@@ -183,6 +250,181 @@ async def test_handler_writes_ok_reply_with_safe_findings():
     assert finding.fingerprint == "OtttmK1tiaZmS8oK2PAT-n3vNa4iic0SQh6RpOY5_yo"
 
 
+async def test_clean_enforcement_scan_publishes_canonical_meter_reading(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(enforce_handler_mod, "datetime", _FrozenScanDateTime)
+    monkeypatch.setattr(metering_mod, "datetime", _FrozenMeterDateTime)
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+    message = _metered_message(created_at=_SCAN_STARTED_AT.isoformat())
+
+    await _handler(FakeScanner(), client, meter_publisher).handle(message, _meta())
+
+    (reading,) = meter_publisher.published
+    template = _meter_reading()
+    assert reading.id == template.id == "reading-1"
+    assert reading.operation_id == template.operation_id
+    assert reading.value == template.value == 11
+    assert reading.attributes == template.attributes
+    assert reading.occurred_at == "2025-01-02T03:04:05.123456Z"
+    assert reading.produced_at == "2025-01-02T03:04:06.654321Z"
+    assert datetime.fromisoformat(reading.occurred_at) < datetime.fromisoformat(
+        reading.produced_at
+    )
+
+
+async def test_malformed_enforcement_meter_preserves_successful_reply():
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+    scanner = FakeScanner(
+        detections=[
+            Detection(
+                entity_type="EMAIL_ADDRESS",
+                match="jane.doe@example.com",
+                start_pos=6,
+                end_pos=26,
+                confidence=0.9,
+            )
+        ]
+    )
+    message = _message()
+    message.meter_reading = b"\x0a\xffprivate-envelope"
+
+    with capture_logs() as logs:
+        await _handler(scanner, client, meter_publisher).handle(message, _meta())
+
+    reply = await _read_reply(client)
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    assert [finding.rule_id for finding in reply.findings] == ["pii.email_address"]
+    assert meter_publisher.published == []
+    (entry,) = [item for item in logs if "error_type" in item]
+    assert entry["error_type"] == "DecodeError"
+    assert entry["log_level"] == "error"
+    assert entry["request_id"] == message.request_id
+    assert entry["reply_urn"] == _REPLY_URN
+    assert entry["delivery_attempt"] == 1
+    assert "private-envelope" not in repr(entry)
+
+
+async def test_enforcement_meter_identity_is_stable_on_redelivery():
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+    message = _metered_message()
+    handler = _handler(FakeScanner(), client, meter_publisher)
+
+    await handler.handle(message, _meta())
+    await handler.handle(message, _meta())
+
+    first, second = meter_publisher.published
+    assert first.id == second.id == "reading-1"
+    assert first.operation_id == second.operation_id == "operation-1"
+    assert first.attributes == second.attributes == _meter_reading().attributes
+
+
+class _FailingMeterResult:
+    def __init__(self, client: fakeredis.aioredis.FakeRedis) -> None:
+        self._client = client
+
+    async def get(self) -> str:
+        # The inline reply must be committed before usage transport is awaited.
+        assert await self._client.llen(inbox_key("replica-1")) == 1
+        raise RuntimeError("meter unavailable")
+
+
+class _FailingMeterPublisher:
+    def __init__(self, client: fakeredis.aioredis.FakeRedis) -> None:
+        self._client = client
+
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _FailingMeterResult:
+        return _FailingMeterResult(self._client)
+
+
+async def test_meter_failure_acks_after_writing_enforcement_reply():
+    client = fakeredis.aioredis.FakeRedis()
+    handler = PresidioEnforceHandler(
+        structlog.get_logger(),
+        ReplyWriter(client),
+        _FailingMeterPublisher(client),
+        FakeScanner(),
+        parse_pepper_keyring(_KEYRING),
+    )
+
+    with capture_logs() as logs:
+        result = await handler.handle(_metered_message(), _meta())
+
+    assert result is None
+    reply = await _read_reply(client)
+    assert reply.correlation_id == _SCAN_ID
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    (entry,) = [item for item in logs if "error_type" in item]
+    assert entry["error_type"] == "RuntimeError"
+    assert entry["log_level"] == "error"
+    assert entry["request_id"] == "req-1"
+    assert entry["reply_urn"] == _REPLY_URN
+    assert entry["delivery_attempt"] == 1
+    assert "meter unavailable" not in repr(entry)
+
+
+class _HungMeterResult:
+    def __init__(
+        self,
+        client: fakeredis.aioredis.FakeRedis,
+        started: anyio.Event,
+    ) -> None:
+        self._client = client
+        self._started = started
+
+    async def get(self) -> str:
+        assert await self._client.llen(inbox_key("replica-1")) == 1
+        self._started.set()
+        await anyio.sleep_forever()
+        raise AssertionError("meter wait unexpectedly completed")
+
+
+class _HungMeterPublisher:
+    def __init__(
+        self,
+        client: fakeredis.aioredis.FakeRedis,
+        started: anyio.Event,
+    ) -> None:
+        self._client = client
+        self._started = started
+
+    def publish(self, message: meter_reading_pb2.MeterReading) -> _HungMeterResult:
+        return _HungMeterResult(self._client, self._started)
+
+
+async def test_hung_meter_times_out_after_reply_and_handler_acks(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(metering_mod, "METER_PUBLISH_TIMEOUT_SECONDS", 0.01)
+    client = fakeredis.aioredis.FakeRedis()
+    meter_started = anyio.Event()
+    handler = PresidioEnforceHandler(
+        structlog.get_logger(),
+        ReplyWriter(client),
+        _HungMeterPublisher(client, meter_started),
+        FakeScanner(),
+        parse_pepper_keyring(_KEYRING),
+    )
+
+    with capture_logs() as logs:
+        with anyio.fail_after(1):
+            result = await handler.handle(_metered_message(), _meta())
+
+    assert result is None
+    assert meter_started.is_set()
+    reply = await _read_reply(client)
+    assert reply.correlation_id == _SCAN_ID
+    assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
+    (entry,) = [item for item in logs if "error_type" in item]
+    assert entry["error_type"] == "TimeoutError"
+    assert entry["request_id"] == "req-1"
+    assert entry["reply_urn"] == _REPLY_URN
+    assert entry["delivery_attempt"] == 1
+
+
 class FailingWriter:
     def __init__(self) -> None:
         self.called = False
@@ -193,17 +435,18 @@ class FailingWriter:
 
 
 async def test_handler_acks_request_when_reply_write_fails():
-    # A nack would send raw content to the DLQ; the handler must ack and the
-    # waiter's deadline covers the lost reply.
     writer = FailingWriter()
+    meter_publisher = FakeMeterPublisher()
     handler = PresidioEnforceHandler(
         structlog.get_logger(),
         cast(ReplyWriter, writer),
+        meter_publisher,
         FakeScanner(),
         parse_pepper_keyring(_KEYRING),
     )
-    await handler.handle(_message(), _meta())
+    await handler.handle(_metered_message(), _meta())
     assert writer.called
+    assert len(meter_publisher.published) == 1
 
 
 def test_classify_covers_every_category_set():
@@ -214,7 +457,7 @@ def test_classify_covers_every_category_set():
     assert enforce_handler_mod._classify("pii.email_address") == "pii"
 
 
-async def test_handler_replies_error_when_fingerprinting_fails():
+async def test_handler_replies_error_when_fingerprinting_fails_without_metering():
     class FailingFingerprinter:
         def tenanted_hs256(self, tenant_id: str, message: bytes) -> tuple[bytes, str]:
             raise RuntimeError("hkdf failure")
@@ -231,17 +474,20 @@ async def test_handler_replies_error_when_fingerprinting_fails():
             )
         ]
     )
+    meter_publisher = FakeMeterPublisher()
     handler = PresidioEnforceHandler(
         structlog.get_logger(),
         ReplyWriter(client),
+        meter_publisher,
         scanner,
         cast(Fingerprinter, FailingFingerprinter()),
     )
-    await handler.handle(_message(), _meta())
+    await handler.handle(_metered_message(), _meta())
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
     assert reply.reason == "fingerprint enforcement finding"
     assert len(reply.findings) == 0
+    assert meter_publisher.published == []
 
 
 async def test_handler_honors_explicit_zero_score_threshold():
@@ -262,6 +508,7 @@ def test_handler_rejects_non_finite_max_request_age():
         handler = PresidioEnforceHandler(
             structlog.get_logger(),
             ReplyWriter(fakeredis.aioredis.FakeRedis()),
+            FakeMeterPublisher(),
             FakeScanner(),
             parse_pepper_keyring(_KEYRING),
             max_request_age_seconds=bad,
@@ -280,12 +527,16 @@ def test_parse_pepper_keyring_accepts_line_wrapped_base64():
     assert encode_fingerprint(sum1) == "OtttmK1tiaZmS8oK2PAT-n3vNa4iic0SQh6RpOY5_yo"
 
 
-async def test_handler_drops_stale_request_without_reply():
+async def test_handler_drops_stale_request_without_reply_or_meter():
     client = fakeredis.aioredis.FakeRedis()
     scanner = FakeScanner()
+    meter_publisher = FakeMeterPublisher()
     stale = (datetime.now(UTC) - timedelta(seconds=45)).isoformat()
-    await _handler(scanner, client).handle(_message(created_at=stale), _meta())
+    await _handler(scanner, client, meter_publisher).handle(
+        _metered_message(created_at=stale), _meta()
+    )
     assert scanner.calls == []
+    assert meter_publisher.published == []
     assert await client.lpop(inbox_key("replica-1")) is None
 
 
@@ -330,6 +581,17 @@ async def test_handler_replies_error_on_scan_failure_without_content():
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
     assert "jane.doe" not in reply.reason
     assert "RuntimeError" in reply.reason
+
+
+async def test_scan_failure_does_not_publish_enforcement_meter():
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+
+    await _handler(
+        FakeScanner(error=RuntimeError("scan failed")), client, meter_publisher
+    ).handle(_metered_message(), _meta())
+
+    assert meter_publisher.published == []
 
 
 async def test_handler_replies_error_on_scan_slot_timeout():
@@ -386,3 +648,14 @@ async def test_handler_rejects_oversized_content_without_scanning():
     assert scanner.calls == []
     reply = await _read_reply(client)
     assert reply.status == enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
+
+
+async def test_oversized_request_does_not_publish_enforcement_meter():
+    client = fakeredis.aioredis.FakeRedis()
+    meter_publisher = FakeMeterPublisher()
+
+    await _handler(FakeScanner(), client, meter_publisher).handle(
+        _metered_message(content="a" * (MAX_CONTENT_BYTES + 1)), _meta()
+    )
+
+    assert meter_publisher.published == []

@@ -2766,6 +2766,12 @@ type ProtectedResourceMetadataResponseBody struct {
 	BearerMethodsSupported []string `form:"bearer_methods_supported,omitempty" json:"bearer_methods_supported,omitempty" xml:"bearer_methods_supported,omitempty"`
 	// URL of human-readable documentation for the resource server.
 	ResourceDocumentation *string `form:"resource_documentation,omitempty" json:"resource_documentation,omitempty" xml:"resource_documentation,omitempty"`
+	// Human-readable display name of the resource server.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// URL of the resource server's data-usage policy.
+	ResourcePolicyURI *string `form:"resource_policy_uri,omitempty" json:"resource_policy_uri,omitempty" xml:"resource_policy_uri,omitempty"`
+	// URL of the resource server's terms of service.
+	ResourceTosURI *string `form:"resource_tos_uri,omitempty" json:"resource_tos_uri,omitempty" xml:"resource_tos_uri,omitempty"`
 }
 
 // ProtectedResourceMetadataUnavailableResponseBody is used to define fields on

@@ -12,9 +12,12 @@ package types
 type UserSessionIssuer struct {
 	// The user_session_issuer id.
 	ID string
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string
 	// chain | interactive.
 	AuthnChallengeMode string
@@ -29,6 +32,9 @@ type UserSessionIssuer struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string
-	CreatedAt                     string
-	UpdatedAt                     string
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string
+	CreatedAt                    string
+	UpdatedAt                    string
 }

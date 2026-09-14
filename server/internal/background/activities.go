@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -145,6 +146,7 @@ type Activities struct {
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
 	generateToolsetEmbeddings       *activities.GenerateToolsetEmbeddings
+	listToolsetsForIndexing         *activities.ListToolsetsForIndexing
 	dispatchTrigger                 *activities.DispatchTrigger
 	processScheduledTrigger         *activities.ProcessScheduledTrigger
 	markTriggerFired                *activities.MarkTriggerFired
@@ -241,6 +243,8 @@ func NewActivities(
 	disableRiskRetroReconcile bool,
 	tumMeterStreamingEnabled bool,
 	idTokenVerifier remotesessions.IDTokenVerifier,
+	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
+	remoteSessionEnricher *remotesessions.SessionEnricher,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -257,6 +261,8 @@ func NewActivities(
 	if chConn != nil && !disableRiskRetroReconcile {
 		riskFindingsCH = riskchrepo.New(chConn)
 	}
+
+	riskRecorder := metering.NewRiskRecorder(publishers.MeterReadings)
 
 	analyzeBatch, err := risk_analysis.NewAnalyzeBatch(
 		logger,
@@ -282,6 +288,7 @@ func NewActivities(
 		&shadowMCPPolicyBypassChecker{
 			evaluator: risk.NewPolicyBypassEvaluator(logger, db),
 		},
+		riskRecorder,
 	)
 	if err != nil {
 		panic(fmt.Errorf("new analyze batch: %w", err))
@@ -316,7 +323,11 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier)),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter,
+				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
+				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
+			),
 		)
 	}
 
@@ -334,7 +345,7 @@ func NewActivities(
 			// Every page the agent fetches goes through the same judge the
 			// risk pipeline uses: a page that tries to steer the reviewer is
 			// a finding about the server, not just a hazard to the run.
-			researchagent.NewScannerJudge(piScanner),
+			researchagent.NewScannerJudge(logger, piScanner, riskRecorder),
 			researchMenu,
 			researchagent.ProductionToolset(
 				platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient), researchMenu),
@@ -421,6 +432,7 @@ func NewActivities(
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
+		listToolsetsForIndexing:         activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
 		markTriggerFired:                activities.NewMarkTriggerFired(triggerApp),
@@ -470,7 +482,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler, riskRecorder),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -756,6 +768,18 @@ func (a *Activities) ValidateDeployment(ctx context.Context, projectID uuid.UUID
 
 func (a *Activities) GenerateToolsetEmbeddings(ctx context.Context, input activities.GenerateToolsetEmbeddingsInput) error {
 	return a.generateToolsetEmbeddings.Do(ctx, input)
+}
+
+func (a *Activities) ListToolsetsForIndexing(ctx context.Context, input activities.ListToolsetsForIndexingInput) ([]activities.ToolsetIndexTarget, error) {
+	return a.listToolsetsForIndexing.Do(ctx, input)
+}
+
+func (a *Activities) ListProjectsForToolsetIndexing(ctx context.Context, input activities.ListProjectsForToolsetIndexingInput) ([]uuid.UUID, error) {
+	projectIDs, err := a.listToolsetsForIndexing.ListProjects(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("list projects for toolset indexing: %w", err)
+	}
+	return projectIDs, nil
 }
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {

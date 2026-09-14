@@ -14,13 +14,15 @@ import {
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export const Effect = {
+export const CreateAgentPolicyGrantFormEffect = {
   Allow: "allow",
 } as const;
 /**
  * Grant effect; direct agent policy is allow-only
  */
-export type Effect = ClosedEnum<typeof Effect>;
+export type CreateAgentPolicyGrantFormEffect = ClosedEnum<
+  typeof CreateAgentPolicyGrantFormEffect
+>;
 
 export type CreateAgentPolicyGrantForm = {
   /**
@@ -30,7 +32,7 @@ export type CreateAgentPolicyGrantForm = {
   /**
    * Grant effect; direct agent policy is allow-only
    */
-  effect: Effect;
+  effect: CreateAgentPolicyGrantFormEffect;
   /**
    * Agent-runtime-safe scope to grant
    */
@@ -42,9 +44,9 @@ export type CreateAgentPolicyGrantForm = {
 };
 
 /** @internal */
-export const Effect$outboundSchema: z.ZodMiniEnum<typeof Effect> = z.enum(
-  Effect,
-);
+export const CreateAgentPolicyGrantFormEffect$outboundSchema: z.ZodMiniEnum<
+  typeof CreateAgentPolicyGrantFormEffect
+> = z.enum(CreateAgentPolicyGrantFormEffect);
 
 /** @internal */
 export type CreateAgentPolicyGrantForm$Outbound = {
@@ -61,7 +63,7 @@ export const CreateAgentPolicyGrantForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.string(),
-    effect: Effect$outboundSchema,
+    effect: CreateAgentPolicyGrantFormEffect$outboundSchema,
     scope: z.string(),
     selector: AgentPolicySelector$outboundSchema,
   }),

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -234,7 +235,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -261,6 +262,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -730,7 +734,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, err
 		}
 
-		canonical, err := parseCanonicalIssuerURL(*payload.Issuer)
+		canonical, err := issuerurl.Parse(*payload.Issuer)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
 		}
@@ -739,7 +743,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		// issuer describing this upstream is one the project may attach its own
 		// client to, so it counts as found.
 		candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-			Issuers:               canonical.matchCandidates(),
+			Issuers:               canonical.MatchCandidates(),
 			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 			IncludeOrganizational: true,
 			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -797,7 +801,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
@@ -807,7 +811,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 	// no LIMIT, because precedence resolution needs the whole candidate set;
 	// buildIssuerDuplicatePreflight truncates the response instead.
 	candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-		Issuers:               canonical.matchCandidates(),
+		Issuers:               canonical.MatchCandidates(),
 		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		IncludeOrganizational: true,
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -892,6 +896,13 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	}
 	if clientCount > 0 {
 		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
+	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{

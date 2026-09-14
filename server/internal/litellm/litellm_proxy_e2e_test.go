@@ -32,6 +32,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"gopkg.in/yaml.v3"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -297,6 +299,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 		scanner, err := risk.NewScanner(
 			testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn,
 			customRules, nil, nil, nil, &feature.InMemory{}, celEngine,
+			metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		)
 		require.NoError(t, err)
 		return scanner
@@ -803,6 +806,7 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 		gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.Finding](),
 		customRules, celEngine, nil, nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(h.t, err)
 	var suite testsuite.WorkflowTestSuite

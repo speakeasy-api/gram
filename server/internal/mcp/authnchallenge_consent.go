@@ -32,7 +32,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -156,6 +158,8 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
+	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked,
 	// rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
@@ -201,8 +205,8 @@ type remoteSessionCard struct {
 	ClientID   string
 	IssuerSlug string
 
-	// IssuerDisplay is the card's identity-provider label: the issuer's
-	// operator-set display name when present, otherwise the slug. Issuer
+	// IssuerDisplay is the card's label: the resource's own name when the
+	// client carries one, else the issuer's operator-set display name, else the slug. Issuer
 	// branding is Gram-controlled and tenant-set, unlike the
 	// attacker-chosen CIMD client_name/logo_uri surfaced via
 	// ClientIDOrigin, so the two stay visually separate on the page.
@@ -211,6 +215,15 @@ type remoteSessionCard struct {
 	// IssuerLogoURL points at the issuer's logo through the public
 	// assets.serveImage endpoint, empty when the issuer has no logo.
 	IssuerLogoURL string
+
+	// IssuerDocumentationURL is the documentation link (resource's, else issuer's); rendered only when non-empty.
+	IssuerDocumentationURL string
+
+	// IssuerPolicyURL is the data-usage policy link (resource's, else issuer's); rendered only when non-empty.
+	IssuerPolicyURL string
+
+	// IssuerTosURL is the terms link (resource's, else issuer's); rendered only when non-empty.
+	IssuerTosURL string
 
 	Connected  bool
 	Expired    bool
@@ -238,6 +251,86 @@ type remoteSessionCard struct {
 
 	// ConnectedAs is upstream-supplied text, rendered escaped as a secondary line.
 	ConnectedAs string
+	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
+	AccountChips []string
+	// IdentityCaveat qualifies ConnectedAs when it was not recorded as the grant's identity; rendered as a hover note.
+	IdentityCaveat string
+
+	// TokenActive is set when the provider's introspection last reported the access token active.
+	TokenActive bool
+	// TokenExpiresAt and TokenExpiresIn are that token's deadline: introspection's exp, else the
+	// stored access expiry; empty when neither is known.
+	TokenExpiresAt string
+	TokenExpiresIn string
+
+	// Verified, Rejected, Inactive, Unverified: the last probe's verdict; all false when none ran.
+	Verified   bool
+	Rejected   bool
+	Inactive   bool
+	Unverified bool
+	// ValidatedAt and ValidatedAgo describe when that validation ran.
+	ValidatedAt  string
+	ValidatedAgo string
+	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	ValidationReason string
+	// ValidationNotice is fixed page copy about a verify that did not run.
+	ValidationNotice string
+	// CanValidate marks a card whose credential this endpoint forwards upstream, so a check has a target.
+	CanValidate bool
+	// Pending marks a card whose automatic verification is still running, so the page refreshes until its verdict lands.
+	Pending bool
+}
+
+// cardPanel is which detail lines a card renders. The status line says whether
+// the grant is live; the panel describes a live grant, plus the one thing that
+// stays useful when it is not: which account it was. The template checks only
+// these booleans.
+type cardPanel struct {
+	// GrantLive is a connected card whose status line does not say reconnect.
+	GrantLive bool
+
+	ShowIdentity         bool
+	ShowAccountContext   bool
+	ShowToken            bool
+	ShowValidationReason bool
+	ShowLapse            bool
+	ShowAutoRefresh      bool
+	ShowAccessEnd        bool
+
+	// ShowLinks is the issuer's documentation, policy, and terms links; shown in every state.
+	ShowLinks bool
+
+	// ShowDetails is whether the disclosure renders at all: any line above.
+	ShowDetails bool
+}
+
+// Panel decides the detail lines from the card's state.
+func (c remoteSessionCard) Panel() cardPanel {
+	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect
+	hasGrant := c.Connected || c.Expired || c.Unroutable
+	p := cardPanel{
+		GrantLive:            c.Connected && !reconnect,
+		ShowIdentity:         hasGrant && c.ConnectedAs != "",
+		ShowAccountContext:   false,
+		ShowToken:            false,
+		ShowValidationReason: false,
+		ShowLapse:            false,
+		ShowAutoRefresh:      false,
+		ShowAccessEnd:        false,
+		ShowLinks:            c.IssuerDocumentationURL != "" || c.IssuerPolicyURL != "" || c.IssuerTosURL != "",
+		ShowDetails:          false,
+	}
+	p.ShowAccountContext = hasGrant && len(c.AccountChips) > 0
+	if p.GrantLive {
+		p.ShowToken = c.TokenActive
+		p.ShowValidationReason = c.Unverified && c.ValidationReason != ""
+		// Auto refresh is what defeats the idle lapse, so the two lines are exclusive.
+		p.ShowLapse = c.RefreshExpiresIn != "" && !c.AutoRefreshChecked
+		p.ShowAutoRefresh = c.AutoRefreshChecked
+		p.ShowAccessEnd = c.AuthorizationExpiresIn != ""
+	}
+	p.ShowDetails = p.ShowIdentity || p.ShowAccountContext || p.ShowToken || p.ShowValidationReason || p.ShowLapse || p.ShowAutoRefresh || p.ShowAccessEnd || p.ShowLinks
+	return p
 }
 
 // autoRefreshPolicy is an organization's policy for automatic remote-session
@@ -420,6 +513,31 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
+	validationDeadlineMS := int64(0)
+	if deadlineMS, parseErr := strconv.ParseInt(r.URL.Query().Get("verifying_until"), 10, 64); parseErr == nil {
+		now := time.Now()
+		deadline := time.UnixMilli(deadlineMS)
+		maxDeadline := now.Add(s.metaRuntime.ValidationTimeout)
+		if deadline.After(now) && !deadline.After(maxDeadline) {
+			clientID := r.URL.Query().Get("verifying_client")
+			for i := range cards {
+				if cards[i].ClientID == clientID && cards[i].Connected && cards[i].ValidatedAt == "" {
+					cards[i].Pending = true
+					if challengeState.FirstParty {
+						validationDeadlineMS = deadlineMS
+					}
+					break
+				}
+			}
+		}
+	}
+	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
+		for i := range cards {
+			if cards[i].ClientID == limited {
+				cards[i].ValidationNotice = validationLimitedNotice
+			}
+		}
+	}
 
 	connectedCardCount := 0
 	autoRefreshHasSessions := false
@@ -544,6 +662,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
 		SelectedSessionDuration: selectedSessionDuration(durationOptions),
@@ -989,7 +1108,8 @@ func isUniqueViolation(err error) bool {
 
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
-// connected. The runtime gate (remotesessions.ResolveAccessTokens) fails the
+// connected and each probe-capable connection is verified. The runtime gate
+// (remotesessions.ResolveAccessTokens) fails the
 // request unless all bound clients have a usable token, so closing after only
 // the first of several providers is linked would strand the user mid-flow. A
 // challenge with no cards is never auto-closed — there is nothing to complete.
@@ -998,9 +1118,9 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 		return false
 	}
 	for _, c := range cards {
-		// A grant that could gain identity on reconnect keeps the page open
-		// so the person can act on the hint before it closes on them.
-		if !c.Connected || c.IdentityReconnect {
+		// Keep actionable reconnect and verification states visible instead of
+		// closing the tab before the person can act on them.
+		if !c.Connected || c.IdentityReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
 			return false
 		}
 	}
@@ -1088,17 +1208,43 @@ func desiredSessionDurationHours(raw string) int {
 	return hours
 }
 
+// tokenLine is the card's "Token active" line: the introspection answer while
+// its deadline (else the stored access expiry) is still ahead. An answer about
+// a token that has since expired says nothing about the current one.
+func tokenLine(renderedAt time.Time, token *remotesessions.IntrospectedToken, accessExpiresAt *time.Time) (active bool, expiresAt, expiresIn string) {
+	if token == nil || !token.Active {
+		return false, "", ""
+	}
+	deadline := token.ExpiresAt
+	if deadline.IsZero() && accessExpiresAt != nil {
+		deadline = *accessExpiresAt
+	}
+	if deadline.IsZero() {
+		return true, "", ""
+	}
+	if !deadline.After(renderedAt) {
+		return false, "", ""
+	}
+	return true, deadline.UTC().Format(time.RFC3339), formatTimeRemaining(renderedAt, deadline)
+}
+
 // issuerCardBranding resolves the branding a consent card renders for its
 // identity provider. The display fallback matches
 // formatRemoteSessionIssuerDisplay in the dashboard: a trimmed non-empty
 // name wins, otherwise the identifier the page always rendered (the slug).
+// The resource's own name outranks both, but only when the client recorded
+// it for a resource this endpoint fronts (ownResource): a client shared with
+// another endpoint must not lend that endpoint's name to this one.
 // The logo URL points at the public assets.serveImage endpoint on the
 // platform origin, the same construction mcpmetadata uses for MCP server
 // logos, and is empty when the issuer has no logo.
-func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, logoURL string) {
+func issuerCardBranding(c remotesessions.Client, ownResource bool, serverURL *url.URL) (display, logoURL string) {
 	display = c.IssuerSlug
 	if name := strings.TrimSpace(conv.PtrValOr(c.IssuerName, "")); name != "" {
 		display = name
+	}
+	if ownResource && c.ResourceName != "" {
+		display = c.ResourceName
 	}
 	if c.IssuerLogoAssetID.Valid {
 		u := *serverURL
@@ -1109,6 +1255,79 @@ func issuerCardBranding(c remotesessions.Client, serverURL *url.URL) (display, l
 		logoURL = u.String()
 	}
 	return display, logoURL
+}
+
+// cardLinks picks the documentation, policy, and terms links a card shows:
+// the resource's own (RFC 9728) when the client carries any for a resource
+// this endpoint fronts (ownResource), else the authorization server's (RFC 8414).
+func cardLinks(c remotesessions.Client, ownResource bool) (documentation, policy, tos string) {
+	if ownResource && (c.ResourceDocumentationURL != "" || c.ResourcePolicyURL != "" || c.ResourceTosURL != "") {
+		return c.ResourceDocumentationURL, c.ResourcePolicyURL, c.ResourceTosURL
+	}
+	return c.IssuerDocumentationURL, c.IssuerPolicyURL, c.IssuerTosURL
+}
+
+// resourceDisplayOwner decides whether a client recorded its RFC 9728
+// display members for a resource this endpoint routes the client's grant
+// to: the single proxied server's upstream, or a meta member claiming the
+// client's authorization server. A client that recorded none owns none.
+// Meta member rows load once, on first use, and serve every card.
+type resourceDisplayOwner struct {
+	endpoint *ResolvedMcpEndpoint
+	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
+	loaded   bool
+	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
+	upstreams map[uuid.UUID][]string
+}
+
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+	return &resourceDisplayOwner{
+		endpoint: endpoint,
+		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
+				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
+				ProjectID:       endpoint.ProjectID,
+			})
+		},
+		loaded:    false,
+		upstreams: nil,
+	}
+}
+
+func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client) (bool, error) {
+	if c.ResourceIdentifier == "" {
+		return false, nil
+	}
+	if !o.endpoint.MetaMcpServerID.Valid {
+		return wellknown.SameResource(c.ResourceIdentifier, o.endpoint.UpstreamResource), nil
+	}
+	if !o.loaded {
+		rows, err := o.load(ctx)
+		if err != nil {
+			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
+		}
+		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		for _, row := range rows {
+			if row.RemoteSessionIssuerID.Valid {
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+			}
+		}
+		o.loaded = true
+	}
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
+		return wellknown.SameResource(c.ResourceIdentifier, upstream)
+	}), nil
+}
+
+// ownsOrFallsBack is owns as best effort: a lookup fault logs and the card
+// keeps the issuer's own branding rather than failing the page or a verdict.
+func (o *resourceDisplayOwner) ownsOrFallsBack(ctx context.Context, logger *slog.Logger, c remotesessions.Client) bool {
+	own, err := o.owns(ctx, c)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve resource display ownership; falling back to issuer branding", attr.SlogError(err))
+		return false
+	}
+	return own
 }
 
 // buildRemoteSessionCards loads every remote_session_client linked to the
@@ -1153,6 +1372,7 @@ func (s *Service) buildRemoteSessionCards(
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
+	owner := s.newResourceDisplayOwner(endpoint)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
@@ -1188,7 +1408,16 @@ func (s *Service) buildRemoteSessionCards(
 			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
 			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
 		}
-		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
+		ownResource := owner.ownsOrFallsBack(ctx, s.logger, c)
+		issuerDisplay, issuerLogoURL := issuerCardBranding(c, ownResource, s.serverURL)
+		documentationURL, policyURL, tosURL := cardLinks(c, ownResource)
+		validatedAt := ""
+		validatedAgo := ""
+		if state.LastValidatedAt != nil {
+			validatedAt = state.LastValidatedAt.UTC().Format(time.RFC3339)
+			validatedAgo = formatTimeAgo(renderedAt, *state.LastValidatedAt)
+		}
+		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		requested, _ := c.RequestedScopes()
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
@@ -1197,7 +1426,10 @@ func (s *Service) buildRemoteSessionCards(
 			IssuerSlug:             c.IssuerSlug,
 			IssuerDisplay:          issuerDisplay,
 			IssuerLogoURL:          issuerLogoURL,
-			Connected:              state.Status == remotesessions.RemoteSessionActive && !unroutable,
+			IssuerDocumentationURL: documentationURL,
+			IssuerPolicyURL:        policyURL,
+			IssuerTosURL:           tosURL,
+			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			CanRefresh:             state.CanRefresh,
@@ -1210,6 +1442,21 @@ func (s *Service) buildRemoteSessionCards(
 			AuthorizationExpiresIn: authorizationExpiresIn,
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
+			AccountChips:           state.AccountChips,
+			IdentityCaveat:         state.IdentityCaveat,
+			TokenActive:            tokenActive,
+			TokenExpiresAt:         tokenExpiresAt,
+			TokenExpiresIn:         tokenExpiresIn,
+			Verified:               state.ValidationStatus == remotesessions.ValidationOutcomeValid,
+			Rejected:               state.ValidationStatus == remotesessions.ValidationOutcomeRejectedByMember,
+			Inactive:               state.ValidationStatus == remotesessions.ValidationOutcomeInactive,
+			Unverified:             state.ValidationStatus == remotesessions.ValidationOutcomeUnknown,
+			ValidatedAt:            validatedAt,
+			ValidatedAgo:           validatedAgo,
+			ValidationReason:       state.ValidationReason,
+			ValidationNotice:       "",
+			CanValidate:            routing.canValidate(c, state.Resource),
+			Pending:                false,
 		})
 	}
 	return cards, nil
@@ -1238,6 +1485,14 @@ func formatTimeRemaining(now, expiresAt time.Time) string {
 	default:
 		return fmt.Sprintf("%d %s", minutes, pluralize(minutes, "minute"))
 	}
+}
+
+// formatTimeAgo renders how long ago at was at minute resolution; a future at (clock skew) reads as just now.
+func formatTimeAgo(now, at time.Time) string {
+	if !at.Before(now) || now.Sub(at) < time.Minute {
+		return "just now"
+	}
+	return formatTimeRemaining(at, now) + " ago"
 }
 
 func pluralize(value int, singular string) string {

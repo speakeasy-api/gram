@@ -57,6 +57,20 @@ func TestSkillEfficacyCoordinatorWorkflowIDIsPerProject(t *testing.T) {
 	require.NotEqual(t, skillEfficacyCoordinatorWorkflowID(uuid.New()), skillEfficacyCoordinatorWorkflowID(projectID))
 }
 
+func TestTemporalSkillEfficacySignalerWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
+	signaler := &TemporalSkillEfficacySignaler{}
+	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), ErrTemporalUnavailable)
+}
+
+func TestNilTemporalSkillEfficacySignaler(t *testing.T) {
+	t.Parallel()
+
+	var signaler *TemporalSkillEfficacySignaler
+	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), ErrTemporalUnavailable)
+}
+
 func TestSkillEfficacyCoordinatorWorkflowCompletesWhenThereIsNoWork(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite

@@ -84,7 +84,7 @@ func newTestKeysService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 	features := &feature.InMemory{}
-	features.SetFlag(feature.FlagAgentCredentialsM2, authCtx.ActiveOrganizationID, true)
+	features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
 	svc := keys.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger, features)
 	keyAuth := auth.NewKeyAuth(conn, logger, billingClient)
 

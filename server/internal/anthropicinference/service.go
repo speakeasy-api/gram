@@ -24,7 +24,7 @@ import (
 )
 
 type scanner interface {
-	ScanForEnforcement(context.Context, string, uuid.UUID, string, string, message.Type, string) (*risk.ScanResult, error)
+	ScanForEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.ScanResult, error)
 }
 
 type transcriptStore interface {
@@ -58,11 +58,37 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 		return Verdict{}, fmt.Errorf("store inference transcript: %w", err)
 	}
 	verdict := Verdict{Action: "allow", DenyReason: "", ReferenceID: ""}
-	for _, input := range inputs {
+	for index, input := range inputs {
 		if err := ctx.Err(); err != nil {
 			return Verdict{}, fmt.Errorf("inference policy deadline: %w", err)
 		}
-		result, err := s.scanner.ScanForEnforcement(ctx, config.OrganizationID, config.ProjectID, userID, input.text, input.kind, input.tool)
+		result, err := s.scanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+			Provenance: metering.RiskProvenance{
+				OrganizationID:         config.OrganizationID,
+				ProjectID:              config.ProjectID,
+				RiskPolicyID:           uuid.Nil,
+				RiskPolicyVersion:      0,
+				PolicyLinkReason:       "",
+				ChatID:                 uuid.Nil,
+				ExternalConversationID: frame.SessionID,
+				ChatMessageID:          uuid.Nil,
+				ContentPartID:          uuid.Nil,
+				MessageLinkReason:      "realtime_message_not_resolved",
+				OperationID:            fmt.Sprintf("anthropic-inference:%s:%d", frame.RequestID, index),
+				ExecutionPath:          "realtime_local",
+				RequestID:              frame.RequestID,
+				MessageType:            input.kind,
+				HookSource:             inferenceSource(frame.Source.Application),
+				UserID:                 userID,
+				ToolCallID:             input.toolCallID,
+				ToolName:               input.tool,
+				Model:                  "",
+				Provider:               "",
+			},
+			Text:        input.text,
+			MessageType: input.kind,
+			ToolName:    input.tool,
+		})
 		if err != nil {
 			return Verdict{}, fmt.Errorf("evaluate inference policy: %w", err)
 		}
@@ -77,9 +103,10 @@ func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verd
 }
 
 type policyInput struct {
-	kind message.Type
-	tool string
-	text string
+	kind       message.Type
+	tool       string
+	text       string
+	toolCallID string
 }
 
 // Preserve each block as an independent policy input so tool arguments stay
@@ -95,7 +122,7 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 			return nil, err
 		}
 		for _, block := range blocks {
-			input := policyInput{kind: "", tool: "", text: ""}
+			input := policyInput{kind: "", tool: "", text: "", toolCallID: ""}
 			switch block.Type {
 			case "text":
 				input.kind, input.text = message.User, block.Text
@@ -108,8 +135,10 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 				// Inference hooks use tool_name; the standard Messages API uses name.
 				// Accept either so both documented protocol shapes are handled.
 				input.kind, input.tool, input.text = message.ToolRequest, conv.Default(block.ToolName, block.Name), string(block.Input)
+				input.toolCallID = block.ID
 			case "tool_result":
 				input.kind, input.tool, input.text = message.ToolResponse, block.ToolName, block.Content
+				input.toolCallID = block.ToolUseID
 			}
 			if input.text == "" && input.tool == "" {
 				continue

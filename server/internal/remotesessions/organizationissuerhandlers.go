@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -286,7 +287,7 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 }
 
 // GetIssuerDeletePreflight returns the authoritative impact of deleting an
-// issuer: client count and the names of MCP servers its clients are attached to.
+// issuer: client attachments and user-session issuers that trust it.
 func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerDeletePreflightPayload) (*orgissuersgen.OrganizationIssuerDeletePreflight, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -336,10 +337,22 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 	for _, row := range nameRows {
 		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
 	}
+	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams{
+		RemoteSessionIssuerID: issuerID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	trusted := make([]*orgissuersgen.TrustedUserSessionIssuerReference, 0, len(trustedRows))
+	for _, row := range trustedRows {
+		trusted = append(trusted, &orgissuersgen.TrustedUserSessionIssuerReference{ID: row.ID.String(), Slug: row.Slug})
+	}
 
 	return &orgissuersgen.OrganizationIssuerDeletePreflight{
-		ClientCount:    int(clientCount),
-		McpServerNames: names,
+		ClientCount:               int(clientCount),
+		McpServerNames:            names,
+		TrustedUserSessionIssuers: trusted,
 	}, nil
 }
 
@@ -371,13 +384,13 @@ func (s *Service) GetIssuerDuplicatePreflight(ctx context.Context, payload *orgi
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	canonical, err := issuerurl.Parse(conv.PtrValOrEmpty(payload.Issuer, ""))
 	if err != nil {
 		return emptyIssuerDuplicatePreflight(), nil
 	}
 
 	candidates, err := repo.New(s.db).ListOrganizationRemoteSessionIssuersByIssuerURL(ctx, repo.ListOrganizationRemoteSessionIssuersByIssuerURLParams{
-		Issuers:        canonical.matchCandidates(),
+		Issuers:        canonical.MatchCandidates(),
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  true,
 		PerTierLimit:   maxIssuerDuplicateMatchesPerTier,
@@ -650,7 +663,7 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -677,6 +690,9 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization admin remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -776,6 +792,13 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 	if clientCount > 0 {
 		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
 		ID:             issuerID,
@@ -859,8 +882,10 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 
 	// A platform issuer has no owning organization to re-scope within, and a
 	// tenant must never move one. SetOrganizationRemoteSessionIssuerProject is
-	// org-scoped and would refuse anyway; opting out keeps it a clean 404.
-	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	// org-scoped and would refuse anyway; checking before the cross-reference
+	// advisory lock keeps foreign issuer IDs from creating cross-tenant lock
+	// contention.
+	_, err = txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  false,
@@ -871,8 +896,35 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer references").LogError(ctx, logger)
+	}
+
+	// Re-check ownership after taking the advisory lock. A concurrent platform
+	// migration or delete that won the lock must win rather than letting this
+	// move act on a row whose scope changed after the preflight read.
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "remote session issuer changed while it was being locked; retry the move").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "recheck organization admin remote session issuer").LogError(ctx, logger)
+	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
+	if projectID.Valid {
+		trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count user session issuers that trust issuer").LogError(ctx, logger)
+		}
+		if trustedCount > 0 {
+			return nil, oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them before moving it to a project").LogError(ctx, logger)
+		}
+	}
 
 	updated, err := txRepo.SetOrganizationRemoteSessionIssuerProject(ctx, repo.SetOrganizationRemoteSessionIssuerProjectParams{
 		ProjectID:      projectID,
@@ -1018,8 +1070,17 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
 		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
 		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
+		TrustedUserSessionIssuers: trustedUserSessionIssuerReferenceViews(preflight.trustedUserSessionIssuers),
 		CanMigrate:                preflight.canMigrate(),
 	}, nil
+}
+
+func trustedUserSessionIssuerReferenceViews(refs []trustedUserSessionIssuerReference) []*orgissuersgen.TrustedUserSessionIssuerReference {
+	views := make([]*orgissuersgen.TrustedUserSessionIssuerReference, 0, len(refs))
+	for _, ref := range refs {
+		views = append(views, &orgissuersgen.TrustedUserSessionIssuerReference{ID: ref.id.String(), Slug: ref.slug})
+	}
+	return views
 }
 
 // MigrateIssuer consolidates the source issuer onto the target: every active
