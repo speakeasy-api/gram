@@ -196,6 +196,30 @@ func TestLaunch_RequestsCountsWhatReachesTheServer(t *testing.T) {
 	require.Equal(t, before+2, inst.Requests())
 }
 
+// A client that does not trust the certificate connects and fails the
+// handshake without ever sending a request. That attempt is exactly what a
+// request count misses and a connection count must not.
+func TestLaunch_ConnectionsCountsAttemptsThatNeverBecomeRequests(t *testing.T) {
+	t.Parallel()
+
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{TLS: true})
+	connectionsBefore := inst.Connections()
+	requestsBefore := inst.Requests()
+
+	untrusting := &http.Client{Transport: &http.Transport{}}
+	t.Cleanup(untrusting.CloseIdleConnections)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, inst.OAuth21URL+"/.well-known/jwks.json", nil)
+	require.NoError(t, err)
+	resp, err := untrusting.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	require.Error(t, err, "a client without the test certificate must fail the handshake")
+
+	require.Equal(t, connectionsBefore+1, inst.Connections())
+	require.Equal(t, requestsBefore, inst.Requests(), "the failed handshake never became a request")
+}
+
 func TestLaunch_SeedsDefaultUserAndCurrentUsers(t *testing.T) {
 	t.Parallel()
 

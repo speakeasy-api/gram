@@ -44,10 +44,12 @@ type liveWorkloadFixture struct {
 	// recorded on issuer rows exactly as registration would store it.
 	jwksURI string
 
-	// requestsAtSetup is how many requests had reached the issuer once the
-	// fixture was built. Discovery is one of them, so a test asserting that a
-	// rejection reached the issuer compares against this rather than zero.
-	requestsAtSetup int64
+	// connectionsAtSetup is how many connections the issuer had accepted once
+	// the fixture was built. Discovery made one, so a test asserting that a
+	// rejection never reached the issuer compares against this, not zero. It
+	// counts connections so that an attempt failing before it sends a request
+	// still registers.
+	connectionsAtSetup int64
 }
 
 func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
@@ -85,13 +87,13 @@ func newLiveWorkloadFixture(t *testing.T) liveWorkloadFixture {
 	organizationID := newLiveWorkloadOrganization(t, conn)
 
 	return liveWorkloadFixture{
-		conn:            conn,
-		verifier:        verifier,
-		issuer:          issuer,
-		organizationID:  organizationID,
-		projectID:       newLiveWorkloadProject(t, conn, organizationID),
-		jwksURI:         jwksURI,
-		requestsAtSetup: issuer.Requests(),
+		conn:               conn,
+		verifier:           verifier,
+		issuer:             issuer,
+		organizationID:     organizationID,
+		projectID:          newLiveWorkloadProject(t, conn, organizationID),
+		jwksURI:            jwksURI,
+		connectionsAtSetup: issuer.Connections(),
 	}
 }
 
@@ -200,7 +202,7 @@ func TestWorkloadAssertionPipeline_AdmittedWorkloadFromALiveIssuerPasses(t *test
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.NoError(t, err)
-	require.Greater(t, f.issuer.Requests(), f.requestsAtSetup, "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
+	require.Greater(t, f.issuer.Connections(), f.connectionsAtSetup, "an admitted assertion must have fetched the key set, or the no-egress tests assert against a counter that never moves")
 }
 
 // An issuer registered by a different organization is not trusted here, and
@@ -221,7 +223,7 @@ func TestWorkloadAssertionPipeline_IssuerOutsideTheTenancyMakesNoOutboundRequest
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
-	require.Equal(t, f.requestsAtSetup, f.issuer.Requests(), "an untrusted issuer must be refused before any key set is fetched")
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "an untrusted issuer must be refused before any connection to it is attempted")
 }
 
 // A soft-deleted issuer row is how an administrator withdraws trust. It stops
@@ -238,7 +240,7 @@ func TestWorkloadAssertionPipeline_SoftDeletedIssuerIsUntrusted(t *testing.T) {
 	err := f.present(t, f.endpoint(f.organizationID, f.projectID))
 
 	require.ErrorIs(t, err, mcp.ErrWorkloadIssuerUntrusted)
-	require.Equal(t, f.requestsAtSetup, f.issuer.Requests(), "a withdrawn issuer must be refused before any key set is fetched")
+	require.Equal(t, f.connectionsAtSetup, f.issuer.Connections(), "a withdrawn issuer must be refused before any connection to it is attempted")
 }
 
 // A subject admitted in one project is not admitted in a sibling project of the

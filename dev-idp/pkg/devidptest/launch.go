@@ -17,6 +17,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -102,9 +103,10 @@ type Instance struct {
 	// pass DefaultUser.ID as the row's user_id.
 	DefaultUser repo.User
 
-	server   *httptest.Server
-	keystore *keystore.Keystore
-	requests *atomic.Int64
+	server      *httptest.Server
+	keystore    *keystore.Keystore
+	requests    *atomic.Int64
+	connections *atomic.Int64
 }
 
 // LaunchOpts configures Launch. The zero value is valid: OAuth 2.1 mounted,
@@ -176,6 +178,17 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	// URL into their JWT claims and discovery documents at construction
 	// time, so they must know the public URL up front.
 	server := httptest.NewUnstartedServer(counted)
+
+	// Every accepted connection is counted as well, including one whose TLS
+	// handshake fails or that closes before sending a request, neither of
+	// which reaches the handler above.
+	connections := &atomic.Int64{}
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+
 	scheme := "http"
 	if opts.TLS {
 		scheme = "https"
@@ -239,6 +252,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 		server:      server,
 		keystore:    ks,
 		requests:    requests,
+		connections: connections,
 	}
 }
 
@@ -274,9 +288,17 @@ func (i *Instance) RotateKey(t *testing.T) {
 func (i *Instance) Stop() { i.server.Close() }
 
 // Requests counts the HTTP requests the server has received, on every mode.
-// A test asserting that a code path made no request to the issuer compares it
-// before and after, since fixture setup may itself reach the server.
+// Only requests that were read reach the count: a connection that fails its
+// TLS handshake or closes early is not one. Use Connections to assert that a
+// code path made no attempt to reach the server at all.
 func (i *Instance) Requests() int64 { return i.requests.Load() }
+
+// Connections counts every connection the server has accepted, whether or
+// not it went on to carry a request. A test asserting that a code path never
+// reached the issuer compares it before and after, since fixture setup may
+// itself connect. A stopped server accepts nothing, so it cannot count an
+// attempt made after Stop.
+func (i *Instance) Connections() int64 { return i.connections.Load() }
 
 // Client returns an HTTP client that reaches this server, trusting its
 // certificate when LaunchOpts.TLS is set.

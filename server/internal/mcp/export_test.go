@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
@@ -33,6 +33,8 @@ var (
 // iss and sub are read before the signature is checked because the issuer row
 // is what supplies the keys. Neither is trusted on that read: Verify requires
 // iss to equal the row's issuer and sub to equal the subject being admitted.
+// The read accepts the verifier's own algorithm allowlist, so an assertion the
+// verifier would accept is never refused here first.
 func AdmitWorkloadAssertion(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -41,7 +43,7 @@ func AdmitWorkloadAssertion(
 	audiences clientauth.Audiences,
 	raw string,
 ) error {
-	parsed, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
+	parsed, err := jwt.ParseSigned(raw, jwks.AllowedSignatureAlgorithms())
 	if err != nil {
 		return fmt.Errorf("parse workload assertion: %w", err)
 	}

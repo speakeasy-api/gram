@@ -115,8 +115,8 @@ func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 // Here the issuer really replaces its key and republishes it at the same URL.
 //
 // Each presentation uses a resolver with a cold cache, which is what makes
-// this deterministic — and the reason is worth stating, because the warm case
-// surprised this test twice while it was being written.
+// this deterministic. A warm cache behaves differently, for a reason that is
+// easy to miss:
 //
 // jwks holds a 30s refreshCooldown after any successful consult: a forced
 // refresh inside that window re-selects from the stored set rather than
