@@ -33,7 +33,11 @@ import {
   IssuerUrlField,
   OverridesFields,
 } from "./IssuerFormFields";
-import { parseScopes } from "./issuerFormUtils";
+import {
+  clientSecretUpdateValue,
+  isPrivateKeyJwtAuthMethod,
+  parseScopes,
+} from "./issuerFormUtils";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
@@ -222,13 +226,20 @@ function ModifyRemoteIdentityProviderSheetBody({
 
   // Client-side form state. clientId is informational only — the API has no
   // rotate path, so it stays read-only. clientSecret starts blank; a typed
-  // value rotates the secret, blank means "leave unchanged".
+  // value rotates the secret for secret-based auth, blank means "leave unchanged".
   const [clientSecret, setClientSecret] = useState("");
   const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
   >("");
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
+
+  const handleTokenEndpointAuthMethodChange = (
+    method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  ) => {
+    setTokenEndpointAuthMethod(method);
+    if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
+  };
 
   const modifyMutation = useMutation({
     mutationFn: async () => {
@@ -294,13 +305,16 @@ function ModifyRemoteIdentityProviderSheetBody({
         },
       });
 
-      // Update the remote_session_client overrides. clientSecret is only
-      // forwarded when the operator typed a new value (blank means keep the
-      // stored secret in place — see ClientCredentialsFields placeholder).
+      // Update the remote_session_client overrides. Omit clientSecret when
+      // private_key_jwt is selected or the input is blank; both keep the
+      // stored secret in place.
       await client.remoteSessionClients.update({
         updateRemoteSessionClientForm: {
           id: primaryClient.id,
-          clientSecret: clientSecret.trim() || undefined,
+          clientSecret: clientSecretUpdateValue(
+            tokenEndpointAuthMethod,
+            clientSecret,
+          ),
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
           // Backend update uses COALESCE — omitting (undefined) keeps the
           // stored value, sending an empty array would clear it. Mirror the
@@ -487,7 +501,9 @@ function ModifyRemoteIdentityProviderSheetBody({
             clientSecretPlaceholder="Type a new secret to rotate"
             onClientIdChange={() => undefined}
             onClientSecretChange={setClientSecret}
-            onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
+            onTokenEndpointAuthMethodChange={
+              handleTokenEndpointAuthMethodChange
+            }
           />
         )}
 

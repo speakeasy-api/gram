@@ -26,6 +26,8 @@ import { toast } from "sonner";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import { TokenEndpointAuthMethodField } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
+  clientSecretUpdateValue,
+  isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
@@ -64,6 +66,14 @@ export function SettingsTab({
   // and be refused for having no set attached. AIM-156 makes that method
   // selectable; the sequencing is here so it is already right when it does.
   const [keySetPending, setKeySetPending] = useState(false);
+  const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(authMethod);
+
+  const handleAuthMethodChange = (
+    method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  ) => {
+    setAuthMethod(method);
+    if (isPrivateKeyJwtAuthMethod(method)) setClientSecret("");
+  };
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async () => {
@@ -89,7 +99,7 @@ export function SettingsTab({
           tokenEndpointAuthAudienceFormat: authAudienceFormat,
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
-          clientSecret: clientSecret.trim() || undefined,
+          clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
         },
       },
     });
@@ -100,11 +110,10 @@ export function SettingsTab({
       <div className="flex flex-col gap-4">
         <TokenEndpointAuthMethodField
           value={authMethod}
-          onChange={setAuthMethod}
+          onChange={handleAuthMethodChange}
           allowPrivateKeyJwt={client.jsonWebKeySetId != null}
         />
-        {authMethod ===
-          CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+        {privateKeyJwtSelected && (
           <div className="flex flex-col gap-1.5">
             <Label>Client assertion audience</Label>
             <Select
@@ -157,19 +166,26 @@ export function SettingsTab({
           <Label>Audience</Label>
           <Input value={audience} onChange={setAudience} />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Rotate client secret</Label>
-          <Input
-            type="password"
-            value={clientSecret}
-            onChange={setClientSecret}
-            placeholder="Enter a new secret to rotate; leave blank to keep current"
-          />
+        {privateKeyJwtSelected ? (
           <Text small muted>
-            The secret is encrypted at rest and never displayed. Leave blank to
-            keep the existing secret.
+            Any existing client secret is retained but not used with
+            private_key_jwt.
           </Text>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label>Rotate client secret</Label>
+            <Input
+              type="password"
+              value={clientSecret}
+              onChange={setClientSecret}
+              placeholder="Enter a new secret to rotate; leave blank to keep current"
+            />
+            <Text small muted>
+              The secret is encrypted at rest and never displayed. Leave blank
+              to keep the existing secret.
+            </Text>
+          </div>
+        )}
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button

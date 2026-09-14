@@ -81,6 +81,26 @@ export function narrowTokenEndpointAuthMethod(
   return undefined;
 }
 
+export function isPrivateKeyJwtAuthMethod(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+): boolean {
+  return (
+    method ===
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+  );
+}
+
+// The server retains an existing secret when this update omits clientSecret.
+// Never rotate a dormant secret while private_key_jwt is selected, even if a
+// value was typed before switching authentication methods in the form.
+export function clientSecretUpdateValue(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  secret: string,
+): string | undefined {
+  if (isPrivateKeyJwtAuthMethod(method)) return undefined;
+  return secret.trim() || undefined;
+}
+
 // Picks the preferred auth method from the issuer's advertised list.
 // Preference order: client_secret_basic > client_secret_post > none.
 // Falls back to client_secret_basic when the issuer advertises no recognized

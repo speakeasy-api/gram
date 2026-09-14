@@ -17,6 +17,7 @@ import { Stack } from "@/components/ui/Stack";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
+  isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
 
@@ -309,8 +310,8 @@ export function TokenEndpointAuthMethodField({
 
 // ClientCredentialsFields is used by both Add (editable client_id) and
 // Modify (client_id read-only — the API has no rotate path; create a fresh
-// remote_session_client if you need a new one). clientSecret stays an input
-// in both — empty means "leave existing in place" in Modify. Callers that
+// remote_session_client if you need a new one). The secret input is hidden
+// for private_key_jwt; empty means "leave existing in place" in Modify. Callers that
 // render their own section header (e.g. above a client-type selector) pass
 // showHeading={false} to suppress the built-in "OAuth Client Credentials" block.
 export function ClientCredentialsFields({
@@ -374,17 +375,24 @@ export function ClientCredentialsFields({
         )}
       </Stack>
 
-      <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">
-          {clientSecretLabel}
-        </Label>
-        <Input
-          type="password"
-          value={clientSecret}
-          onChange={onClientSecretChange}
-          placeholder={clientSecretPlaceholder}
-        />
-      </Stack>
+      {isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ? (
+        <Text muted small>
+          Any existing client secret is retained but not used with
+          private_key_jwt.
+        </Text>
+      ) : (
+        <Stack gap={2}>
+          <Label className="text-muted-foreground text-xs">
+            {clientSecretLabel}
+          </Label>
+          <Input
+            type="password"
+            value={clientSecret}
+            onChange={onClientSecretChange}
+            placeholder={clientSecretPlaceholder}
+          />
+        </Stack>
+      )}
 
       <TokenEndpointAuthMethodField
         value={tokenEndpointAuthMethod}
