@@ -34,6 +34,10 @@ func ResolveAgentPrincipals(ctx context.Context, db repo.DBTX, organizationID st
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent principal: %w", err)
 	}
+	// An inactive or owner-latched agent holds no principals of its own.
+	if agents.DeriveLifecycle(resolved) != agents.LifecycleActive || resolved.OwnerReassignmentRequiredAt.Valid {
+		return []urn.Principal{AllUsersPrincipal()}, nil
+	}
 
 	principals := []urn.Principal{AllUsersPrincipal(), urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.ID.String())}
 	roleURNs, err := repo.New(db).ListAgentRolePrincipals(ctx, repo.ListAgentRolePrincipalsParams{

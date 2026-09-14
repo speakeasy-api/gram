@@ -348,7 +348,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
 		email := conv.NormalizeEmail(m.UserEmail)
-		if email == "" {
+		if email == "" || isAgentActor(ctx) {
 			continue
 		}
 		if _, seen := emailToUserID[email]; seen {
@@ -402,6 +402,9 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 				meta.GramOrgID == orgID && meta.ProjectID == projectID {
 				sessionMeta = meta
 			}
+		}
+		if isAgentActor(ctx) {
+			sessionMeta = agentSessionView(sessionMeta, orgID, projectID)
 		}
 		stampAccountAttribution(attrs, sessionMeta)
 		// Cost/token metric rows carry the session's resolved surface (OTEL

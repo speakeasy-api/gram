@@ -13,6 +13,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -257,6 +258,51 @@ func TestCodex_AgentKeyAcceptedWithoutEmail(t *testing.T) {
 	metadata := ti.service.codexSessionMetadata(agentCtx, &gen.CodexPayload{HookEventName: "Stop", SessionID: &sessionID, UserEmail: &humanEmail}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	require.Empty(t, metadata.UserEmail)
 	require.Empty(t, metadata.UserID)
+}
+
+func TestWithAgentActor_StripsSpoofedActorOnHumanRequests(t *testing.T) {
+	t.Parallel()
+	attrs := map[attr.Key]any{
+		attr.AuthorizationActorTypeKey: "agent",
+		attr.AuthorizationActorIDKey:   "spoofed",
+	}
+	withAgentActor(t.Context(), attrs)
+	require.NotContains(t, attrs, attr.AuthorizationActorTypeKey)
+	require.NotContains(t, attrs, attr.AuthorizationActorIDKey)
+}
+
+func TestAgentSessionView_RejectsOtherTenant(t *testing.T) {
+	t.Parallel()
+	cached := SessionMetadata{
+		SessionID: "s", ServiceName: "cowork", UserEmail: "h@example.com", UserID: "u", Provider: providerAnthropic,
+		ExternalOrgID: "eo", ExternalAccountUUID: "ea", ExternalAccountID: "eid", DeviceID: "d", Hostname: "host", Cwd: "/w",
+		AccountType: accountTypePersonal, BillingMode: "metered", UserAccountID: "ua", ObservedUserEmail: "h@example.com",
+		GramOrgID: "org-a", ProjectID: "proj-a",
+	}
+
+	same := agentSessionView(cached, "org-a", "proj-a")
+	require.Equal(t, "host", same.Hostname)
+	require.Empty(t, same.UserEmail)
+	require.Empty(t, same.UserAccountID)
+	require.Empty(t, same.DeviceID)
+
+	other := agentSessionView(cached, "org-b", "proj-b")
+	require.Empty(t, other.Hostname, "another tenant's cache entry contributes nothing")
+	require.Empty(t, other.ServiceName)
+	require.Equal(t, "org-b", other.GramOrgID)
+}
+
+func TestCodexOTELUserInfo_AgentDropsSelfReportedEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	attrs := map[attr.Key]any{attr.UserEmailKey: "codex-human@example.com"}
+	_, email, userID := ti.service.codexOTELUserInfo(agentKeyContext(t, ctx, ti), attrs, map[string]string{}, authCtx.ActiveOrganizationID)
+	require.Empty(t, email)
+	require.Empty(t, userID)
+	require.NotContains(t, attrs, attr.UserEmailKey, "the persisted row must not carry the payload email")
 }
 
 func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {

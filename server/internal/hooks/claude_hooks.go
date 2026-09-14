@@ -797,9 +797,16 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 }
 
 func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, error) {
-	// An agent actor ignores the payload email and the cached session identity.
+	// An agent actor ignores the payload email and adopts only the cached
+	// session's surface fields.
 	if isAgentActor(ctx) {
 		if metadata, ok := s.claudeAuthContextMetadata(ctx, sessionID, ""); ok {
+			if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+				view := agentSessionView(cached, metadata.GramOrgID, metadata.ProjectID)
+				metadata.ServiceName = view.ServiceName
+				metadata.Hostname = view.Hostname
+				metadata.Cwd = view.Cwd
+			}
 			return metadata, nil
 		}
 		return SessionMetadata{}, errAgentHookUnscoped

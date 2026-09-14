@@ -117,7 +117,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			continue
 		}
 		if agent {
-			cached = agentSessionView(cached)
+			cached = agentSessionView(cached, orgID, projectID)
 		}
 
 		// Merge this batch's identity over anything an earlier (incomplete) batch
@@ -244,7 +244,11 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			}
 		}
 
-		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+		// Buffered hooks came from unauthenticated requests; an agent batch must
+		// never adopt them.
+		if !agent {
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",
 			attr.SlogEvent("session_validated"),
@@ -483,6 +487,8 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
 				}
 				if isAgentActor(ctx) {
+					// Self-reported identity never rides an agent's rows.
+					delete(logAttrs, attr.UserEmailKey)
 					userInfo = telemetry.UserInfoByEmail("")
 				}
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
@@ -24,6 +25,12 @@ import (
 // agentRequestContext makes ctx look like an admitted agent-principal key for
 // a new agent, optionally assigned roleURN.
 func agentRequestContext(t *testing.T, ctx context.Context, ti *testInstance, name, roleURN string) context.Context {
+	t.Helper()
+	agentCtx, _ := agentRequestContextWithID(t, ctx, ti, name, roleURN)
+	return agentCtx
+}
+
+func agentRequestContextWithID(t *testing.T, ctx context.Context, ti *testInstance, name, roleURN string) (context.Context, uuid.UUID) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -45,7 +52,7 @@ func agentRequestContext(t *testing.T, ctx context.Context, ti *testInstance, na
 	clone.APIKeyScopes = nil
 	clone.SessionID = nil
 	credential := contextvalues.PrincipalCredential{AuthorizerUserID: authCtx.UserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0}
-	return contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &clone, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), credential)
+	return contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &clone, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), credential), agent.ID
 }
 
 func TestScanner_LookupShadowMCPBlockingPolicy_AgentRoleAudience(t *testing.T) {
@@ -101,4 +108,49 @@ func TestScanner_LookupShadowMCPBlockingPolicy_AgentRoleAudience(t *testing.T) {
 	outsiderPolicy, err := scanner.LookupShadowMCPBlockingPolicy(outsiderCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
 	require.NoError(t, err)
 	require.Nil(t, outsiderPolicy, "an agent without the targeted role is not blocked")
+
+	suspendedCtx, suspendedID := agentRequestContextWithID(t, ctx, ti, "Suspended role agent", role.RoleUrn)
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: authCtx.ActiveOrganizationID, ID: suspendedID})
+	require.NoError(t, err)
+	suspendedPolicy, err := scanner.LookupShadowMCPBlockingPolicy(suspendedCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
+	require.NoError(t, err)
+	require.Nil(t, suspendedPolicy, "a suspended agent holds none of its role principals")
+}
+
+func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceBlocksAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("Everyone shadow MCP for agents"),
+		Sources:               []string{"shadow_mcp"},
+		AudienceType:          "everyone",
+		AudiencePrincipalUrns: nil,
+		Action:                "block",
+	})
+	require.NoError(t, err)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	require.NoError(t, err)
+
+	agentCtx := agentRequestContext(t, ctx, ti, "Roleless agent", "")
+	policy, err := scanner.LookupShadowMCPBlockingPolicy(agentCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
+	require.NoError(t, err)
+	require.NotNil(t, policy, "user:all audiences apply to agents with no targeted role")
+	require.Equal(t, "Everyone shadow MCP for agents", policy.Name)
 }

@@ -373,8 +373,13 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 // The resolved email and user id are returned alongside the UserInfo so the
 // session-attribution path can reuse them without a second resolution.
 func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) (telemetry.UserInfo, string, string) {
+	if isAgentActor(ctx) {
+		// Self-reported identity never rides an agent's rows.
+		delete(attrs, attr.UserEmailKey)
+		return telemetry.UserInfoByEmail(""), "", ""
+	}
 	email := strings.TrimSpace(stringAttr(attrs, attr.UserEmailKey))
-	if email == "" || isAgentActor(ctx) {
+	if email == "" {
 		return telemetry.UserInfoByEmail(""), "", ""
 	}
 
@@ -421,9 +426,16 @@ type codexOTELIdentity struct {
 // the zero metadata stamps nothing.
 func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[string]SessionMetadata, id codexOTELIdentity) SessionMetadata {
 	var none SessionMetadata
-	// An agent actor never adopts a cached or classified human identity.
-	if id.SessionID == "" || isAgentActor(ctx) {
+	if id.SessionID == "" {
 		return none
+	}
+	// An agent keeps only safe surface fields: no classification or writeback.
+	if isAgentActor(ctx) {
+		var cached SessionMetadata
+		if err := s.cache.Get(ctx, sessionCacheKey(id.SessionID), &cached); err != nil || cached.ServiceName != "Codex" {
+			return none
+		}
+		return agentSessionView(cached, id.OrgID, id.ProjectID)
 	}
 	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {
 		return meta

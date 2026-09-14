@@ -38,32 +38,44 @@ func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	return nil
 }
 
-// agentSessionView keeps only the surface fields of a cached session so an
-// agent event never inherits a human's identity or account attribution.
-func agentSessionView(cached SessionMetadata) SessionMetadata {
-	return SessionMetadata{
+// agentSessionView keeps only the surface fields of a cached session, and only
+// when orgID+projectID seeded it, so an agent event never inherits a human's
+// identity, account attribution, or another tenant's metadata.
+func agentSessionView(cached SessionMetadata, orgID, projectID string) SessionMetadata {
+	view := SessionMetadata{
 		SessionID:           cached.SessionID,
-		ServiceName:         cached.ServiceName,
+		ServiceName:         "",
 		UserEmail:           "",
 		UserID:              "",
-		Provider:            cached.Provider,
+		Provider:            "",
 		ExternalOrgID:       "",
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
-		Hostname:            cached.Hostname,
-		Cwd:                 cached.Cwd,
+		Hostname:            "",
+		Cwd:                 "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
 		ObservedUserEmail:   "",
-		GramOrgID:           cached.GramOrgID,
-		ProjectID:           cached.ProjectID,
+		GramOrgID:           orgID,
+		ProjectID:           projectID,
 	}
+	if cached.GramOrgID != orgID || cached.ProjectID != projectID {
+		return view
+	}
+	view.ServiceName = cached.ServiceName
+	view.Provider = cached.Provider
+	view.Hostname = cached.Hostname
+	view.Cwd = cached.Cwd
+	return view
 }
 
-// withAgentActor stamps the agent actor onto a per-event hook telemetry row.
+// withAgentActor strips client-supplied actor attributes from a telemetry row,
+// then stamps the trusted agent actor when one authenticated the request.
 func withAgentActor(ctx context.Context, attrs map[attr.Key]any) map[attr.Key]any {
+	delete(attrs, attr.AuthorizationActorTypeKey)
+	delete(attrs, attr.AuthorizationActorIDKey)
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
 		attrs[attr.AuthorizationActorTypeKey] = string(actor.Type)
 		attrs[attr.AuthorizationActorIDKey] = actor.ID

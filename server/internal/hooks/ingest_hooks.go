@@ -1094,7 +1094,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	if cached, err := s.getSessionMetadata(ctx, metadata.SessionID); err == nil &&
 		cached.GramOrgID == metadata.GramOrgID && cached.ProjectID == metadata.ProjectID {
 		if isAgentActor(ctx) {
-			cached = agentSessionView(cached)
+			cached = agentSessionView(cached, metadata.GramOrgID, metadata.ProjectID)
 		}
 		// Surface-specificity merge: the OTEL path caches "cowork" from the
 		// resource service.name, which must survive this event's re-cache —
