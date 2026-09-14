@@ -20,11 +20,7 @@ import {
   encodeGatewayServerFilter,
   encodeHostedServerFilter,
   encodeShadowServerFilter,
-  parseTargetFilter,
-  selectedHookSources,
-  selectedTargetValues,
   selectedUserEmails,
-  toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -97,6 +93,7 @@ import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
+import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
@@ -187,85 +184,14 @@ export function InsightsToolsContent(): JSX.Element {
 
   const client = useGramContext();
 
-  const serverFilters = useMemo(
-    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
-    [activeFilters],
-  );
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "hosted")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const shadowServerNames = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "shadow")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const metaMcpServerIds = useMemo(
-    () =>
-      serverFilters
-        .filter((filter) => filter.type === "gateway")
-        .map((filter) => filter.id),
-    [serverFilters],
-  );
-  const userFilters = useMemo(() => {
-    const emails = [
-      ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
-    ];
-    return emails.map((email) => ({ kind: "email" as const, key: email }));
-  }, [activeFilters, roleEmails]);
-  const hookSourceFilters = useMemo(
-    () => selectedHookSources(activeFilters),
-    [activeFilters],
-  );
-
-  // The tool usage summary is split across seven endpoints (one per panel) so the
-  // dashboard renders each card as its data lands instead of blocking on the
-  // slowest aggregate. They all share this payload; each has its own query so its
-  // own loading state drives its own card's skeleton.
-  const summaryPayload = useMemo(
-    () => ({
-      from,
-      to,
-      hostedToolsetSlugs:
-        hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
-      shadowServerNames:
-        shadowServerNames.length > 0 ? shadowServerNames : undefined,
-      metaMcpServerIds:
-        metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
-      targetTypes: toTargetTypes(selectedHookTypes),
-      userFilters: userFilters.length > 0 ? userFilters : undefined,
-      hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
-      accountType: accountType || undefined,
-    }),
-    [
-      from,
-      to,
-      hostedToolsetSlugs,
-      shadowServerNames,
-      metaMcpServerIds,
-      selectedHookTypes,
-      userFilters,
-      hookSourceFilters,
-      accountType,
-    ],
-  );
-
-  const sharedQueryKey = [
-    from.toISOString(),
-    to.toISOString(),
-    hostedToolsetSlugs,
-    shadowServerNames,
-    metaMcpServerIds,
-    userFilters,
-    hookSourceFilters,
+  const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
+    activeFilters,
+    roleEmails,
     selectedHookTypes,
     accountType,
-  ];
+    from,
+    to,
+  });
 
   // Totals is the gate query: it decides the page shell (logs-disabled overlay,
   // "no data" empty state, KPI cards) and is the cheapest, so the page appears as
