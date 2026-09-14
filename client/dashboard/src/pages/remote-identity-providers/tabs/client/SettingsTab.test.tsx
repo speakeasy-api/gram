@@ -1,5 +1,6 @@
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import { UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -26,11 +27,32 @@ vi.mock(
     }),
   }),
 );
+vi.mock("@gram/client/react-query/organizationRemoteSessionIssuer.js", () => ({
+  useOrganizationRemoteSessionIssuer: () => ({ data: undefined }),
+}));
 vi.mock("./KeySetField", () => ({ KeySetField: () => null }));
 vi.mock("../../clientDialogs", () => ({ DeleteClientDialog: () => null }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
   () => ({
+    ClientAssertionAudienceField: ({
+      value,
+      onChange,
+    }: {
+      value: AuthAudienceFormat;
+      onChange: (value: AuthAudienceFormat) => void;
+    }) => (
+      <select
+        aria-label="Client assertion audience"
+        value={value}
+        onChange={(event) => onChange(event.target.value as AuthAudienceFormat)}
+      >
+        <option value={AuthAudienceFormat.Issuer}>Issuer URL (default)</option>
+        <option value={AuthAudienceFormat.TokenEndpoint}>
+          Token endpoint URL
+        </option>
+      </select>
+    ),
     TokenEndpointAuthMethodField: ({
       value,
       onChange,
@@ -101,10 +123,18 @@ describe("organization client settings", () => {
 
     expect(screen.queryByText("Rotate client secret")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(
-      mutation.mutate.mock.calls[0]?.[0]?.request?.updateRemoteSessionClientForm
-        ?.clientSecret,
-    ).toBeUndefined();
+    expect(mutation.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            id: "client-1",
+            tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
+            clientSecret: undefined,
+            tokenEndpointAuthAudienceFormat: undefined,
+          }),
+        }),
+      }),
+    );
 
     fireEvent.change(
       screen.getByRole("combobox", { name: "Authentication method" }),
@@ -119,5 +149,49 @@ describe("organization client settings", () => {
         ) as HTMLInputElement
       ).value,
     ).toBe("");
+  });
+
+  it("preserves an unset assertion audience on an unrelated save", () => {
+    render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            tokenEndpointAuthAudienceFormat: undefined,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("saves an explicitly selected token endpoint audience", () => {
+    render(
+      <SettingsTab
+        client={client(AuthMethod.PrivateKeyJwt)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Client assertion audience" }),
+      { target: { value: AuthAudienceFormat.TokenEndpoint } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mutation.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateRemoteSessionClientForm: expect.objectContaining({
+            tokenEndpointAuthAudienceFormat: AuthAudienceFormat.TokenEndpoint,
+          }),
+        }),
+      }),
+    );
   });
 });

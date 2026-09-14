@@ -2,8 +2,11 @@ package gcpkms
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"sync"
@@ -72,6 +75,22 @@ func TestPersistentLocalSigningClient_RejectsLooseKeyPermissions(t *testing.T) {
 
 	_, err = NewPersistentLocalSigningClient(jose.RS256, path)
 	require.ErrorContains(t, err, "accessible only to its owner")
+}
+
+func TestPersistentLocalSigningClient_RejectsUndersizedRSAKey(t *testing.T) {
+	t.Parallel()
+
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "local-kms.pem")
+	require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{
+		Type: "PRIVATE KEY", Bytes: der,
+	}), 0o600))
+
+	_, err = NewPersistentLocalSigningClient(jose.RS256, path)
+	require.ErrorContains(t, err, "must be at least 2048 bits")
 }
 
 func TestPersistentLocalSigningClient_ConcurrentCreationConverges(t *testing.T) {

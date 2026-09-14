@@ -155,6 +155,9 @@ func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSig
 	if err := checkKeyMatchesAlgorithm(PublicKey{Algorithm: alg, Key: signer.Public()}); err != nil {
 		return nil, fmt.Errorf("validate persistent local %s key: %w", alg, err)
 	}
+	if rsaKey, ok := signer.Public().(*rsa.PublicKey); ok && rsaKey.N.BitLen() < rsaLocalKeyBits {
+		return nil, fmt.Errorf("persistent local %s key must be at least %d bits", alg, rsaLocalKeyBits)
+	}
 	return &LocalSigningClient{alg: alg, key: signer}, nil
 }
 

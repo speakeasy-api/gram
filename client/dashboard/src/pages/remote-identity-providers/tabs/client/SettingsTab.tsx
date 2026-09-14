@@ -1,13 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
@@ -24,7 +17,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
-import { TokenEndpointAuthMethodField } from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
+import {
+  ClientAssertionAudienceField,
+  TokenEndpointAuthMethodField,
+} from "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields";
 import {
   clientSecretUpdateValue,
   isPrivateKeyJwtAuthMethod,
@@ -46,11 +42,9 @@ export function SettingsTab({
   const [authMethod, setAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
   >(narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "");
-  const [authAudienceFormat, setAuthAudienceFormat] =
-    useState<AuthAudienceFormat>(
-      client.tokenEndpointAuthAudienceFormat ??
-        UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer,
-    );
+  const [authAudienceFormat, setAuthAudienceFormat] = useState<
+    AuthAudienceFormat | undefined
+  >(client.tokenEndpointAuthAudienceFormat);
   const [scope, setScope] = useState((client.scope ?? []).join(", "));
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
@@ -96,7 +90,9 @@ export function SettingsTab({
         updateRemoteSessionClientForm: {
           id: client.id,
           tokenEndpointAuthMethod: authMethod || undefined,
-          tokenEndpointAuthAudienceFormat: authAudienceFormat,
+          tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
+            ? authAudienceFormat
+            : undefined,
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
@@ -114,39 +110,13 @@ export function SettingsTab({
           allowPrivateKeyJwt={client.jsonWebKeySetId != null}
         />
         {privateKeyJwtSelected && (
-          <div className="flex flex-col gap-1.5">
-            <Label>Client assertion audience</Label>
-            <Select
-              value={authAudienceFormat}
-              onValueChange={(value) =>
-                setAuthAudienceFormat(value as AuthAudienceFormat)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  value={
-                    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
-                  }
-                >
-                  Issuer URL (default)
-                </SelectItem>
-                <SelectItem
-                  value={
-                    UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.TokenEndpoint
-                  }
-                >
-                  Token endpoint URL
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Text small muted>
-              Use the issuer URL unless your identity provider requires the
-              token endpoint URL, as required by providers such as Okta.
-            </Text>
-          </div>
+          <ClientAssertionAudienceField
+            value={
+              authAudienceFormat ??
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+            onChange={setAuthAudienceFormat}
+          />
         )}
         {/* org:admin like the Save button below: attach and detach are
             org:admin on the server, so a reader must not get a live control

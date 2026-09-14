@@ -11,6 +11,10 @@ import {
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -304,6 +308,50 @@ export function TokenEndpointAuthMethodField({
           )}
         </SelectContent>
       </Select>
+    </Stack>
+  );
+}
+
+export function ClientAssertionAudienceField({
+  value,
+  onChange,
+}: {
+  value: AuthAudienceFormat;
+  onChange: (value: AuthAudienceFormat) => void;
+}): JSX.Element {
+  return (
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">
+        Client assertion audience
+      </Label>
+      <Select
+        value={value}
+        onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+          >
+            Issuer URL (default)
+          </SelectItem>
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.TokenEndpoint
+            }
+          >
+            Token endpoint URL
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Text small muted>
+        Use the issuer URL unless your identity provider requires the token
+        endpoint URL, as required by providers such as Okta.
+      </Text>
     </Stack>
   );
 }

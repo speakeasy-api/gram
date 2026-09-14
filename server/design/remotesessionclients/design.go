@@ -784,15 +784,12 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 // AttachKeySetForm backs the attachKeySet methods on both tenant client
 // services; detachKeySet needs no body and takes the id as a query parameter.
 // The link lives on its own pair of methods rather than on the create and
-// update forms for three reasons: the
+// update forms for two reasons: the
 // entitlement gate applies to this link alone and would otherwise have to fire
 // conditionally on a field's presence inside handlers the rest of the
 // organization can use ungated; the private_key_jwt coupling rule needs to tell
 // "leave unchanged" from "clear", which a Format(FormatUUID) patch attribute
-// cannot express (an empty string fails validation before a handler sees it);
-// and UpdateRemoteSessionClientForm is shared with the platform-admin
-// updateGlobalClient method, whose clients have a NULL organization_id by
-// construction and so can never hold a set.
+// cannot express (an empty string fails validation before a handler sees it).
 var AttachKeySetForm = Type("AttachKeySetForm", func() {
 	Description("Form for attaching an organization JSON Web Key Set to a remote_session_client.")
 

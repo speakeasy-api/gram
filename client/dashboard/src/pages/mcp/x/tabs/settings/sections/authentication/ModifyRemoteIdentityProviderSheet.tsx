@@ -14,6 +14,10 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import {
   invalidateAllMcpServers,
@@ -28,6 +32,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ClientAssertionAudienceField,
   ClientCredentialsFields,
   EndpointsFields,
   IssuerUrlField,
@@ -231,6 +236,9 @@ function ModifyRemoteIdentityProviderSheetBody({
   const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
   >("");
+  const [authAudienceFormat, setAuthAudienceFormat] = useState<
+    AuthAudienceFormat | undefined
+  >();
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
@@ -316,6 +324,11 @@ function ModifyRemoteIdentityProviderSheetBody({
             clientSecret,
           ),
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          tokenEndpointAuthAudienceFormat: isPrivateKeyJwtAuthMethod(
+            tokenEndpointAuthMethod,
+          )
+            ? authAudienceFormat
+            : undefined,
           // Backend update uses COALESCE — omitting (undefined) keeps the
           // stored value, sending an empty array would clear it. Mirror the
           // audience handling here: only send when non-empty so the Modify
@@ -361,6 +374,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   useEffect(() => {
     if (!primaryClient || clientFieldsInitializedRef.current) return;
     setTokenEndpointAuthMethod(primaryClient.tokenEndpointAuthMethod ?? "");
+    setAuthAudienceFormat(primaryClient.tokenEndpointAuthAudienceFormat);
     setScopeOverride((primaryClient.scope ?? []).join(", "));
     setAudienceOverride(primaryClient.audience ?? "");
     clientFieldsInitializedRef.current = true;
@@ -418,13 +432,12 @@ function ModifyRemoteIdentityProviderSheetBody({
             // Same reset semantics as Attach: when the URL diverges from the
             // settled state, every downstream field was tied to that prior
             // URL. Clear them so re-Discover (or manual re-entry) produces a
-            // coherent result. clientId is intentionally NOT cleared — the
-            // existing client record stays in place since the API has no
-            // rotate path for client_id.
+            // coherent result. Client credentials and auth method stay with
+            // the existing client record, which the update retains unless
+            // the operator explicitly changes them.
             if (discoveredSnapshot && value.trim() !== discoveredSnapshot.url) {
               resetEndpointState();
               setClientSecret("");
-              setTokenEndpointAuthMethod("");
               setScopeOverride("");
               setAudienceOverride("");
             }
@@ -504,6 +517,16 @@ function ModifyRemoteIdentityProviderSheetBody({
             onTokenEndpointAuthMethodChange={
               handleTokenEndpointAuthMethodChange
             }
+          />
+        )}
+
+        {isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) && (
+          <ClientAssertionAudienceField
+            value={
+              authAudienceFormat ??
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+            onChange={setAuthAudienceFormat}
           />
         )}
 

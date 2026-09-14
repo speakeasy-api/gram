@@ -447,6 +447,7 @@ func TestUpstreamRevoker_PrivateKeyJWTUsesTokenEndpointAudience(t *testing.T) {
 	calls, form, authHdr := spy.snapshot()
 	require.Equal(t, 1, calls)
 	require.Equal(t, fx.refreshToken, form.Get("token"))
+	require.Equal(t, "refresh_token", form.Get("token_type_hint"))
 	require.Equal(t, fx.externalCID, form.Get("client_id"))
 	require.Equal(t, "signed-revocation-assertion", form.Get("client_assertion"))
 	require.Equal(t, "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", form.Get("client_assertion_type"))
