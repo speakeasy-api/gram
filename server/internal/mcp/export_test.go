@@ -2,10 +2,111 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
+
+// ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
+// admission sentinels, so a test can tell which stage refused an assertion.
+var (
+	ErrWorkloadIssuerUntrusted = errWorkloadIssuerUntrusted
+	ErrWorkloadNotAdmitted     = errWorkloadNotAdmitted
+)
+
+// AdmitWorkloadAssertion runs the workload grant's stages in the order the
+// token endpoint runs them: resolve iss to a workload issuer row in the
+// endpoint's tenancy, verify the assertion against that row's published key
+// set, then check the subject is admitted. Every stage reads real rows, so a
+// test can drive it against a live issuer.
+//
+// iss and sub are read before the signature is checked because the issuer row
+// is what supplies the keys. Neither is trusted on that read: Verify requires
+// iss to equal the row's issuer and sub to equal the subject being admitted.
+func AdmitWorkloadAssertion(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	verifier *clientauth.Verifier,
+	endpoint *ResolvedMcpEndpoint,
+	audiences clientauth.Audiences,
+	raw string,
+) error {
+	parsed, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
+	if err != nil {
+		return fmt.Errorf("parse workload assertion: %w", err)
+	}
+	var claims jwt.Claims
+	if err := parsed.UnsafeClaimsWithoutVerification(&claims); err != nil {
+		return fmt.Errorf("read workload assertion claims: %w", err)
+	}
+
+	projectID := uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil}
+
+	admission := newWorkloadIssuerAdmission(
+		func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
+			issuer, err := workloadidentity.ResolveIssuerByURL(ctx, db, workloadidentity.ResolveIssuerParams{
+				OrganizationID: endpoint.OrganizationID,
+				ProjectID:      projectID,
+				IssuerURL:      issuerURL,
+			})
+			switch {
+			case errors.Is(err, workloadidentity.ErrIssuerNotFound):
+				return workloadidentity_repo.WorkloadIssuer{}, false, nil
+			case err != nil:
+				return workloadidentity_repo.WorkloadIssuer{}, false, fmt.Errorf("resolve workload issuer by url: %w", err)
+			}
+			return issuer, true, nil
+		},
+		allowAllWorkloadLookups,
+	)
+
+	issuer, err := admission.admit(ctx, endpoint, claims.Issuer)
+	if err != nil {
+		return err
+	}
+
+	source, err := workloadIssuerKeySource(endpoint, &issuer)
+	if err != nil {
+		return err
+	}
+
+	expectation := clientauth.WorkloadExpectation(
+		issuer.Issuer,
+		claims.Subject,
+		source,
+		endpoint.UserSessionIssuerID.String(),
+		issuer.ID.String(),
+		claims.Subject,
+		audiences,
+		clientauth.DefaultMaxLifetime,
+	)
+	if _, err := verifier.Verify(ctx, clientauth.Assertion{Value: raw, Type: clientauth.AssertionType}, expectation); err != nil {
+		return fmt.Errorf("verify workload assertion: %w", err)
+	}
+
+	return admitWorkloadIdentity(ctx, func(ctx context.Context, identity workloadIdentity) (bool, error) {
+		admitted, err := workloadidentity.IsAdmitted(ctx, db, workloadidentity.AdmissionParams{
+			OrganizationID:   identity.OrganizationID,
+			ProjectID:        identity.ProjectID,
+			WorkloadIssuerID: identity.WorkloadIssuerID,
+			Subject:          identity.ExternalSubject,
+		})
+		if err != nil {
+			return false, fmt.Errorf("check workload admission: %w", err)
+		}
+		return admitted, nil
+	}, endpoint, issuer.ID, claims.Subject)
+}
 
 // VerifyRemoteGrant exposes the grant hook to tests.
 func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {

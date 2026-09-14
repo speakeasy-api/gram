@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,9 @@ type WorkloadIssuer struct {
 	signer  jose.Signer
 	keyID   string
 	stopped bool
+
+	// requests counts every HTTP request the issuer has served.
+	requests atomic.Int64
 }
 
 // LaunchWorkloadIssuer starts an issuer and stops it when the test ends.
@@ -63,14 +67,15 @@ func LaunchWorkloadIssuer(t *testing.T) *WorkloadIssuer {
 	server.StartTLS()
 
 	issuer := &WorkloadIssuer{
-		URL:     server.URL,
-		server:  server,
-		logger:  logger,
-		config:  config,
-		mu:      sync.Mutex{},
-		signer:  nil,
-		keyID:   "",
-		stopped: false,
+		URL:      server.URL,
+		server:   server,
+		logger:   logger,
+		config:   config,
+		mu:       sync.Mutex{},
+		signer:   nil,
+		keyID:    "",
+		stopped:  false,
+		requests: atomic.Int64{},
 	}
 	issuer.rotate(t)
 
@@ -99,11 +104,23 @@ func (w *WorkloadIssuer) rotate(t *testing.T) {
 	)
 	require.NoError(t, err, "build signer")
 
+	served := mockoidc.NewServer(provider, w.logger).Handler()
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.signer = signer
 	w.keyID = provider.KeyID()
-	w.server.Config.Handler = mockoidc.NewServer(provider, w.logger).Handler()
+	w.server.Config.Handler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		w.requests.Add(1)
+		served.ServeHTTP(rw, r)
+	})
+}
+
+// Requests is how many HTTP requests have reached the issuer. A test asserting
+// that a rejection made no outbound request pins it here, at the only server
+// the request could have gone to, rather than inferring it from the verdict.
+func (w *WorkloadIssuer) Requests() int64 {
+	return w.requests.Load()
 }
 
 // Rotate replaces the issuer's signing key and publishes the new one, exactly

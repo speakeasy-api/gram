@@ -18,28 +18,28 @@ import (
 // resource rather than the ephemeral job.
 const testExternalSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// workloadExpectationFor is the assertion shape a workload presents: iss is
-// the platform that vouched for it and sub is the machine, where a client
-// assertion requires both to be the client_id. The key set is resolved from
-// the issuer over the network rather than handed over inline.
-func workloadExpectationFor(t *testing.T, issuer *oauthtest.WorkloadIssuer) clientauth.Expectation {
+// liveWorkloadExpectationFor is workloadExpectationFor against a live issuer:
+// iss is the platform that vouched for the workload and sub is the machine,
+// and the key set is resolved from the issuer over the network rather than
+// handed over inline.
+func liveWorkloadExpectationFor(t *testing.T, issuer *oauthtest.WorkloadIssuer) clientauth.Expectation {
 	t.Helper()
 
-	return clientauth.Expectation{
-		Issuer:    issuer.URL,
-		Subject:   testExternalSubject,
-		KeySource: issuer.KeySource(t),
+	return clientauth.WorkloadExpectation(
+		issuer.URL,
+		testExternalSubject,
+		issuer.KeySource(t),
 		// Spent identifiers are scoped by this endpoint, never by anything the
 		// assertion carries.
-		ReplayIssuer:  testIssuer,
-		ReplayParty:   issuer.URL,
-		ReplaySubject: testExternalSubject,
-		Audiences: clientauth.Audiences{
+		testIssuer,
+		issuer.URL,
+		testExternalSubject,
+		clientauth.Audiences{
 			Issuer:   testIssuer,
 			Endpoint: testTokenURL,
 		},
-		MaxLifetime: 0,
-	}
+		clientauth.DefaultMaxLifetime,
+	)
 }
 
 // newWorkloadVerifier is newVerifier with a key resolver that trusts the
@@ -89,7 +89,7 @@ func TestWorkloadIssuer_AssertionFromALiveIssuerVerifies(t *testing.T) {
 	issuer := oauthtest.LaunchWorkloadIssuer(t)
 	assertion := issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, testIssuer))
 
-	result, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), workloadExpectationFor(t, issuer))
+	result, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), liveWorkloadExpectationFor(t, issuer))
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -124,19 +124,19 @@ func TestWorkloadIssuer_RetiredKeyIsRejectedOnceTheCurrentSetIsHeld(t *testing.T
 	proof := issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, testIssuer))
 	retired := issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, testIssuer))
 
-	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(proof), workloadExpectationFor(t, issuer))
+	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(proof), liveWorkloadExpectationFor(t, issuer))
 	require.NoError(t, err, "the retiring key must work before the rotation, or the test proves nothing")
 
 	issuer.Rotate(t)
 
 	// A resolver holding the current set finds no key for the retired kid.
-	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(retired), workloadExpectationFor(t, issuer))
+	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(retired), liveWorkloadExpectationFor(t, issuer))
 	requireRejected(t, err, clientauth.ReasonKeyUnknown)
 
 	// And the issuer is still healthy: the rejection above is about the key
 	// that was retired, not about a server the rotation broke.
 	current := issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, testIssuer))
-	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(current), workloadExpectationFor(t, issuer))
+	_, err = newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(current), liveWorkloadExpectationFor(t, issuer))
 	require.NoError(t, err, "the republished key must verify against a resolver that fetched it")
 }
 
@@ -155,7 +155,7 @@ func TestWorkloadIssuer_UnreachableKeySetIsRefused(t *testing.T) {
 
 	issuer.Stop()
 
-	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), workloadExpectationFor(t, issuer))
+	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), liveWorkloadExpectationFor(t, issuer))
 
 	requireRejected(t, err, clientauth.ReasonKeyUnresolvable)
 }
@@ -172,7 +172,7 @@ func TestWorkloadIssuer_SubjectOtherThanTheAdmittedOneIsRejected(t *testing.T) {
 	// issued, and not ours.
 	assertion := issuer.Mint(t, issuer.WorkloadClaims("repo:someone-else/their-api:ref:refs/heads/main", testIssuer))
 
-	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), workloadExpectationFor(t, issuer))
+	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), liveWorkloadExpectationFor(t, issuer))
 
 	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
 }
@@ -185,7 +185,7 @@ func TestWorkloadIssuer_AudienceForAnotherServerIsRejected(t *testing.T) {
 	issuer := oauthtest.LaunchWorkloadIssuer(t)
 	assertion := issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, "https://gram.example.com/mcp/someone-else"))
 
-	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), workloadExpectationFor(t, issuer))
+	_, err := newWorkloadVerifier(t, issuer).Verify(t.Context(), assertionFor(assertion), liveWorkloadExpectationFor(t, issuer))
 
 	requireRejected(t, err, clientauth.ReasonAudienceMismatch)
 }
@@ -197,7 +197,7 @@ func TestWorkloadIssuer_ReplayedAssertionIsRejected(t *testing.T) {
 	t.Parallel()
 
 	issuer := oauthtest.LaunchWorkloadIssuer(t)
-	expectation := workloadExpectationFor(t, issuer)
+	expectation := liveWorkloadExpectationFor(t, issuer)
 	verifier := newWorkloadVerifier(t, issuer)
 
 	assertion := assertionFor(issuer.Mint(t, issuer.WorkloadClaims(testExternalSubject, testIssuer)))
