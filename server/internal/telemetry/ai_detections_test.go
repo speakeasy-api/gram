@@ -68,20 +68,29 @@ func TestUpsertAIDetectionsRejectsInvalidSignalAndCategory(t *testing.T) {
 // contract while both detection validators still accepted only harness and
 // local_model, so every scan naming an assistant-category target failed the
 // whole batch — taking the harness rows reported alongside it down too.
+//
+// The set comparison runs in both directions on purpose. Checking only that
+// every known category is accepted catches the drift above but not its
+// mirror: a category retired from KnownCategories would keep being written
+// here, and nothing would say so.
 func TestUpsertAIDetectionsAcceptsEveryKnownCategory(t *testing.T) {
 	t.Parallel()
-	logger := NewStub(testenv.NewLogger(t))
+	known := make([]string, 0, len(aitargets.KnownCategories()))
 	for _, category := range aitargets.KnownCategories() {
-		require.Containsf(t, aiDetectionCategories, string(category),
-			"category %q is in the ingest contract but rejected here", category)
+		known = append(known, string(category))
+	}
+	require.ElementsMatch(t, known, aiDetectionCategories,
+		"this write path and the scan-report ingest must accept the same categories")
 
+	logger := NewStub(testenv.NewLogger(t))
+	for _, category := range known {
 		detection := AIDetection{
 			OrganizationID: "org_test",
 			TargetID:       "cursor",
 			DeviceSerial:   "serial-1",
 			UserEmail:      "member@example.com",
 			Signal:         "installed",
-			Category:       string(category),
+			Category:       category,
 			Version:        "",
 			SeenAt:         time.Now().UTC(),
 		}
