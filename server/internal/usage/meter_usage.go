@@ -182,6 +182,14 @@ func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string
 	seriesTotals := make(map[*gen.MeterUsageSeries]*big.Int, len(seriesByIdentity))
 	for _, accumulator := range seriesByIdentity {
 		accumulator.series.Total = accumulator.total.String()
+		if payload.Family == string(metering.UsageFamilyRiskContentScans) && breakdown == "scanner" && accumulator.series.Kind == "value" {
+			switch *accumulator.series.Key {
+			case string(metering.MeterRiskGitleaks):
+				accumulator.series.Label = "Secret scanning"
+			case string(metering.MeterRiskPresidio):
+				accumulator.series.Label = "Sensitive data"
+			}
+		}
 		series = append(series, accumulator.series)
 		seriesTotals[accumulator.series] = accumulator.total
 	}
