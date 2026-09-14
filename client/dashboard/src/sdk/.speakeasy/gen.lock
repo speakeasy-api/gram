@@ -127,6 +127,7 @@ trackedFiles:
   src/funcs/aiIntegrationsUpsertAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
   src/funcs/analyticsDescribe.ts: {}
+  src/funcs/analyticsDimensionValues.ts: {}
   src/funcs/analyticsQuery.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
@@ -764,6 +765,8 @@ trackedFiles:
   src/models/components/allowedorigin.ts: {}
   src/models/components/analyticsdataset.ts: {}
   src/models/components/analyticsdescriberesult.ts: {}
+  src/models/components/analyticsdimensionvalue.ts: {}
+  src/models/components/analyticsdimensionvaluesresult.ts: {}
   src/models/components/analyticsfield.ts: {}
   src/models/components/analyticsfilter.ts: {}
   src/models/components/analyticsmeasure.ts: {}
@@ -917,6 +920,7 @@ trackedFiles:
   src/models/components/deviceintegrationproviderschedule.ts: {}
   src/models/components/deviceintegrationschedulestate.ts: {}
   src/models/components/deviceintegrationtestconnectionresult.ts: {}
+  src/models/components/dimensionvaluesrequestbody.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
@@ -1724,6 +1728,7 @@ trackedFiles:
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/analyticsdescribe.ts: {}
+  src/models/operations/analyticsdimensionvalues.ts: {}
   src/models/operations/analyticsquery.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -2426,6 +2431,8 @@ trackedFiles:
   src/react-query/aiIntegrationSchedules.ts: {}
   src/react-query/analyticsDescribe.core.ts: {}
   src/react-query/analyticsDescribe.ts: {}
+  src/react-query/analyticsDimensionValues.core.ts: {}
+  src/react-query/analyticsDimensionValues.ts: {}
   src/react-query/analyticsQuery.core.ts: {}
   src/react-query/analyticsQuery.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
@@ -3590,6 +3597,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsDimensionValues:
+    speakeasy-default-analytics-dimension-values:
+      requestBody:
+        application/json: {"dataset": "sessions", "dimension": "model", "from": "2026-12-07T17:23:32.803Z", "to": "2024-05-29T19:45:53.200Z"}
+      responses:
+        "200":
+          application/json: {"dataset": "<value>", "dimension": "<value>", "values": [{"count": 831783, "value": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   analyticsQuery:
     speakeasy-default-analytics-query:
       requestBody:

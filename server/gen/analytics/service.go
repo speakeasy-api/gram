@@ -24,6 +24,10 @@ type Service interface {
 	// Describe every dataset and the fields it exposes, with the operators and
 	// aggregations each admits.
 	Describe(context.Context, *DescribePayload) (res *AnalyticsDescribeResult, err error)
+	// List the values a dimension holds inside a window, most frequent first, for
+	// filter pickers. Values are resolved after the dataset collapses its
+	// observations, so every value returned is one a query would match.
+	DimensionValues(context.Context, *DimensionValuesPayload) (res *AnalyticsDimensionValuesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -46,7 +50,7 @@ const ServiceName = "analytics"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"query", "describe"}
+var MethodNames = [3]string{"query", "describe", "dimensionValues"}
 
 // A dataset and the fields it exposes. The builder is generated from this.
 type AnalyticsDataset struct {
@@ -62,6 +66,21 @@ type AnalyticsDataset struct {
 // method.
 type AnalyticsDescribeResult struct {
 	Datasets []*AnalyticsDataset
+}
+
+type AnalyticsDimensionValue struct {
+	// A non-empty value of the dimension
+	Value string
+	// Rows at the dataset's grain carrying this value inside the window
+	Count int64
+}
+
+// AnalyticsDimensionValuesResult is the result type of the analytics service
+// dimensionValues method.
+type AnalyticsDimensionValuesResult struct {
+	Dataset   string
+	Dimension string
+	Values    []*AnalyticsDimensionValue
 }
 
 // One queryable field on a dataset.
@@ -119,6 +138,23 @@ type AnalyticsQueryResult struct {
 
 // DescribePayload is the payload type of the analytics service describe method.
 type DescribePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// DimensionValuesPayload is the payload type of the analytics service
+// dimensionValues method.
+type DimensionValuesPayload struct {
+	// Dataset to look in
+	Dataset string
+	// Dimension to list values of
+	Dimension string
+	// Start of the half-open window [from, to), ISO 8601
+	From string
+	// End of the half-open window [from, to), ISO 8601
+	To string
+	// Maximum values. Defaults to 50, at most 200.
+	Limit            *int
 	SessionToken     *string
 	ProjectSlugInput *string
 }
