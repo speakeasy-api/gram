@@ -9,6 +9,7 @@ import {
   DirectorySyncStep,
   DistributeServersStep,
   InstrumentAgentsStep,
+  LiteLLMSetupStep,
   PlatformMCPSetupStep,
 } from "../steps";
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
@@ -108,6 +109,8 @@ export function TaskStepContent({
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":
       return <AnthropicInferenceHooksStep onComplete={onComplete} />;
+    case "litellm":
+      return <LiteLLMSetupStep onComplete={onComplete} />;
     case "anthropic-admin-controls":
       return <AnthropicAdminControlsStep onComplete={onComplete} />;
     case "connect-idp":

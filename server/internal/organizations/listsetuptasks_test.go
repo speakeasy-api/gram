@@ -29,7 +29,7 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	require.Len(t, result.Tasks, 4)
 	require.Equal(t, "identity-provider", result.Tasks[0].Key)
 	require.Equal(t, "additional-agent-config", result.Tasks[3].Key)
-	for _, key := range []string{"connect-idp", "directory-sync", "create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "distribute-servers", "configure-policies", "platform-mcp"} {
+	for _, key := range []string{"connect-idp", "directory-sync", "create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.Nil(t, setupTask(result.Tasks, key), key)
 	}
 	for _, task := range result.Tasks {
@@ -56,9 +56,9 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 13)
-	require.Equal(t, "platform-mcp", result.Tasks[12].Key)
-	for _, key := range []string{"connect-idp", "directory-sync", "create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "distribute-servers", "configure-policies", "platform-mcp"} {
+	require.Len(t, result.Tasks, 14)
+	require.Equal(t, "platform-mcp", result.Tasks[13].Key)
+	for _, key := range []string{"connect-idp", "directory-sync", "create-marketplace", "enable-logging", "confirm-traffic", "anthropic-admin-controls", "litellm", "distribute-servers", "configure-policies", "platform-mcp"} {
 		require.True(t, setupTask(result.Tasks, key).Hidden, key)
 	}
 	require.False(t, setupTask(result.Tasks, "identity-provider").Hidden)
@@ -69,7 +69,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	require.ElementsMatch(t, []string{
 		"connect-idp", "directory-sync", "create-marketplace", "enable-logging",
 		"identity-provider", "anthropic-observability", "anthropic-admin-controls",
-		"instrument-agents", "additional-agent-config", "confirm-traffic",
+		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp",
 	}, keys)
 	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy)
@@ -374,7 +374,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 	for _, key := range []string{
 		"connect-idp", "directory-sync", "create-marketplace", "enable-logging",
 		"identity-provider", "anthropic-observability", "anthropic-admin-controls",
-		"instrument-agents", "additional-agent-config", "confirm-traffic",
+		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp",
 	} {
 		task, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: key, Status: &done})
