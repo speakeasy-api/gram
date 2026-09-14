@@ -874,6 +874,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	return nil
 }
 
+// redirectStatus reports the status of the response that produced req, which
+// net/http populates only on a redirected request.
+func redirectStatus(req *http.Request) int {
+	if req.Response == nil {
+		return 0
+	}
+	return req.Response.StatusCode
+}
+
 // forwardRequest builds and sends the upstream HTTP request, applying a
 // two-phase timeout policy:
 //
@@ -951,6 +960,13 @@ func (p *Proxy) forwardRequest(
 			// Redirects are still followed, but a hop off the configured
 			// origin travels without the project's credentials.
 			if !sameRemoteMCPOrigin(configuredOrigin, req.URL) {
+				// 307 and 308 are the codes that replay method and body, so
+				// following one off-origin would hand the JSON-RPC request —
+				// tool arguments included — to a host the upstream chose.
+				// Stripping credentials does not cover that, so refuse.
+				if status := redirectStatus(req); status == http.StatusTemporaryRedirect || status == http.StatusPermanentRedirect {
+					return fmt.Errorf("remote MCP redirect to %s: %w", req.URL.Host, ErrCrossOriginRemoteMCPRedirect)
+				}
 				p.stripConfiguredCredentials(req.Header)
 			}
 			return nil
