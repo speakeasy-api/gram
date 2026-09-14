@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,7 +14,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 // toyReply exercises the generic inbox with a payload unrelated to risk
@@ -49,6 +52,24 @@ type toyEnv struct {
 	client *redis.Client
 	inbox  *Inbox[toyReply]
 	writer *Writer[toyReply]
+	reader *sdkmetric.ManualReader
+}
+
+type blockingRegistration struct {
+	metric.Registration
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+	err     error
+}
+
+func (r *blockingRegistration) Unregister() error {
+	r.once.Do(func() {
+		close(r.started)
+		<-r.release
+		r.err = r.Registration.Unregister()
+	})
+	return r.err
 }
 
 func setupToyInbox(t *testing.T, replicaID string, drainFunc func(context.Context)) *toyEnv {
@@ -80,7 +101,26 @@ func setupToyInbox(t *testing.T, replicaID string, drainFunc func(context.Contex
 		Encode:        toyCodec().Encode,
 		CorrelationID: toyCodec().CorrelationID,
 	})
-	return &toyEnv{redis: mr, client: client, inbox: inbox, writer: writer}
+	return &toyEnv{redis: mr, client: client, inbox: inbox, writer: writer, reader: reader}
+}
+
+func collectInt64Gauge(t *testing.T, reader *sdkmetric.ManualReader, name string) (int64, bool) {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			gauge, ok := m.Data.(metricdata.Gauge[int64])
+			require.True(t, ok)
+			require.Len(t, gauge.DataPoints, 1)
+			return gauge.DataPoints[0].Value, true
+		}
+	}
+	return 0, false
 }
 
 func TestToyInstantiationRoundTrip(t *testing.T) {
@@ -161,6 +201,45 @@ func TestDrainerSupervisorRestartsAfterPanic(t *testing.T) {
 		stats := te.inbox.Snapshot()
 		return attempts.Load() >= 2 && stats.DrainerAlive && stats.DrainerErrors == 1
 	}, 2*time.Second, 5*time.Millisecond)
+}
+
+func TestDrainerAliveMetricIsAHeartbeat(t *testing.T) {
+	t.Parallel()
+
+	te := setupToyInbox(t, "toy-heartbeat", nil)
+	require.Eventually(t, te.inbox.drainerAlive.Load, time.Second, 5*time.Millisecond)
+
+	value, ok := collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
+	require.True(t, ok)
+	require.Equal(t, int64(1), value)
+	value, ok = collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
+	require.True(t, ok)
+	require.Equal(t, int64(1), value)
+
+	// Hold unregistration open so Close's final false state can be collected.
+	registration := &blockingRegistration{
+		Registration: te.inbox.drainerAliveRegistration,
+		started:      make(chan struct{}),
+		release:      make(chan struct{}),
+		once:         sync.Once{},
+		err:          nil,
+	}
+	te.inbox.drainerAliveRegistration = registration
+	var releaseOnce sync.Once
+	releaseRegistration := func() { releaseOnce.Do(func() { close(registration.release) }) }
+	defer releaseRegistration()
+	closeResult := make(chan error, 1)
+	go func() { closeResult <- te.inbox.Close() }()
+	<-registration.started
+
+	value, ok = collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
+	require.True(t, ok)
+	require.Equal(t, int64(0), value)
+	releaseRegistration()
+	require.NoError(t, <-closeResult)
+
+	_, ok = collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
+	require.False(t, ok)
 }
 
 func TestMissingCodecOrNamespaceIsRejected(t *testing.T) {
