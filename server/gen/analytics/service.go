@@ -59,7 +59,10 @@ type AnalyticsDataset struct {
 	// What one row represents, as a noun
 	Grain       string
 	Description string
-	Fields      []*AnalyticsField
+	// The field a row list shows as its headline beside time, when the dataset
+	// nominates one
+	SummaryField *string
+	Fields       []*AnalyticsField
 }
 
 // AnalyticsDescribeResult is the result type of the analytics service describe

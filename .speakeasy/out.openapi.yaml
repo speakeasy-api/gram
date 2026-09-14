@@ -70306,6 +70306,10 @@ components:
         name:
           type: string
           example: sessions
+        summary_field:
+          type: string
+          description: The field a row list shows as its headline beside time, when the dataset nominates one
+          example: tool_name
       description: A dataset and the fields it exposes. The builder is generated from this.
       required:
         - name
