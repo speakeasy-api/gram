@@ -64,7 +64,7 @@ type IssuedKey = { agentId: string; keyId: string; value: string };
 
 export default function DeviceAgentAgentIdentity(): JSX.Element {
   return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
+    <RequireScope scope="org:admin" level="page">
       <AgentIdentityOnboarding />
     </RequireScope>
   );

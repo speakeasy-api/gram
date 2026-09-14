@@ -73,10 +73,9 @@ function candidateCovers(
 ): boolean {
   if (candidate.effect !== "allow" || candidate.scope !== required.scope)
     return false;
-  if (candidate.selector.resourceKind !== required.selector.resourceKind)
-    return false;
-  const id = candidate.selector.resourceId;
-  return id === ANY_RESOURCE || id === required.selector.resourceId;
+  // Strict containment: a candidate constraining any dimension the required
+  // grant leaves open would mint a key too narrow for the device agent.
+  return requestNarrowsPolicy(candidate.selector, required.selector);
 }
 
 /**
@@ -169,7 +168,7 @@ export function buildAgentIdentitySnippet(
   const linger =
     input.os === "linux"
       ? `# Keep the per-user service running after logout.
-loginctl enable-linger "$USER"
+$SUDO loginctl enable-linger "$USER"
 `
       : "";
   const run =

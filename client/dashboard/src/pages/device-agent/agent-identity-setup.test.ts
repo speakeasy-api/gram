@@ -80,6 +80,32 @@ describe("device agent key grants", () => {
     expect(buildRequestedGrants(selections)).toEqual(required);
   });
 
+  it("accepts an exact project candidate unchanged", () => {
+    const { selections, missingScopes } = selectDeviceAgentKeyGrants(
+      required,
+      required,
+    );
+    expect(missingScopes).toEqual([]);
+    expect(buildRequestedGrants(selections)).toEqual(required);
+  });
+
+  it("rejects a candidate that constrains an extra dimension", () => {
+    const narrowed: AgentPolicyGrantForm = {
+      effect: "allow",
+      scope: "project:read",
+      selector: {
+        resourceKind: "project",
+        resourceId: "*",
+        tool: "only_this_tool",
+      },
+    };
+    const { missingScopes } = selectDeviceAgentKeyGrants(
+      [required[0]!, required[1]!, narrowed],
+      required,
+    );
+    expect(missingScopes).toEqual(["project:read"]);
+  });
+
   it("reports scopes no candidate covers", () => {
     const { missingScopes } = selectDeviceAgentKeyGrants(
       [required[2]!],
@@ -136,9 +162,12 @@ describe("agent identity snippet", () => {
 
   it("keeps the Linux service alive after logout", () => {
     const snippet = buildAgentIdentitySnippet({ ...base, mode: "service" });
-    expect(snippet.indexOf('loginctl enable-linger "$USER"')).toBeLessThan(
-      snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'),
-    );
+    expect(
+      snippet.indexOf('$SUDO loginctl enable-linger "$USER"'),
+    ).toBeGreaterThan(-1);
+    expect(
+      snippet.indexOf('$SUDO loginctl enable-linger "$USER"'),
+    ).toBeLessThan(snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'));
     expect(snippet.indexOf("loginctl")).toBeGreaterThan(-1);
   });
 
