@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -78,7 +79,12 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 	// retrying here only adds activity failures. A claim leaked by a crashed
 	// attempt lapses at the TTL, after which no statement from that attempt
 	// can still be in flight.
-	claimed, err := s.cache.Add(ctx, identityMapReplaceLockKey, identityMapReplaceLockTTL)
+	leases, ok := s.cache.(cache.LeaseCache)
+	if !ok {
+		return nil, fmt.Errorf("identity map cache does not support ownership-aware leases")
+	}
+	owner := uuid.NewString()
+	claimed, err := leases.AcquireLease(ctx, identityMapReplaceLockKey, owner, identityMapReplaceLockTTL)
 	if err != nil {
 		return nil, fmt.Errorf("claim identity map replacement lock: %w", err)
 	}
@@ -90,7 +96,7 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 	rows, err := s.store.ListIdentityMapEntries(ctx)
 	if err != nil {
 		// Nothing has reached ClickHouse yet, so the claim is safe to release.
-		s.releaseLock(ctx)
+		s.releaseLock(ctx, leases, owner)
 		return nil, fmt.Errorf("list identity map entries: %w", err)
 	}
 
@@ -113,7 +119,7 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 
 	// Release on success so the schedule and link-event triggers are not
 	// blocked for the remainder of the TTL.
-	s.releaseLock(ctx)
+	s.releaseLock(ctx, leases, owner)
 
 	// This success line is the staleness signal: a quiet component means the
 	// map is drifting from Postgres until the next successful pass.
@@ -122,9 +128,15 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 	return &SyncIdentityMapResult{Entries: len(entries), Deferred: false}, nil
 }
 
-// releaseLock is best effort: a leaked claim merely delays the next refresh.
-func (s *SyncIdentityMap) releaseLock(ctx context.Context) {
-	if err := s.cache.Delete(context.WithoutCancel(ctx), identityMapReplaceLockKey); err != nil {
+// releaseLock only clears this attempt's own claim, so a run that outlived
+// the TTL cannot evict a successor's. Best effort: a leaked claim merely
+// delays the next refresh.
+func (s *SyncIdentityMap) releaseLock(ctx context.Context, leases cache.LeaseCache, owner string) {
+	released, err := leases.ReleaseLeaseIfOwner(context.WithoutCancel(ctx), identityMapReplaceLockKey, owner)
+	switch {
+	case err != nil:
 		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
+	case !released:
+		s.logger.WarnContext(ctx, "identity map replacement lock expired before release")
 	}
 }
