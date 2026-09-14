@@ -1,4 +1,4 @@
--- LOCAL-ONLY prerequisites for marts views, also used by CI and Atlas's
+-- LOCAL-ONLY prerequisites for reporting views, also used by CI and Atlas's
 -- development database. This is not a ClickHouse Cloud provisioning template.
 -- Terraform owns databases, users, roles, credentials, and role settings in Cloud.
 -- Never copy their CREATE statements into application schema migrations.

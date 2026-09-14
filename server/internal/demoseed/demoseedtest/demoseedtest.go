@@ -113,14 +113,15 @@ type ClickHouseTableState struct {
 	DemoCount uint64
 }
 
-// SnapshotClickHouse captures the state of every MergeTree-family table in the
-// current database. Each table is OPTIMIZE ... FINAL'd first so background
-// merges (which collapse rows in Summing/Aggregating tables) cannot shift
-// counts between two snapshots.
+// SnapshotClickHouse captures every MergeTree-family table in the current
+// database. Engines that collapse same-key rows are OPTIMIZE ... FINAL'd first
+// so background merges cannot shift counts between snapshots. Plain MergeTree
+// rows are already stable without merging.
 func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, projectIDs []string) (map[string]ClickHouseTableState, error) {
 	rows, err := ch.Query(ctx, `
 		SELECT name, engine FROM system.tables
-		WHERE database = currentDatabase() AND engine LIKE '%MergeTree%'
+		WHERE database = currentDatabase()
+			AND engine LIKE '%MergeTree%'
 		ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list clickhouse tables: %w", err)
@@ -149,8 +150,10 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 
 	snap := make(map[string]ClickHouseTableState, len(tables))
 	for _, t := range tables {
-		if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
-			return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+		if t.engine != "MergeTree" && t.engine != "ReplicatedMergeTree" && t.engine != "SharedMergeTree" {
+			if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
+				return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+			}
 		}
 
 		cols, err := ch.Query(ctx, `
