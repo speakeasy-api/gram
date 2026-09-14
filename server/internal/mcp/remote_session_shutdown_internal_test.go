@@ -53,13 +53,13 @@ func TestRemoteSessionShutdownReleasesSlotCancelledAfterAcquisition(t *testing.T
 
 // remoteSessionErrHookContext injects a cancellation at a deterministic checkpoint.
 type remoteSessionErrHookContext struct {
-	context.Context
-	beforeErr func()
+	context.Context //nolint:containedctx // the type is itself a context wrapper.
+	beforeErr       func()
 }
 
 func (c remoteSessionErrHookContext) Err() error {
 	c.beforeErr()
-	return c.Context.Err()
+	return c.Context.Err() //nolint:wrapcheck // a context's Err must stay the bare sentinel.
 }
 
 func TestRemoteSessionShutdownClosesBothAdmissionGatesBeforeDraining(t *testing.T) {
