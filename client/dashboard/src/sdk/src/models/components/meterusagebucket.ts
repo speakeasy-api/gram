@@ -17,7 +17,7 @@ export type MeterUsageBucket = {
    */
   to: Date;
   /**
-   * Exact signed integer quantity as a decimal string
+   * Exact integer ordinary usage quantity as a decimal string
    */
   total: string;
 };

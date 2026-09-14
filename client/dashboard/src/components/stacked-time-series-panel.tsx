@@ -405,33 +405,26 @@ export function StackedTimeSeriesPanel({
           if (dataset.type === "line") {
             return {
               ...dataset,
+              hidden: hiddenKeys.has(dataset.key),
               borderColor: color,
               backgroundColor: "transparent",
             };
           }
-          return { ...dataset, backgroundColor: color };
+          return {
+            ...dataset,
+            hidden: hiddenKeys.has(dataset.key),
+            backgroundColor: color,
+          };
         }),
       },
       buckets: rolled.buckets,
       starts: rolled.starts,
       ends: rolled.ends,
     }),
-    [rolled, focus],
+    [rolled, focus, hiddenKeys],
   );
 
   const hasData = rolled.datasets.length > 0;
-  const datasetKeys = useMemo(
-    () => rolled.datasets.map((dataset) => dataset.key),
-    [rolled.datasets],
-  );
-  useEffect(() => {
-    const instance = chartRef.current;
-    if (!instance) return;
-    datasetKeys.forEach((key, index) => {
-      instance.setDatasetVisibility(index, !hiddenKeys.has(key));
-    });
-    instance.update();
-  }, [datasetKeys, hiddenKeys]);
 
   const buckets = chart.buckets;
   const drillToBuckets = useCallback(
@@ -633,6 +626,7 @@ export function StackedTimeSeriesPanel({
               <Chart<"bar" | "line", number[], string>
                 ref={chartRef}
                 type="bar"
+                datasetIdKey="key"
                 data={chart.data}
                 options={chartOptions}
               />

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { useOrganization } from "@/contexts/Auth";
 import { useGetMeterUsage } from "@gram/client/react-query/getMeterUsage.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
@@ -16,7 +17,6 @@ import {
   METER_FAMILIES,
   meterBreakdownLabel,
   type MeterFamily,
-  type MeterReadingKind,
 } from "./meter-breakdown-options";
 import {
   adaptMeterChart,
@@ -46,15 +46,6 @@ const FAMILY_OPTIONS = [
   },
 ] satisfies { value: MeterFamily; label: string; tooltip: string }[];
 
-const READING_KIND_OPTIONS = [
-  { value: "usage", label: "Usage", tooltip: "Ordinary meter readings" },
-  {
-    value: "adjustment",
-    label: "Adjustments",
-    tooltip: "Separate signed correction readings",
-  },
-] satisfies { value: MeterReadingKind; label: string; tooltip: string }[];
-
 function periodDisplayRange(period: { from: Date; to: Date }): {
   from: Date;
   to: Date;
@@ -70,7 +61,6 @@ function periodDisplayRange(period: { from: Date; to: Date }): {
 
 export function MeterUsageSection(): JSX.Element {
   const [family, setFamily] = useState<MeterFamily>("agent_session_storage");
-  const [readingKind, setReadingKind] = useState<MeterReadingKind>("usage");
   const [breakdownByFamily, setBreakdownByFamily] = useState<
     Record<MeterFamily, string>
   >({
@@ -90,7 +80,6 @@ export function MeterUsageSection(): JSX.Element {
   const request = {
     family,
     breakdown,
-    readingKind,
     ...(period ? { from: period.from, to: period.to } : {}),
   };
   const query = useGetMeterUsage(request, undefined, { throwOnError: false });
@@ -106,19 +95,22 @@ export function MeterUsageSection(): JSX.Element {
     undefined,
     { throwOnError: false },
   );
-  const projectNames = useMemo(
-    () =>
-      new Map([
-        ...organization.projects.map(
-          (project) => [project.id, project.name] as const,
-        ),
-        ...(projectsQuery.data?.projects ?? []).map(
-          (project) => [project.id, project.name] as const,
-        ),
-      ]),
-    [organization.projects, projectsQuery.data],
+  const projectSlugs = useMemo(() => {
+    const slugs = new Map<string, string>();
+    for (const projects of [
+      organization.projects,
+      projectsQuery.data?.projects ?? [],
+    ]) {
+      for (const project of projects) {
+        if (project.slug) slugs.set(project.id, project.slug);
+      }
+    }
+    return slugs;
+  }, [organization.projects, projectsQuery.data]);
+  const chart = useMemo(
+    () => adaptMeterChart(data, projectSlugs),
+    [data, projectSlugs],
   );
-  const chart = useMemo(() => adaptMeterChart(data), [data]);
 
   const totalSeries = useMemo(
     () =>
@@ -159,12 +151,21 @@ export function MeterUsageSection(): JSX.Element {
     explorer = <Skeleton className="h-[480px] w-full" />;
   } else {
     const quantity = formatMeterQuantity(data.total, data.unit);
+    const now = new Date();
     const dailyRate = formatDailyMeterRate(
       data.total,
       data.unit,
       data.window.from,
       data.window.to,
-      new Date(),
+      now,
+    );
+    const exactDailyRate = formatDailyMeterRate(
+      data.total,
+      data.unit,
+      data.window.from,
+      data.window.to,
+      now,
+      "standard",
     );
     explorer = (
       <div key={periodState.viewNonce} className="space-y-4">
@@ -175,30 +176,23 @@ export function MeterUsageSection(): JSX.Element {
         )}
         <MetricCard.Group>
           <MetricCard
-            label={
-              readingKind === "adjustment" ? "Net adjustment" : "Total usage"
-            }
+            label="Total usage"
             value={
-              <span className="break-all tabular-nums" title={quantity}>
+              <span
+                className="break-all tabular-nums"
+                title={formatMeterQuantity(data.total, data.unit, "standard")}
+              >
                 {quantity}
               </span>
             }
-            description={`${definition.label} · ${data.measurementMethod}`}
-            tone={
-              readingKind === "adjustment" && BigInt(data.total) < 0n
-                ? "warning"
-                : "information"
-            }
+            description={definition.label}
+            tone="information"
             size="sm"
           />
           <MetricCard
-            label={
-              readingKind === "adjustment"
-                ? "Average daily adjustment"
-                : "Average daily usage"
-            }
+            label="Average daily usage"
             value={
-              <span className="break-all tabular-nums" title={dailyRate}>
+              <span className="break-all tabular-nums" title={exactDailyRate}>
                 {dailyRate}
               </span>
             }
@@ -222,16 +216,16 @@ export function MeterUsageSection(): JSX.Element {
             />
           }
           totalSeries={breakdown === "total" ? undefined : totalSeries}
-          formatValue={(value) =>
-            formatMeterQuantity(Math.trunc(value).toString(), data.unit)
+          formatValue={(value) => formatMeterAxis(value, data.unit)}
+          formatExactValue={(value) =>
+            formatMeterQuantity(value, data.unit, "standard")
           }
-          formatExactValue={(value) => formatMeterQuantity(value, data.unit)}
-          formatAxisValue={formatMeterAxis}
+          formatAxisValue={(value) => formatMeterAxis(value, data.unit)}
           emptyMessage="No meter readings recorded. Usage reflects the new metering system."
           loading={query.isFetching && !data}
           onSelectRange={periodState.selectChartRange}
         />
-        <MeterUsageTable data={data} projectNames={projectNames} />
+        <MeterUsageTable data={data} projectSlugs={projectSlugs} />
       </div>
     );
   }
@@ -241,8 +235,8 @@ export function MeterUsageSection(): JSX.Element {
       <Page.Section.Title>Meter usage</Page.Section.Title>
       <Page.Section.Description>
         Explore storage, bandwidth, and risk-scanning volume by UTC day. Today's
-        totals update as readings arrive. Usage and adjustments are reported
-        separately and are not invoice estimates.
+        totals update as readings arrive. These usage totals are not invoice
+        estimates.
       </Page.Section.Description>
       <Page.Section.Body>
         <Page.Toolbar>
@@ -254,13 +248,6 @@ export function MeterUsageSection(): JSX.Element {
                 options={FAMILY_OPTIONS}
               />
             </Page.Toolbar.Leading>
-            <Page.Toolbar.Actions>
-              <SegmentedControl
-                value={readingKind}
-                onChange={setReadingKind}
-                options={READING_KIND_OPTIONS}
-              />
-            </Page.Toolbar.Actions>
           </Page.Toolbar.Row>
           <Page.Toolbar.Row>
             <Page.Toolbar.Leading>
@@ -287,13 +274,15 @@ export function MeterUsageSection(): JSX.Element {
                   />
                 </div>
               )}
-            </Page.Toolbar.Leading>
-            <Page.Toolbar.Actions>
-              <Button variant="secondary" size="sm" onClick={periodState.reset}>
-                <RotateCcw className="size-3.5" />
+              <Button
+                variant="secondary"
+                className={CONTROL_HEIGHT}
+                onClick={periodState.reset}
+              >
+                <RotateCcw className="size-4" />
                 Reset
               </Button>
-            </Page.Toolbar.Actions>
+            </Page.Toolbar.Leading>
             <Page.Toolbar.Refresh
               onRefresh={() => void query.refetch()}
               isRefreshing={query.isFetching}

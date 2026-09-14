@@ -1603,29 +1603,6 @@ ORDER BY meter_id, operation_id
 LIMIT 1 BY meter_id
 SETTINGS do_not_merge_across_partitions_select_final = 1;
 
--- Separate positive and negative adjustments. They never mutate or net into
--- ordinary usage, and preserve the original's measurement and reporting facets.
-INSERT INTO billing_meter_readings_by_time
-  (id, organization_id, project_id, meter_id, operation_id, unit,
-   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
-WITH lower(hex(MD5(concat('gram-demo-meter-adjustment-', toString(original.id), toString(sign))))) AS h
-SELECT
-  toUUID(concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
-                '-8', substring(h, 18, 3), '-', substring(h, 21, 12))),
-  organization_id, project_id, meter_id,
-  concat('gram-demo-meter-adjustment-', toString(original.id), '-', toString(sign)),
-  unit, measurement_method, toInt64(if(sign < 0, -250, 100)),
-  occurred_at - toIntervalDay(if(sign < 0, 1, 0)), now64(9, 'UTC'), original.id, attributes
-FROM (
-  SELECT id, organization_id, project_id, meter_id, unit, measurement_method, occurred_at, attributes
-  FROM billing_meter_readings_by_time FINAL
-  WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage'
-  ORDER BY meter_id, operation_id
-  LIMIT 1 BY meter_id
-) AS original
-ARRAY JOIN [-1, 1] AS sign
-SETTINGS do_not_merge_across_partitions_select_final = 1;
-
 SELECT throwIf(
   (SELECT count() FROM billing_meter_readings_by_time FINAL
    WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 864,
@@ -1636,15 +1613,15 @@ SELECT throwIf(
   (SELECT uniqExact(meter_id) FROM billing_meter_readings_by_time FINAL
    WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 9
   OR (SELECT count() FROM billing_meter_readings_by_time FINAL
-      WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'adjustment') != 18,
-  'demo seed postflight: meter families or separate adjustments missing')
+      WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind != 'usage') != 0,
+  'demo seed postflight: meter families missing or unexpected non-usage readings')
 SETTINGS do_not_merge_across_partitions_select_final = 1;
 
 SELECT throwIf(
   (SELECT sum(reading_count) FROM billing_meter_daily_summaries
    WHERE organization_id = 'org_gram_demo_workspace'
-     AND facet = 'total') != 891,
-  'demo seed postflight: incremental meter summaries missing or duplicated');
+     AND facet = 'total') != 873,
+  'demo seed postflight: ordinary meter deliveries missing or duplicated');
 
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero

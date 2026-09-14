@@ -35,11 +35,11 @@ export type MeterUsageSeries = {
    */
   label: string;
   /**
-   * Exact signed integer series total as a decimal string
+   * Exact integer ordinary usage series total as a decimal string
    */
   total: string;
   /**
-   * Exact signed integer values aligned one-for-one with buckets
+   * Exact integer ordinary usage values aligned one-for-one with buckets
    */
   values: Array<string>;
 };

@@ -18,9 +18,9 @@ import (
 type Service interface {
 	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
-	// Get incrementally aggregated meter usage by UTC day over a maximum of three
-	// calendar months. Duplicate deliveries count unless prevented by the producer
-	// or corrected out of band.
+	// Get incrementally aggregated ordinary meter usage by UTC day over a maximum
+	// of three calendar months. Duplicate deliveries count unless prevented by the
+	// producer.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *MeterUsageResponse, err error)
 	// Get tokens under management for the active billing cycle alongside the
 	// contracted terms
@@ -153,8 +153,6 @@ type GetMeterUsagePayload struct {
 	To *string
 	// Family-compatible reporting facet
 	Breakdown *string
-	// Select ordinary usage or separate signed adjustments
-	ReadingKind string
 }
 
 // GetPaygBillingSummaryPayload is the payload type of the usage service
@@ -204,23 +202,22 @@ type MeterUsageBucket struct {
 	From string
 	// Exclusive bucket boundary
 	To string
-	// Exact signed integer quantity as a decimal string
+	// Exact integer ordinary usage quantity as a decimal string
 	Total string
 }
 
 // MeterUsageResponse is the result type of the usage service getMeterUsage
 // method.
 type MeterUsageResponse struct {
-	Family      string
-	ReadingKind string
-	Window      *MeterUsageWindow
+	Family string
+	Window *MeterUsageWindow
 	// Trailing twelve billing-cycle date windows
 	BillingCycles     []*MeterUsageWindow
 	Unit              string
 	MeasurementMethod string
-	// Exact signed integer period total as a decimal string
+	// Exact integer ordinary usage period total as a decimal string
 	Total string
-	// Dense UTC daily buckets, including in-progress days
+	// Dense UTC daily ordinary usage buckets, including in-progress days
 	Buckets   []*MeterUsageBucket
 	Breakdown *MeterUsageBreakdown
 	// Retrieval timestamp, not an ingestion watermark
@@ -234,9 +231,9 @@ type MeterUsageSeries struct {
 	Key *string `json:"key"`
 	// Display label, never chart identity
 	Label string
-	// Exact signed integer series total as a decimal string
+	// Exact integer ordinary usage series total as a decimal string
 	Total string
-	// Exact signed integer values aligned one-for-one with buckets
+	// Exact integer ordinary usage values aligned one-for-one with buckets
 	Values []string
 }
 

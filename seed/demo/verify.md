@@ -260,12 +260,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     missing attribution and a remainder. Chart series and table totals sum to
     the headline exactly, including after weekly/monthly and cumulative toggles.
     Hide/show a legend series and drill into a day without losing the selected
-    family. Switch to adjustments: signed positive/negative activity is separate
-    from ordinary usage, whose total does not change. A historical empty range
-    shows “No meter readings recorded,” not legacy telemetry usage. Invoice/
-    contract estimates remain in their separate section. Compare the API totals
-    with `billing_meter_readings_by_time FINAL` per reading kind: the nine
-    duplicate deliveries must not increase usage. Run the seed twice and repeat.
+    family. The dashboard and API report ordinary usage only. A historical empty
+    range shows “No meter readings recorded,” not legacy telemetry usage.
+    Invoice/contract estimates remain in their separate section. Compare the API
+    totals with the 864 ordinary rows in `billing_meter_readings_by_time FINAL`
+    across all nine meters. The nine intentional duplicate physical deliveries
+    must not increase API usage, while the incremental summary records all 873
+    deliveries. Run the seed twice and repeat.
 
 ## On failure
 

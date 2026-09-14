@@ -32,27 +32,29 @@
 
 - `usage.getMeterUsage` remains an additive organization-scoped GET method under `server/design/usage/design.go`, implemented in `server/internal/usage/meter_usage.go`. Organization comes from auth; existing `org:read` enforcement remains.
 - Dedicated ClickHouse read-replica connection only. Missing configuration or reader failure must not fall back to the writer. Infrastructure owns reader endpoints and SELECT privileges.
-- Filter daily summaries by organization, family, reading kind, facet, and `[from day, to day)`.
-- Rank six identities over the whole period: descending signed quantity for usage, descending absolute net quantity for adjustments, deterministic identity tie-breaks.
+- Filter daily summaries by organization, family, fixed `reading_kind = 'usage'`, facet, and `[from day, to day)`. No public reading-kind selector or response field.
+- Rank six identities over the whole period by descending quantity with deterministic identity tie-breaks.
 - Group the selected facet's daily quantities into these six identities plus remainder. Compute the response's total and daily buckets from the returned series; do not subtract totals fetched from a separately changing source. Detect incompatible units/methods across all input groups, not just winners.
 - Keep grouping state and response bounded; no full day/value expansion transferred to Go or the browser. Retain all stored series, not daily top six.
 - Distinguish `value`, `unset`, and `remainder` identities. Directory group sets remain sorted intact sets. MCP identity uses type plus ID, with slug only as a label.
+- Project-facet chart and table labels use available project slugs from accessible project metadata, falling back to IDs. This is display-only: API series keys, grouping, attribution, and quantities remain unchanged.
 - Exact signed decimal strings on the wire; BigInt for client aggregation; Number only for chart coordinates. Dense UTC daily buckets, aligned series arrays, exact weekly/monthly/cumulative totals. No partial-day clipping.
-- Every series sum equals its total; every bucket equals the sum of its series values; both reconcile to period total. Net-zero signed activity remains visible.
+- Display token quantities in decimal KTok/MTok/BTok and bytes in binary KiB/MiB/GiB, rounded to at most one decimal. Keep full quantities in hover details. Compact scaling and elapsed-day rates use integer arithmetic; promote rounded values across unit boundaries.
+- Every series sum equals its total; every bucket equals the sum of its series values; both reconcile to period total.
 - Reports are eventually consistent. `queried_at` is retrieval time, not an ingestion watermark or read-your-write promise.
 
 ## Meter semantics and product boundary
 
-| Family     | Meter selection              | Unit     | Default   |
-| ---------- | ---------------------------- | -------- | --------- |
-| Storage    | `gram.agent_session.storage` | s-tokens | Total     |
-| Bandwidth  | MCP ingress and egress       | bytes    | Direction |
-| Risk scans | All six registered scanners  | s-tokens | Scanner   |
+| Family     | Meter selection              | Unit   | Default   |
+| ---------- | ---------------------------- | ------ | --------- |
+| Storage    | `gram.agent_session.storage` | tokens | Total     |
+| Bandwidth  | MCP ingress and egress       | bytes  | Direction |
+| Risk scans | All six registered scanners  | tokens | Scanner   |
 
 - Storage is stored-message workload, not provider inference consumption. Bandwidth measures application-visible body bytes. Risk measures content scanned, not detections or unique content; multiple scanners legitimately count separately.
-- Usage and adjustments stay separate. Never join adjustments back onto originals or reconcile usage to invoice estimates.
+- Report ordinary usage only; adjustments are not planned for the dashboard or API. Existing internal correction records and schema remain intact but excluded from reporting. Never reconcile usage to invoice estimates.
 - Frozen producer attribution remains the upstream contract. No current-directory enrichment or actor-to-billing-user inference in reporting.
-- Existing independent billing-position/admin-estimator UI remains intact. Preserve all three family views, signed stacks, legends, cumulative mode, and exact tooltips.
+- Existing independent billing-position/admin-estimator UI remains intact. Preserve all three family views, legends, cumulative mode, and exact tooltips.
 - Demo reseeding deletes only its organization's raw and aggregate rows before reinsertion; the MV populates summaries naturally. No global rebuild or summary-publication exception in tenant-safety checks.
 
 ## Steps
@@ -62,15 +64,15 @@
 - [x] Replaced the checkpointed rebuild with incremental UTC-day SummingMergeTree reporting and one consolidated migration. Verified deliveries, late/unmerged increments, tenant safety, exact period ranking, and write overhead. The five-reader 20,000-user gates pass under the one-GiB server budget; the larger-cardinality latency limitation and separate raw-ingestion evidence are recorded below.
 - [x] Added the Goa method, embedded cycle windows, family/facet catalog, generated SDK and response contract; descriptions and validation enforce UTC-day precision.
 - [x] Separated billing position/estimates from the storage explorer.
-- [x] Added bandwidth/scanner views, exact aggregates, separate adjustments, and chart controls; calendar selection and chart drilldown select UTC days.
+- [x] Added bandwidth/scanner views, exact aggregates, and chart controls; calendar selection and chart drilldown select UTC days.
 - [x] Seeded all nine meters, verified local rendering and tenant safety, and completed two incremental reseeds.
 
 ## Verification
 
-1. Real ClickHouse: inserts immediately produce every appropriate marginal; duplicate deliveries contribute as documented; late arrivals update old days without any rebuild; separate positive/negative adjustments preserve net-zero activity. Check before merges, without forcing compaction.
+1. Real ClickHouse: inserts immediately produce every appropriate marginal; duplicate deliveries contribute as documented; late arrivals update old days without any rebuild; correction readings do not affect ordinary usage. Check before merges, without forcing compaction.
 2. Exercise tenant isolation, every family/facet, incompatible metadata outside winners, period winners absent from every daily top six, deterministic labels, and exact conservation.
 3. API: paired UTC-midnight boundaries, timezone-equivalent midnight, rejected subday requests, leap dates/month-end maximum, dense zeros, quantities above JavaScript's safe-integer limit.
-4. Browser: date picker, day-snapped chart drilldown, all three families, signed adjustments, legends/cumulative mode, and unchanged billing position. No changes to shared Costs semantics.
+4. Browser: date picker, day-snapped chart drilldown, all three families, no adjustment selector, legends/cumulative mode, and unchanged billing position. No changes to shared Costs semantics.
 5. Replay the single generated migration on a clean database, run focused server tests and demo safety, regenerate Goa/SDK, run server lint and dashboard checks once after integration.
 6. Benchmark ingestion with matched batch sizes and bounded memory; compare empty versus retained aggregate state. Separately benchmark representative full-window series cardinality with five readers and capture query-log accounting and EXPLAIN pruning. Report what was actually loaded, not an assumed traffic forecast.
 
@@ -89,11 +91,21 @@
 - Actual reader `EXPLAIN PIPELINE` shows `AggregatingInOrderTransform × 2` and `FinishAggregatingInOrderTransform` for period ranking. The remaining hash aggregation occurs only after classification into six winners plus remainder. Query limits alone would not establish this property.
 - Separate ingestion A/B/A/B: one million raw rows per mode, 20,000-row batches, 250 ms pacing, all nine meters. Baseline median/p95 99/360 ms; incremental 128/266 ms. Active-call throughput 140,745 versus 126,320 rows/s; peak query memory 169,366,338 versus 168,013,225 B. Every incremental insert read at most 40,000 rows despite retained summaries, consistent with processing the incoming block twice rather than scanning history. Total-facet quantities and physical counts exactly reconcile to the one million inserted raw rows.
 - An earlier unpaced burst exceeded the one-GiB server limit during background work. Bounded MV input state does not remove the need for bounded ingestion concurrency/backpressure; the paced result is not evidence for arbitrary burst capacity.
+- The following HTTP and browser evidence predates removal of adjustment reporting; current behavior is usage-only.
 - Authenticated local HTTP smoke: all 25 family/facet combinations for both reading kinds conserve exact series, daily, and period totals across 30 dense UTC days. Subday request returns 400; timezone-equivalent UTC midnight returns 200 with the same total.
 - Incremental demo safety passed 14 tests, including neighboring-tenant checks; two successive local reseeds completed. All 11 focused server tests passed; the strengthened late-redelivery/unmerged-parts regression passed separately. Goa/SDK generation, server lint, and dashboard type-check passed. Server lint reports the existing `exhaustruct` deprecation warning.
 - Browser verification covered storage, bandwidth, signed risk adjustments, and cumulative mode. In an America/Los_Angeles browser, selecting September 3–5 emitted `[September 3 00:00Z, September 6 00:00Z)`; a real chart drag emitted `[September 10 00:00Z, September 15 00:00Z)` and returned 200. An authenticated request against the restarted server also returned 200.
 - Removed throwaway reporting/ingestion commands; stopped the disposable benchmark server and browsers. The obsolete local rebuild schedule was deleted; the worker was restored on the incremental implementation.
 - Query logs, pipelines, insert accounting, and HTTP matrix are ignored local artifacts under `.playwright-cli/meter-incremental/`; no synthetic throughput figure represents measured production traffic.
+
+## Usage-only cutover verification
+
+- Removed public reading-kind selection and adjustment presentation; generated Goa and SDK contracts contain no reading-kind field. Internal correction storage and schema are unchanged.
+- All 10 focused server tests and 14 demo-safety tests passed. Correction-exclusion coverage includes positive and negative corrections and incompatible correction metadata. Two local reseeds passed with 864 unique ordinary readings across nine meters and 873 delivered summary counts, with no correction fixtures.
+- Against the restarted local API, all 25 family/facet combinations returned 200 without `reading_kind` and conserved exact series, daily, and period totals across 30 UTC days.
+- Browser screenshots verified storage, bandwidth, and risk-scan views with ordinary usage labels, rendered charts, and no adjustment selector. The generated browser request omits `reading_kind`. Storage/risk display tokens; bandwidth displays bytes.
+- Dashboard type-check, `hk fix`, and server lint passed; lint reports only the existing `exhaustruct` deprecation warning. Closed the verification browser and removed its temporary authenticated profile.
+- Compact-unit verification exercised 13 quantity boundary/rounding cases, exact values beyond JavaScript's safe-integer range, fractional-day rates, and zero-duration handling. Live browser checks covered storage, bandwidth, risk scans, cumulative chart axes, and full-value hover details. Dashboard type-check passed.
 
 ## Rollout and unresolved dependencies
 

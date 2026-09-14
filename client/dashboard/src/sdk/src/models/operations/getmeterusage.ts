@@ -17,18 +17,6 @@ export const Family = {
 } as const;
 export type Family = ClosedEnum<typeof Family>;
 
-/**
- * Select ordinary usage or separate signed adjustments
- */
-export const ReadingKind = {
-  Usage: "usage",
-  Adjustment: "adjustment",
-} as const;
-/**
- * Select ordinary usage or separate signed adjustments
- */
-export type ReadingKind = ClosedEnum<typeof ReadingKind>;
-
 export type GetMeterUsageRequest = {
   family: Family;
   /**
@@ -43,10 +31,6 @@ export type GetMeterUsageRequest = {
    * Family-compatible reporting facet
    */
   breakdown?: string | undefined;
-  /**
-   * Select ordinary usage or separate signed adjustments
-   */
-  readingKind?: ReadingKind | undefined;
   /**
    * Session header
    */
@@ -87,16 +71,11 @@ export const Family$outboundSchema: z.ZodMiniEnum<typeof Family> = z.enum(
 );
 
 /** @internal */
-export const ReadingKind$outboundSchema: z.ZodMiniEnum<typeof ReadingKind> = z
-  .enum(ReadingKind);
-
-/** @internal */
 export type GetMeterUsageRequest$Outbound = {
   family: string;
   from?: string | undefined;
   to?: string | undefined;
   breakdown?: string | undefined;
-  reading_kind: string;
   "Gram-Session"?: string | undefined;
 };
 
@@ -110,12 +89,10 @@ export const GetMeterUsageRequest$outboundSchema: z.ZodMiniType<
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     breakdown: z.optional(z.string()),
-    readingKind: z._default(ReadingKind$outboundSchema, "usage"),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      readingKind: "reading_kind",
       gramSession: "Gram-Session",
     });
   }),

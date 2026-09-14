@@ -68,16 +68,15 @@ type GetPeriodUsageResponseBody struct {
 // GetMeterUsageResponseBody is the type of the "usage" service "getMeterUsage"
 // endpoint HTTP response body.
 type GetMeterUsageResponseBody struct {
-	Family      string                        `form:"family" json:"family" xml:"family"`
-	ReadingKind string                        `form:"reading_kind" json:"reading_kind" xml:"reading_kind"`
-	Window      *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	Family string                        `form:"family" json:"family" xml:"family"`
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
 	// Trailing twelve billing-cycle date windows
 	BillingCycles     []*MeterUsageWindowResponseBody `form:"billing_cycles" json:"billing_cycles" xml:"billing_cycles"`
 	Unit              string                          `form:"unit" json:"unit" xml:"unit"`
 	MeasurementMethod string                          `form:"measurement_method" json:"measurement_method" xml:"measurement_method"`
-	// Exact signed integer period total as a decimal string
+	// Exact integer ordinary usage period total as a decimal string
 	Total string `form:"total" json:"total" xml:"total"`
-	// Dense UTC daily buckets, including in-progress days
+	// Dense UTC daily ordinary usage buckets, including in-progress days
 	Buckets   []*MeterUsageBucketResponseBody  `form:"buckets" json:"buckets" xml:"buckets"`
 	Breakdown *MeterUsageBreakdownResponseBody `form:"breakdown" json:"breakdown" xml:"breakdown"`
 	// Retrieval timestamp, not an ingestion watermark
@@ -3622,7 +3621,7 @@ type MeterUsageBucketResponseBody struct {
 	From string `form:"from" json:"from" xml:"from"`
 	// Exclusive bucket boundary
 	To string `form:"to" json:"to" xml:"to"`
-	// Exact signed integer quantity as a decimal string
+	// Exact integer ordinary usage quantity as a decimal string
 	Total string `form:"total" json:"total" xml:"total"`
 }
 
@@ -3643,9 +3642,9 @@ type MeterUsageSeriesResponseBody struct {
 	Key *string `json:"key"`
 	// Display label, never chart identity
 	Label string `form:"label" json:"label" xml:"label"`
-	// Exact signed integer series total as a decimal string
+	// Exact integer ordinary usage series total as a decimal string
 	Total string `form:"total" json:"total" xml:"total"`
-	// Exact signed integer values aligned one-for-one with buckets
+	// Exact integer ordinary usage values aligned one-for-one with buckets
 	Values []string `form:"values" json:"values" xml:"values"`
 }
 
@@ -3727,7 +3726,6 @@ func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageRespon
 func NewGetMeterUsageResponseBody(res *usage.MeterUsageResponse) *GetMeterUsageResponseBody {
 	body := &GetMeterUsageResponseBody{
 		Family:            res.Family,
-		ReadingKind:       res.ReadingKind,
 		Unit:              res.Unit,
 		MeasurementMethod: res.MeasurementMethod,
 		Total:             res.Total,
@@ -6575,13 +6573,12 @@ func NewGetPeriodUsagePayload(sessionToken *string) *usage.GetPeriodUsagePayload
 
 // NewGetMeterUsagePayload builds a usage service getMeterUsage endpoint
 // payload.
-func NewGetMeterUsagePayload(family string, from *string, to *string, breakdown *string, readingKind string, sessionToken *string) *usage.GetMeterUsagePayload {
+func NewGetMeterUsagePayload(family string, from *string, to *string, breakdown *string, sessionToken *string) *usage.GetMeterUsagePayload {
 	v := &usage.GetMeterUsagePayload{}
 	v.Family = family
 	v.From = from
 	v.To = to
 	v.Breakdown = breakdown
-	v.ReadingKind = readingKind
 	v.SessionToken = sessionToken
 
 	return v

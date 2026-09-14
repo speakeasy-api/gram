@@ -16,7 +16,6 @@ import {
   Family,
   GetMeterUsageRequest,
   GetMeterUsageSecurity,
-  ReadingKind,
 } from "../models/operations/getmeterusage.js";
 import { unwrapAsync } from "../types/fp.js";
 export type GetMeterUsageQueryData = MeterUsageResponse;
@@ -53,7 +52,6 @@ export function buildGetMeterUsageQuery(
       from: request.from,
       to: request.to,
       breakdown: request.breakdown,
-      readingKind: request.readingKind,
       gramSession: request.gramSession,
     }),
     queryFn: async function getMeterUsageQueryFn(
@@ -86,7 +84,6 @@ export function queryKeyGetMeterUsage(
     from?: Date | undefined;
     to?: Date | undefined;
     breakdown?: string | undefined;
-    readingKind?: ReadingKind | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

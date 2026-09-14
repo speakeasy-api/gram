@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getMeterUsage usage
  *
  * @remarks
- * Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
+ * Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
  */
 export function usageGetMeterUsage(
   client: GramCore,
@@ -110,7 +110,6 @@ async function $do(
     "breakdown": payload.breakdown,
     "family": payload.family,
     "from": payload.from,
-    "reading_kind": payload.reading_kind,
     "to": payload.to,
   });
 

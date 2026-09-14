@@ -17,13 +17,9 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import {
-  type Family,
-  type ReadingKind,
-} from "@gram/client/models/components/meterusageresponse.js";
+import { type Family } from "@gram/client/models/components/meterusageresponse.js";
 
 export type MeterFamily = Family;
-export type MeterReadingKind = ReadingKind;
 
 export type MeterFamilyDefinition = {
   label: string;
@@ -53,7 +49,7 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
   agent_session_storage: {
     label: "Tokens under management",
     description:
-      "Canonical stored-message workload measured in stored tokens (s-tokens), not provider input or output tokens.",
+      "Stored-message workload measured in tokens, not provider input or output tokens.",
     defaultBreakdown: "total",
     groups: [
       { heading: "", options: [TOTAL] },
@@ -106,7 +102,7 @@ export const METER_FAMILIES: Record<MeterFamily, MeterFamilyDefinition> = {
   risk_content_scans: {
     label: "Risk content scans",
     description:
-      "Content volume scanned by the six risk scanners, measured in s-tokens. Content scanned by multiple scanners contributes to each.",
+      "Content volume scanned by the six risk scanners, measured in tokens. Content scanned by multiple scanners contributes to each.",
     defaultBreakdown: "scanner",
     groups: [
       {

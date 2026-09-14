@@ -68,16 +68,15 @@ type GetPeriodUsageResponseBody struct {
 // GetMeterUsageResponseBody is the type of the "usage" service "getMeterUsage"
 // endpoint HTTP response body.
 type GetMeterUsageResponseBody struct {
-	Family      *string                       `form:"family,omitempty" json:"family,omitempty" xml:"family,omitempty"`
-	ReadingKind *string                       `form:"reading_kind,omitempty" json:"reading_kind,omitempty" xml:"reading_kind,omitempty"`
-	Window      *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+	Family *string                       `form:"family,omitempty" json:"family,omitempty" xml:"family,omitempty"`
+	Window *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
 	// Trailing twelve billing-cycle date windows
 	BillingCycles     []*MeterUsageWindowResponseBody `form:"billing_cycles,omitempty" json:"billing_cycles,omitempty" xml:"billing_cycles,omitempty"`
 	Unit              *string                         `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	MeasurementMethod *string                         `form:"measurement_method,omitempty" json:"measurement_method,omitempty" xml:"measurement_method,omitempty"`
-	// Exact signed integer period total as a decimal string
+	// Exact integer ordinary usage period total as a decimal string
 	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
-	// Dense UTC daily buckets, including in-progress days
+	// Dense UTC daily ordinary usage buckets, including in-progress days
 	Buckets   []*MeterUsageBucketResponseBody  `form:"buckets,omitempty" json:"buckets,omitempty" xml:"buckets,omitempty"`
 	Breakdown *MeterUsageBreakdownResponseBody `form:"breakdown,omitempty" json:"breakdown,omitempty" xml:"breakdown,omitempty"`
 	// Retrieval timestamp, not an ingestion watermark
@@ -3618,7 +3617,7 @@ type MeterUsageBucketResponseBody struct {
 	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
 	// Exclusive bucket boundary
 	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
-	// Exact signed integer quantity as a decimal string
+	// Exact integer ordinary usage quantity as a decimal string
 	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 }
 
@@ -3639,9 +3638,9 @@ type MeterUsageSeriesResponseBody struct {
 	Key *string `json:"key"`
 	// Display label, never chart identity
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
-	// Exact signed integer series total as a decimal string
+	// Exact integer ordinary usage series total as a decimal string
 	Total *string `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
-	// Exact signed integer values aligned one-for-one with buckets
+	// Exact integer ordinary usage values aligned one-for-one with buckets
 	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
 }
 
@@ -3905,7 +3904,6 @@ func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody)
 func NewGetMeterUsageMeterUsageResponseOK(body *GetMeterUsageResponseBody) *usage.MeterUsageResponse {
 	v := &usage.MeterUsageResponse{
 		Family:            *body.Family,
-		ReadingKind:       *body.ReadingKind,
 		Unit:              *body.Unit,
 		MeasurementMethod: *body.MeasurementMethod,
 		Total:             *body.Total,
@@ -6690,9 +6688,6 @@ func ValidateGetMeterUsageResponseBody(body *GetMeterUsageResponseBody) (err err
 	if body.Family == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("family", "body"))
 	}
-	if body.ReadingKind == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("reading_kind", "body"))
-	}
 	if body.Window == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
 	}
@@ -6720,11 +6715,6 @@ func ValidateGetMeterUsageResponseBody(body *GetMeterUsageResponseBody) (err err
 	if body.Family != nil {
 		if !(*body.Family == "agent_session_storage" || *body.Family == "mcp_bandwidth" || *body.Family == "risk_content_scans") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.family", *body.Family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
-		}
-	}
-	if body.ReadingKind != nil {
-		if !(*body.ReadingKind == "usage" || *body.ReadingKind == "adjustment") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reading_kind", *body.ReadingKind, []any{"usage", "adjustment"}))
 		}
 	}
 	if body.Window != nil {

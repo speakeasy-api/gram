@@ -189,7 +189,7 @@ var MeterUsageWindow = Type("MeterUsageWindow", func() {
 var MeterUsageBucket = Type("MeterUsageBucket", func() {
 	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
 	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
-	Attribute("total", String, "Exact signed integer quantity as a decimal string")
+	Attribute("total", String, "Exact integer ordinary usage quantity as a decimal string")
 	Required("from", "to", "total")
 })
 
@@ -205,8 +205,8 @@ var MeterUsageSeries = Type("MeterUsageSeries", func() {
 		Meta("struct:tag:json", "key")
 	})
 	Attribute("label", String, "Display label, never chart identity")
-	Attribute("total", String, "Exact signed integer series total as a decimal string")
-	Attribute("values", ArrayOf(String), "Exact signed integer values aligned one-for-one with buckets")
+	Attribute("total", String, "Exact integer ordinary usage series total as a decimal string")
+	Attribute("values", ArrayOf(String), "Exact integer ordinary usage values aligned one-for-one with buckets")
 	Required("kind", "label", "total", "values")
 })
 
@@ -225,23 +225,20 @@ var MeterUsageBreakdown = Type("MeterUsageBreakdown", func() {
 	Required("dimension", "series")
 })
 
-// MeterUsageResponse is an exact, bounded meter-ledger usage report.
+// MeterUsageResponse is an exact, bounded ordinary meter usage report.
 var MeterUsageResponse = Type("MeterUsageResponse", func() {
 	Attribute("family", String, func() {
 		Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
-	})
-	Attribute("reading_kind", String, func() {
-		Enum("usage", "adjustment")
 	})
 	Attribute("window", MeterUsageWindow)
 	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
 	Attribute("unit", String, func() { Enum("stokens", "bytes") })
 	Attribute("measurement_method", String)
-	Attribute("total", String, "Exact signed integer period total as a decimal string")
-	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense UTC daily buckets, including in-progress days")
+	Attribute("total", String, "Exact integer ordinary usage period total as a decimal string")
+	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense UTC daily ordinary usage buckets, including in-progress days")
 	Attribute("breakdown", MeterUsageBreakdown)
 	Attribute("queried_at", String, "Retrieval timestamp, not an ingestion watermark", func() { Format(FormatDateTime) })
-	Required("family", "reading_kind", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
+	Required("family", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
 })
 
 var _ = Service("usage", func() {
@@ -270,7 +267,7 @@ var _ = Service("usage", func() {
 	})
 
 	Method("getMeterUsage", func() {
-		Description("Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.")
+		Description("Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -284,10 +281,6 @@ var _ = Service("usage", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("breakdown", String, "Family-compatible reporting facet")
-			Attribute("reading_kind", String, "Select ordinary usage or separate signed adjustments", func() {
-				Enum("usage", "adjustment")
-				Default("usage")
-			})
 			Required("family")
 		})
 
@@ -299,7 +292,6 @@ var _ = Service("usage", func() {
 			Param("from")
 			Param("to")
 			Param("breakdown")
-			Param("reading_kind")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

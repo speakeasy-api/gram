@@ -6164,7 +6164,7 @@ examples:
           reading_kind: "usage"
       responses:
         "200":
-          application/json: {"billing_cycles": [{"from": "2024-10-14T00:52:41.567Z", "to": "2025-01-31T16:10:28.190Z"}], "breakdown": {"dimension": "policy", "series": []}, "buckets": [{"from": "2026-05-17T05:41:42.504Z", "to": "2026-01-24T07:40:53.020Z", "total": "<value>"}], "family": "agent_session_storage", "measurement_method": "<value>", "queried_at": "2024-11-20T01:39:03.119Z", "reading_kind": "adjustment", "total": "<value>", "unit": "bytes", "window": {"from": "2024-09-15T11:34:59.195Z", "to": "2024-05-25T19:55:29.985Z"}}
+          application/json: {"billing_cycles": [{"from": "2024-10-14T00:52:41.567Z", "to": "2025-01-31T16:10:28.190Z"}], "breakdown": {"dimension": "policy", "series": []}, "buckets": [{"from": "2026-05-17T05:41:42.504Z", "to": "2026-01-24T07:40:53.020Z", "total": "<value>"}], "family": "agent_session_storage", "measurement_method": "<value>", "queried_at": "2024-11-20T01:39:03.119Z", "total": "<value>", "unit": "bytes", "window": {"from": "2024-09-15T11:34:59.195Z", "to": "2024-05-25T19:55:29.985Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

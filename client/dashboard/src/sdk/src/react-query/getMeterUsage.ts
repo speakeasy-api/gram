@@ -25,7 +25,6 @@ import {
   Family,
   GetMeterUsageRequest,
   GetMeterUsageSecurity,
-  ReadingKind,
 } from "../models/operations/getmeterusage.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -61,7 +60,7 @@ export type GetMeterUsageQueryError =
  * getMeterUsage usage
  *
  * @remarks
- * Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
+ * Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
  */
 export function useGetMeterUsage(
   request: GetMeterUsageRequest,
@@ -84,7 +83,7 @@ export function useGetMeterUsage(
  * getMeterUsage usage
  *
  * @remarks
- * Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
+ * Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
  */
 export function useGetMeterUsageSuspense(
   request: GetMeterUsageRequest,
@@ -114,7 +113,6 @@ export function setGetMeterUsageData(
       from?: Date | undefined;
       to?: Date | undefined;
       breakdown?: string | undefined;
-      readingKind?: ReadingKind | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -133,7 +131,6 @@ export function invalidateGetMeterUsage(
       from?: Date | undefined;
       to?: Date | undefined;
       breakdown?: string | undefined;
-      readingKind?: ReadingKind | undefined;
       gramSession?: string | undefined;
     }]
   >,

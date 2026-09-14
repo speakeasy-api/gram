@@ -234,7 +234,6 @@ func DecodeGetMeterUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			from         *string
 			to           *string
 			breakdown    *string
-			readingKind  string
 			sessionToken *string
 			err          error
 		)
@@ -264,15 +263,6 @@ func DecodeGetMeterUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if breakdownRaw != "" {
 			breakdown = &breakdownRaw
 		}
-		readingKindRaw := qp.Get("reading_kind")
-		if readingKindRaw != "" {
-			readingKind = readingKindRaw
-		} else {
-			readingKind = "usage"
-		}
-		if !(readingKind == "usage" || readingKind == "adjustment") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("reading_kind", readingKind, []any{"usage", "adjustment"}))
-		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -280,7 +270,7 @@ func DecodeGetMeterUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetMeterUsagePayload(family, from, to, breakdown, readingKind, sessionToken)
+		payload = NewGetMeterUsagePayload(family, from, to, breakdown, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

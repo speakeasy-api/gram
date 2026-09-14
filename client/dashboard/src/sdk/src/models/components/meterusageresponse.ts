@@ -28,12 +28,6 @@ export const Family = {
 } as const;
 export type Family = ClosedEnum<typeof Family>;
 
-export const ReadingKind = {
-  Usage: "usage",
-  Adjustment: "adjustment",
-} as const;
-export type ReadingKind = ClosedEnum<typeof ReadingKind>;
-
 export const Unit = {
   Stokens: "stokens",
   Bytes: "bytes",
@@ -47,7 +41,7 @@ export type MeterUsageResponse = {
   billingCycles: Array<MeterUsageWindow>;
   breakdown: MeterUsageBreakdown;
   /**
-   * Dense UTC daily buckets, including in-progress days
+   * Dense UTC daily ordinary usage buckets, including in-progress days
    */
   buckets: Array<MeterUsageBucket>;
   family: Family;
@@ -56,9 +50,8 @@ export type MeterUsageResponse = {
    * Retrieval timestamp, not an ingestion watermark
    */
   queriedAt: Date;
-  readingKind: ReadingKind;
   /**
-   * Exact signed integer period total as a decimal string
+   * Exact integer ordinary usage period total as a decimal string
    */
   total: string;
   unit: Unit;
@@ -69,10 +62,6 @@ export type MeterUsageResponse = {
 export const Family$inboundSchema: z.ZodMiniEnum<typeof Family> = z.enum(
   Family,
 );
-
-/** @internal */
-export const ReadingKind$inboundSchema: z.ZodMiniEnum<typeof ReadingKind> = z
-  .enum(ReadingKind);
 
 /** @internal */
 export const Unit$inboundSchema: z.ZodMiniEnum<typeof Unit> = z.enum(Unit);
@@ -92,7 +81,6 @@ export const MeterUsageResponse$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    reading_kind: ReadingKind$inboundSchema,
     total: z.string(),
     unit: Unit$inboundSchema,
     window: MeterUsageWindow$inboundSchema,
@@ -102,7 +90,6 @@ export const MeterUsageResponse$inboundSchema: z.ZodMiniType<
       "billing_cycles": "billingCycles",
       "measurement_method": "measurementMethod",
       "queried_at": "queriedAt",
-      "reading_kind": "readingKind",
     });
   }),
 );

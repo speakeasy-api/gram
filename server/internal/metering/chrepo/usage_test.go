@@ -49,7 +49,6 @@ func TestGetUsageCountsDeliveriesScopesTenantAndConservesExactTotals(t *testing.
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
 		To:             to,
-		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "stokens", result.Unit)
@@ -77,7 +76,7 @@ func TestGetUsageCountsDeliveriesScopesTenantAndConservesExactTotals(t *testing.
 	require.True(t, remainderSeen)
 }
 
-func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
+func TestGetUsageExcludesCorrectionsAndNormalizesUnsetSets(t *testing.T) {
 	t.Parallel()
 	conn := newTestClickhouse(t)
 	queries := chrepo.New(conn)
@@ -88,39 +87,39 @@ func TestGetUsageKeepsAdjustmentsSeparateAndNormalizesUnsetSets(t *testing.T) {
 
 	usage := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 500, from.Add(time.Hour), nil, map[string]string{})
 	negative := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -100, from.Add(2*time.Hour), &originalID, map[string]string{})
+	negative.MeasurementMethod = "incompatible-correction"
 	positive := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 100, from.Add(25*time.Hour), &originalID, map[string]string{})
 	sortedGroups := meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 25, from.Add(3*time.Hour), nil, map[string]string{
 		metering.AttributeBillingUserDirectoryGroups: `["Support","Engineering","Support"]`,
 	})
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{usage, negative, positive, sortedGroups}))
 
-	adjustments, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
+	models, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
 		To:             to,
-		ReadingKind:    chrepo.ReadingKindAdjustment,
 	})
 	require.NoError(t, err)
-	require.Len(t, adjustments.Rows, 2)
-	require.Equal(t, "unset", adjustments.Rows[0].Kind)
-	require.Equal(t, "(unset)", adjustments.Rows[0].Label)
-	require.Equal(t, "-100", adjustments.Rows[0].Total)
-	require.Equal(t, "100", adjustments.Rows[1].Total)
+	require.Len(t, models.Rows, 1)
+	require.Equal(t, "unset", models.Rows[0].Kind)
+	require.Equal(t, "(unset)", models.Rows[0].Label)
+	require.Equal(t, "525", models.Rows[0].Total)
 
 	groups, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
 		OrganizationID: organizationID,
 		Selection:      storageUsageSelection(t, "directory_group_set"),
 		From:           from,
 		To:             to,
-		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
 	require.Len(t, groups.Rows, 2)
 	require.Equal(t, "unset", groups.Rows[0].Kind)
+	require.Equal(t, "500", groups.Rows[0].Total)
 	require.Equal(t, "value", groups.Rows[1].Kind)
 	require.Equal(t, `["Engineering","Support"]`, groups.Rows[1].Key)
 	require.Equal(t, "Engineering, Support", groups.Rows[1].Label)
+	require.Equal(t, "25", groups.Rows[1].Total)
 }
 
 func TestGetUsageRejectsMixedMeasurementOutsideTopSix(t *testing.T) {
@@ -147,49 +146,8 @@ func TestGetUsageRejectsMixedMeasurementOutsideTopSix(t *testing.T) {
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
 		To:             from.AddDate(0, 0, 1),
-		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.ErrorIs(t, err, chrepo.ErrMixedMeasurement)
-}
-
-func TestGetUsageRanksAdjustmentsByAbsoluteNetAndPreservesZeroNetActivity(t *testing.T) {
-	t.Parallel()
-	conn := newTestClickhouse(t)
-	queries := chrepo.New(conn)
-	organizationID := "org-" + uuid.NewString()
-	from := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
-	originalID := uuid.New()
-
-	rows := make([]chrepo.ReadingRow, 0, 12)
-	for index, model := range []string{"m1", "m2", "m3", "m4", "m5", "m6"} {
-		rows = append(rows, meterUsageReading(
-			organizationID,
-			metering.MeterAgentSessionStorage,
-			int64(100-index),
-			from.Add(time.Duration(index+1)*time.Hour),
-			&originalID,
-			map[string]string{metering.AttributeModel: model},
-		))
-	}
-	rows = append(rows,
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1000, from.Add(7*time.Hour), &originalID, map[string]string{metering.AttributeModel: "noisy"}),
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -1000, from.Add(8*time.Hour), &originalID, map[string]string{metering.AttributeModel: "noisy"}),
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, 5, from.Add(9*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
-		meterUsageReading(organizationID, metering.MeterAgentSessionStorage, -5, from.Add(10*time.Hour), &originalID, map[string]string{metering.AttributeModel: "omitted"}),
-	)
-	require.NoError(t, queries.InsertReadings(t.Context(), rows))
-
-	result, err := queries.GetUsage(t.Context(), chrepo.UsageParams{
-		OrganizationID: organizationID,
-		Selection:      storageUsageSelection(t, "model"),
-		From:           from,
-		To:             from.AddDate(0, 0, 1),
-		ReadingKind:    chrepo.ReadingKindAdjustment,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Rows, 7)
-	require.Equal(t, "remainder", result.Rows[0].Kind)
-	require.Equal(t, "0", result.Rows[0].Total)
 }
 
 func TestGetUsageRanksAcrossTheWholePeriod(t *testing.T) {
@@ -217,7 +175,6 @@ func TestGetUsageRanksAcrossTheWholePeriod(t *testing.T) {
 		Selection:      storageUsageSelection(t, "model"),
 		From:           from,
 		To:             from.AddDate(0, 0, 2),
-		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
 	totals := make(map[string]*big.Int)
@@ -251,7 +208,6 @@ func TestGetUsageReturnsEmptyWithoutCoverageMarkers(t *testing.T) {
 		Selection:      storageUsageSelection(t, "total"),
 		From:           from,
 		To:             from.AddDate(0, 0, 1),
-		ReadingKind:    chrepo.ReadingKindUsage,
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Rows)

@@ -63597,7 +63597,7 @@ paths:
         name: getInferenceSpendCaps
   /rpc/usage.getMeterUsage:
     get:
-      description: Get incrementally aggregated meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer or corrected out of band.
+      description: Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
       operationId: getMeterUsage
       parameters:
         - allowEmptyValue: true
@@ -63632,17 +63632,6 @@ paths:
           name: breakdown
           schema:
             description: Family-compatible reporting facet
-            type: string
-        - allowEmptyValue: true
-          description: Select ordinary usage or separate signed adjustments
-          in: query
-          name: reading_kind
-          schema:
-            default: usage
-            description: Select ordinary usage or separate signed adjustments
-            enum:
-              - usage
-              - adjustment
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -80094,7 +80083,7 @@ components:
           format: date-time
         total:
           type: string
-          description: Exact signed integer quantity as a decimal string
+          description: Exact integer ordinary usage quantity as a decimal string
       required:
         - from
         - to
@@ -80113,7 +80102,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MeterUsageBucket'
-          description: Dense UTC daily buckets, including in-progress days
+          description: Dense UTC daily ordinary usage buckets, including in-progress days
         family:
           type: string
           enum:
@@ -80126,14 +80115,9 @@ components:
           type: string
           description: Retrieval timestamp, not an ingestion watermark
           format: date-time
-        reading_kind:
-          type: string
-          enum:
-            - usage
-            - adjustment
         total:
           type: string
-          description: Exact signed integer period total as a decimal string
+          description: Exact integer ordinary usage period total as a decimal string
         unit:
           type: string
           enum:
@@ -80143,7 +80127,6 @@ components:
           $ref: '#/components/schemas/MeterUsageWindow'
       required:
         - family
-        - reading_kind
         - window
         - billing_cycles
         - unit
@@ -80171,12 +80154,12 @@ components:
           description: Display label, never chart identity
         total:
           type: string
-          description: Exact signed integer series total as a decimal string
+          description: Exact integer ordinary usage series total as a decimal string
         values:
           type: array
           items:
             type: string
-          description: Exact signed integer values aligned one-for-one with buckets
+          description: Exact integer ordinary usage values aligned one-for-one with buckets
       required: [kind, key, label, total, values]
     MeterUsageWindow:
       type: object

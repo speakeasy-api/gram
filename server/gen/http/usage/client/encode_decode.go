@@ -287,7 +287,6 @@ func EncodeGetMeterUsageRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.Breakdown != nil {
 			values.Add("breakdown", *p.Breakdown)
 		}
-		values.Add("reading_kind", p.ReadingKind)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

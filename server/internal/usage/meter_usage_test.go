@@ -38,11 +38,10 @@ func TestGetMeterUsageBuildsDenseDailyOrganizationReport(t *testing.T) {
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
 	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
 	result, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
-		Family:      string(metering.UsageFamilyAgentSessionStorage),
-		From:        &fromText,
-		To:          &toText,
-		Breakdown:   nil,
-		ReadingKind: chrepo.ReadingKindUsage,
+		Family:    string(metering.UsageFamilyAgentSessionStorage),
+		From:      &fromText,
+		To:        &toText,
+		Breakdown: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "9007199254741000", result.Total)
@@ -65,8 +64,7 @@ func TestGetMeterUsageRequiresOrganizationRead(t *testing.T) {
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID))
 
 	_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
-		Family:      string(metering.UsageFamilyAgentSessionStorage),
-		ReadingKind: chrepo.ReadingKindUsage,
+		Family: string(metering.UsageFamilyAgentSessionStorage),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

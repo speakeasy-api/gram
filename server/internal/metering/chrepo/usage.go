@@ -9,23 +9,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const (
-	// ReadingKindUsage selects ordinary positive usage facts.
-	ReadingKindUsage = "usage"
-
-	// ReadingKindAdjustment selects separate signed correction facts.
-	ReadingKindAdjustment = "adjustment"
-)
-
 var (
 	// ErrInvalidUsageSelection reports an incomplete internal selection.
 	ErrInvalidUsageSelection = errors.New("invalid meter usage selection")
 
 	// ErrInvalidUsageRange reports a range whose boundaries are not distinct UTC days.
 	ErrInvalidUsageRange = errors.New("invalid meter usage range")
-
-	// ErrInvalidReadingKind reports a reading kind outside usage and adjustment.
-	ErrInvalidReadingKind = errors.New("invalid meter reading kind")
 
 	// ErrMixedMeasurement reports rows that violate their family's fixed measurement contract.
 	ErrMixedMeasurement = errors.New("meter usage contains incompatible units or measurement methods")
@@ -46,7 +35,7 @@ type UsageSelection struct {
 	MeasurementMethod string
 }
 
-// UsageParams defines one organization-owned bounded meter report.
+// UsageParams defines one organization-owned bounded ordinary usage report.
 type UsageParams struct {
 	// OrganizationID identifies the owning organization.
 	OrganizationID string
@@ -59,9 +48,6 @@ type UsageParams struct {
 
 	// To is the exclusive UTC-day boundary.
 	To time.Time
-
-	// ReadingKind selects ordinary usage or separate adjustments.
-	ReadingKind string
 }
 
 // UsageRow is one bounded daily/facet aggregate returned by GetUsage.
@@ -84,11 +70,11 @@ type UsageRow struct {
 	// Label is display text and never chart identity.
 	Label string
 
-	// Total is an exact signed integer encoded in base ten.
+	// Total is an exact integer ordinary usage quantity encoded in base ten.
 	Total string
 }
 
-// UsageResult contains compatible measurement metadata and bounded aggregates.
+// UsageResult contains compatible measurement metadata and bounded ordinary usage aggregates.
 type UsageResult struct {
 	// Unit is the fixed family unit, including for empty results.
 	Unit string
@@ -106,13 +92,13 @@ WITH top_series AS (
 	FROM billing_meter_daily_summaries
 	PREWHERE organization_id = ?
 		AND family = ?
-		AND reading_kind = ?
+		AND reading_kind = 'usage'
 		AND facet = ?
 	WHERE day >= toDate(?) AND day < toDate(?)
 	GROUP BY series_kind, series_key
 	HAVING sum(reading_count) != 0
 	ORDER BY
-		if(? = 'adjustment', abs(sum(quantity)), sum(quantity)) DESC,
+		sum(quantity) DESC,
 		series_kind ASC,
 		series_key ASC
 	LIMIT 6
@@ -132,7 +118,7 @@ WITH top_series AS (
 	FROM billing_meter_daily_summaries
 	PREWHERE organization_id = ?
 		AND family = ?
-		AND reading_kind = ?
+		AND reading_kind = 'usage'
 		AND facet = ?
 	WHERE day >= toDate(?) AND day < toDate(?)
 ), daily AS (
@@ -176,16 +162,13 @@ SETTINGS
 	max_bytes_before_external_group_by = 67108864,
 	max_bytes_before_external_sort = 67108864`
 
-// GetUsage returns a period-ranked top-six daily aggregation from the incremental
-// UTC-day summary. Physical summary rows are always summed because background
-// SummingMergeTree merges need not have completed before the read.
+// GetUsage returns a period-ranked top-six daily ordinary usage aggregation
+// from the incremental UTC-day summary. Physical summary rows are always summed
+// because background SummingMergeTree merges need not have completed before the read.
 func (q *Queries) GetUsage(ctx context.Context, params UsageParams) (UsageResult, error) {
 	selection := params.Selection
 	if params.OrganizationID == "" || selection.Family == "" || selection.Breakdown == "" || selection.Unit == "" || selection.MeasurementMethod == "" {
 		return UsageResult{}, ErrInvalidUsageSelection
-	}
-	if params.ReadingKind != ReadingKindUsage && params.ReadingKind != ReadingKindAdjustment {
-		return UsageResult{}, ErrInvalidReadingKind
 	}
 
 	result := UsageResult{
@@ -200,15 +183,12 @@ func (q *Queries) GetUsage(ctx context.Context, params UsageParams) (UsageResult
 	rows, err := q.conn.Query(ctx, usageQuery,
 		params.OrganizationID,
 		selection.Family,
-		params.ReadingKind,
 		selection.Breakdown,
 		params.From,
 		params.To,
-		params.ReadingKind,
 		selection.Breakdown,
 		params.OrganizationID,
 		selection.Family,
-		params.ReadingKind,
 		selection.Breakdown,
 		params.From,
 		params.To,

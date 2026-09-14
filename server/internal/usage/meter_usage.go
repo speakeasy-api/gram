@@ -21,8 +21,8 @@ import (
 
 const maxMeterUsageMonths = 3
 
-// GetMeterUsage returns incrementally aggregated daily quantities and a bounded
-// full-period facet breakdown for the active organization.
+// GetMeterUsage returns incrementally aggregated daily ordinary usage quantities
+// and a bounded full-period facet breakdown for the active organization.
 func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsagePayload) (*gen.MeterUsageResponse, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -59,7 +59,6 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 		Selection:      selection,
 		From:           from,
 		To:             to,
-		ReadingKind:    payload.ReadingKind,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "query meter usage").LogError(ctx, s.logger)
@@ -192,9 +191,6 @@ func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string
 			}
 		}
 		order := seriesTotals[right].Cmp(seriesTotals[left])
-		if payload.ReadingKind == chrepo.ReadingKindAdjustment {
-			order = seriesTotals[right].CmpAbs(seriesTotals[left])
-		}
 		if order != 0 {
 			return order
 		}
@@ -218,8 +214,7 @@ func buildMeterUsageResponse(payload *gen.GetMeterUsagePayload, breakdown string
 		})
 	}
 	return &gen.MeterUsageResponse{
-		Family:      payload.Family,
-		ReadingKind: payload.ReadingKind,
+		Family: payload.Family,
 		Window: &gen.MeterUsageWindow{
 			From: from.Format(time.RFC3339Nano),
 			To:   to.Format(time.RFC3339Nano),

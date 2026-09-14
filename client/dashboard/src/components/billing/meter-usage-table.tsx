@@ -5,8 +5,9 @@ import {
 import { type Column, Table } from "@/components/ui/Table";
 import {
   type MeterUsageData,
-  formatExactInteger,
+  formatMeterQuantity,
   meterSeriesIdentity,
+  meterSeriesLabel,
 } from "./meter-usage-adapter";
 
 const UUID_RE =
@@ -22,18 +23,19 @@ type MeterTableRow = {
 
 export function MeterUsageTable({
   data,
-  projectNames,
+  projectSlugs,
 }: {
   data: MeterUsageData;
-  projectNames: Map<string, string>;
+  projectSlugs: ReadonlyMap<string, string>;
 }): JSX.Element {
   const colors = useSeriesColors();
   const remainderColor = useOtherSeriesColor();
   const rows: MeterTableRow[] = data.breakdown.series.map((series, index) => {
-    let label = series.kind === "unset" ? "(unset)" : series.label;
-    if (data.breakdown.dimension === "project" && series.key) {
-      label = projectNames.get(series.key) ?? label;
-    }
+    const label = meterSeriesLabel(
+      series,
+      data.breakdown.dimension,
+      projectSlugs,
+    );
     return {
       identity: meterSeriesIdentity(series),
       label,
@@ -72,14 +74,14 @@ export function MeterUsageTable({
     },
     {
       key: "total",
-      header: data.readingKind === "adjustment" ? "Net adjustment" : "Usage",
+      header: "Usage",
       width: "220px",
       render: (row) => (
         <span
           className="block text-right tabular-nums"
-          title={formatExactInteger(row.total)}
+          title={formatMeterQuantity(row.total, data.unit, "standard")}
         >
-          {formatExactInteger(row.total)}
+          {formatMeterQuantity(row.total, data.unit)}
         </span>
       ),
     },

@@ -32,7 +32,7 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string) (*usage.
 
 // BuildGetMeterUsagePayload builds the payload for the usage getMeterUsage
 // endpoint from CLI flags.
-func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsageFrom string, usageGetMeterUsageTo string, usageGetMeterUsageBreakdown string, usageGetMeterUsageReadingKind string, usageGetMeterUsageSessionToken string) (*usage.GetMeterUsagePayload, error) {
+func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsageFrom string, usageGetMeterUsageTo string, usageGetMeterUsageBreakdown string, usageGetMeterUsageSessionToken string) (*usage.GetMeterUsagePayload, error) {
 	var err error
 	var family string
 	{
@@ -70,18 +70,6 @@ func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsa
 			breakdown = &usageGetMeterUsageBreakdown
 		}
 	}
-	var readingKind string
-	{
-		if usageGetMeterUsageReadingKind != "" {
-			readingKind = usageGetMeterUsageReadingKind
-			if !(readingKind == "usage" || readingKind == "adjustment") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("reading_kind", readingKind, []any{"usage", "adjustment"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
 	var sessionToken *string
 	{
 		if usageGetMeterUsageSessionToken != "" {
@@ -93,7 +81,6 @@ func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsa
 	v.From = from
 	v.To = to
 	v.Breakdown = breakdown
-	v.ReadingKind = readingKind
 	v.SessionToken = sessionToken
 
 	return v, nil
