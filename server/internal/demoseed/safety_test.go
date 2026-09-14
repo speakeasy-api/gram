@@ -199,12 +199,13 @@ func TestDemoSeedSafety(t *testing.T) {
 		require.True(t, ok, "postgres table %s appeared between seed runs", table)
 	}
 
-	// ClickHouse: deterministic plain MergeTree targets and the daily meter
-	// SummingMergeTree target must return to the same demo-scope row count.
-	// Other collapsing targets are covered by the tenant-isolation assertions.
+	// Plain MergeTree targets have stable counts. Summary row counts can
+	// change when now()-relative timestamps cross UTC day boundaries.
+	// Meter cleanup is checked by the seed's delivery-total postflight;
+	// all tables retain the tenant-isolation checks above.
 	for table, s1 := range chAfter1 {
 		s2 := chAfter2[table]
-		if isPlainMergeTree(s1.Engine) || table == "billing_meter_daily_summaries" {
+		if isPlainMergeTree(s1.Engine) {
 			require.Equal(t, s1.DemoCount, s2.DemoCount,
 				"clickhouse table %s: demo row count changed between seed runs — reseed is not cleaning up or not idempotent", table)
 		}
