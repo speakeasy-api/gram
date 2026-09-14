@@ -192,9 +192,7 @@ func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.
 	require.False(t, storedSession(t, ctx, fx).ValidationStatus.Valid)
 }
 
-// A rate-limited issuer host stops the pass: the refused row gives its lease back and is not counted, and rows
-// that were never claimed wait for the next tick instead of being leased unprobed.
-// A rate-limited issuer host gives its rows back for the next tick while the pass goes on with every other host.
+// A rate-limited issuer host gives its rows back for the next tick, uncounted, while the pass goes on with every other host.
 func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	t.Parallel()
 
