@@ -87,8 +87,8 @@ func mintAgentKey(t *testing.T, ctx context.Context, ti *testInstance, delegated
 func requireCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, code, shareable.Code)
+	require.ErrorAs(t, err, &shareable, "error: %v", err)
+	require.Equal(t, code, shareable.Code, "error: %v", err)
 }
 
 func TestAPIKeyAuth_AgentKeyWithDeviceSyncGrantPollsPlugins(t *testing.T) {
