@@ -43,7 +43,7 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 						continue
 					}
 					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
-					policy, err := NewDelegatedPolicyV1([]authz.Grant{candidate})
+					policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, []authz.Grant{candidate})
 					if err != nil {
 						continue
 					}
