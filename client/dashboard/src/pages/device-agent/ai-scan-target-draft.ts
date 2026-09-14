@@ -70,11 +70,16 @@ export function emptyDraft(): Draft {
   };
 }
 
+// draftFromTarget seeds the editor from an existing target. The category is
+// carried through as-is: the API types it as a closed enum over the same
+// values as TargetCategory, so a server-side addition breaks this assignment
+// at compile time rather than silently rewriting the target's category on the
+// next upsert.
 export function draftFromTarget(target: AiScanTarget): Draft {
   return {
     id: target.id,
     displayName: target.displayName,
-    category: target.category === "local_model" ? "local_model" : "harness",
+    category: target.category,
     bundleIds: [...target.signatures.bundleIds],
     binaries: [...target.signatures.binaries],
     configDirs: [...target.signatures.configDirs],
