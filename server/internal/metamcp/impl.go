@@ -241,7 +241,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	// Validate the same normalized text that will be persisted, not the raw input.
-	instructions := conv.PtrToPGTextTrimmed(stripNUL(payload.Instructions))
+	instructions := conv.PtrToPGTextTrimmed(conv.PtrStripNUL(payload.Instructions))
 	if utf8.RuneCountInString(instructions.String) > 10000 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "instructions must not exceed 10000 characters after normalization")
 	}
@@ -1101,13 +1101,4 @@ func sortOrderValue(v *int) (int32, error) {
 		return 0, errors.New("sort_order out of range")
 	}
 	return int32(value), nil
-}
-
-// stripNUL drops NUL bytes, which Goa accepts but Postgres text rejects.
-func stripNUL(s *string) *string {
-	if s == nil {
-		return nil
-	}
-	stripped := conv.StripNUL(*s)
-	return &stripped
 }
