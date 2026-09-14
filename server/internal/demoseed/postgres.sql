@@ -1071,10 +1071,9 @@ BEGIN
      demo.det_uuid('gram-demo-issuer-github'), 'private');
 
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
-                                user_session_issuer_id, instructions) VALUES
+                                user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
-     demo.det_uuid('gram-demo-issuer-gateway'),
-     E'You are connected to Acme''s agent gateway. Start with list_servers, then describe_server for the member that owns the task before calling describe_tools and execute_tool.\n\nSlack is for customer-facing updates only; track engineering work in Linear and code changes in GitHub.');
+     demo.det_uuid('gram-demo-issuer-gateway'));
 
   -- sort_order is the order agents see members in list_servers.
   INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
