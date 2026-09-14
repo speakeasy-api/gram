@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 // proxyRegisterMaxBodyBytes caps both the inbound request body and the upstream
@@ -97,8 +98,17 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
 
+	// The response carries a client secret, so the endpoint must be HTTPS,
+	// with the RFC 8252 loopback exception for local development and tests
+	// (guardian's egress policy blocks loopback in production regardless).
+	// This is the one choke point for both the dashboard's proxy registration
+	// and the rotator's re-registration, which posts under the system
+	// principal to whatever endpoint the issuer row carries.
+	if !urls.IsAbsoluteHTTPSOrLoopback(request.RegistrationEndpoint) {
+		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
+	}
 	endpoint, err := url.Parse(request.RegistrationEndpoint)
-	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+	if err != nil || endpoint.Host == "" {
 		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
 	}
 

@@ -93,3 +93,26 @@ func TestRegisterDynamicClientOmitsAbsentRegistrationStamps(t *testing.T) {
 	require.Empty(t, registered.ClientIDIssuedAtRFC3339)
 	require.Empty(t, registered.ClientSecretExpiresAtRFC3339)
 }
+
+// A registration response carries a client secret, so the endpoint must be
+// HTTPS or loopback. Plain HTTP to any other host is refused before any
+// request is made, whether the endpoint came from a dashboard form or from an
+// issuer row the rotator re-registers at.
+func TestRegisterDynamicClient_RefusesPlaintextNonLoopbackEndpoint(t *testing.T) {
+	t.Parallel()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.com")
+	require.NoError(t, err)
+
+	for _, endpoint := range []string{
+		"http://idp.example.com/register",
+		"http://10.0.0.5/register",
+		"ftp://idp.example.com/register",
+		"/register",
+	} {
+		_, err := RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: endpoint})
+		require.ErrorIs(t, err, ErrInvalidDynamicClientRegistrationEndpoint, endpoint)
+	}
+}
