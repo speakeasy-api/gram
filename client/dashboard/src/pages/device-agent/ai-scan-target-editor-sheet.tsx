@@ -439,11 +439,21 @@ function EditorForm({
                   // never calls the gateway drops the matchers with it, so the
                   // save is not refused over an error the sheet has no field to
                   // show.
-                  onValueChange={(value) =>
-                    setDraft((current) =>
-                      withCategory(current, value as TargetCategory),
-                    )
-                  }
+                  onValueChange={(value) => {
+                    const category = value as TargetCategory;
+                    setDraft((current) => withCategory(current, category));
+                    // The matchers went with the category, so an error about
+                    // them must not resurface on an empty field later.
+                    if (!callsGateway(category)) {
+                      setErrors((current) => {
+                        const next = { ...current };
+                        delete next.cimdVendorKeys;
+                        delete next.oauthClientIds;
+                        delete next.clientInfoNames;
+                        return next;
+                      });
+                    }
+                  }}
                 >
                   <SelectTrigger
                     id="ai-scan-target-category"

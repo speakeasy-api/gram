@@ -123,12 +123,13 @@ function codePoints(value: string): number {
   return Array.from(value).length;
 }
 
-// hasControlCharacter scans for C0 controls rather than matching them in a
-// regex, which the lint rules forbid.
+// hasControlCharacter covers what Go's unicode.IsControl does on the server:
+// the C0 range, DEL and the C1 range. Scanned rather than matched in a regex,
+// which the lint rules forbid for control characters.
 function hasControlCharacter(value: string): boolean {
   return Array.from(value).some((char) => {
     const code = char.codePointAt(0) ?? 0;
-    return code < 0x20 || code === 0x7f;
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
   });
 }
 
@@ -299,17 +300,19 @@ function clientIdProblem(id: string): string | undefined {
     return `"${id}" must not contain a userinfo component`;
   }
   if (!URL.canParse(id)) return `"${id}" must be a parseable https URL`;
-  // Dot segments are judged on the decoded path, as the server does, so an
-  // encoded "%2e%2e" is caught too. The path is read from the string rather
-  // than from URL.pathname, which resolves dot segments away.
-  for (const segment of rest.slice(slash).split("/")) {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(segment);
-    } catch {
-      return `"${id}" must be a parseable https URL`;
-    }
-    if (decoded === "." || decoded === "..") {
+  // Dot segments are judged on the decoded path, as the server does: Go's
+  // url.Parse decodes the whole path before it is split, so an encoded slash
+  // separates segments too and "a%2F.." hides nothing. The path is read from
+  // the string rather than from URL.pathname, which resolves dot segments
+  // away.
+  let decodedPath: string;
+  try {
+    decodedPath = decodeURIComponent(rest.slice(slash));
+  } catch {
+    return `"${id}" must be a parseable https URL`;
+  }
+  for (const segment of decodedPath.split("/")) {
+    if (segment === "." || segment === "..") {
       return `"${id}" must not contain "." or ".." path segments`;
     }
   }

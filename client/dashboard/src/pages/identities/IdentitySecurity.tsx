@@ -25,6 +25,7 @@ import {
   useCanReadRisk,
   useIdentityChallenges,
   useIdentityPrincipalUrn,
+  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -46,8 +47,14 @@ export default function IdentitySecurity(): JSX.Element {
   // Employee detections are a project read on the server (the email pins
   // the request to one person), so this panel gates on that scope rather
   // than on the org:admin the risk panels need.
-  const { hasAnyScope } = useRBAC();
-  const canReadDetections = hasAnyScope(["project:read", "project:write"]);
+  // Checked against the project the request goes to: a read grant on some
+  // other project would enable the panel and then fail the request.
+  const { hasAnyScopeInProject, isLoading: grantsLoading } = useRBAC();
+  const project = useIdentityProject();
+  const canReadDetections = hasAnyScopeInProject(
+    ["project:read", "project:write"],
+    project.id,
+  );
   const { identity } = useIdentityOutlet();
   // Only an enrolled person has device scans behind them; an API key or an
   // external identity has nothing to show.
@@ -270,7 +277,13 @@ export default function IdentitySecurity(): JSX.Element {
           // Full width: the detections table is eight columns and 820px at
           // minimum, so half the grid would scroll it sideways on a laptop.
           <div className="md:col-span-2">
-            {canReadDetections ? (
+            {grantsLoading ? (
+              // Grants still resolving: saying the permission is missing
+              // would be false for most people who reach this page.
+              <IdentityPanel title="Shadow AI" loading loadingVariant="block">
+                {null}
+              </IdentityPanel>
+            ) : canReadDetections ? (
               <EmployeeShadowAISection userEmail={employeeEmail} />
             ) : (
               <IdentityPanel title="Shadow AI">

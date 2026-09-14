@@ -198,6 +198,11 @@ describe("clientIdFromCimdInput", () => {
       ["https://client.example/./a", '"." or ".."'],
       ["https://client.example/a/../b", '"." or ".."'],
       ["https://client.example/%2e%2e/a", '"." or ".."'],
+      // Go decodes the whole path before splitting it, so an encoded slash
+      // separates segments there; the client has to split the same way.
+      ["https://client.example/a%2F..%2Fb", '"." or ".."'],
+      // A C1 control, which unicode.IsControl rejects alongside the C0 range.
+      ["https://client.example/a\u0085b", "spaces"],
       ["https://client.example/%gh", "parseable"],
       ["https://[bad/a", "parseable"],
     ];

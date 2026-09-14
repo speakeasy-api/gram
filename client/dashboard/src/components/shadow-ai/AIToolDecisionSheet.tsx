@@ -87,8 +87,11 @@ function DecisionForm({
     accessOf(detection).rationale ?? "",
   );
   // Refusing here gives inline feedback instead of the generic failure toast
-  // the endpoint's rejection would otherwise turn into.
-  const rationaleTooLong = rationale.length > RATIONALE_MAX_LENGTH;
+  // the endpoint's rejection would otherwise turn into. Counted the way Goa
+  // counts MaxLength, in code points on the trimmed value that is sent, so
+  // an emoji is one character here as it is there.
+  const rationaleLength = Array.from(rationale.trim()).length;
+  const rationaleTooLong = rationaleLength > RATIONALE_MAX_LENGTH;
   const mutation = useSetAIToolDecisionMutation({
     onSuccess: () => {
       void invalidateAllAiDetections(queryClient);
@@ -195,7 +198,7 @@ function DecisionForm({
           {rationaleTooLong ? (
             <Text variant="small" className="text-destructive">
               Rationale must be {RATIONALE_MAX_LENGTH} characters or fewer
-              (currently {rationale.length}).
+              (currently {rationaleLength}).
             </Text>
           ) : null}
         </div>
