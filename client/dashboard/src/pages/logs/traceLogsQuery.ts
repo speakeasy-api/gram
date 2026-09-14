@@ -1,6 +1,6 @@
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import type { ToolUsageTraceLogGroup } from "@gram/client/models/components/toolusagetraceloggroup.js";
-import { Operator as Op } from "@gram/client/models/components/logfilter";
+import { LogFilterOperator as Op } from "@gram/client/models/components/logfilter";
 import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";

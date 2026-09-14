@@ -12,6 +12,7 @@ import { AdminRemoteSessions } from "./adminremotesessions.js";
 import { Agent } from "./agent.js";
 import { Agents } from "./agents.js";
 import { AiIntegrations } from "./aiintegrations.js";
+import { Analytics } from "./analytics.js";
 import { Assets } from "./assets.js";
 import { AssistantMemories } from "./assistantmemories.js";
 import { Assistants } from "./assistants.js";
@@ -139,6 +140,11 @@ export class Gram extends ClientSDK {
   private _aiIntegrations?: AiIntegrations;
   get aiIntegrations(): AiIntegrations {
     return (this._aiIntegrations ??= new AiIntegrations(this._options));
+  }
+
+  private _analytics?: Analytics;
+  get analytics(): Analytics {
+    return (this._analytics ??= new Analytics(this._options));
   }
 
   private _assets?: Assets;

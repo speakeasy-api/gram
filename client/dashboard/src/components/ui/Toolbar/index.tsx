@@ -20,7 +20,7 @@ import {
 import { ViewToggle } from "@/components/ui/ViewToggle";
 import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { cn } from "@/lib/utils";
-import type { Operator } from "@gram/client/models/components/logfilter";
+import type { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { getFilterAccents } from "@/components/gradient-colors";
 import { FilterChip, CustomFilterChip } from "@/components/filters/FilterChip";
