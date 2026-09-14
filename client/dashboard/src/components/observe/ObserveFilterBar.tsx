@@ -1,3 +1,4 @@
+import { OBSERVE_FILTER_PARAMS } from "@/components/observe/observeDeepLink";
 import { type DateRangePreset } from "@/elements";
 import { X } from "lucide-react";
 import { type ReactNode, useCallback, useMemo } from "react";
@@ -397,19 +398,7 @@ export function ObserveFilterBar({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        for (const key of [
-          "server",
-          "user",
-          "source",
-          "role",
-          "hookTypes",
-          "status",
-          "account_type",
-          "range",
-          "from",
-          "to",
-          "label",
-        ]) {
+        for (const key of OBSERVE_FILTER_PARAMS) {
           next.delete(key);
         }
         return next;
