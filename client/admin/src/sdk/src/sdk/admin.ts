@@ -21,6 +21,7 @@ import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
@@ -43,6 +44,7 @@ import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
@@ -59,6 +61,7 @@ import { AdminInferenceSpendMonth } from "../models/components/admininferencespe
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
+import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -92,6 +95,7 @@ import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
@@ -108,6 +112,7 @@ import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusa
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
@@ -403,6 +408,34 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListOrganizationMembersResult> {
     return unwrapAsync(adminListOrganizationMembers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationOnboarding admin
+   */
+  async getOrganizationOnboarding(
+    request: AdminGetOrganizationOnboardingRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingConfiguration> {
+    return unwrapAsync(adminGetOrganizationOnboarding(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationOnboarding admin
+   */
+  async setOrganizationOnboarding(
+    request: SetOrganizationOnboardingRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingConfiguration> {
+    return unwrapAsync(adminSetOrganizationOnboarding(
       this,
       request,
       options,
