@@ -120,6 +120,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		Marketplaces:  marketplaces,
 		Plugins:       plugins,
 		Configuration: nil,
+		Principal:     nil,
 	}
 }
 

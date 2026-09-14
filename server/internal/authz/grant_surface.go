@@ -46,6 +46,8 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeAgentWrite:              GrantSurfaceAccess,
 	ScopeAgentAuthorize:          GrantSurfaceAccess,
 	ScopeAgentTransfer:           GrantSurfaceAccess,
+	ScopeOrgDeviceAgentSync:      GrantSurfaceAccess,
+	ScopeOrgHooksIngest:          GrantSurfaceAccess,
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.
