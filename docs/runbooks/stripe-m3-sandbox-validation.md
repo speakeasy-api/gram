@@ -38,13 +38,36 @@ References:
    ./zero --agent
    ```
 
-3. Configure and validate the Stripe meter, metered price, and local webhook
-   signing secret:
+3. Configure Stripe once for this local worktree; no organization is required.
 
    ```sh
+   mise install stripe
    mise set --prompt --file mise.local.toml STRIPE_API_KEY
-   mise run stripe:setup
+   mise run stripe:setup --listen
    ```
+
+   Setup preflights the managed CLI, local target and
+   webhook authentication before catalog writes. Only test-mode credentials are
+   accepted. It reuses compatible metered prices/products by lookup key and
+   billing semantics, not mutable product display names. Conflicting product
+   metadata still requires manual resolution; setup does not overwrite it.
+
+   The same API key and signing secret are saved in ignored `mise.local.toml`
+   for provisioning, server and listener. An authenticated CLI key can be used
+   as a fallback, but **CLI keys expire (typically after 90 days)**. A passing
+   check today does not establish durable credentials. After expiry/rotation,
+   replace the saved key using
+   `mise set --prompt --file mise.local.toml STRIPE_API_KEY`, then rerun setup
+   and restart the server, worker and listener. CLI reauthentication alone is
+   insufficient: setup prefers the saved `STRIPE_API_KEY` over the CLI key.
+
+   Setup does not read or change organization billing flags, trial state or
+   eligibility. Before testing checkout, separately select a **synthetic local**
+   organization with the existing `gram-payg-self-serve-billing` feature gate
+   enabled and eligible billing/trial state. Keep its identifiers only in your
+   shell/internal rollout record (`M3_ORG_ID` / `M3_ORG_SLUG`), not shared logs.
+   These are checkout prerequisites, not setup requirements. Trial reset is
+   separate work (GRW-92) and is not part of this procedure.
 
 4. In the Stripe sandbox Dashboard, verify these account settings:
 
@@ -55,24 +78,56 @@ References:
    - Smart Retries uses 8 attempts within 2 weeks and cancels the subscription
      after the last failed attempt.
 
-5. Restart `server`, then forward sandbox webhooks to Gram in a separate
-   terminal. The setup task already saved the listener signing secret to
-   ignored `mise.local.toml`.
+5. Use the worktree-managed listener, not a separate terminal:
 
    ```sh
-   pitchfork restart server
-   if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi
-   stripe listen --latest --skip-verify \
-     --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"
+   mise run wake
+   pitchfork restart server worker
+   # If forwarding was already running before setup/rotation:
+   pitchfork restart stripe-listener
+   mise run stripe:status
+   # When finished:
+   mise run pause
    ```
 
-6. Create a synthetic Gram organization through the local dashboard. Record
-   its ID and slug only in your shell or the internal rollout record:
+   `--listen` registers the daemon in ignored `pitchfork.local.toml` using
+   `pitchfork daemons add --local`. Without it, no Stripe daemon is configured.
+   Re-running setup without `--listen` preserves an existing opt-in. Native
+   `pitchfork start --all-local` (including wake) starts opted-in forwarding;
+   pause stops it with the other worktree daemons. Setup/status
+   report missing credentials, server/listener readiness and
+   remediation without printing secrets. After key/config changes, restart the
+   relevant daemons with fresh mise configuration as directed by status.
+   Status deliberately reports the running server/worker configuration as
+   **unknown**: it does not inspect their credentials, and a health response
+   cannot prove they loaded newly saved settings. `configurationReady` and
+   `listenerReady` are not an end-to-end billing readiness claim. `--ready` is
+   the supervised listener's readiness check, not proof of billing side effects.
+
+   To opt out, stop the listener and remove its local registration:
 
    ```sh
-   export M3_ORG_ID='<ORG_ID>'
-   export M3_ORG_SLUG='<ORG_SLUG>'
+   pitchfork stop stripe-listener
+   pitchfork daemons remove stripe-listener --local
    ```
+
+   **Listener readiness is not verified webhook delivery.** A connected CLI
+   and matching signing secret do not prove that Gram accepted and processed
+   an event. After the local mocked checks pass, separately validate a real
+   sandbox checkout and its resulting webhook, checking the expected local
+   billing transition and successful HTTP delivery. Do not interpret mere
+   listener startup (or a synthetic trigger alone) as end-to-end validation.
+
+### Local regression checks (no Stripe mutations)
+
+```sh
+mise run test:stripe
+```
+
+These mocked tests do not authenticate to Stripe, create checkout sessions,
+advance clocks, or change trial state. Real sandbox setup, wake/pause/restart,
+credential rotation/expiry, checkout and webhook processing remain manual
+validation steps; run them only when authorized.
 
 ## Create a clocked Stripe customer
 

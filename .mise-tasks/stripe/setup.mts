@@ -1,14 +1,20 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
+//USAGE flag "--listen" help="Opt this worktree into Pitchfork-managed webhook forwarding"
 
 // Idempotent: the meter is keyed on its event name and the price on its
 // lookup key, so re-running against a sandbox that already has the objects
 // just re-saves the existing IDs. Safe to run any time; refuses live-mode
 // keys outright.
 
-import { intro, isCancel, log, outro, password } from "@clack/prompts";
+import { intro, isCancel, log, note, outro, password } from "@clack/prompts";
 import { $ } from "zx";
+import { execFileSync } from "node:child_process";
+import { lstatSync } from "node:fs";
+import { join } from "node:path";
+import { localWebhookTarget, registerStripeListener } from "./helpers.mts";
+import { getSetupReadiness, preflightStripeCLI } from "./readiness.mts";
 
 const METER_EVENT_NAME = "tum";
 const METER_DISPLAY_NAME = "Tokens under management";
@@ -40,6 +46,7 @@ interface StripeMeter {
 }
 
 interface StripeProduct {
+  active: boolean;
   id: string;
   name: string;
   metadata?: Record<string, string>;
@@ -133,7 +140,7 @@ async function stripe<T>(
   const body = (await res.json()) as T & StripeError;
   if (!res.ok) {
     throw new Error(
-      `Stripe ${method} ${path} failed (${res.status}): ${body.error?.message ?? JSON.stringify(body)}`,
+      `Stripe ${method} ${path} failed (${res.status}): Request rejected; inspect the sandbox request log (do not share secrets or tenant details)`,
     );
   }
   return body;
@@ -236,7 +243,8 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
   }
 
   // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
-  // for provisioning but never persist it — it expires after ~90 days.
+  // for provisioning, the server and listener; persist it consistently. It
+  // expires (typically after 90 days), so this is not durable readiness.
   const cliConfig = await $({
     nothrow: true,
     quiet: true,
@@ -245,7 +253,9 @@ async function resolveSecretKey(): Promise<{ key: string; prompted: boolean }> {
     /test_mode_api_key\s*=\s*['"]?((?:sk|rk)_test_[A-Za-z0-9_]+)/,
   )?.[1];
   if (cliKey) {
-    log.info("Using the test-mode key from the authenticated Stripe CLI.");
+    log.info(
+      "Using the CLI test key for all local Stripe clients. CLI keys expire (typically after 90 days). After expiry, replace the saved key with `mise set --prompt --file mise.local.toml STRIPE_API_KEY` and rerun setup. CLI reauthentication alone does not replace the saved key.",
+    );
     return { key: cliKey, prompted: false };
   }
 
@@ -284,13 +294,8 @@ async function resolveWebhookSecret(key: string): Promise<string> {
   const output = `${listener.stdout}\n${listener.stderr}`;
   const secret = output.match(/whsec_[A-Za-z0-9]+/)?.[0];
   if (listener.exitCode !== 0 || !secret) {
-    const details = output
-      .replaceAll(key, "<redacted>")
-      .replace(/(?:sk|rk)_(?:test|live)_[A-Za-z0-9_]+/g, "<redacted>")
-      .replace(/whsec_[A-Za-z0-9]+/g, "<redacted>")
-      .trim();
     throw new Error(
-      `Initialize Stripe CLI webhook listener secret failed${details ? `: ${details}` : "."}`,
+      "Stripe CLI webhook authentication failed. Refresh the sandbox key or CLI login and rerun setup; do not share raw CLI output.",
     );
   }
   return secret;
@@ -353,23 +358,15 @@ function assertMeterConfiguration(
   );
 }
 
-async function main() {
-  intro("Stripe PAYG sandbox setup");
-
-  const { key, prompted } = await resolveSecretKey();
-  if (/^(sk|rk)_live_/.test(key)) {
-    log.error("Refusing to run against a live-mode key.");
-    process.exit(1);
+export async function provisionCatalog(key: string) {
+  if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
+    throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
   }
-
   const account = await stripe<StripeAccount>(key, "GET", "/account");
   if (account.livemode === true) {
-    log.error("Refusing to run against a live-mode Stripe account.");
-    process.exit(1);
+    throw new Error("Refusing to run against a live-mode Stripe account.");
   }
-  const accountLabel =
-    account.settings?.dashboard?.display_name ?? account.id ?? "unknown";
-  log.info(`Connected to Stripe account: ${accountLabel}`);
+  log.info("Connected to Stripe sandbox account.");
 
   // Meter — event names are unique across active and inactive meters.
   let meter = await findMeter(key, "active");
@@ -461,9 +458,13 @@ async function main() {
     "GET",
     `/products/${price.product}`,
   );
-  assertConfiguration(`Product ${product.id}`, [
-    ["name", product.name, PRODUCT_NAME],
-  ]);
+  // The lookup key and validated billing semantics identify the catalog.
+  // Display names are mutable; never rename an existing compatible product.
+  assertConfiguration(
+    "PAYG product",
+    [["active", product.active, true]],
+    "Use an active sandbox product/price; setup will not reactivate archived products.",
+  );
   const productTag = product.metadata?.speakeasy_product;
   if (productTag && productTag !== PRODUCT_METADATA_SPEAKEASY_PRODUCT) {
     throw new Error(
@@ -512,6 +513,10 @@ async function main() {
         "features[subscription_cancel][mode]": "at_period_end",
         "features[subscription_cancel][proration_behavior]": "none",
         "features[subscription_cancel][cancellation_reason][enabled]": "false",
+        "features[subscription_cancel][cancellation_reason][options][0]":
+          "too_expensive",
+        "features[subscription_cancel][cancellation_reason][options][1]":
+          "other",
         "features[subscription_update][enabled]": "false",
       },
     );
@@ -521,61 +526,122 @@ async function main() {
   }
   assertPortalConfiguration(portalConfiguration);
 
-  const webhookSecret = await resolveWebhookSecret(key);
-  log.success("Initialized the Stripe CLI webhook signing secret.");
+  return { meter, price, portalConfiguration };
+}
 
-  const settings: Record<string, string> = {
+interface SetupDependencies {
+  preflight: () => Promise<void>;
+  resolveKey: () => Promise<{ key: string }>;
+  webhookSecret: (key: string) => Promise<string>;
+  provision: typeof provisionCatalog;
+  persist: (settings: Record<string, string>) => Promise<void>;
+}
+
+export async function setupStripe(deps: SetupDependencies) {
+  await deps.preflight();
+  const { key } = await deps.resolveKey();
+  if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(key)) {
+    throw new Error("Only Stripe sandbox/test-mode keys are accepted.");
+  }
+  // Authentication must succeed before provisioning catalog objects.
+  const webhookSecret = await deps.webhookSecret(key);
+  const { meter, price, portalConfiguration } = await deps.provision(key);
+  await deps.persist({
+    STRIPE_API_KEY: key,
     STRIPE_PRICE_ID_TUM: price.id,
     STRIPE_METER_ID_TUM: meter.id,
     STRIPE_METER_EVENT_NAME: METER_EVENT_NAME,
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
-  };
-  if (prompted) {
-    settings.STRIPE_API_KEY = key;
-  }
-  for (const [name, value] of Object.entries(settings)) {
-    await $({
-      input: value,
-      quiet: true,
-    })`mise set --stdin --file mise.local.toml ${name}`;
-  }
-  log.success(`Saved to mise.local.toml: ${Object.keys(settings).join(", ")}`);
-
-  log.info(
-    [
-      "Start webhook forwarding for this worktree in a separate terminal:",
-      '  if test "${STRIPE_API_KEY:-}" = unset; then unset STRIPE_API_KEY; fi',
-      '  stripe listen --latest --skip-verify --forward-to "$GRAM_SERVER_URL/rpc/stripe.webhook"',
-    ].join("\n"),
-  );
-
-  log.info(
-    [
-      "Finish Stripe Dashboard setup before sandbox validation:",
-      "",
-      "1. Configure subscription Smart Retries",
-      "   Billing → Revenue recovery → Retries",
-      "   - Under Card payments, click Manage.",
-      "   - Select Smart Retries: 8 retries within 2 weeks.",
-      "   - Set Subscription status to cancel the subscription.",
-      "   - Leave Invoice status as leave the invoice past-due; it applies to one-off invoices.",
-      "   - Save the settings.",
-      "",
-      "2. Configure the metered invoice grace period",
-      "   Settings → Billing → Invoices → Invoice finalization grace period",
-      "   - Click Add rule and set Invoice finalization delay to 72 hours.",
-      "   - Add both conditions: Has a metered price and Invoice is from a subscription cycle.",
-      "   - Save the rule.",
-    ].join("\n"),
-  );
-
-  outro("Done.");
+  });
 }
 
-try {
-  await main();
-} catch (err) {
-  log.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
+/** Worktree-only safety: no database, organization or feature-flag access. */
+export function preflightLocalSetup(
+  root = process.cwd(),
+  env = process.env,
+): void {
+  if (env.GRAM_ENVIRONMENT !== "local") {
+    throw new Error("Stripe setup requires GRAM_ENVIRONMENT=local.");
+  }
+  localWebhookTarget(env.GRAM_SERVER_URL ?? "", env.GRAM_SERVER_PORT ?? "");
+  try {
+    // check-ignore also rejects tracked files, even when an ignore rule matches.
+    execFileSync("git", ["check-ignore", "--quiet", "--", "mise.local.toml"], {
+      cwd: root,
+      stdio: "pipe",
+    });
+    try {
+      const stat = lstatSync(join(root, "mise.local.toml"));
+      if (!stat.isFile() || stat.nlink !== 1) throw new Error("unsafe file");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  } catch {
+    throw new Error(
+      "Stripe setup requires an ignored, untracked regular mise.local.toml (no links).",
+    );
+  }
+}
+
+async function main() {
+  intro("Stripe PAYG sandbox setup");
+  await setupStripe({
+    preflight: async () => {
+      preflightLocalSetup();
+      preflightStripeCLI();
+    },
+    resolveKey: resolveSecretKey,
+    webhookSecret: resolveWebhookSecret,
+    provision: provisionCatalog,
+    persist: async (settings) => {
+      preflightLocalSetup();
+      for (const [name, value] of Object.entries(settings)) {
+        await $({
+          input: value,
+          quiet: true,
+        })`mise set --stdin --file mise.local.toml ${name}`;
+      }
+      if (process.env.usage_listen === "true") registerStripeListener();
+      log.success(
+        "Saved consistent test credentials and billing configuration to ignored mise.local.toml.",
+      );
+    },
+  });
+
+  const readiness = await getSetupReadiness();
+  for (const check of readiness.checks)
+    log.info(`${check.ok ? "OK" : "ACTION"} ${check.message}`);
+  const commands = [
+    ["mise run stripe:status", "Check configuration and forwarding"],
+    ["mise run stripe:setup --listen", "Configure managed forwarding"],
+    ["pitchfork start stripe-listener", "Start forwarding"],
+    ["pitchfork restart server worker", "Reload saved billing credentials"],
+    [
+      "pitchfork restart stripe-listener",
+      "Restart forwarding after config changes",
+    ],
+    ["pitchfork logs stripe-listener -n 50", "Inspect recent forwarding logs"],
+    ["pitchfork stop stripe-listener", "Stop forwarding"],
+  ] as const;
+  const width = Math.max(...commands.map(([command]) => command.length));
+  note(
+    commands
+      .map(
+        ([command, description]) => `${command.padEnd(width)}  ${description}`,
+      )
+      .join("\n"),
+    "Useful commands",
+  );
+
+  outro("Stripe configuration saved. See checks above for remaining actions.");
+}
+
+if (import.meta.main) {
+  try {
+    await main();
+  } catch (err) {
+    log.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  }
 }
