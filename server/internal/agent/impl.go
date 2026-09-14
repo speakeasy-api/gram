@@ -422,7 +422,7 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 	if err != nil {
 		return nil, err
 	}
-	result.Principal = &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name}
+	mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name})
 	return result, nil
 }
 
