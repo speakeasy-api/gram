@@ -234,12 +234,11 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		{name: "custom replaces default", stored: conv.ToPGText(custom), want: custom},
 		{name: "reset restores default", stored: pgtype.Text{}, want: metamcp.Instructions},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			setInstructions(tc.stored)
-			for _, method := range []string{"initialize", "server/discover"} {
-				require.Equal(t, tc.want, served(method), "method=%s", method)
-			}
-		})
+		// Exercise setting and resetting the same endpoint sequentially.
+		setInstructions(tc.stored)
+		for _, method := range []string{"initialize", "server/discover"} {
+			require.Equal(t, tc.want, served(method), "case=%s method=%s", tc.name, method)
+		}
 	}
 }
 
