@@ -257,9 +257,7 @@ export default function PluginDetail(): JSX.Element | null {
     await invalidateAllPublishStatus(queryClient);
   };
 
-  // Both dialogs publish; only the manage one is about sharing the repo. A ref
-  // rather than state because the toast reads it from a detached mutation
-  // callback, and a render here would defeat memo() on the dialogs.
+  // Ref, not state, so switching modes does not re-render the memoized dialogs.
   const publishModeRef = useRef<"publish" | "manage">("publish");
 
   const publishMutation = usePublishPluginsMutation({

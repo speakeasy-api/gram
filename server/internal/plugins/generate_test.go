@@ -2656,8 +2656,6 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	require.Contains(t, readme, "codex plugin marketplace add")
 }
 
-// The README is the only place a collaborator learns what their access to the
-// repo is good for, and the Cursor sync is the reason they hold admin at all.
 func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {
 	t.Parallel()
 	files, err := GeneratePluginPackages(nil, GenerateConfig{

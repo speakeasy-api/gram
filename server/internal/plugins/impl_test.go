@@ -44,13 +44,11 @@ import (
 // mockGitHubPublisher records calls for testing. Set the *Err fields to
 // simulate GitHub-side failures.
 type mockGitHubPublisher struct {
-	createRepoCalled      bool
-	pushFilesCalled       bool
-	addCollaboratorCalled bool
-	getRepoFilesCalled    bool
-	collaborators         []string
-	// collaboratorPermissions records the permission each AddCollaborator call
-	// asked for, positionally aligned with collaborators.
+	createRepoCalled        bool
+	pushFilesCalled         bool
+	addCollaboratorCalled   bool
+	getRepoFilesCalled      bool
+	collaborators           []string
 	collaboratorPermissions []string
 	lastPushedFiles         map[string][]byte
 	// repoFiles, when set, is returned by GetRepoFiles; otherwise it falls back
@@ -1789,9 +1787,6 @@ func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, mock.addCollaboratorCalled)
 	require.Equal(t, []string{"octocat", "hubot", "monalisa"}, mock.collaborators)
-	// Admin, not read: Cursor gates "Serve Marketplace From Cursor" — and other
-	// platforms gate parts of their marketplace setup — on repository admin, and
-	// nothing in Gram can escalate a collaborator afterwards.
 	require.Equal(t, []string{"admin", "admin", "admin"}, mock.collaboratorPermissions)
 }
 
