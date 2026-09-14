@@ -14,7 +14,6 @@ import (
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -928,14 +927,10 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 		statusCode: 200,
 	})
 
-	rawPathQuery := "charge"
-	// Calling the service directly skips the HTTP decoder that applies the
-	// payload defaults, so the limit has to be set here.
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 	limit := 100
-
-	window := func() (string, string) {
-		return now.Add(-1 * time.Hour).Format(time.RFC3339), now.Add(1 * time.Hour).Format(time.RFC3339)
-	}
+	rawPathQuery := "charge"
 
 	// A free-text query drops the listing off trace_summaries onto a raw
 	// telemetry_logs scan. The two paths derive the client separately, so they
@@ -950,40 +945,30 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
-				from, to := window()
-				res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
-					From: from, To: to, Query: tc.query, Limit: limit,
-				})
-				if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
-					return
-				}
+			res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+				From: from, To: to, Query: tc.query, Limit: limit,
+			})
+			require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 
-				byTool := map[string]*gen.ToolUsageTraceSummary{}
-				for _, trace := range res.Traces {
-					byTool[trace.ToolName] = trace
-				}
+			byTool := map[string]*gen.ToolUsageTraceSummary{}
+			for _, trace := range res.Traces {
+				byTool[trace.ToolName] = trace
+			}
 
-				charge := byTool["charge"]
-				if !assert.NotNil(c, charge) {
-					return
-				}
-				assert.Equal(c, "claude code", charge.ClientKey)
-				assert.Equal(c, "Claude Code", charge.ClientLabel)
-				if assert.NotNil(c, charge.ClientVersion) {
-					assert.Equal(c, "2.4.1", *charge.ClientVersion)
-				}
+			charge := byTool["charge"]
+			require.NotNil(t, charge)
+			require.Equal(t, "claude code", charge.ClientKey)
+			require.Equal(t, "Claude Code", charge.ClientLabel)
+			require.NotNil(t, charge.ClientVersion)
+			require.Equal(t, "2.4.1", *charge.ClientVersion)
 
-				if tc.query != nil {
-					return
-				}
-				refund := byTool["refund"]
-				if !assert.NotNil(c, refund) {
-					return
-				}
-				assert.Equal(c, "unattributed", refund.ClientKey)
-				assert.Nil(c, refund.ClientVersion)
-			}, 20*time.Second, 250*time.Millisecond)
+			if tc.query != nil {
+				return
+			}
+			refund := byTool["refund"]
+			require.NotNil(t, refund)
+			require.Equal(t, "unattributed", refund.ClientKey)
+			require.Nil(t, refund.ClientVersion)
 		})
 	}
 }

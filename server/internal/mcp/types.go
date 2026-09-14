@@ -101,12 +101,16 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// variation group, never filter by tag, have no fronting mcp_servers
 		// row to record, and carry no HTTP request to declare a protocol
 		// version, so they resolve to the unversioned default.
-		toolVariationsGroupID:    nil,
-		mcpServerID:              nil,
-		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
-		metaMcpServerID:          "",
-		clientInfoScope:          "",
+		toolVariationsGroupID: nil,
+		mcpServerID:           nil,
+		wrapperRBACResourceID: "",
+		wrapperIsPublic:       nil,
+		metaMcpServerID:       "",
+		// An internal caller never handshaked as an MCP client. Scoping it
+		// somewhere no handshake can be stored keeps it from resolving the
+		// record some real client wrote for the same toolset and session,
+		// which would attribute an agent-workflow call to that client.
+		clientInfoScope:          internalClientInfoScope,
 		skipProxyTools:           false,
 		tags:                     nil,
 		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
