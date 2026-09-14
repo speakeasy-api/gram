@@ -21,7 +21,7 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { Wrench } from "lucide-react";
-import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
+import { useCanViewOrgSetup } from "@/hooks/useCanSetUpOrg";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -58,7 +58,7 @@ export function OrgSidebar({
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const { isLoading: rbacLoading } = useRBAC();
-  const canSetUpOrg = useCanSetUpOrg();
+  const canViewOrgSetup = useCanViewOrgSetup();
   const telemetry = useTelemetry();
   const { data: productFeatures } = useProductFeatures(
     { organizationId: organization.id },
@@ -305,14 +305,11 @@ export function OrgSidebar({
       </SidebarContent>
       <SidebarFooter className="border-t">
         <TrialStatusCard />
-        {/* One-time org setup: a raised card just above the user bar, out of
-            the standing nav but always reachable while it still applies. */}
-        {canSetUpOrg && (
+        {canViewOrgSetup && (
           <SidebarFooterAction
             to={orgRoutes.setup.href()}
             icon={Wrench}
-            label="Finish organization setup"
-            labelClassName="mode-shimmer"
+            label="Organization onboarding"
           />
         )}
         <SidebarUserMenu />
