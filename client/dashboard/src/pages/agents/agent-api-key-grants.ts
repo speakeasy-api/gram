@@ -204,6 +204,35 @@ export function buildRequestedGrants(
   return forms;
 }
 
+export const DEFAULT_AGENT_KEY_EXPIRY_DAYS = "90";
+
+/**
+ * When a key issued now would expire, and why that choice is invalid if it is.
+ * `expiryDays` is a day count or "custom", which reads `customDate`.
+ */
+export function agentKeyExpiry(
+  expiryDays: string,
+  customDate: string,
+  now: number,
+): { expiresAt: Date; reason?: string } {
+  // Leave five minutes below the server limit for modest browser clock skew.
+  const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
+  // Date-only selections expire at local midnight, not UTC midnight.
+  const expiresAt =
+    expiryDays === "custom"
+      ? new Date(`${customDate}T00:00:00`)
+      : new Date(now + Math.min(Number(expiryDays) * 86_400_000, maxLifetime));
+  let reason: string | undefined;
+  if (!Number.isFinite(expiresAt.getTime()))
+    reason = "Choose a valid expiration date.";
+  else if (expiresAt.getTime() <= now)
+    reason = "Expiration date must be in the future.";
+  else if (expiresAt.getTime() > now + maxLifetime)
+    reason =
+      "Expiration date must be within 365 days minus a 5-minute clock-skew margin.";
+  return { expiresAt, reason };
+}
+
 // Match Go strings.TrimSpace and utf8.RuneCountInString used by agent issuance.
 export function validateAgentAPIKeyName(value: string): string {
   const name = value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");

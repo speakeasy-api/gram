@@ -135,7 +135,9 @@ function CloudSetupScript({
   version: string;
   sha256: string;
 }) {
-  const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const orgRoutes = useOrgRoutes();
+  const apiKeysHref = orgRoutes.apiKeys.href();
+  const agentIdentityHref = orgRoutes.deviceAgent.agentIdentity.href();
   const identityEmailId = useId();
   const [identityEmail, setIdentityEmail] = useState("");
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
@@ -200,7 +202,12 @@ function CloudSetupScript({
           Interactive machines can enroll through a browser sign-in. A headless
           shared VM cannot, so this flow uses managed enrollment: an admin
           provides the shared reporting identity and an agent-scoped{" "}
-          <code>org_token</code>.
+          <code>org_token</code>. To attribute sessions to a dedicated agent
+          instead of a shared email, and skip pinning a version, use{" "}
+          <Link to={agentIdentityHref} className={LINK_CLASS}>
+            agent identity setup
+          </Link>
+          .
         </AlertDescription>
       </Alert>
       <Text small muted>

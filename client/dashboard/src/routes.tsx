@@ -33,6 +33,7 @@ import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
+import DeviceAgentAgentIdentity from "./pages/device-agent/agent-identity-onboarding";
 import AgentsPage from "./pages/agents/Agents";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -1386,6 +1387,11 @@ const ORG_ROUTE_STRUCTURE = {
         title: "MDM Integration",
         url: "mdm-integrations/:provider",
         component: MdmIntegrationDetail,
+      },
+      agentIdentity: {
+        title: "Agent Identity Setup",
+        url: "agent-identity",
+        component: DeviceAgentAgentIdentity,
       },
     },
   },
