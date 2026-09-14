@@ -1,0 +1,23 @@
+.changeset/enforcement-opaque-operation-id.md
+  s_8c25379f270d5a::t_61f2e22425ee4a 1-5
+server/internal/risk/enforcereply/dispatch.go
+  s_8c25379f270d5a::t_91799151a28a64 7,178-182,201,215,242
+server/internal/risk/enforcereply/dispatch_test.go
+  s_8c25379f270d5a::t_d5eccbdd415604 151-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a91063bb21109fd6a5c69519e35cccb416eb4d4b",
+  "prompts": {},
+  "sessions": {
+    "s_8c25379f270d5a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a036-642b-73d0-b9d9-ec1971c3ac5b",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
