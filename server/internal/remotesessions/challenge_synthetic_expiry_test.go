@@ -15,7 +15,6 @@ package remotesessions_test
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -368,21 +367,19 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	var policyOptions []func(*guardian.Policy)
 	issuerURL, jwksURI := "https://idp.example.com", ""
-	trusted := x509.NewCertPool()
+	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
+	trusted := testIssuerTLSRootCAs.Clone()
 	if options.idTokenIssuer != nil {
 		trusted.AddCert(options.idTokenIssuer.cert)
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
 		issuerURL, jwksURI = options.idTokenIssuer.issuerURL, options.idTokenIssuer.jwksURI
 	}
 	userinfoEndpoint, introspectionEndpoint := "", ""
 	if options.enrichment != nil {
 		trusted.AddCert(options.enrichment.cert)
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
 		userinfoEndpoint, introspectionEndpoint = options.enrichment.userinfoURL, options.enrichment.introspectionURL
 	}
-	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, policyOptions...)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(trusted))
 	require.NoError(t, err)
 
 	// A real Redis-backed cache is required: BuildAuthorizationUrl writes the
