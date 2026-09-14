@@ -74,6 +74,7 @@ type UserSessionIssuer struct {
 	ID                            uuid.UUID
 	ProjectID                     uuid.NullUUID
 	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval

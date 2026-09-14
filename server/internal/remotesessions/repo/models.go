@@ -12,6 +12,7 @@ import (
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -43,6 +44,7 @@ type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
 	RemoteSessionIssuerID           uuid.UUID
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
