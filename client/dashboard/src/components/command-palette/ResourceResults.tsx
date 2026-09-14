@@ -162,10 +162,15 @@ function McpServersGroup({ onNavigate }: GroupProps) {
  * for one of the project's own slugs.
  *
  * The typed query filters the fetched list here rather than being sent to
- * listCatalog. Searching server-side would reach no further: the backend
- * filters in memory over the same bounded crawl it returns unfiltered, so a
- * search term buys an upstream round trip per keystroke and a cache entry the
- * catalog page cannot share, without surfacing a single extra entry.
+ * listCatalog, which keeps what this group can reach identical to what the
+ * catalog page can show. Both read the same capped response: listCatalog
+ * concatenates its sources in priority order and truncates the merged list, so
+ * the day a second source is enabled, entries past the cap fall out of the
+ * page, out of this group, and out of the detail page — which resolves a
+ * selected row by finding it in that same list. Searching server-side here
+ * alone would filter per source before the merge and so surface rows the
+ * detail page then fails to resolve. The cap is the thing to lift, and the
+ * handler already marks it as standing until cursor pagination lands.
  */
 function McpCatalogGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
