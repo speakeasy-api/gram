@@ -11,8 +11,10 @@ export type MeterChartData = {
 
 export function meterSeriesIdentity(
   series: MeterUsageResponse["breakdown"]["series"][number],
+  family: MeterUsageData["family"],
+  dimension: string,
 ): string {
-  return `${series.kind}:${series.key ?? ""}`;
+  return `${family}:${dimension}:${series.kind}:${series.key ?? ""}`;
 }
 
 export function meterSeriesLabel(
@@ -36,7 +38,7 @@ export function adaptMeterChart(
     bucketsMs: data.buckets.map((bucket) => bucket.from.getTime()),
     bucketEndsMs: data.buckets.map((bucket) => bucket.to.getTime()),
     stacks: data.breakdown.series.map((series) => ({
-      key: meterSeriesIdentity(series),
+      key: meterSeriesIdentity(series, data.family, data.breakdown.dimension),
       label: meterSeriesLabel(series, data.breakdown.dimension, projectSlugs),
       series: series.values.map(Number),
       exactSeries: series.values,

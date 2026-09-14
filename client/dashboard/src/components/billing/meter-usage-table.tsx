@@ -38,7 +38,11 @@ export function MeterUsageTable({
       projectSlugs,
     );
     return {
-      identity: meterSeriesIdentity(series),
+      identity: meterSeriesIdentity(
+        series,
+        data.family,
+        data.breakdown.dimension,
+      ),
       label,
       total: series.total,
       color:

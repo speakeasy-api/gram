@@ -9,6 +9,7 @@ import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { useOrganization } from "@/contexts/Auth";
 import { useGetMeterUsage } from "@gram/client/react-query/getMeterUsage.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
+import { keepPreviousData } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BillingCyclePicker } from "./billing-cycle-picker";
@@ -82,7 +83,10 @@ export function MeterUsageSection(): JSX.Element {
     breakdown,
     ...periodState.requestPeriod,
   };
-  const query = useGetMeterUsage(request, undefined, { throwOnError: false });
+  const query = useGetMeterUsage(request, undefined, {
+    throwOnError: false,
+    placeholderData: keepPreviousData,
+  });
   const data: MeterUsageData | undefined = query.data;
   useEffect(() => {
     if (!data || data.billingCycles.length === 0) return;
@@ -116,7 +120,7 @@ export function MeterUsageSection(): JSX.Element {
     () =>
       data
         ? {
-            key: "__bucket_total__",
+            key: `${data.family}:${data.breakdown.dimension}:__bucket_total__`,
             label: "Total",
             series: data.buckets.map((bucket) => Number(bucket.total)),
             exactSeries: data.buckets.map((bucket) => bucket.total),
@@ -150,6 +154,7 @@ export function MeterUsageSection(): JSX.Element {
   } else if (!data) {
     explorer = <Skeleton className="h-[480px] w-full" />;
   } else {
+    const dataDefinition = METER_FAMILIES[data.family];
     const quantity = formatMeterQuantity(data.total, data.unit);
     const now = new Date();
     const dailyRate = formatDailyMeterRate(
@@ -168,7 +173,16 @@ export function MeterUsageSection(): JSX.Element {
       "standard",
     );
     explorer = (
-      <div key={periodState.viewNonce} className="space-y-4">
+      <div
+        key={periodState.viewNonce}
+        className="space-y-4"
+        aria-busy={query.isFetching}
+      >
+        {query.isPlaceholderData && (
+          <div className="text-muted-foreground text-sm" role="status">
+            Loading selected usage — showing the previous selection.
+          </div>
+        )}
         {query.isError && (
           <div className="text-muted-foreground text-sm" role="alert">
             Couldn't refresh usage — showing the last loaded data.
@@ -185,7 +199,7 @@ export function MeterUsageSection(): JSX.Element {
                 {quantity}
               </span>
             }
-            description={definition.label}
+            description={dataDefinition.label}
             tone="information"
             size="sm"
           />
@@ -202,9 +216,8 @@ export function MeterUsageSection(): JSX.Element {
           />
         </MetricCard.Group>
         <StackedTimeSeriesPanel
-          key={`${data.family}:${data.breakdown.dimension}`}
-          title={`${definition.label} over time`}
-          headerHint={`${definition.description} Click or drag the chart to drill into a date range.`}
+          title={`${dataDefinition.label} over time`}
+          headerHint={`${dataDefinition.description} Click or drag the chart to drill into a date range.`}
           bucketsMs={chart.bucketsMs}
           bucketEndsMs={chart.bucketEndsMs}
           stacks={chart.stacks}
@@ -216,7 +229,9 @@ export function MeterUsageSection(): JSX.Element {
               onChange={selectBreakdown}
             />
           }
-          totalSeries={breakdown === "total" ? undefined : totalSeries}
+          totalSeries={
+            data.breakdown.dimension === "total" ? undefined : totalSeries
+          }
           formatValue={(value) => formatMeterAxis(value, data.unit)}
           formatExactValue={(value) =>
             formatMeterQuantity(value, data.unit, "standard")
@@ -253,7 +268,7 @@ export function MeterUsageSection(): JSX.Element {
           <Page.Toolbar.Row>
             <Page.Toolbar.Leading>
               {period && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <BillingCyclePicker
                     cycles={knownCycles}
                     selected={

@@ -682,7 +682,7 @@ function TimeRangePicker({
             "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
             "border-border hover:border-border/80",
             disabled && "cursor-not-allowed opacity-50",
-            timezone && "pt-4",
+            timezone && "py-1.5",
             className,
           )}
         >
