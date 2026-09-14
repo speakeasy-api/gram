@@ -164,6 +164,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
 	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
+	logAttrs.RecordAuthenticatedActor(ctx)
 	ensureTraceContext(logAttrs)
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
