@@ -27,7 +27,7 @@ func CanonicalJSON(document *Document) (string, error) {
 		}
 	}
 	setList := func(key string, value []string) {
-		if len(value) > 0 {
+		if value != nil {
 			members[key] = value
 		}
 	}

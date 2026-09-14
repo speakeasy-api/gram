@@ -182,7 +182,7 @@ func GatewayMatchersFor(product Product) GatewayMatchers {
 		matchers.VendorKeys = []string{product.VendorKey}
 	}
 	for _, document := range product.Documents {
-		if !document.Enabled {
+		if !document.Enabled && !document.DisplayOnly {
 			continue
 		}
 		// DisplayOnly URLs are included: naming one literally is what lets
