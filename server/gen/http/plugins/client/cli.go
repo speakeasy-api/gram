@@ -589,7 +589,7 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 	{
 		err = json.Unmarshal([]byte(pluginsUpdateMarketplaceSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\",\n      \"observability_enabled\": false\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -605,7 +605,8 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 		}
 	}
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -24,7 +24,7 @@ export type ReportAIScanRequestBody = {
    */
   scanStartedAt: Date;
   /**
-   * Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
+   * Revision of the scan target catalog the agent scanned with: the list_version it last received from getPlugins, or 0 when it fell back to the list embedded in its binary. Echoed into the scan receipt as reported.
    */
   targetListVersion: number;
 };

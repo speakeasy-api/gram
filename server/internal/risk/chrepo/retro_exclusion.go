@@ -217,8 +217,8 @@ func reversalWhere(keep RetroReversalKeep) string {
 }
 
 // copyProjection renders the INSERT ... SELECT column projection: every
-// risk_findings column passed through verbatim except inserted_at (bound —
-// the copy must sort after every prior copy of the id) and the suppression
+// risk_findings column passed through verbatim except inserted_at (strictly
+// newer than the selected source and both clocks) and the suppression
 // columns (bound, literal or NULL per direction). excluded_reason,
 // excluded_detail and event_kind are SQL literal expressions, not bind
 // placeholders — the callers only ever stamp constants ('rule' on apply, ” on
@@ -231,7 +231,9 @@ func copyProjection(excludedAtExpr, exclusionIDExpr, excludedReasonExpr, exclude
 	for i, col := range riskFindingColumns {
 		switch col {
 		case "inserted_at":
-			projected[i] = "?"
+			// DateTime64(9) has a one-nanosecond tick. Caller monotonicity
+			// alone cannot order copies when ClickHouse's clock is ahead.
+			projected[i] = "greatest(toDateTime64(?, 9), now64(9), latest.inserted_at) + toIntervalNanosecond(1)"
 		case "excluded_at":
 			projected[i] = excludedAtExpr
 		case "exclusion_id":

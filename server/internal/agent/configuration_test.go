@@ -55,7 +55,9 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 
 	beforePoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
-	require.Nil(t, beforePoll.Configuration)
+	require.NotNil(t, beforePoll.Configuration)
+	require.False(t, beforePoll.Configuration.IsConfigured)
+	require.Contains(t, beforePoll.Configuration.Config, "ai_scan")
 
 	beforeAuditCount, err := audittest.AuditLogCountByAction(
 		ctx,
@@ -99,7 +101,14 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 	afterPoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
 	require.NotNil(t, afterPoll.Configuration)
-	require.Equal(t, updated, afterPoll.Configuration)
+	require.True(t, afterPoll.Configuration.IsConfigured)
+	require.Equal(t, updated.SchemaVersion, afterPoll.Configuration.SchemaVersion)
+	require.Equal(t, updated.UpdatedAt, afterPoll.Configuration.UpdatedAt)
+	for key, value := range updated.Config {
+		require.Equal(t, value, afterPoll.Configuration.Config[key], "stored key %q must be delivered as saved", key)
+	}
+	require.Contains(t, afterPoll.Configuration.Config, "ai_scan")
+	require.NotEqual(t, updated.Etag, afterPoll.Configuration.Etag)
 	require.NotEqual(t, beforePoll.Etag, afterPoll.Etag, "remote configuration changes must invalidate the policy etag")
 }
 

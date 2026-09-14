@@ -17,7 +17,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "agent-sessions": "Observability",
   "org-memory": "Observability",
   logs: "Observability",
-  employees: "Observability",
+  identities: "Observability",
   // Security and Policy
   watchdog: "Security and Policy",
   "risk-overview": "Security and Policy",

@@ -370,6 +370,10 @@ var _ efficacy.Signaler = (*TemporalSkillEfficacySignaler)(nil)
 // run is live. The workflow id is the project's, so a signal raised while a run
 // is in flight joins that run instead of starting a second one.
 func (s *TemporalSkillEfficacySignaler) Signal(ctx context.Context, projectID uuid.UUID) error {
+	if s == nil || s.TemporalEnv == nil {
+		return ErrTemporalUnavailable
+	}
+
 	workflowID := skillEfficacyCoordinatorWorkflowID(projectID)
 
 	_, err := s.TemporalEnv.Client().SignalWithStartWorkflow(

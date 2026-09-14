@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
+	"strings"
 	"sync/atomic"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"go.opentelemetry.io/otel"
 )
 
 // AuthRejectedError is returned when an MCP server rejects authentication (401 or 403).
@@ -30,6 +34,8 @@ func (e *AuthRejectedError) Error() string {
 
 // ClientOptions contains options for creating an MCP client.
 type ClientOptions struct {
+	// Metrics optionally injects recovery instruments; nil uses the process OTel provider.
+	Metrics *Metrics
 	// Authorization is the value for the Authorization header (e.g., "Bearer token").
 	// If empty, no Authorization header is sent.
 	Authorization string
@@ -89,6 +95,10 @@ type Client struct {
 	session        *mcp.ClientSession
 	authRT         *authRoundTripper
 	bodyLimitRT    *bodyLimitRoundTripper
+	transportType  types.TransportType
+	options        ClientOptions
+	// Fresh definitions discovered on this isolated session override persisted metadata.
+	discovered map[string]json.RawMessage
 }
 
 func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLimitRT *bodyLimitRoundTripper, err error) error {
@@ -97,6 +107,16 @@ func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLi
 	}
 	if bodyLimitRT != nil && bodyLimitRT.tripped.Load() {
 		return fmt.Errorf("%s: %w", op, ErrResponseTooLarge)
+	}
+	// SDK response decoding may include raw numeric values or remote field
+	// names. Retain typed protocol errors, but redact typed JSON diagnostics.
+	switch {
+	case isJSONDiagnostic(err):
+		err = safeJSONDiagnostic(err)
+	default:
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
+			err = &jsonrpc.Error{Code: rpcErr.Code, Message: "external MCP parameter header mismatch", Data: nil}
+		}
 	}
 	return fmt.Errorf("%s: %w", op, err)
 }
@@ -112,12 +132,21 @@ func (c *Client) beginRequest() {
 func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
+			Metrics:          nil,
 			Authorization:    "",
 			Headers:          nil,
 			DisableRetries:   false,
 			MaxResponseBytes: 0,
 		}
 	}
+
+	// Recovery must retain the exact effective configuration, not a mutable caller map.
+	options := *opts
+	options.Headers = maps.Clone(opts.Headers)
+	if options.Metrics == nil {
+		options.Metrics = NewMetrics(otel.GetMeterProvider(), logger)
+	}
+	opts = &options
 
 	logger.InfoContext(ctx, "connecting to external MCP server", attr.SlogURL(remoteURL))
 
@@ -194,6 +223,9 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		session:        session,
 		authRT:         authRT,
 		bodyLimitRT:    bodyLimitRT,
+		transportType:  transportType,
+		options:        options,
+		discovered:     make(map[string]json.RawMessage),
 	}, nil
 }
 
@@ -222,49 +254,119 @@ type Tool struct {
 	Annotations *ToolAnnotations
 }
 
+// Bound the aggregate discovery before retaining remote metadata across pages.
+const (
+	maxListedTools       = 1000    // 1,000 tools bounds retained definitions and per-tool validation.
+	maxListedPages       = 1000    // 1,000 pages also bounds empty-page requests and cursor storage.
+	maxListedSchemaBytes = 8 << 20 // 8 MiB caps aggregate schema bytes across pages, including skipped tools.
+)
+
 // ListTools lists available tools from the external MCP server.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
-	c.beginRequest()
-	toolsResult, err := c.session.ListTools(ctx, nil)
-	if err != nil {
-		return nil, classifyRequestError("list tools from external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
-	}
+	return c.listTools(ctx, "")
+}
 
-	tools := make([]Tool, 0, len(toolsResult.Tools))
-	for _, tool := range toolsResult.Tools {
-		schema, err := json.Marshal(tool.InputSchema)
+// listTools follows cursors until exhausted, or until the requested tool is found.
+// A fresh recovery Client is required: ListTools on this session can hit the SDK TTL cache.
+func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
+	// Do not consult a previous session listing when deciding whether this
+	// discovery found its target. Failed discovery also discards local metadata.
+	c.discovered = make(map[string]json.RawMessage)
+	var tools []Tool
+	schemaBytes := 0
+	listedTools := 0
+	complete := false
+	defer func() {
+		if !complete {
+			c.discovered = make(map[string]json.RawMessage)
+		}
+	}()
+	seen := make(map[string]bool)
+	cursor := ""
+	for page := 0; ; page++ {
+		// Empty pages must not permit unbounded pagination or cursor retention.
+		if page >= maxListedPages {
+			return nil, errors.New("external mcp tools/list exceeds page limit")
+		}
+		if seen[cursor] {
+			return nil, errors.New("external mcp tools/list pagination did not terminate")
+		}
+		seen[cursor] = true
+		c.beginRequest()
+		toolsResult, err := c.session.ListTools(ctx, &mcp.ListToolsParams{Meta: nil, Cursor: cursor})
 		if err != nil {
-			c.logger.WarnContext(ctx, "failed to marshal tool schema",
-				attr.SlogToolName(tool.Name),
-				attr.SlogError(err),
-			)
-			schema = []byte("{}")
+			return nil, classifyRequestError("list tools from external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
+		}
+		if len(toolsResult.Tools) > maxListedTools-listedTools {
+			return nil, errors.New("external mcp tools/list exceeds tool limit")
+		}
+		listedTools += len(toolsResult.Tools)
+		for _, tool := range toolsResult.Tools {
+			schema, err := json.Marshal(tool.InputSchema)
+			if err != nil {
+				c.logger.WarnContext(ctx, "skipping invalid external mcp tool schema", attr.SlogError(safeJSONDiagnostic(err)))
+				continue
+			}
+			// Charge every marshaled definition, including skipped tools, so
+			// oversized schemas cannot bypass the aggregate discovery budget.
+			if len(schema) > maxListedSchemaBytes-schemaBytes {
+				return nil, errors.New("external mcp tools/list exceeds schema byte limit")
+			}
+			schemaBytes += len(schema)
+			// Within the aggregate budget, an unusable definition must not hide
+			// its neighbors. Never call this tool with incomplete headers.
+			if len(schema) > maxParameterHeaderSchemaBytes {
+				c.logger.WarnContext(ctx, "skipping oversized external mcp tool schema")
+				continue
+			}
+			if _, err := parameterHeaders(schema, nil); err != nil {
+				// Reject only this tool: never call it with incomplete parameter headers.
+				c.logger.WarnContext(ctx, "skipping unsafe external mcp tool schema", attr.SlogError(err))
+				continue
+			}
+			c.discovered[tool.Name] = schema
+
+			// Extract annotations from MCP tool response
+			var annotations *ToolAnnotations
+			if tool.Annotations != nil {
+				annotations = &ToolAnnotations{
+					Title:           tool.Annotations.Title,
+					ReadOnlyHint:    new(tool.Annotations.ReadOnlyHint),
+					DestructiveHint: tool.Annotations.DestructiveHint, // already *bool
+					IdempotentHint:  new(tool.Annotations.IdempotentHint),
+					OpenWorldHint:   tool.Annotations.OpenWorldHint, // already *bool
+				}
+			}
+
+			tools = append(tools, Tool{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Schema:      schema,
+				Annotations: annotations,
+			})
 		}
 
-		// Extract annotations from MCP tool response
-		var annotations *ToolAnnotations
-		if tool.Annotations != nil {
-			annotations = &ToolAnnotations{
-				Title:           tool.Annotations.Title,
-				ReadOnlyHint:    new(tool.Annotations.ReadOnlyHint),
-				DestructiveHint: tool.Annotations.DestructiveHint, // already *bool
-				IdempotentHint:  new(tool.Annotations.IdempotentHint),
-				OpenWorldHint:   tool.Annotations.OpenWorldHint, // already *bool
+		if target != "" {
+			if _, ok := c.discovered[target]; ok {
+				break
 			}
 		}
-
-		tools = append(tools, Tool{
-			Name:        tool.Name,
-			Description: tool.Description,
-			Schema:      schema,
-			Annotations: annotations,
-		})
+		if toolsResult.NextCursor == "" {
+			break
+		}
+		cursor = toolsResult.NextCursor
 	}
 
 	c.logger.InfoContext(ctx, "listed tools from external MCP server",
 		attr.SlogValueInt(len(tools)),
 	)
 
+	if target != "" {
+		if _, ok := c.discovered[target]; !ok {
+			return nil, errors.New("external mcp tool definition absent or invalid")
+		}
+	}
+	complete = true
 	return tools, nil
 }
 
@@ -274,30 +376,50 @@ type CallToolResult struct {
 	IsError bool
 }
 
-// CallTool calls a tool on the external MCP server.
-func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (*CallToolResult, error) {
+// CallTool calls a tool on the external MCP server. A nil schema deliberately
+// sends an ordinary call first, without discovery. Only conformant pre-execution
+// HeaderMismatch responses permit one discovery and replay. Proxy schemas are not
+// persisted, so later isolated calls may need the same recovery again.
+func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.RawMessage, schema json.RawMessage) (*CallToolResult, error) {
 	c.logger.InfoContext(ctx, "calling tool on external MCP server",
 		attr.SlogToolName(toolName),
 	)
 
-	// Parse arguments into map for MCP SDK
-	var args map[string]any
+	// Keep numbers as raw JSON, including integers beyond float64 precision.
+	var args map[string]json.RawMessage
 	if len(arguments) > 0 {
 		if err := json.Unmarshal(arguments, &args); err != nil {
-			return nil, fmt.Errorf("parse external mcp tool arguments: %w", err)
+			return nil, fmt.Errorf("invalid external mcp tool arguments: %w", safeJSONDiagnostic(err))
 		}
+	} else {
+		arguments = json.RawMessage("{}")
 	}
 
-	c.beginRequest()
-	callResult, err := c.session.CallTool(ctx, &mcp.CallToolParams{
-		Meta:           mcp.Meta{},
-		Name:           toolName,
-		Arguments:      args,
-		InputResponses: nil,
-		RequestState:   "",
-	})
+	// Fresh discovery is authoritative metadata, but the SDK's header generator
+	// is not: v1.7.0 drops all bindings when an unrelated property is a union or
+	// boolean schema. Derive complete request headers from the original schema
+	// in every path, including discovery and recovery.
+	if discovered, known := c.discovered[toolName]; known {
+		schema = discovered
+	}
+
+	callResult, err := c.callTool(ctx, toolName, arguments, schema)
+	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
+		// Do not log the upstream mismatch message: it can contain parameter values.
+		c.logger.InfoContext(ctx, "external mcp header mismatch; refreshing tool metadata")
+		c.options.Metrics.RecordRecoveryAttempt(ctx)
+		callResult, err = c.recoverTool(ctx, toolName, arguments)
+		outcome := "success"
+		if err != nil || callResult.IsError {
+			outcome = "failed"
+			c.options.Metrics.RecordRecoveryFailure(ctx)
+		} else {
+			c.options.Metrics.RecordRecoverySuccess(ctx)
+		}
+		c.logger.InfoContext(ctx, "external mcp header mismatch recovery completed", attr.SlogOutcome(outcome))
+	}
 	if err != nil {
-		return nil, classifyRequestError("call tool on external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
+		return nil, err
 	}
 
 	// Marshal each content item back to JSON
@@ -305,7 +427,7 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 	for _, item := range callResult.Content {
 		itemJSON, err := json.Marshal(item)
 		if err != nil {
-			return nil, fmt.Errorf("marshal external mcp tool result: %w", err)
+			return nil, fmt.Errorf("marshal external mcp tool result: %w", safeJSONDiagnostic(err))
 		}
 		content = append(content, itemJSON)
 	}
@@ -319,6 +441,88 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 		IsError: callResult.IsError,
 	}, nil
 }
+
+// recoverTool handles a conformant pre-execution HeaderMismatch rejection. It
+// creates a fresh authenticated session so tools/list cannot use the old SDK
+// session's cached definitions, discovers authoritative metadata, then replays
+// exactly once. It never retries transport failures or tool execution errors.
+// Successful recovery adopts this session locally; authenticated sessions and
+// discovered schemas are never shared between clients.
+func (c *Client) recoverTool(ctx context.Context, name string, arguments json.RawMessage) (*mcp.CallToolResult, error) {
+	delete(c.discovered, name)
+	recovery, err := NewClient(ctx, c.logger, c.guardianPolicy, c.remoteURL, c.transportType, &c.options)
+	if err != nil {
+		return nil, err
+	}
+	adopted := false
+	defer func() {
+		if !adopted {
+			_ = recovery.Close()
+		}
+	}()
+	if err := recovery.discoverTool(ctx, name); err != nil {
+		return nil, err
+	}
+	// Use only refreshed metadata, never the stale schema or generated headers.
+	result, err := recovery.callTool(ctx, name, arguments, recovery.discovered[name])
+	if err != nil {
+		// Only a replay mismatch exhausts recovery; discovery may independently
+		// fail with a protocol error before a second tools/call was attempted.
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
+			c.options.Metrics.RecordRecoveryExhaustion(ctx)
+		}
+		return nil, err
+	}
+	// A wire-level mismatch can close the SDK's original session. Transfer the
+	// successful isolated session and its metadata to this caller only, so reuse
+	// does not select stale schemas or a closed transport.
+	_ = c.session.Close()
+	c.session = recovery.session
+	c.authRT = recovery.authRT
+	c.bodyLimitRT = recovery.bodyLimitRT
+	c.discovered = recovery.discovered
+	adopted = true
+	return result, nil
+}
+
+func (c *Client) discoverTool(ctx context.Context, name string) error {
+	if _, err := c.listTools(ctx, name); err != nil {
+		return err
+	}
+	if _, ok := c.discovered[name]; !ok {
+		return errors.New("external mcp tool definition absent or invalid")
+	}
+	return nil
+}
+
+// callTool performs exactly one attempt. It must not invoke recovery recursively.
+func (c *Client) callTool(ctx context.Context, name string, arguments json.RawMessage, schema json.RawMessage) (*mcp.CallToolResult, error) {
+	var headers http.Header
+	if len(schema) > 0 {
+		var err error
+		headers, err = parameterHeaders(schema, arguments)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ctx = context.WithValue(ctx, toolCallContextKey{}, headers)
+	c.beginRequest()
+	result, err := c.session.CallTool(ctx, &mcp.CallToolParams{Meta: nil, Name: name, Arguments: arguments, InputResponses: nil, RequestState: ""})
+	if err != nil {
+		// SDK mismatch messages can echo Mcp-Param values. Preserve the typed
+		// protocol code for recovery/callers, but never forward those values to logging.
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch {
+			c.options.Metrics.RecordHeaderMismatch(ctx)
+			err = &jsonrpc.Error{Code: rpcErr.Code, Message: "external MCP parameter header mismatch", Data: nil}
+		}
+		return nil, classifyRequestError("call tool on external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
+	}
+	return result, nil
+}
+
+// Carries only request-local adapter headers, never values in shared transport configuration.
+// Its presence also disables generic HTTP retries for possibly effectful tools/call.
+type toolCallContextKey struct{}
 
 type authRoundTripper struct {
 	base          http.RoundTripper
@@ -335,7 +539,9 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	// the protocol's own header names, so a definition naming Mcp-Method would
 	// overwrite the SDK's value below. Classify the request from what the SDK
 	// sent, before that can happen.
-	discoverProbe := req.Header.Get(headerMCPMethod) == methodServerDiscover
+	sdkMethod := req.Header.Get(headerMCPMethod)
+	sdkProtocolVersion := req.Header.Get("Mcp-Protocol-Version")
+	discoverProbe := sdkMethod == methodServerDiscover
 
 	if rt.authorization != "" || len(rt.headers) > 0 {
 		req = req.Clone(req.Context())
@@ -343,7 +549,26 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 			req.Header.Set("Authorization", rt.authorization)
 		}
 		for k, v := range rt.headers {
-			req.Header.Set(k, v)
+			// Reserve the parameter namespace, even when refreshed annotations vanish.
+			if !strings.HasPrefix(strings.ToLower(k), "mcp-param-") {
+				req.Header.Set(k, v)
+			}
+		}
+	}
+
+	if headers, ok := req.Context().Value(toolCallContextKey{}).(http.Header); ok &&
+		sdkMethod == "tools/call" && sdkProtocolVersion >= "2026-07-28" {
+		req = req.Clone(req.Context())
+		// Replace, do not merge with, SDK-generated parameters. The complete
+		// schema-derived set also clears stale/incorrect SDK values for removed
+		// annotations and absent arguments, and overrides its empty-string bug.
+		for name := range req.Header {
+			if strings.HasPrefix(strings.ToLower(name), "mcp-param-") {
+				delete(req.Header, name)
+			}
+		}
+		for name, values := range headers {
+			req.Header[name] = append([]string(nil), values...)
 		}
 	}
 
@@ -387,20 +612,23 @@ const (
 // response and so cannot recognize the probe on a transport failure otherwise.
 type discoverProbeContextKey struct{}
 
-// discoverAwareRetryConfig returns the default retry configuration with one
-// exception: the server/discover capability probe is never retried.
+// discoverAwareRetryConfig disables generic retries for the capability probe
+// and effectful tools/call requests (which only recover typed HeaderMismatch).
 //
 // A rejected probe is the expected answer from any upstream that predates MCP
 // 2026-07-28, and the SDK answers it by falling back to the legacy initialize
 // handshake. Retrying a rejection that will not change spends the whole backoff
 // budget first: five attempts and roughly 15 seconds, on a client that connects
-// once per tool call. Every other request, the fallback handshake and the tool
-// call included, keeps the full retry budget.
+// once per tool call. Discovery and the fallback handshake keep their retry
+// budget; ambiguous tools/call failures must not duplicate execution.
 func discoverAwareRetryConfig(logger *slog.Logger, remoteURL string) *guardian.RetryConfig {
 	config := guardian.DefaultRetryConfig()
 	checkRetry := config.CheckRetry
 
 	config.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if _, call := ctx.Value(toolCallContextKey{}).(http.Header); call {
+			return false, nil
+		}
 		retry, checkErr := checkRetry(ctx, resp, err)
 		if !retry {
 			return retry, checkErr
@@ -422,4 +650,39 @@ func discoverAwareRetryConfig(logger *slog.Logger, remoteURL string) *guardian.R
 	}
 
 	return config
+}
+
+// safeJSONDiagnostic keeps useful decoder categories without copying raw values,
+// schema field names, or errors from a custom JSON marshaler into diagnostics.
+func safeJSONDiagnostic(err error) error {
+	if e, ok := errors.AsType[*json.SyntaxError](err); ok {
+		return fmt.Errorf("JSON syntax error at byte offset %d", e.Offset)
+	}
+	if e, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return fmt.Errorf("JSON type mismatch at byte offset %d (destination %s)", e.Offset, e.Type)
+	}
+	if e, ok := errors.AsType[*json.UnsupportedTypeError](err); ok {
+		return fmt.Errorf("unsupported JSON type %s", e.Type)
+	}
+	if _, ok := errors.AsType[*json.UnsupportedValueError](err); ok {
+		return errors.New("unsupported JSON value")
+	}
+	return errors.New("JSON encoding or decoding failed")
+}
+
+func isJSONDiagnostic(err error) bool {
+	if _, ok := errors.AsType[*json.SyntaxError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*json.UnsupportedTypeError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*json.UnsupportedValueError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*json.MarshalerError](err)
+	return ok
 }

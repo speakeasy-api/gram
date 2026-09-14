@@ -23,12 +23,14 @@ from datetime import UTC, datetime
 from typing import Final
 
 import structlog
+from google.protobuf.message import DecodeError
 from gram.risk.v1 import enforcement_reply_pb2, presidio_enforcement_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
 from opentelemetry import metrics
 
 from pystreams.risk import maskdisplay
 from pystreams.risk.fingerprint import Fingerprinter, encode_fingerprint
+from pystreams.risk.metering import MeterReadingPublisher, publish_meter_reading
 from pystreams.risk.replywriter import ReplyWriter, parse_reply_urn
 from pystreams.risk.scanner import (
     DEFAULT_SCORE_THRESHOLD,
@@ -124,12 +126,14 @@ class PresidioEnforceHandler:
         self,
         logger: structlog.stdlib.BoundLogger,
         writer: ReplyWriter,
+        meter_publisher: MeterReadingPublisher,
         scanner: Scanner,
         fingerprinter: Fingerprinter,
         max_request_age_seconds: float = DEFAULT_MAX_REQUEST_AGE_SECONDS,
     ) -> None:
         self._logger = logger
         self._writer = writer
+        self._meter_publisher = meter_publisher
         self._scanner = scanner
         self._fingerprinter = fingerprinter
         # abs(age) > NaN/inf is always false, defeating the freshness window.
@@ -175,6 +179,8 @@ class PresidioEnforceHandler:
         detections: list[Detection] = []
         status = enforcement_reply_pb2.ENFORCEMENT_STATUS_OK
         reason = ""
+        scan_started_at: datetime | None = None
+        scan_completed = False
         if len(message.content.encode()) > MAX_CONTENT_BYTES:
             status = enforcement_reply_pb2.ENFORCEMENT_STATUS_ERROR
             reason = "enforcement content exceeds the maximum byte budget"
@@ -194,6 +200,7 @@ class PresidioEnforceHandler:
             else:
                 score_threshold = DEFAULT_SCORE_THRESHOLD
             try:
+                scan_started_at = datetime.now(UTC)
                 detections = await self._scanner.scan(
                     message.content, requested, score_threshold
                 )
@@ -221,6 +228,8 @@ class PresidioEnforceHandler:
                     request_id=message.request_id,
                     error_type=type(exc).__name__,
                 )
+            else:
+                scan_completed = True
 
         reply = enforcement_reply_pb2.EnforcementReply(
             correlation_id=scan_id,
@@ -234,8 +243,11 @@ class PresidioEnforceHandler:
                 delivery_attempt=meta.delivery_attempt or 0,
             ),
         )
+
+        reply_written = False
         try:
             await self._writer.write(reply_urn, reply)
+            reply_written = True
         except Exception as exc:
             _reply_write_errors.add(1)
             self._logger.error(
@@ -243,14 +255,39 @@ class PresidioEnforceHandler:
                 request_id=message.request_id,
                 error_type=type(exc).__name__,
             )
-            return
+        if scan_completed and scan_started_at is not None and message.meter_reading:
+            # Reply delivery owns the enforcement deadline, so best-effort usage
+            # transport starts only after Redis was attempted.
+            try:
+                await publish_meter_reading(
+                    self._meter_publisher,
+                    message.meter_reading,
+                    scan_started_at,
+                )
+            except DecodeError as exc:
+                self._logger.error(
+                    "malformed presidio enforcement meter reading",
+                    request_id=message.request_id,
+                    reply_urn=reply_urn,
+                    delivery_attempt=meta.delivery_attempt,
+                    error_type=type(exc).__name__,
+                )
+            except Exception as exc:
+                self._logger.error(
+                    "failed to publish presidio meter reading",
+                    request_id=message.request_id,
+                    reply_urn=reply_urn,
+                    delivery_attempt=meta.delivery_attempt,
+                    error_type=type(exc).__name__,
+                )
 
-        await self._logger.adebug(
-            "presidio enforcement scan complete",
-            request_id=message.request_id,
-            detections=len(detections),
-            status=enforcement_reply_pb2.EnforcementStatus.Name(status),
-        )
+        if reply_written:
+            await self._logger.adebug(
+                "presidio enforcement scan complete",
+                request_id=message.request_id,
+                detections=len(detections),
+                status=enforcement_reply_pb2.EnforcementStatus.Name(status),
+            )
 
     def _build_findings(
         self, organization_id: str, detections: list[Detection]

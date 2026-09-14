@@ -54,6 +54,10 @@ const (
 	// assistant-runtime token, which is not an authoritative acting user.
 	KillswitchIdentityAssistant KillswitchIdentityClass = "assistant"
 
+	// KillswitchIdentityAgent means the validated credential is an agent
+	// session, which is not an authoritative acting user.
+	KillswitchIdentityAgent KillswitchIdentityClass = "agent"
+
 	// KillswitchIdentityChatSession means the validated credential is a
 	// chat-session token, which attributes an embedded chat session or
 	// external end-user and is not an authoritative acting user.
@@ -106,7 +110,7 @@ func validKillswitchCoverageSurface(surface KillswitchCoverageSurface) bool {
 func validKillswitchIdentityClass(class KillswitchIdentityClass) bool {
 	switch class {
 	case KillswitchIdentityActiveUser, KillswitchIdentityInactiveUser, KillswitchIdentityAnonymous,
-		KillswitchIdentityAPIKey, KillswitchIdentityAssistant, KillswitchIdentityChatSession,
+		KillswitchIdentityAPIKey, KillswitchIdentityAssistant, KillswitchIdentityAgent, KillswitchIdentityChatSession,
 		KillswitchIdentityUnattributed, KillswitchIdentityUnavailable:
 		return true
 	default:

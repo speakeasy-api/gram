@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
@@ -146,6 +147,20 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 	require.Equal(t, string(authzrepo.PrincipalTypeAPIKey), message.GetPrincipalType())
 	require.Equal(t, "key_abc", message.GetApiKeyId())
 	require.Equal(t, "user_owner", message.GetUserId())
+}
+
+func TestAuthorizationChallengePrincipalUsesCanonicalAgentActor(t *testing.T) {
+	t.Parallel()
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	authCtx := &contextvalues.AuthContext{UserID: "", APIKeyID: "key_abc"}
+	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, agent, contextvalues.PrincipalCredential{
+		AuthorizerUserID: "user_authorizer", DelegatedGrants: []byte(`{"requested":[],"effective":[]}`), DelegatedGrantsVersion: 1,
+	})
+
+	principalURN, principalType := authorizationChallengePrincipal(ctx, authCtx)
+	require.Equal(t, agent.String(), principalURN)
+	require.Equal(t, authzrepo.PrincipalTypeAgent, principalType)
 }
 
 func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {

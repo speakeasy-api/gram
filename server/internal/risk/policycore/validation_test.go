@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -58,8 +60,6 @@ func TestValidatePolicyFields(t *testing.T) {
 	for _, id := range []string{"builtin.rule", "custom.", "custom.Bad", "custom.bad-rule"} {
 		require.Error(t, ValidateCustomRuleIDs([]string{id}))
 	}
-	require.NoError(t, ValidateMessageTypes(nil))
-	require.Error(t, ValidateMessageTypes([]string{"unknown"}))
 }
 
 func TestValidateDetectionScopes(t *testing.T) {
@@ -106,4 +106,26 @@ func TestValidateDetectionScopes(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+// The registry answers "is there a recommended scope", not "may this category
+// carry one". `custom` has no recommendation, but the scanner honours a
+// specified scope for it and the legacy-policy-scope fold writes one.
+func TestValidateDetectionScopesAcceptsCategoryWithoutRecommendation(t *testing.T) {
+	t.Parallel()
+
+	eng, err := celenv.New()
+	require.NoError(t, err)
+
+	_, ok := recommendedscopes.For(categories.CategoryCustom)
+	require.False(t, ok, "custom is deliberately absent from the registry")
+
+	include := `kind in ["tool_request"]`
+	got, err := ValidateDetectionScopes(eng, []*DetectionScopeInput{{
+		Category: string(categories.CategoryCustom), ScopeInclude: &include, ScopeExempt: nil,
+	}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "custom", got[0].Category)
+	require.Equal(t, include, got[0].ScopeInclude)
 }

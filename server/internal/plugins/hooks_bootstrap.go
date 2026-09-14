@@ -266,7 +266,10 @@ if [ -n "${GRAM_HOOKS_HOME:-}" ]; then
 elif [ "$os" = darwin ]; then
   cache_root="${HOME}/Library/Caches/Speakeasy/hooks"
 elif [ "$os" = windows ] && [ -n "${LOCALAPPDATA:-}" ]; then
-  cache_root="${LOCALAPPDATA}/Speakeasy/hooks"
+  # Git Bash inherits LOCALAPPDATA in native C:\Users\... form. Normalize it
+  # before handing derived paths to MSYS tools: GNU checksum utilities switch
+  # to escaped output when a filename contains a backslash.
+  cache_root="$(printf '%%s' "$LOCALAPPDATA" | tr '\\' '/')/Speakeasy/hooks"
 else
   cache_root="${XDG_CACHE_HOME:-${HOME}/.cache}/speakeasy/hooks"
 fi
@@ -356,12 +359,16 @@ if ! cache_valid; then
     install_failure 'curl or wget is required for first install'
   fi
 
+  # Hash stdin rather than naming the archive. GNU sha256sum and compatible
+  # tools prefix their digest with a backslash when a filename needs escaping;
+  # Git Bash therefore produced "\<correct hash>" for LOCALAPPDATA paths and
+  # deterministically rejected valid Windows archives.
   if command -v sha256sum >/dev/null 2>&1; then
-    actual_sha=$(sha256sum "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
+    actual_sha=$(sha256sum < "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
   elif command -v shasum >/dev/null 2>&1; then
-    actual_sha=$(shasum -a 256 "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
+    actual_sha=$(shasum -a 256 < "$archive" | cut -d ' ' -f 1) || install_failure 'checksum computation failed'
   elif command -v openssl >/dev/null 2>&1; then
-    actual_sha=$(openssl dgst -sha256 "$archive" | sed 's/^.*= //') || install_failure 'checksum computation failed'
+    actual_sha=$(openssl dgst -sha256 < "$archive" | sed 's/^.*= //') || install_failure 'checksum computation failed'
   else
     install_failure 'no SHA-256 utility is available'
   fi

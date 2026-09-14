@@ -25,14 +25,20 @@ func TestScannerScanMatchedReturnsFinding(t *testing.T) {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test",
+			Provider:         "test",
 		}, nil
 	})
 
-	findings := scanner.Scan(t.Context(), "org", "proj", "user-1", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
-	require.Len(t, findings, 1)
-	require.Equal(t, Source, findings[0].Source)
-	require.Equal(t, Rule, findings[0].RuleID)
-	require.Equal(t, "matched policy", findings[0].Description)
+	result := scanner.Scan(t.Context(), "org", "proj", "user-1", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
+	require.Len(t, result.Findings, 1)
+	require.Equal(t, Source, result.Findings[0].Source)
+	require.Equal(t, Rule, result.Findings[0].RuleID)
+	require.Equal(t, "matched policy", result.Findings[0].Description)
+	require.True(t, result.Completed)
+	require.Equal(t, int64(1), result.STokens)
 	require.Equal(t, "user-1", judged.UserID, "the scanned user's id must reach the judge input")
 }
 
@@ -48,11 +54,15 @@ func TestScannerScanUnmatchedReturnsNoFindings(t *testing.T) {
 			PromptTokens:     0,
 			CompletionTokens: 0,
 			TotalTokens:      0,
+			STokens:          1,
+			Completed:        true,
+			Model:            "test",
+			Provider:         "test",
 		}, nil
 	})
 
-	findings := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "hello"))
-	require.Empty(t, findings)
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "hello"))
+	require.Empty(t, result.Findings)
 }
 
 func TestScannerScanErrorFailOpenReturnsNoFindings(t *testing.T) {
@@ -62,8 +72,8 @@ func TestScannerScanErrorFailOpenReturnsNoFindings(t *testing.T) {
 		return nil, errors.New("judge failed")
 	})
 
-	findings := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
-	require.Empty(t, findings)
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: true}, judgemessage.New(message.User, "", "delete prod"))
+	require.Empty(t, result.Findings)
 }
 
 func TestScannerScanErrorFailClosedReturnsFinding(t *testing.T) {
@@ -73,9 +83,11 @@ func TestScannerScanErrorFailClosedReturnsFinding(t *testing.T) {
 		return nil, errors.New("judge failed")
 	})
 
-	findings := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
-	require.Len(t, findings, 1)
-	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", findings[0].Description)
+	result := scanner.Scan(t.Context(), "org", "proj", "", "flag deletes", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
+	require.Len(t, result.Findings, 1)
+	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", result.Findings[0].Description)
+	require.False(t, result.Completed)
+	require.Zero(t, result.STokens)
 }
 
 func TestScannerScanBlankPromptFailClosedReturnsFinding(t *testing.T) {
@@ -83,7 +95,8 @@ func TestScannerScanBlankPromptFailClosedReturnsFinding(t *testing.T) {
 
 	scanner := NewScanner(nil, nil)
 
-	findings := scanner.Scan(t.Context(), "org", "proj", "", "   ", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
-	require.Len(t, findings, 1)
-	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", findings[0].Description)
+	result := scanner.Scan(t.Context(), "org", "proj", "", "   ", Config{Temperature: nil, FailOpen: false}, judgemessage.New(message.User, "", "delete prod"))
+	require.Len(t, result.Findings, 1)
+	require.Equal(t, "Policy judge was unavailable; flagged by fail-closed policy.", result.Findings[0].Description)
+	require.False(t, result.Completed)
 }

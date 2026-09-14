@@ -79,6 +79,7 @@ type UserSessionIssuer struct {
 	SessionDuration               pgtype.Interval
 	Classification                string
 	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

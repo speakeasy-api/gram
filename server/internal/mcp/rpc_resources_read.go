@@ -175,6 +175,7 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}

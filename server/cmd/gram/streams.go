@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
@@ -29,6 +30,7 @@ import (
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -52,6 +54,7 @@ import (
 	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -248,6 +251,7 @@ func newStreamsCommand() *cli.Command {
 	}
 
 	flags = append(flags, stripeFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
@@ -392,13 +396,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub gcp.Publisher[*riskv1.Finding]
-				logPub      gcp.Publisher[*otelv1.LogRecord]
-				metricPub   gcp.Publisher[*otelv1.Metric]
-				spanPub     gcp.Publisher[*otelv1.Span]
+				findingsPub  gcp.Publisher[*riskv1.Finding]
+				logPub       gcp.Publisher[*otelv1.LogRecord]
+				metricPub    gcp.Publisher[*otelv1.Metric]
+				spanPub      gcp.Publisher[*otelv1.Span]
+				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -413,6 +418,12 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			meterPublishSettings := pubsub.DefaultPublishSettings
+			meterPublishSettings.Timeout = 10 * time.Second
+			meterPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+			meterPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+			meterPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
@@ -420,8 +431,15 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
+			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+				gcp.WithPubSubPublishSettings(&meterPublishSettings),
+			)
+			if err != nil {
+				return fmt.Errorf("create risk meter publisher: %w", err)
+			}
+			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
 
-			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
@@ -431,16 +449,17 @@ func newStreamsCommand() *cli.Command {
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
 				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				riskRecorder,
 			)
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -449,7 +468,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
-			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
 
 			// Transcript rows captured by hooks. The writable pool, not the read
 			// replica: this handler is the writer.
@@ -461,7 +480,7 @@ func newStreamsCommand() *cli.Command {
 			// SignalWithStart, the same call the synchronous writer already
 			// makes; no workflow is awaited, driven, or owned from a handler.
 			transcriptWriter, transcriptWriterShutdown := newTranscriptWriter(
-				logger, tracerProvider, meterProvider, db, temporalEnv, newAuditLogger(),
+				logger, tracerProvider, meterProvider, db, temporalEnv, newAuditLogger(), riskRecorder,
 			)
 			// Temporal closes only once the transcript writer has flushed its
 			// trailing coordinator wakes. runShutdown fans these out
@@ -618,6 +637,10 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				if queue := c.String(networkIngressQueueFlag); queue != "" && queue == string(temporalEnv.Queue()) {
+					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
+					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second})
+				}
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)

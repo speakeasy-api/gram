@@ -58,6 +58,10 @@ func (f *fakeStripeWebhookClient) CreateCustomer(context.Context, stripeclient.C
 	return nil, errors.New("not implemented")
 }
 
+func (f *fakeStripeWebhookClient) GetCustomer(context.Context, string) (*stripeclient.CustomerDetails, error) {
+	return nil, errors.New("unexpected Stripe customer lookup")
+}
+
 func (f *fakeStripeWebhookClient) UpdateCustomer(context.Context, stripeclient.UpdateCustomerInput) error {
 	return errors.New("not implemented")
 }
@@ -1579,6 +1583,10 @@ func TestStripeCheckoutCompletionPreservesTrialFeatureChoices(t *testing.T) {
 	trial, err := trialsrepo.New(db).GetTrial(ctx, stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.True(t, trial.ConvertedAt.Valid)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(ctx, stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "payg", organization.GramAccountType)
+	require.True(t, organization.Whitelisted)
 	ssoEnabled, err := featurerepo.New(db).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 		OrganizationID: stripeWebhookOrganizationID,
 		FeatureName:    string(productfeatures.FeatureSSO),

@@ -70,7 +70,9 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.Equal(t, "flag", stored.Action)
 	require.InDelta(t, 5.0, stored.Score, 0)
 	require.ElementsMatch(t, []string{"gitleaks"}, stored.Sources)
-	require.ElementsMatch(t, []string{"assistant_message", "tool_request", "tool_response", "user_message"}, stored.MessageTypes)
+	require.Empty(t, stored.MessageTypes)
+	require.False(t, stored.ScopeInclude.Valid)
+	require.False(t, stored.ScopeExempt.Valid)
 
 	createAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskPolicyCreate)
 	require.NoError(t, err)
@@ -164,14 +166,14 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 		urn.NewPrincipal(urn.PrincipalTypeUser, "first-user"),
 	}))
 	policy := policycore.Project(stored, []string{authz.AllUsersPrincipal().String()}, nil)
-	firstGrantState, err := riskPolicyVersionState(ctx, conn, policy, false)
+	firstGrantState, err := riskPolicyVersionState(ctx, conn, policy)
 	require.NoError(t, err)
 	firstGrantVersion, err := controls.Versions().PolicyVersion(firstGrantState)
 	require.NoError(t, err)
 	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, policyID.String(), serverURL, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "second-user"),
 	}))
-	secondGrantState, err := riskPolicyVersionState(ctx, conn, policy, false)
+	secondGrantState, err := riskPolicyVersionState(ctx, conn, policy)
 	require.NoError(t, err)
 	secondGrantVersion, err := controls.Versions().PolicyVersion(secondGrantState)
 	require.NoError(t, err)

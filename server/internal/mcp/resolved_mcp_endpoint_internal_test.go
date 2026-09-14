@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +18,7 @@ func TestValidateGrantRejectsOriginChange(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: issuerID,
 	}
-	err := endpoint.ValidateGrant(EndpointRef{
+	err := endpoint.ValidateGrant(t.Context(), EndpointRef{
 		McpSlug: "my-server",
 		BaseURL: "https://custom.example.com",
 	}, issuerID, "https://platform.example.com")
@@ -32,7 +34,7 @@ func TestValidateGrantAllowsLegacyMissingOrigin(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: issuerID,
 	}
-	require.NoError(t, endpoint.ValidateGrant(EndpointRef{McpSlug: "my-server"}, issuerID, "https://platform.example.com"))
+	require.NoError(t, endpoint.ValidateGrant(t.Context(), EndpointRef{McpSlug: "my-server"}, issuerID, "https://platform.example.com"))
 }
 
 func TestValidateChallengeRejectsIssuerChange(t *testing.T) {
@@ -43,8 +45,33 @@ func TestValidateChallengeRejectsIssuerChange(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: uuid.New(),
 	}
-	err := endpoint.ValidateChallenge(EndpointRef{McpSlug: "my-server"}, uuid.New())
+	err := endpoint.ValidateChallenge(t.Context(), EndpointRef{McpSlug: "my-server"}, uuid.New())
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
+}
+
+func TestValidateGlobalChallengeAllowsCustomDomainCallback(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	domainID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	endpoint := &ResolvedMcpEndpoint{
+		Slug: "my-server", RouteBase: "mcp", UserSessionIssuerID: issuerID,
+		OrganizationID: "org_123", CustomDomainID: domainID,
+	}
+	ref := EndpointRef{
+		McpSlug: "my-server", RouteBase: "mcp", BaseURL: "https://custom.example.com",
+		CustomDomainID: domainID,
+		Authority: networkingress.Authority{
+			Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://custom.example.com",
+			OrganizationID: "org_123", NamespaceKind: networkingress.NamespaceCustomDomain, CustomDomainID: domainID,
+		},
+	}
+	require.NoError(t, endpoint.ValidateGlobalChallenge(t.Context(), nil, ref, issuerID))
+	platformCtx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface: requestorigin.SurfacePlatform, BaseURL: "https://platform.example.com",
+		OrganizationID: "org_123",
+	})
+	require.ErrorIs(t, endpoint.ValidateChallenge(platformCtx, ref, issuerID), errToolsetEndpointMismatch)
 }
 
 func TestValidateRef_Matches(t *testing.T) {
@@ -101,7 +128,8 @@ func TestEndpointRefPinsBridgedToolset(t *testing.T) {
 		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
 	}
-	ref := endpoint.EndpointRef("https://platform.example.com")
+	ref, err := endpoint.EndpointRef(t.Context(), nil, "https://platform.example.com")
+	require.NoError(t, err)
 	require.Equal(t, endpoint.McpServerID, ref.McpServerID)
 	require.Equal(t, endpoint.ToolsetID, ref.ToolsetID)
 

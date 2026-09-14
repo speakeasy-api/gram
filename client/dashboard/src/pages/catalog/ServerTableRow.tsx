@@ -1,3 +1,5 @@
+import { catalogLogoClassName } from "./logo";
+import { cn } from "@/lib/utils";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
@@ -39,12 +41,17 @@ export function ServerTableRow({
     <DotRow
       href={detailHref}
       ariaLabel={`View ${displayName}`}
+      iconRailClassName="bg-surface-secondary-default"
+      iconTileClassName="bg-card dark:bg-card"
       icon={
         server.iconUrl ? (
           <img
             src={server.iconUrl}
             alt={displayName}
-            className="h-6 w-6 object-contain"
+            className={cn(
+              "h-6 w-6 object-contain",
+              catalogLogoClassName(server.registrySpecifier),
+            )}
           />
         ) : undefined
       }

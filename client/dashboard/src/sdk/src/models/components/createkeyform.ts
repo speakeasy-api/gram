@@ -4,8 +4,25 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  AgentPolicyGrantForm,
+  AgentPolicyGrantForm$Outbound,
+  AgentPolicyGrantForm$outboundSchema,
+} from "./agentpolicygrantform.js";
 
 export type CreateKeyForm = {
+  /**
+   * First-class agent subject. Omit for an ordinary API key.
+   */
+  agentId?: string | undefined;
+  /**
+   * Delegated policy format version. Required for agent keys.
+   */
+  delegatedGrantsVersion?: number | undefined;
+  /**
+   * Agent credential expiry; defaults to 90 days and cannot exceed one year
+   */
+  expiresAt?: Date | undefined;
   /**
    * The name of the key
    */
@@ -15,16 +32,24 @@ export type CreateKeyForm = {
    */
   projectId?: string | undefined;
   /**
-   * The scopes of the key that determines its permissions.
+   * Exact allow grants approved for an agent credential
    */
-  scopes: Array<string>;
+  requestedGrants?: Array<AgentPolicyGrantForm> | undefined;
+  /**
+   * Legacy transport scopes. Omitted or empty defaults to consumer for ordinary keys; agent keys require no scopes.
+   */
+  scopes?: Array<string> | undefined;
 };
 
 /** @internal */
 export type CreateKeyForm$Outbound = {
+  agent_id?: string | undefined;
+  delegated_grants_version?: number | undefined;
+  expires_at?: string | undefined;
   name: string;
   project_id?: string | undefined;
-  scopes: Array<string>;
+  requested_grants?: Array<AgentPolicyGrantForm$Outbound> | undefined;
+  scopes?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -33,13 +58,21 @@ export const CreateKeyForm$outboundSchema: z.ZodMiniType<
   CreateKeyForm
 > = z.pipe(
   z.object({
+    agentId: z.optional(z.string()),
+    delegatedGrantsVersion: z.optional(z.int()),
+    expiresAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     name: z.string(),
     projectId: z.optional(z.string()),
-    scopes: z.array(z.string()),
+    requestedGrants: z.optional(z.array(AgentPolicyGrantForm$outboundSchema)),
+    scopes: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
+      agentId: "agent_id",
+      delegatedGrantsVersion: "delegated_grants_version",
+      expiresAt: "expires_at",
       projectId: "project_id",
+      requestedGrants: "requested_grants",
     });
   }),
 );

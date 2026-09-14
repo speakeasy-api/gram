@@ -78,6 +78,10 @@ export type ListSkillsRequest = {
    */
   tags?: Array<string> | undefined;
   /**
+   * Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+   */
+  accessibleBy?: Array<string> | undefined;
+  /**
    * How to order skills.
    */
   sort?: Sort | undefined;
@@ -212,6 +216,7 @@ export type ListSkillsRequest$Outbound = {
   source_kinds?: Array<string> | undefined;
   classifications?: Array<string> | undefined;
   tags?: Array<string> | undefined;
+  accessible_by?: Array<string> | undefined;
   sort: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
@@ -230,6 +235,7 @@ export const ListSkillsRequest$outboundSchema: z.ZodMiniType<
     sourceKinds: z.optional(z.array(SourceKinds$outboundSchema)),
     classifications: z.optional(z.array(Classifications$outboundSchema)),
     tags: z.optional(z.array(z.string())),
+    accessibleBy: z.optional(z.array(z.string())),
     sort: z._default(Sort$outboundSchema, "name"),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
@@ -238,6 +244,7 @@ export const ListSkillsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       sourceKinds: "source_kinds",
+      accessibleBy: "accessible_by",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

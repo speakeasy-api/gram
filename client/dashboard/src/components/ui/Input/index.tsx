@@ -186,6 +186,9 @@ export function Input({
       <div
         className={cn(
           "flex items-center gap-3 border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
+          // The field recolours its own border on focus, so the global focus
+          // outline would double it up.
+          "focus-within:outline-none",
           icon && "px-3",
           isFocused && "border-focus text-default",
           hasError && "border-destructive-default",

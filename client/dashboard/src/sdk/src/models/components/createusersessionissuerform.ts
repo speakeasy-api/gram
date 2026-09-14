@@ -31,7 +31,7 @@ export type CreateUserSessionIssuerForm = {
    */
   sessionDurationHours: number;
   /**
-   * Project-unique slug.
+   * Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
    */
   slug: string;
 };

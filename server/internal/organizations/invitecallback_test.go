@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
@@ -41,7 +42,7 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
-	const organizationID = "org_platform_admin_invite"
+	organizationID := "org_platform_admin_invite_" + uuid.NewString()
 	_, err = orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID: organizationID, Name: "Invited Organization", Slug: "invited-organization",
 		WorkosID: conv.ToPGText(organizationID), Whitelisted: pgtype.Bool{Bool: true, Valid: true},

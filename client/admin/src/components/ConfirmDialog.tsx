@@ -12,6 +12,7 @@ import {
 type ConfirmOptions = {
   title: string;
   description: string;
+  details?: React.ReactNode;
   confirmLabel?: string;
   destructive?: boolean;
 };
@@ -59,6 +60,7 @@ export function useConfirmDialog(): [ConfirmFn, React.ReactNode] {
             </span>
           </DialogDescription>
         </DialogHeader>
+        {opts.details}
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => handleClose(false)}>
             Cancel

@@ -67,11 +67,13 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		BackchannelLogoutSupported:                 doc.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: doc.AuthorizationResponseIssParameterSupported,
 
-		// Gram behavior flags, not discovered metadata. A draft never proposes
-		// them; the operator opts in on the create form.
-		Oidc:              false,
-		Passthrough:       false,
-		DiscoveryWarnings: warnings,
+		// Gram behavior flags and operator knobs, not discovered metadata. A
+		// draft never proposes them; the operator opts in on the create form.
+		Oidc:                       false,
+		Passthrough:                false,
+		ScopeOverride:              nil,
+		ResourceIndicatorSupported: nil,
+		DiscoveryWarnings:          warnings,
 	}
 }
 
@@ -303,3 +305,11 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, issuer rep
 // allowed to write it, and only a concurrent move, rename, or delete explains
 // the miss.
 const refreshConflictMessage = "identity provider changed while its metadata was being fetched; retry the refresh"
+
+// discoveryRetryURL is the well-known URL a transient failure left unread, or "" when the failure is definitive.
+func discoveryRetryURL(err error) string {
+	if de, ok := errors.AsType[*discoveryError](err); ok && de.transient() {
+		return de.WellKnownURL
+	}
+	return ""
+}

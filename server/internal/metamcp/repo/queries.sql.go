@@ -650,6 +650,94 @@ func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemb
 	return items, nil
 }
 
+const listMetaMCPEndpointsForTelemetryByProjectID = `-- name: ListMetaMCPEndpointsForTelemetryByProjectID :many
+SELECT
+    ms.id AS meta_mcp_server_id,
+    ms.name,
+    e.slug,
+    e.deleted,
+    e.is_domain_root,
+    cd.domain AS custom_domain,
+    EXISTS (
+      SELECT 1
+      FROM mcp_endpoints r
+      WHERE r.custom_domain_id = e.custom_domain_id
+        AND r.is_domain_root IS TRUE
+        AND r.deleted IS FALSE
+        AND r.id <> e.id
+    ) AS domain_root_taken
+FROM mcp_endpoints e
+JOIN meta_mcp_servers ms
+  ON ms.id = e.meta_mcp_server_id
+ AND ms.project_id = e.project_id
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+ AND cd.organization_id = ms.organization_id
+WHERE e.project_id = $1
+  AND e.meta_mcp_server_id IS NOT NULL
+  AND (
+    e.deleted IS FALSE
+    OR (
+      NOT EXISTS (
+        SELECT 1
+        FROM mcp_endpoints l
+        WHERE l.slug = e.slug
+          AND l.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND l.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM toolsets t
+        WHERE t.mcp_slug = e.slug
+          AND t.custom_domain_id IS NOT DISTINCT FROM e.custom_domain_id
+          AND t.deleted IS FALSE
+      )
+    )
+  )
+ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC
+`
+
+type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
+	MetaMcpServerID uuid.UUID
+	Name            string
+	Slug            string
+	Deleted         bool
+	IsDomainRoot    pgtype.Bool
+	CustomDomain    pgtype.Text
+	DomainRootTaken bool
+}
+
+// Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
+// matching unless a live endpoint or toolset now holds the slug in that namespace;
+// those existence checks mirror the global unique indexes, so they are not project-scoped.
+func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPEndpointsForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMetaMCPEndpointsForTelemetryByProjectIDRow
+		if err := rows.Scan(
+			&i.MetaMcpServerID,
+			&i.Name,
+			&i.Slug,
+			&i.Deleted,
+			&i.IsDomainRoot,
+			&i.CustomDomain,
+			&i.DomainRootTaken,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPMembers = `-- name: ListMetaMCPMembers :many
 SELECT
     m.id,
@@ -779,6 +867,39 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 			&i.UpstreamUrl,
 			&i.Tunneled,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
+SELECT id, name
+FROM meta_mcp_servers
+WHERE project_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// Gateway names for telemetry labels, deleted gateways included.
+func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	for rows.Next() {
+		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

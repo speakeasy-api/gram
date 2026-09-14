@@ -15,24 +15,95 @@ import (
 
 // Client is the "aiIntegrations" service client.
 type Client struct {
-	GetConfigEndpoint          goa.Endpoint
-	UpsertConfigEndpoint       goa.Endpoint
-	DeleteConfigEndpoint       goa.Endpoint
-	ListSchedulesEndpoint      goa.Endpoint
-	SetScheduleEnabledEndpoint goa.Endpoint
-	RetryScheduleEndpoint      goa.Endpoint
+	GetAnthropicInferenceConfigEndpoint    goa.Endpoint
+	UpsertAnthropicInferenceConfigEndpoint goa.Endpoint
+	DeleteAnthropicInferenceConfigEndpoint goa.Endpoint
+	GetConfigEndpoint                      goa.Endpoint
+	UpsertConfigEndpoint                   goa.Endpoint
+	DeleteConfigEndpoint                   goa.Endpoint
+	ListSchedulesEndpoint                  goa.Endpoint
+	SetScheduleEnabledEndpoint             goa.Endpoint
+	RetryScheduleEndpoint                  goa.Endpoint
 }
 
 // NewClient initializes a "aiIntegrations" service client given the endpoints.
-func NewClient(getConfig, upsertConfig, deleteConfig, listSchedules, setScheduleEnabled, retrySchedule goa.Endpoint) *Client {
+func NewClient(getAnthropicInferenceConfig, upsertAnthropicInferenceConfig, deleteAnthropicInferenceConfig, getConfig, upsertConfig, deleteConfig, listSchedules, setScheduleEnabled, retrySchedule goa.Endpoint) *Client {
 	return &Client{
-		GetConfigEndpoint:          getConfig,
-		UpsertConfigEndpoint:       upsertConfig,
-		DeleteConfigEndpoint:       deleteConfig,
-		ListSchedulesEndpoint:      listSchedules,
-		SetScheduleEnabledEndpoint: setScheduleEnabled,
-		RetryScheduleEndpoint:      retrySchedule,
+		GetAnthropicInferenceConfigEndpoint:    getAnthropicInferenceConfig,
+		UpsertAnthropicInferenceConfigEndpoint: upsertAnthropicInferenceConfig,
+		DeleteAnthropicInferenceConfigEndpoint: deleteAnthropicInferenceConfig,
+		GetConfigEndpoint:                      getConfig,
+		UpsertConfigEndpoint:                   upsertConfig,
+		DeleteConfigEndpoint:                   deleteConfig,
+		ListSchedulesEndpoint:                  listSchedules,
+		SetScheduleEnabledEndpoint:             setScheduleEnabled,
+		RetryScheduleEndpoint:                  retrySchedule,
 	}
+}
+
+// GetAnthropicInferenceConfig calls the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+// GetAnthropicInferenceConfig may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetAnthropicInferenceConfig(ctx context.Context, p *GetAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error) {
+	var ires any
+	ires, err = c.GetAnthropicInferenceConfigEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AnthropicInferenceConfig), nil
+}
+
+// UpsertAnthropicInferenceConfig calls the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+// UpsertAnthropicInferenceConfig may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpsertAnthropicInferenceConfig(ctx context.Context, p *UpsertAnthropicInferenceConfigPayload) (res *AnthropicInferenceConfig, err error) {
+	var ires any
+	ires, err = c.UpsertAnthropicInferenceConfigEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AnthropicInferenceConfig), nil
+}
+
+// DeleteAnthropicInferenceConfig calls the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+// DeleteAnthropicInferenceConfig may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteAnthropicInferenceConfig(ctx context.Context, p *DeleteAnthropicInferenceConfigPayload) (err error) {
+	_, err = c.DeleteAnthropicInferenceConfigEndpoint(ctx, p)
+	return
 }
 
 // GetConfig calls the "getConfig" endpoint of the "aiIntegrations" service.

@@ -26,9 +26,54 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestPluginAssignmentAdmissionRejectionLeavesNoMutationOrReceipt(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_admission_rejection")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Guarded", "guarded")
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPluginAssignmentsSet)
+	require.NoError(t, err)
+	store := NewPluginAssignmentMutationReceiptStore(conn)
+	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), []string{"everyone"}, "version")
+	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+		locked, err := pluginassignments.Lock(ctx, tx, principal.OrganizationID, project.ID, plugin.ID)
+		require.NoError(t, err)
+		_, err = pluginassignments.Replace(ctx, tx, audit.NewLogger(), locked, pluginassignments.Input{
+			OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: plugin.ID,
+			PrincipalURNs: []string{urn.PrincipalWildcard}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			ActorDisplayName: nil, ActorSlug: nil,
+		}, pluginassignments.Dependencies{
+			Guard: func(_ context.Context, _ pgx.Tx, _ pluginsrepo.Plugin, current, desired []string) error {
+				require.Empty(t, current)
+				require.Equal(t, []string{urn.PrincipalWildcard}, desired)
+				return pluginAssignmentAdmissionError(admission.ErrApprovalRequired)
+			}, BeforeReplace: nil,
+		})
+		return SetPluginAssignmentsReceiptResult{}, fmt.Errorf("replace rejected plugin assignments: %w", err)
+	})
+	require.ErrorIs(t, err, admission.ErrApprovalRequired)
+	var mutation *PluginAssignmentMutationError
+	require.ErrorAs(t, err, &mutation)
+	require.Equal(t, "approval_required", mutation.Code)
+	stored, err := pluginsrepo.New(conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Empty(t, stored)
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPluginAssignmentsSet)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit, afterAudit)
+	_, err = platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: operationSetPluginAssignments,
+		IdempotencyKey: "admission-rejected", UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
 
 func TestListPluginsPagesAProjectsPluginsWithMembershipCounts(t *testing.T) {
 	t.Parallel()
@@ -285,7 +330,8 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := testPluginTargets(conn)
+	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
+	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult})
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
 
 	// Named by slug, by exact name, and by id: one plugin, three ways to say it.
@@ -293,6 +339,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 		got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: target})
 		require.NoError(t, err, target)
 		require.Equal(t, marketing.ID.String(), got.Plugin.ID)
+		require.Equal(t, &admissionResult, got.Plugin.DistributionAdmission)
 		require.Empty(t, got.Servers)
 		require.Empty(t, got.Skills)
 		require.False(t, got.Truncated)
@@ -512,11 +559,14 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 		_, replaceErr := pluginassignments.Replace(ctx, tx, audit.NewLogger(), locked, pluginassignments.Input{
 			OrganizationID: principal.OrganizationID, ProjectID: project.ID, PluginID: plugin.ID,
 			PrincipalURNs: []string{principalURN}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-		}, func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
-			if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current) != expected {
-				return ErrPluginAssignmentMutationConflict
-			}
-			return nil
+		}, pluginassignments.Dependencies{
+			Guard: pluginassignments.LegacyGuard,
+			BeforeReplace: func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
+				if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current) != expected {
+					return ErrPluginAssignmentMutationConflict
+				}
+				return nil
+			},
 		})
 		if replaceErr != nil {
 			results <- replaceErr

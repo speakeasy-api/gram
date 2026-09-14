@@ -43,6 +43,12 @@ const (
 // the Stripe webhook secret is unavailable.
 var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 
+// ErrCustomerNotFound indicates that a customer is missing or deleted in Stripe.
+var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
+
+// ErrCustomerLookupUnavailable indicates that no live customer lookup is configured.
+var ErrCustomerLookupUnavailable = errors.New("stripe customer lookup is unavailable")
+
 var errMissingIdempotencyKey = errors.New("idempotency key is required")
 
 var errMissingCustomerID = errors.New("customer id is required")
@@ -93,6 +99,7 @@ func IsConfigured(value string) bool {
 // Client is the Stripe surface used by PAYG billing.
 type Client interface {
 	CreateCustomer(context.Context, CreateCustomerInput) (*Customer, error)
+	GetCustomer(context.Context, string) (*CustomerDetails, error)
 	UpdateCustomer(context.Context, UpdateCustomerInput) error
 	CreateCheckoutSession(context.Context, CreateCheckoutSessionInput) (*CheckoutSession, error)
 	GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error)
@@ -145,6 +152,24 @@ type UpdateCustomerInput struct {
 // Customer is the Stripe customer data needed by billing callers.
 type Customer struct {
 	ID string
+}
+
+// CustomerDetails is the live identity an operator reviews before linking billing.
+type CustomerDetails struct {
+	// ID identifies the customer in Stripe.
+	ID string
+
+	// Name is the customer's display name, if provided.
+	Name string
+
+	// Email is the customer's billing contact, if provided.
+	Email string
+
+	// Description is Stripe's customer description, if provided.
+	Description string
+
+	// LiveMode distinguishes live customers from Stripe test data.
+	LiveMode bool
 }
 
 // organizationIdentity is the organization view stamped onto every Stripe object.
@@ -420,6 +445,7 @@ type WebhookEvent struct {
 
 type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
+	retrieveCustomer(context.Context, string, *stripesdk.CustomerRetrieveParams) (*stripesdk.Customer, error)
 	updateCustomer(context.Context, string, *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error)
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	expireCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error)
@@ -444,6 +470,14 @@ func (s *sdkAPI) createCustomer(ctx context.Context, params *stripesdk.CustomerC
 	customer, err := s.client.V1Customers.Create(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("stripe SDK create customer: %w", err)
+	}
+	return customer, nil
+}
+
+func (s *sdkAPI) retrieveCustomer(ctx context.Context, id string, params *stripesdk.CustomerRetrieveParams) (*stripesdk.Customer, error) {
+	customer, err := s.client.V1Customers.Retrieve(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK retrieve customer: %w", err)
 	}
 	return customer, nil
 }
@@ -600,6 +634,32 @@ func (c *client) CreateCustomer(ctx context.Context, input CreateCustomerInput) 
 		return nil, fmt.Errorf("create Stripe customer: %w", err)
 	}
 	return &Customer{ID: customer.ID}, nil
+}
+
+func (c *client) GetCustomer(ctx context.Context, id string) (*CustomerDetails, error) {
+	if id == "" {
+		return nil, errMissingCustomerID
+	}
+	customer, err := c.api.retrieveCustomer(ctx, id, new(stripesdk.CustomerRetrieveParams))
+	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return nil, fmt.Errorf("%w: %w", ErrCustomerNotFound, err)
+		}
+		return nil, fmt.Errorf("retrieve Stripe customer: %w", err)
+	}
+	if customer == nil || customer.ID != id {
+		return nil, errors.New("stripe returned an unexpected customer identity")
+	}
+	if customer.Deleted {
+		return nil, ErrCustomerNotFound
+	}
+	return &CustomerDetails{
+		ID:          customer.ID,
+		Name:        customer.Name,
+		Email:       customer.Email,
+		Description: customer.Description,
+		LiveMode:    customer.Livemode,
+	}, nil
 }
 
 func (c *client) UpdateCustomer(ctx context.Context, input UpdateCustomerInput) error {
@@ -1144,6 +1204,10 @@ func NewStubClient(logger *slog.Logger) Client {
 func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) (*Customer, error) {
 	s.logger.DebugContext(ctx, "stub Stripe customer creation skipped")
 	return &Customer{ID: "cus_local_stub"}, nil
+}
+
+func (s *stubClient) GetCustomer(context.Context, string) (*CustomerDetails, error) {
+	return nil, ErrCustomerLookupUnavailable
 }
 
 func (s *stubClient) UpdateCustomer(ctx context.Context, _ UpdateCustomerInput) error {

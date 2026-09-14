@@ -248,6 +248,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled,
 		ConsentToolFilteringEnabled:             snapshot.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

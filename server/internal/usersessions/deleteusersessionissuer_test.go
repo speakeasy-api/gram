@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	orggen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -319,7 +320,7 @@ func TestDeleteUserSessionIssuer_ConflictWithLiveMetaMcpServer(t *testing.T) {
 // issuer's tier rather than the caller's project: scoped to the caller's
 // project it would see no owner here and soft-delete the issuer out from under
 // the sibling project's toolset.
-func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingToolset(t *testing.T) {
+func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingToolset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -349,11 +350,9 @@ func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingToolset(t *t
 	})
 	require.NoError(t, err)
 
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuerID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
+		ID:           issuerID.String(),
+		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -373,18 +372,16 @@ func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingToolset(t *t
 	})
 	require.NoError(t, err)
 
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuerID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
+		ID:           issuerID.String(),
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 }
 
 // The mcp_servers arm of the same sweep. mcp_servers carries no
 // organization_id, so it reaches the organization through its project.
-func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingMCPServer(t *testing.T) {
+func TestDeleteOrganizationUserSessionIssuer_ConflictWithSiblingMCPServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -420,11 +417,9 @@ func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingMCPServer(t 
 	})
 	require.NoError(t, err)
 
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuerID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
+		ID:           issuerID.String(),
+		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -440,7 +435,7 @@ func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingMCPServer(t 
 // A soft-deleted project is terminal and unreachable, so a reference stranded
 // inside one must not leave the issuer undeletable everywhere else in the
 // organization.
-func TestDeleteUserSessionIssuer_OrganizationTierIgnoresOwnersInDeletedProject(t *testing.T) {
+func TestDeleteOrganizationUserSessionIssuer_IgnoresOwnersInDeletedProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -486,11 +481,9 @@ func TestDeleteUserSessionIssuer_OrganizationTierIgnoresOwnersInDeletedProject(t
 	require.NoError(t, err)
 
 	// While the owning project is live the references hold the issuer down.
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuerID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
+		ID:           issuerID.String(),
+		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 
@@ -499,11 +492,9 @@ func TestDeleteUserSessionIssuer_OrganizationTierIgnoresOwnersInDeletedProject(t
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, siblingID)
 	require.NoError(t, err)
 
-	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
-		ID:               issuerID.String(),
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
+	err = ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{
+		ID:           issuerID.String(),
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 }

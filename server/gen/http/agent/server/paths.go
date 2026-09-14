@@ -27,6 +27,21 @@ func UpdateConfigurationAgentPath() string {
 	return "/rpc/agent.updateConfiguration"
 }
 
+// ListAiScanTargetsAgentPath returns the URL path to the agent service listAiScanTargets HTTP endpoint.
+func ListAiScanTargetsAgentPath() string {
+	return "/rpc/agent.listAiScanTargets"
+}
+
+// UpsertAiScanTargetAgentPath returns the URL path to the agent service upsertAiScanTarget HTTP endpoint.
+func UpsertAiScanTargetAgentPath() string {
+	return "/rpc/agent.upsertAiScanTarget"
+}
+
+// DeleteAiScanTargetAgentPath returns the URL path to the agent service deleteAiScanTarget HTTP endpoint.
+func DeleteAiScanTargetAgentPath() string {
+	return "/rpc/agent.deleteAiScanTarget"
+}
+
 // GetSessionMetaAgentPath returns the URL path to the agent service getSessionMeta HTTP endpoint.
 func GetSessionMetaAgentPath() string {
 	return "/rpc/agent.getSessionMeta"

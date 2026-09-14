@@ -85,6 +85,18 @@ type Client struct {
 	// the listEmployeeAIDetections endpoint.
 	ListEmployeeAIDetectionsDoer goahttp.Doer
 
+	// ListResourceAudience Doer is the HTTP client used to make requests to the
+	// listResourceAudience endpoint.
+	ListResourceAudienceDoer goahttp.Doer
+
+	// SetResourceAudience Doer is the HTTP client used to make requests to the
+	// setResourceAudience endpoint.
+	SetResourceAudienceDoer goahttp.Doer
+
+	// ListAudienceOptions Doer is the HTTP client used to make requests to the
+	// listAudienceOptions endpoint.
+	ListAudienceOptionsDoer goahttp.Doer
+
 	// RequestAccess Doer is the HTTP client used to make requests to the
 	// requestAccess endpoint.
 	RequestAccessDoer goahttp.Doer
@@ -100,6 +112,10 @@ type Client struct {
 	// ResolveChallenge Doer is the HTTP client used to make requests to the
 	// resolveChallenge endpoint.
 	ResolveChallengeDoer goahttp.Doer
+
+	// ListIdentityAccess Doer is the HTTP client used to make requests to the
+	// listIdentityAccess endpoint.
+	ListIdentityAccessDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -138,10 +154,14 @@ func NewClient(
 		ResolveShadowMCPInventoryRequestDoer:     doer,
 		ListAIDetectionsDoer:                     doer,
 		ListEmployeeAIDetectionsDoer:             doer,
+		ListResourceAudienceDoer:                 doer,
+		SetResourceAudienceDoer:                  doer,
+		ListAudienceOptionsDoer:                  doer,
 		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
+		ListIdentityAccessDoer:                   doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -558,6 +578,78 @@ func (c *Client) ListEmployeeAIDetections() goa.Endpoint {
 	}
 }
 
+// ListResourceAudience returns an endpoint that makes HTTP requests to the
+// access service listResourceAudience server.
+func (c *Client) ListResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeListResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetResourceAudience returns an endpoint that makes HTTP requests to the
+// access service setResourceAudience server.
+func (c *Client) SetResourceAudience() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetResourceAudienceRequest(c.encoder)
+		decodeResponse = DecodeSetResourceAudienceResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetResourceAudienceRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetResourceAudienceDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setResourceAudience", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAudienceOptions returns an endpoint that makes HTTP requests to the
+// access service listAudienceOptions server.
+func (c *Client) ListAudienceOptions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAudienceOptionsRequest(c.encoder)
+		decodeResponse = DecodeListAudienceOptionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAudienceOptionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAudienceOptionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAudienceOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // RequestAccess returns an endpoint that makes HTTP requests to the access
 // service requestAccess server.
 func (c *Client) RequestAccess() goa.Endpoint {
@@ -649,6 +741,30 @@ func (c *Client) ResolveChallenge() goa.Endpoint {
 		resp, err := c.ResolveChallengeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "resolveChallenge", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListIdentityAccess returns an endpoint that makes HTTP requests to the
+// access service listIdentityAccess server.
+func (c *Client) ListIdentityAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListIdentityAccessRequest(c.encoder)
+		decodeResponse = DecodeListIdentityAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListIdentityAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListIdentityAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listIdentityAccess", err)
 		}
 		return decodeResponse(resp)
 	}

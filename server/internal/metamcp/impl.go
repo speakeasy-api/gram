@@ -3,6 +3,7 @@ package metamcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
@@ -115,16 +116,19 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode)
+	if err != nil {
 		return nil, err
 	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
@@ -244,6 +248,28 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
+	unlocked, err := repo.New(s.db).GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
+	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -251,6 +277,9 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
 
 	existing, err := txRepo.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{
@@ -290,8 +319,8 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
-		return nil, err
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "meta mcp server network access mode changed concurrently; retry the update")
 	}
 	storedMode := networkaccess.Storage(mode)
 
@@ -368,17 +397,23 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	return afterView, nil
 }
 
-func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) error {
+func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) (networkaccess.AdmissionFinalizer, error) {
 	if mode.IsPublicOnly() {
-		return nil
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
 	}
 	if s.networkAccessEligibility == nil {
-		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
-	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
-		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
+	if err != nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
 	}
-	return nil
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+		}
+		return nil
+	}), nil
 }
 
 func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMetaMcpServerPayload) error {

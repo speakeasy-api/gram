@@ -12,6 +12,15 @@ import (
 type Key = attribute.Key
 
 const (
+	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
+	AuthSourceKey                    = attribute.Key("gram.auth.source")
+	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
+	AuthorizationActorTypeKey        = attribute.Key("gram.authorization.actor.type")
+	AuthorizationActorIDKey          = attribute.Key("gram.authorization.actor.id")
+	AuthorizationAPIKeyIDKey         = attribute.Key("gram.authorization.api_key_id")
+	AuthorizationAuthorizerUserIDKey = attribute.Key("gram.authorization.authorizer_user_id")
+	AuthorizationOwnerUserIDKey      = attribute.Key("gram.authorization.owner_user_id")
+
 	WideEventKey = attribute.Key("gram.wide_event")
 
 	ErrorIDKey                       = attribute.Key("error.id")
@@ -305,6 +314,13 @@ const (
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
+	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
+	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
+	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
+	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
+	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
+	NetworkIngressErrorCodeKey     = attribute.Key("gram.network_ingress.error_code")
+	NetworkIngressDurationKey      = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -405,14 +421,17 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey                  = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey                  = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey          = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey           = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey      = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey      = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRequiredKey                  = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                     = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey             = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey             = attribute.Key("gram.oauth.provider")
+	OAuthRedirectURICountKey     = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey      = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRequiredKey             = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                = attribute.Key("gram.oauth.scope")
+	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
+	// client's configured scope because the issuer advertises them.
+	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
@@ -485,73 +504,69 @@ const (
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 
 	RemoteSessionIssuerIDKey            = attribute.Key("gram.remote_session_issuer.id")
+	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
-	RiskPolicyCountKey              = attribute.Key("gram.risk.policy_count")
-	RiskPolicyIDKey                 = attribute.Key("gram.risk.policy_id")
-	RiskPolicyNameKey               = attribute.Key("gram.risk.policy_name")
-	RiskPolicyTypeKey               = attribute.Key("gram.risk.policy_type")
-	RiskPolicyActionKey             = attribute.Key("gram.risk.policy_action")
-	RiskPolicyScopeFoldKey          = attribute.Key("gram.risk.policy_scope_fold")
-	RiskPolicyScopeFoldRemainingKey = attribute.Key("gram.risk.policy_scope_fold_remaining")
-	RiskPolicyScopeFoldAttemptKey   = attribute.Key("gram.risk.policy_scope_fold_attempt")
-	RiskPolicyDetectionScopesKey    = attribute.Key("gram.risk.policy_detection_scopes")
-	RiskMessageTypeKey              = attribute.Key("gram.risk.message_type")
-	RiskRuleIDKey                   = attribute.Key("gram.risk.rule_id")
-	RiskExclusionIDKey              = attribute.Key("gram.risk.exclusion_id")
-	RiskExclusionMatchTypeKey       = attribute.Key("gram.risk.exclusion_match_type")
-	RiskReconcileRowCountKey        = attribute.Key("gram.risk.reconcile_row_count")
-	RiskReconcileRowsKeptKey        = attribute.Key("gram.risk.reconcile_rows_kept")
-	SpendRuleIDKey                  = attribute.Key("gram.spend.rule_id")
-	RiskSourceKey                   = attribute.Key("gram.risk.source")
-	RiskScanAttemptKey              = attribute.Key("gram.risk.scan.attempt")
-	RiskScanMaxAttemptsKey          = attribute.Key("gram.risk.scan.max_attempts")
-	RiskScanBatchIndexKey           = attribute.Key("gram.risk.scan.batch_index")
-	RiskScanTextSizeKey             = attribute.Key("gram.risk.scan.text_size_bytes")
-	RiskScanRequestIDKey            = attribute.Key("gram.risk.scan.request_id")
-	RiskScanEngineKey               = attribute.Key("gram.risk.scan.engine")
-	RiskScanGateReasonKey           = attribute.Key("gram.risk.scan.gate_reason")
-	RiskFindingIDKey                = attribute.Key("gram.risk.finding.id")
-	RiskPolicyVersionKey            = attribute.Key("gram.risk.policy.version")
-	RiskConfidenceKey               = attribute.Key("gram.risk.confidence")
-	RiskTagsKey                     = attribute.Key("gram.risk.tags")
-	RiskSurfaceKey                  = attribute.Key("gram.risk.surface")
-	RiskFieldKey                    = attribute.Key("gram.risk.field")
-	RiskPathKey                     = attribute.Key("gram.risk.path")
-	RiskStartPosKey                 = attribute.Key("gram.risk.start_pos")
-	RiskEndPosKey                   = attribute.Key("gram.risk.end_pos")
-	SecretNameKey                   = attribute.Key("gram.secret.name")
-	SecurityPlacementKey            = attribute.Key("gram.security.placement")
-	SecuritySchemeKey               = attribute.Key("gram.security.scheme")
-	SecurityTypeKey                 = attribute.Key("gram.security.type")
-	SessionIDKey                    = attribute.Key("gram.session.id")
-	SlackEventFullKey               = attribute.Key("gram.slack.event.full")
-	SlackEventTypeKey               = attribute.Key("gram.slack.event.type")
-	SlackTeamIDKey                  = attribute.Key("gram.slack.team.id")
-	ToolCallDurationKey             = attribute.Key("gram.tool_call.duration")
-	ToolCallKindKey                 = attribute.Key("gram.tool_call.kind")
-	ToolCallSourceKey               = attribute.Key("gram.tool_call.source")
-	ToolHTTPResponseContentTypeKey  = attribute.Key("gram.tool.http.response.content_type")
-	ToolIDKey                       = attribute.Key("gram.tool.id")
-	ToolURNKey                      = attribute.Key("gram.tool.urn")
-	ToolNameKey                     = attribute.Key("gram.tool.name")
-	ResourceIDKey                   = attribute.Key("gram.resource.id")
-	ResourceNameKey                 = attribute.Key("gram.resource.name")
-	ResourceURNKey                  = attribute.Key("gram.resource.urn")
-	ResourceURIKey                  = attribute.Key("gram.resource.uri")
-	SvixAppIDKey                    = attribute.Key("gram.svix.app_id")
-	SvixMessageIDKey                = attribute.Key("gram.svix.message_id")
-	WebhookDropReasonKey            = attribute.Key("gram.webhook.drop_reason")
-	SvixPreviousAppIDKey            = attribute.Key("gram.svix.previous_app_id")
-	ToolsetIDKey                    = attribute.Key("gram.toolset.id")
-	ToolsetSlugKey                  = attribute.Key("gram.toolset.slug")
-	ToolsetMCPSlugKey               = attribute.Key("gram.toolset.mcp_slug")
-	ToolsetMCPEnabledKey            = attribute.Key("gram.toolset.mcp_enabled")
-	VisibilityKey                   = attribute.Key("gram.visibility")
+	RiskPolicyCountKey             = attribute.Key("gram.risk.policy_count")
+	RiskPolicyIDKey                = attribute.Key("gram.risk.policy_id")
+	RiskPolicyNameKey              = attribute.Key("gram.risk.policy_name")
+	RiskPolicyTypeKey              = attribute.Key("gram.risk.policy_type")
+	RiskMessageTypeKey             = attribute.Key("gram.risk.message_type")
+	RiskRuleIDKey                  = attribute.Key("gram.risk.rule_id")
+	RiskExclusionIDKey             = attribute.Key("gram.risk.exclusion_id")
+	RiskExclusionMatchTypeKey      = attribute.Key("gram.risk.exclusion_match_type")
+	RiskReconcileRowCountKey       = attribute.Key("gram.risk.reconcile_row_count")
+	RiskReconcileRowsKeptKey       = attribute.Key("gram.risk.reconcile_rows_kept")
+	SpendRuleIDKey                 = attribute.Key("gram.spend.rule_id")
+	RiskSourceKey                  = attribute.Key("gram.risk.source")
+	RiskScanAttemptKey             = attribute.Key("gram.risk.scan.attempt")
+	RiskScanMaxAttemptsKey         = attribute.Key("gram.risk.scan.max_attempts")
+	RiskScanBatchIndexKey          = attribute.Key("gram.risk.scan.batch_index")
+	RiskScanTextSizeKey            = attribute.Key("gram.risk.scan.text_size_bytes")
+	RiskScanRequestIDKey           = attribute.Key("gram.risk.scan.request_id")
+	RiskScanEngineKey              = attribute.Key("gram.risk.scan.engine")
+	RiskScanGateReasonKey          = attribute.Key("gram.risk.scan.gate_reason")
+	RiskFindingIDKey               = attribute.Key("gram.risk.finding.id")
+	RiskPolicyVersionKey           = attribute.Key("gram.risk.policy.version")
+	RiskConfidenceKey              = attribute.Key("gram.risk.confidence")
+	RiskTagsKey                    = attribute.Key("gram.risk.tags")
+	RiskSurfaceKey                 = attribute.Key("gram.risk.surface")
+	RiskFieldKey                   = attribute.Key("gram.risk.field")
+	RiskPathKey                    = attribute.Key("gram.risk.path")
+	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
+	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
+	SecretNameKey                  = attribute.Key("gram.secret.name")
+	SecurityPlacementKey           = attribute.Key("gram.security.placement")
+	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
+	SecurityTypeKey                = attribute.Key("gram.security.type")
+	SessionIDKey                   = attribute.Key("gram.session.id")
+	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
+	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
+	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
+	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
+	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
+	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
+	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
+	ToolIDKey                      = attribute.Key("gram.tool.id")
+	ToolURNKey                     = attribute.Key("gram.tool.urn")
+	ToolNameKey                    = attribute.Key("gram.tool.name")
+	ResourceIDKey                  = attribute.Key("gram.resource.id")
+	ResourceNameKey                = attribute.Key("gram.resource.name")
+	ResourceURNKey                 = attribute.Key("gram.resource.urn")
+	ResourceURIKey                 = attribute.Key("gram.resource.uri")
+	SvixAppIDKey                   = attribute.Key("gram.svix.app_id")
+	SvixMessageIDKey               = attribute.Key("gram.svix.message_id")
+	WebhookDropReasonKey           = attribute.Key("gram.webhook.drop_reason")
+	SvixPreviousAppIDKey           = attribute.Key("gram.svix.previous_app_id")
+	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
+	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+	ToolsetMCPSlugKey              = attribute.Key("gram.toolset.mcp_slug")
+	ToolsetMCPEnabledKey           = attribute.Key("gram.toolset.mcp_enabled")
+	VisibilityKey                  = attribute.Key("gram.visibility")
 
 	// Hooks
 	// HookDecisionKey carries the policy verdict the hook endpoint returned to
@@ -1562,6 +1577,48 @@ func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParam
 func IngressName(v string) attribute.KeyValue { return IngressNameKey.String(v) }
 func SlogIngressName(v string) slog.Attr      { return slog.String(string(IngressNameKey), v) }
 
+func NetworkIngressID(v string) attribute.KeyValue { return NetworkIngressIDKey.String(v) }
+func SlogNetworkIngressID(v string) slog.Attr      { return slog.String(string(NetworkIngressIDKey), v) }
+
+func NetworkSurface[V ~string](v V) attribute.KeyValue {
+	return NetworkSurfaceKey.String(string(v))
+}
+func SlogNetworkSurface[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkSurfaceKey), string(v))
+}
+
+func NetworkIngressOperation[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressOperationKey.String(string(v))
+}
+func SlogNetworkIngressOperation[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressOperationKey), string(v))
+}
+
+func NetworkIngressResult[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressResultKey.String(string(v))
+}
+func SlogNetworkIngressResult[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressResultKey), string(v))
+}
+
+func NetworkIngressReason[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressReasonKey.String(string(v))
+}
+func SlogNetworkIngressReason[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressReasonKey), string(v))
+}
+
+func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressErrorCodeKey.String(string(v))
+}
+func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
+	return slog.Duration(string(NetworkIngressDurationKey), v)
+}
+
 func CustomDomainProvisionerKind(v string) attribute.KeyValue {
 	return CustomDomainProvisionerKindKey.String(v)
 }
@@ -1691,6 +1748,7 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
+func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }
@@ -1725,6 +1783,9 @@ func SlogOAuthRequired(v bool) slog.Attr      { return slog.Bool(string(OAuthReq
 
 func OAuthScope(v string) attribute.KeyValue { return OAuthScopeKey.String(v) }
 func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthScopeKey), v) }
+
+func OAuthScopeAdded(v string) attribute.KeyValue { return OAuthScopeAddedKey.String(v) }
+func SlogOAuthScopeAdded(v string) slog.Attr      { return slog.String(string(OAuthScopeAddedKey), v) }
 
 func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
 func SlogOAuthTokenEndpoint(v string) slog.Attr {
@@ -2014,6 +2075,11 @@ func SlogRemoteSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionIssuerIDKey), v)
 }
 
+func RemoteSessionID(v string) attribute.KeyValue { return RemoteSessionIDKey.String(v) }
+func SlogRemoteSessionID(v string) slog.Attr {
+	return slog.String(string(RemoteSessionIDKey), v)
+}
+
 func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return RemoteSessionClientMigratedCountKey.Int64(v)
 }
@@ -2104,39 +2170,6 @@ func SlogRiskPolicyName(v string) slog.Attr      { return slog.String(string(Ris
 
 func RiskPolicyType(v string) attribute.KeyValue { return RiskPolicyTypeKey.String(v) }
 func SlogRiskPolicyType(v string) slog.Attr      { return slog.String(string(RiskPolicyTypeKey), v) }
-
-func RiskPolicyAction(v string) attribute.KeyValue { return RiskPolicyActionKey.String(v) }
-func SlogRiskPolicyAction(v string) slog.Attr      { return slog.String(string(RiskPolicyActionKey), v) }
-
-// RiskPolicyScopeFold names what the legacy-policy-scope migration did to one
-// policy: preserved, cleared, or noop.
-func RiskPolicyScopeFold(v string) attribute.KeyValue { return RiskPolicyScopeFoldKey.String(v) }
-func SlogRiskPolicyScopeFold(v string) slog.Attr {
-	return slog.String(string(RiskPolicyScopeFoldKey), v)
-}
-
-// RiskPolicyScopeFoldRemaining counts policies still carrying a legacy scope
-// after a fold pass; RiskPolicyScopeFoldAttempt numbers that pass.
-func RiskPolicyScopeFoldRemaining(v int64) attribute.KeyValue {
-	return RiskPolicyScopeFoldRemainingKey.Int64(v)
-}
-func SlogRiskPolicyScopeFoldRemaining(v int64) slog.Attr {
-	return slog.Int64(string(RiskPolicyScopeFoldRemainingKey), v)
-}
-
-func RiskPolicyScopeFoldAttempt(v int64) attribute.KeyValue {
-	return RiskPolicyScopeFoldAttemptKey.Int64(v)
-}
-func SlogRiskPolicyScopeFoldAttempt(v int64) slog.Attr {
-	return slog.Int64(string(RiskPolicyScopeFoldAttemptKey), v)
-}
-
-func RiskPolicyDetectionScopes(v string) attribute.KeyValue {
-	return RiskPolicyDetectionScopesKey.String(v)
-}
-func SlogRiskPolicyDetectionScopes(v string) slog.Attr {
-	return slog.String(string(RiskPolicyDetectionScopesKey), v)
-}
 
 func RiskMessageType(v string) attribute.KeyValue { return RiskMessageTypeKey.String(v) }
 func SlogRiskMessageType(v string) slog.Attr      { return slog.String(string(RiskMessageTypeKey), v) }
@@ -2799,3 +2832,25 @@ func ResilienceSubset(v string) attribute.KeyValue { return ResilienceSubsetKey.
 func SlogResilienceSubset(v string) slog.Attr {
 	return slog.String(string(ResilienceSubsetKey), v)
 }
+
+func SlogAuthorizationOrganizationID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOrganizationIDKey), v)
+}
+func SlogAuthorizationActorType(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorTypeKey), v)
+}
+func SlogAuthorizationActorID(v string) slog.Attr {
+	return slog.String(string(AuthorizationActorIDKey), v)
+}
+func SlogAuthorizationAPIKeyID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAPIKeyIDKey), v)
+}
+func SlogAuthorizationAuthorizerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationAuthorizerUserIDKey), v)
+}
+func SlogAuthorizationOwnerUserID(v string) slog.Attr {
+	return slog.String(string(AuthorizationOwnerUserIDKey), v)
+}
+
+func SlogAdminOIDCSubject(v string) slog.Attr { return slog.String(string(AdminOIDCSubjectKey), v) }
+func SlogAuthSource(v string) slog.Attr       { return slog.String(string(AuthSourceKey), v) }

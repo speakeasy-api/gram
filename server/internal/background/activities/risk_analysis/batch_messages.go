@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +17,8 @@ import (
 
 type batchMessage struct {
 	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	ParentChatMessageID    uuid.UUID
 	ContentPart            bool
 	Type                   message.Type
 	Content                string
@@ -78,6 +79,7 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
+		msg.ChatID = row.ChatID
 		msg.UserID = row.ChatUserID
 		msg.PriorUserRequest = row.PriorUserRequest
 		msg.RecentUntrustedContent = row.RecentUntrustedContent
@@ -101,6 +103,8 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 		// context.
 		msg := batchMessage{
 			ID:                     row.ID,
+			ChatID:                 row.ChatID,
+			ParentChatMessageID:    row.ParentChatMessageID.UUID,
 			ContentPart:            true,
 			Type:                   messageType,
 			Content:                contents[i],
@@ -133,6 +137,8 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 
 	msg := batchMessage{
 		ID:                     id,
+		ChatID:                 uuid.Nil,
+		ParentChatMessageID:    uuid.Nil,
 		ContentPart:            false,
 		Type:                   messageType,
 		Content:                content,
@@ -181,19 +187,6 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 		return []recordedToolCall{fallback}
 	}
 	return calls
-}
-
-func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
-	if len(messageTypes) == 0 {
-		return messages
-	}
-	filtered := make([]batchMessage, 0, len(messages))
-	for _, msg := range messages {
-		if slices.Contains(messageTypes, msg.Type) {
-			filtered = append(filtered, msg)
-		}
-	}
-	return filtered
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {

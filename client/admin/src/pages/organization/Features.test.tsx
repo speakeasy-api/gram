@@ -41,6 +41,7 @@ const FEATURES: ProductFeatures = {
   hooksBrowserLoginEnabled: false,
   hooksFailOpenEnabled: false,
   logsEnabled: true,
+  networkIngressEnabled: false,
   platformMcpEnabled: true,
   remoteSessionAutoRefreshEnabled: false,
   remoteSessionAutoRefreshEnforcedEnabled: false,
@@ -63,6 +64,7 @@ const FEATURES_RESPONSE = {
   hooks_browser_login_enabled: false,
   hooks_fail_open_enabled: false,
   logs_enabled: true,
+  network_ingress_enabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   remote_session_auto_refresh_enforced_enabled: false,
@@ -131,6 +133,7 @@ const OMITTED_FEATURES = {
   skill_capture_metadata_only: "omitted",
   remote_session_auto_refresh_enforced: "omitted",
   consent_tool_filtering: "omitted",
+  network_ingress: "omitted",
 } as const satisfies Record<Exclude<FeatureName, ToggleFeatureName>, "omitted">;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -196,7 +199,7 @@ async function renderFeatures(queryClient?: QueryClient): Promise<void> {
 }
 
 describe("Features", () => {
-  it("renders exactly the nine typed direct toggles", async () => {
+  it("renders exactly the typed direct toggles", async () => {
     await renderFeatures();
 
     const switches = await screen.findAllByRole("switch");
@@ -210,7 +213,7 @@ describe("Features", () => {
       Object.values(OMITTED_FEATURES).filter(
         (classification) => classification === "omitted",
       ),
-    ).toHaveLength(9);
+    ).toHaveLength(Object.keys(OMITTED_FEATURES).length);
   });
 
   it("uses an organization-scoped generated query", async () => {

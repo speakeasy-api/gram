@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Wrench, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Wrench, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -81,6 +81,14 @@ export interface ToolSelectionPanelProps {
   /** Overrides the counts derived from `servers` (e.g. deploy-time-only counts). */
   toolCountByAnnotation?: ReadonlyMap<ToolAnnotation, number>;
   searchPlaceholder?: string;
+  /** "By server" reads oddly when the panel holds one server's tools. */
+  toolsTabLabel?: string;
+  /**
+   * Drop the server header when there is only one: a row that names the
+   * server you are already looking at, and expands the only group there is,
+   * is a click between you and the tools.
+   */
+  flattenSingleServer?: boolean;
   onExpandedServersChange?: (serverIds: string[]) => void;
   className?: string;
 }
@@ -96,6 +104,8 @@ export function ToolSelectionPanel({
   toolsDescription,
   toolCountByAnnotation,
   searchPlaceholder = "Search tools and servers…",
+  toolsTabLabel = "By server",
+  flattenSingleServer = false,
   onExpandedServersChange,
   className,
 }: ToolSelectionPanelProps): JSX.Element {
@@ -229,120 +239,175 @@ export function ToolSelectionPanel({
   }, [q, filteredServers]);
 
   const annotationSectionVisible = annotationSelectionSupported;
-  const annotationsDimmed = mode === "tools" && selectedTools.length > 0;
-  const toolsDimmed = mode === "annotations" && selectedAnnotations.length > 0;
+  // Whether any annotation is actually counted, not whether tools happen to be
+  // loaded: a server that resolves its tools per caller reports no counts, and
+  // expanding one must not start hiding the chips it can still be narrowed by.
+  const hasAnnotationCounts = Array.from(annotationCounts.values()).some(
+    (count) => count > 0,
+  );
+
+  // Annotation and per-tool selection are alternatives, not a stack: showing
+  // both meant the panel scrolled past the choice you were making. One switch,
+  // one visible pane, no "or" divider.
+  const [pane, setPane] = useState<"annotations" | "tools">(() => {
+    if (!annotationSelectionSupported) return "tools";
+    if (mode === "annotations") return "annotations";
+    if (mode === "tools" || selectedTools.length > 0) return "tools";
+    return selectedAnnotations.length > 0 ? "annotations" : "tools";
+  });
+  const activePane = annotationSectionVisible ? pane : "tools";
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {annotationSectionVisible && (
-          <div className={cn(annotationsDimmed && "opacity-60")}>
-            <div className="px-3 pt-5 pb-3">
-              <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                By annotation
-              </div>
-              {annotationsDescription && (
-                <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
-                  {annotationsDescription}
-                </div>
+      {annotationSectionVisible && (
+        <div className="border-border flex shrink-0 items-center gap-1 border-b px-3">
+          {[
+            { key: "annotations" as const, label: "By annotation" },
+            { key: "tools" as const, label: toolsTabLabel },
+          ].map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setPane(option.key)}
+              className={cn(
+                "text-muted-foreground relative px-1 py-2.5 font-mono text-[11px] tracking-[0.08em] uppercase",
+                activePane === option.key &&
+                  "text-foreground after:bg-primary after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5",
+                option.key === "tools" && "ml-4",
               )}
-            </div>
-            <div className="flex flex-wrap gap-2 px-3 pb-4">
+            >
+              {option.label}
+              {option.key === "annotations" && selectedAnnotations.length > 0
+                ? ` (${selectedAnnotations.length})`
+                : ""}
+              {option.key === "tools" && selectedTools.length > 0
+                ? ` (${selectedTools.length})`
+                : ""}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {activePane === "annotations" ? (
+          <div>
+            {annotationsDescription && (
+              <div className="text-muted-foreground/70 px-3 pt-3 pb-2 text-xs leading-snug">
+                {annotationsDescription}
+              </div>
+            )}
+            {/* One row per annotation, saying what picking it would cover: a
+                wall of chips made the reader guess. The marker follows the
+                filter bar's dimension squares. */}
+            <div className="border-border divide-border mx-3 mt-3 divide-y border">
               {ANNOTATION_OPTIONS.map((opt) => {
                 const isActive = selectedAnnotations.includes(opt.key);
                 const count = annotationCounts.get(opt.key) ?? 0;
-                if (count === 0) return null;
-                const Icon = opt.icon;
+                // Counts come from a deploy-time catalogue. A server that
+                // resolves its tools per caller has none, and hiding every
+                // row would leave the pane empty even though annotations are
+                // exactly what such a server can be narrowed by.
+                if (count === 0 && hasAnnotationCounts) return null;
                 return (
                   <button
                     key={opt.key}
                     type="button"
                     onClick={() => toggleAnnotation(opt.key)}
+                    role="checkbox"
+                    aria-checked={isActive}
                     className={cn(
-                      "border-input hover:bg-accent inline-flex items-center gap-1 border px-2 py-1 text-xs transition-colors",
-                      isActive &&
-                        "border-primary bg-primary/5 text-primary font-medium",
+                      "hover:bg-muted/40 flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                      isActive && "bg-muted/60",
                     )}
                   >
-                    <Icon className="h-3 w-3" />
-                    {opt.label}
-                    <span className="text-muted-foreground ml-0.5">
-                      {count}
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "border-primary flex size-4 shrink-0 items-center justify-center border",
+                        isActive && "bg-primary text-primary-foreground",
+                      )}
+                    >
+                      {isActive && <Check className="size-3" />}
                     </span>
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-2 shrink-0",
+                        !isActive && "opacity-40",
+                      )}
+                      style={{ backgroundColor: opt.color }}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm">{opt.label}</span>
+                      <span className="text-muted-foreground block text-xs">
+                        {opt.description}
+                      </span>
+                    </span>
+                    {count > 0 && (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {count} tools
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
-        )}
-
-        {annotationSectionVisible && (
-          <div className="flex items-center gap-3 px-3 py-3">
-            <div className="bg-border h-px flex-1" />
-            <span className="text-muted-foreground text-[11px] font-medium uppercase">
-              or
-            </span>
-            <div className="bg-border h-px flex-1" />
-          </div>
-        )}
-
-        <div className={cn(toolsDimmed && "opacity-60")}>
-          <div className="px-3 pt-1 pb-3">
-            <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              By server
-            </div>
+        ) : (
+          <div>
             {toolsDescription && (
-              <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
+              <div className="text-muted-foreground/70 px-3 pt-3 pb-2 text-xs leading-snug">
                 {toolsDescription}
               </div>
             )}
-          </div>
 
-          <div className="flex items-center gap-2 px-3 pb-3">
-            <div className="border-input flex h-8 flex-1 items-center gap-2 border px-2">
-              <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+            <div className="flex items-center gap-2 px-3 pt-3 pb-3">
+              <div className="border-input flex h-9 flex-1 items-center gap-2 border px-2.5">
+                <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="border-border mx-3 mb-3 border">
+              {filteredServers.length === 0 ? (
+                <div className="text-muted-foreground px-3 py-3 text-sm">
+                  {servers.length === 0
+                    ? "No servers found"
+                    : "No matching tools or servers"}
+                </div>
+              ) : (
+                filteredServers.map((server) => (
+                  <ServerRow
+                    key={server.id}
+                    server={server}
+                    selectedTools={selectedTools}
+                    query={q}
+                    isExpanded={expandedServers.has(server.id)}
+                    onToggleExpanded={toggleExpanded}
+                    onToggleTool={toggleTool}
+                    onBatchToggleTools={batchToggleTools}
+                    flat={flattenSingleServer && servers.length === 1}
+                  />
+                ))
               )}
             </div>
           </div>
-
-          <div className="border-border border-t">
-            {filteredServers.length === 0 ? (
-              <div className="text-muted-foreground px-3 py-3 text-sm">
-                {servers.length === 0
-                  ? "No servers found"
-                  : "No matching tools or servers"}
-              </div>
-            ) : (
-              filteredServers.map((server) => (
-                <ServerRow
-                  key={server.id}
-                  server={server}
-                  selectedTools={selectedTools}
-                  query={q}
-                  isExpanded={expandedServers.has(server.id)}
-                  onToggleExpanded={toggleExpanded}
-                  onToggleTool={toggleTool}
-                  onBatchToggleTools={batchToggleTools}
-                />
-              ))
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -376,6 +441,7 @@ function ServerRow({
   onToggleExpanded,
   onToggleTool,
   onBatchToggleTools,
+  flat = false,
 }: {
   server: ToolSelectionServer;
   selectedTools: readonly ToolSelectionToolRef[];
@@ -388,6 +454,8 @@ function ServerRow({
     toolNames: string[],
     select: boolean,
   ) => void;
+  /** Render the tools without the server header above them. */
+  flat?: boolean;
 }): JSX.Element {
   const serverTools = useMemo(
     () => server.tools.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -495,7 +563,13 @@ function ServerRow({
           key={tool.name}
           type="button"
           onClick={() => onToggleTool(server.id, tool.name)}
-          className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 pl-8 text-sm"
+          className={cn(
+            "hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm",
+            // Tools sit under their server's chevron. A flattened single
+            // server has no header above them, so the indent would leave
+            // them floating away from the edge they belong to.
+            flat ? "pl-3" : "pl-8",
+          )}
         >
           <Checkbox
             checked={isSelected}
@@ -506,6 +580,38 @@ function ServerRow({
         </button>
       );
     });
+  }
+
+  if (flat) {
+    return (
+      <div>
+        {total > 0 && (
+          <div className="border-border text-muted-foreground flex items-center justify-between border-b px-3 py-2 text-xs">
+            <span>
+              {selectedCount > 0
+                ? `${selectedCount} of ${total} selected`
+                : `${total} tools`}
+            </span>
+            {total > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  onBatchToggleTools(
+                    server.id,
+                    serverTools.map((t) => t.name),
+                    !allSelected,
+                  )
+                }
+                className="hover:text-foreground underline decoration-dotted underline-offset-4"
+              >
+                {allSelected ? "Clear all" : "Select all"}
+              </button>
+            )}
+          </div>
+        )}
+        <div>{expandedBody}</div>
+      </div>
+    );
   }
 
   return (

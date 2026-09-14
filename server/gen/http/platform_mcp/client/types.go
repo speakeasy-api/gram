@@ -832,6 +832,25 @@ type GetOnboardingGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "getOnboarding" endpoint HTTP response body for the "unavailable"
+// error.
+type GetOnboardingUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // StartOnboardingUnauthorizedResponseBody is the type of the "platformMcp"
 // service "startOnboarding" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1004,6 +1023,25 @@ type StartOnboardingUnexpectedResponseBody struct {
 // service "startOnboarding" endpoint HTTP response body for the
 // "gateway_error" error.
 type StartOnboardingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "startOnboarding" endpoint HTTP response body for the "unavailable"
+// error.
+type StartOnboardingUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1209,6 +1247,25 @@ type RecordDashboardCtaEventGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RecordDashboardCtaEventUnavailableResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "unavailable" error.
+type RecordDashboardCtaEventUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RecordInstallIntentUnauthorizedResponseBody is the type of the "platformMcp"
 // service "recordInstallIntent" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1384,6 +1441,25 @@ type RecordInstallIntentUnexpectedResponseBody struct {
 // service "recordInstallIntent" endpoint HTTP response body for the
 // "gateway_error" error.
 type RecordInstallIntentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RecordInstallIntentUnavailableResponseBody is the type of the "platformMcp"
+// service "recordInstallIntent" endpoint HTTP response body for the
+// "unavailable" error.
+type RecordInstallIntentUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1589,6 +1665,25 @@ type RecordAgentConfigurationCopiedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RecordAgentConfigurationCopiedUnavailableResponseBody is the type of the
+// "platformMcp" service "recordAgentConfigurationCopied" endpoint HTTP
+// response body for the "unavailable" error.
+type RecordAgentConfigurationCopiedUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // StartOnboardingSetupUnauthorizedResponseBody is the type of the
 // "platformMcp" service "startOnboardingSetup" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -1764,6 +1859,25 @@ type StartOnboardingSetupUnexpectedResponseBody struct {
 // "platformMcp" service "startOnboardingSetup" endpoint HTTP response body for
 // the "gateway_error" error.
 type StartOnboardingSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartOnboardingSetupUnavailableResponseBody is the type of the "platformMcp"
+// service "startOnboardingSetup" endpoint HTTP response body for the
+// "unavailable" error.
+type StartOnboardingSetupUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1969,6 +2083,25 @@ type RecheckOnboardingReadinessGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RecheckOnboardingReadinessUnavailableResponseBody is the type of the
+// "platformMcp" service "recheckOnboardingReadiness" endpoint HTTP response
+// body for the "unavailable" error.
+type RecheckOnboardingReadinessUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DistributeOnboardingCandidateUnauthorizedResponseBody is the type of the
 // "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2144,6 +2277,25 @@ type DistributeOnboardingCandidateUnexpectedResponseBody struct {
 // "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
 // body for the "gateway_error" error.
 type DistributeOnboardingCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DistributeOnboardingCandidateUnavailableResponseBody is the type of the
+// "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
+// body for the "unavailable" error.
+type DistributeOnboardingCandidateUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2349,6 +2501,25 @@ type RemoveOnboardingDistributionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RemoveOnboardingDistributionUnavailableResponseBody is the type of the
+// "platformMcp" service "removeOnboardingDistribution" endpoint HTTP response
+// body for the "unavailable" error.
+type RemoveOnboardingDistributionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RepairOnboardingPublicationUnauthorizedResponseBody is the type of the
 // "platformMcp" service "repairOnboardingPublication" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2539,6 +2710,25 @@ type RepairOnboardingPublicationGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RepairOnboardingPublicationUnavailableResponseBody is the type of the
+// "platformMcp" service "repairOnboardingPublication" endpoint HTTP response
+// body for the "unavailable" error.
+type RepairOnboardingPublicationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DismissOnboardingUnauthorizedResponseBody is the type of the "platformMcp"
 // service "dismissOnboarding" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2714,6 +2904,25 @@ type DismissOnboardingUnexpectedResponseBody struct {
 // service "dismissOnboarding" endpoint HTTP response body for the
 // "gateway_error" error.
 type DismissOnboardingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DismissOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "dismissOnboarding" endpoint HTTP response body for the
+// "unavailable" error.
+type DismissOnboardingUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2975,6 +3184,21 @@ func NewGetOnboardingGatewayError(body *GetOnboardingGatewayErrorResponseBody) *
 	return v
 }
 
+// NewGetOnboardingUnavailable builds a platformMcp service getOnboarding
+// endpoint unavailable error.
+func NewGetOnboardingUnavailable(body *GetOnboardingUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewStartOnboardingPlatformMCPOnboardingStateOK builds a "platformMcp"
 // service "startOnboarding" endpoint result from a HTTP "OK" response.
 func NewStartOnboardingPlatformMCPOnboardingStateOK(body *StartOnboardingResponseBody) *platformmcp.PlatformMCPOnboardingState {
@@ -3159,6 +3383,21 @@ func NewStartOnboardingGatewayError(body *StartOnboardingGatewayErrorResponseBod
 	return v
 }
 
+// NewStartOnboardingUnavailable builds a platformMcp service startOnboarding
+// endpoint unavailable error.
+func NewStartOnboardingUnavailable(body *StartOnboardingUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRecordDashboardCtaEventUnauthorized builds a platformMcp service
 // recordDashboardCtaEvent endpoint unauthorized error.
 func NewRecordDashboardCtaEventUnauthorized(body *RecordDashboardCtaEventUnauthorizedResponseBody) *goa.ServiceError {
@@ -3297,6 +3536,21 @@ func NewRecordDashboardCtaEventUnexpected(body *RecordDashboardCtaEventUnexpecte
 // NewRecordDashboardCtaEventGatewayError builds a platformMcp service
 // recordDashboardCtaEvent endpoint gateway_error error.
 func NewRecordDashboardCtaEventGatewayError(body *RecordDashboardCtaEventGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRecordDashboardCtaEventUnavailable builds a platformMcp service
+// recordDashboardCtaEvent endpoint unavailable error.
+func NewRecordDashboardCtaEventUnavailable(body *RecordDashboardCtaEventUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3481,6 +3735,21 @@ func NewRecordInstallIntentUnexpected(body *RecordInstallIntentUnexpectedRespons
 // NewRecordInstallIntentGatewayError builds a platformMcp service
 // recordInstallIntent endpoint gateway_error error.
 func NewRecordInstallIntentGatewayError(body *RecordInstallIntentGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRecordInstallIntentUnavailable builds a platformMcp service
+// recordInstallIntent endpoint unavailable error.
+func NewRecordInstallIntentUnavailable(body *RecordInstallIntentUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3678,6 +3947,21 @@ func NewRecordAgentConfigurationCopiedGatewayError(body *RecordAgentConfiguratio
 	return v
 }
 
+// NewRecordAgentConfigurationCopiedUnavailable builds a platformMcp service
+// recordAgentConfigurationCopied endpoint unavailable error.
+func NewRecordAgentConfigurationCopiedUnavailable(body *RecordAgentConfigurationCopiedUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewStartOnboardingSetupPlatformMCPOnboardingSetupHandoffOK builds a
 // "platformMcp" service "startOnboardingSetup" endpoint result from a HTTP
 // "OK" response.
@@ -3828,6 +4112,21 @@ func NewStartOnboardingSetupUnexpected(body *StartOnboardingSetupUnexpectedRespo
 // NewStartOnboardingSetupGatewayError builds a platformMcp service
 // startOnboardingSetup endpoint gateway_error error.
 func NewStartOnboardingSetupGatewayError(body *StartOnboardingSetupGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartOnboardingSetupUnavailable builds a platformMcp service
+// startOnboardingSetup endpoint unavailable error.
+func NewStartOnboardingSetupUnavailable(body *StartOnboardingSetupUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4025,6 +4324,21 @@ func NewRecheckOnboardingReadinessGatewayError(body *RecheckOnboardingReadinessG
 	return v
 }
 
+// NewRecheckOnboardingReadinessUnavailable builds a platformMcp service
+// recheckOnboardingReadiness endpoint unavailable error.
+func NewRecheckOnboardingReadinessUnavailable(body *RecheckOnboardingReadinessUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDistributeOnboardingCandidatePlatformMCPOnboardingStateOK builds a
 // "platformMcp" service "distributeOnboardingCandidate" endpoint result from a
 // HTTP "OK" response.
@@ -4198,6 +4512,21 @@ func NewDistributeOnboardingCandidateUnexpected(body *DistributeOnboardingCandid
 // NewDistributeOnboardingCandidateGatewayError builds a platformMcp service
 // distributeOnboardingCandidate endpoint gateway_error error.
 func NewDistributeOnboardingCandidateGatewayError(body *DistributeOnboardingCandidateGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDistributeOnboardingCandidateUnavailable builds a platformMcp service
+// distributeOnboardingCandidate endpoint unavailable error.
+func NewDistributeOnboardingCandidateUnavailable(body *DistributeOnboardingCandidateUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4395,6 +4724,21 @@ func NewRemoveOnboardingDistributionGatewayError(body *RemoveOnboardingDistribut
 	return v
 }
 
+// NewRemoveOnboardingDistributionUnavailable builds a platformMcp service
+// removeOnboardingDistribution endpoint unavailable error.
+func NewRemoveOnboardingDistributionUnavailable(body *RemoveOnboardingDistributionUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRepairOnboardingPublicationPlatformMCPOnboardingStateOK builds a
 // "platformMcp" service "repairOnboardingPublication" endpoint result from a
 // HTTP "OK" response.
@@ -4580,6 +4924,21 @@ func NewRepairOnboardingPublicationGatewayError(body *RepairOnboardingPublicatio
 	return v
 }
 
+// NewRepairOnboardingPublicationUnavailable builds a platformMcp service
+// repairOnboardingPublication endpoint unavailable error.
+func NewRepairOnboardingPublicationUnavailable(body *RepairOnboardingPublicationUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDismissOnboardingUnauthorized builds a platformMcp service
 // dismissOnboarding endpoint unauthorized error.
 func NewDismissOnboardingUnauthorized(body *DismissOnboardingUnauthorizedResponseBody) *goa.ServiceError {
@@ -4718,6 +5077,21 @@ func NewDismissOnboardingUnexpected(body *DismissOnboardingUnexpectedResponseBod
 // NewDismissOnboardingGatewayError builds a platformMcp service
 // dismissOnboarding endpoint gateway_error error.
 func NewDismissOnboardingGatewayError(body *DismissOnboardingGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDismissOnboardingUnavailable builds a platformMcp service
+// dismissOnboarding endpoint unavailable error.
+func NewDismissOnboardingUnavailable(body *DismissOnboardingUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5938,6 +6312,30 @@ func ValidateGetOnboardingGatewayErrorResponseBody(body *GetOnboardingGatewayErr
 	return
 }
 
+// ValidateGetOnboardingUnavailableResponseBody runs the validations defined on
+// getOnboarding_unavailable_response_body
+func ValidateGetOnboardingUnavailableResponseBody(body *GetOnboardingUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateStartOnboardingUnauthorizedResponseBody runs the validations defined
 // on startOnboarding_unauthorized_response_body
 func ValidateStartOnboardingUnauthorizedResponseBody(body *StartOnboardingUnauthorizedResponseBody) (err error) {
@@ -6157,6 +6555,30 @@ func ValidateStartOnboardingUnexpectedResponseBody(body *StartOnboardingUnexpect
 // ValidateStartOnboardingGatewayErrorResponseBody runs the validations defined
 // on startOnboarding_gateway_error_response_body
 func ValidateStartOnboardingGatewayErrorResponseBody(body *StartOnboardingGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartOnboardingUnavailableResponseBody runs the validations defined
+// on startOnboarding_unavailable_response_body
+func ValidateStartOnboardingUnavailableResponseBody(body *StartOnboardingUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6420,6 +6842,30 @@ func ValidateRecordDashboardCtaEventGatewayErrorResponseBody(body *RecordDashboa
 	return
 }
 
+// ValidateRecordDashboardCtaEventUnavailableResponseBody runs the validations
+// defined on recordDashboardCtaEvent_unavailable_response_body
+func ValidateRecordDashboardCtaEventUnavailableResponseBody(body *RecordDashboardCtaEventUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRecordInstallIntentUnauthorizedResponseBody runs the validations
 // defined on recordInstallIntent_unauthorized_response_body
 func ValidateRecordInstallIntentUnauthorizedResponseBody(body *RecordInstallIntentUnauthorizedResponseBody) (err error) {
@@ -6639,6 +7085,30 @@ func ValidateRecordInstallIntentUnexpectedResponseBody(body *RecordInstallIntent
 // ValidateRecordInstallIntentGatewayErrorResponseBody runs the validations
 // defined on recordInstallIntent_gateway_error_response_body
 func ValidateRecordInstallIntentGatewayErrorResponseBody(body *RecordInstallIntentGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRecordInstallIntentUnavailableResponseBody runs the validations
+// defined on recordInstallIntent_unavailable_response_body
+func ValidateRecordInstallIntentUnavailableResponseBody(body *RecordInstallIntentUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6906,6 +7376,31 @@ func ValidateRecordAgentConfigurationCopiedGatewayErrorResponseBody(body *Record
 	return
 }
 
+// ValidateRecordAgentConfigurationCopiedUnavailableResponseBody runs the
+// validations defined on
+// recordAgentConfigurationCopied_unavailable_response_body
+func ValidateRecordAgentConfigurationCopiedUnavailableResponseBody(body *RecordAgentConfigurationCopiedUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateStartOnboardingSetupUnauthorizedResponseBody runs the validations
 // defined on startOnboardingSetup_unauthorized_response_body
 func ValidateStartOnboardingSetupUnauthorizedResponseBody(body *StartOnboardingSetupUnauthorizedResponseBody) (err error) {
@@ -7125,6 +7620,30 @@ func ValidateStartOnboardingSetupUnexpectedResponseBody(body *StartOnboardingSet
 // ValidateStartOnboardingSetupGatewayErrorResponseBody runs the validations
 // defined on startOnboardingSetup_gateway_error_response_body
 func ValidateStartOnboardingSetupGatewayErrorResponseBody(body *StartOnboardingSetupGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartOnboardingSetupUnavailableResponseBody runs the validations
+// defined on startOnboardingSetup_unavailable_response_body
+func ValidateStartOnboardingSetupUnavailableResponseBody(body *StartOnboardingSetupUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7367,6 +7886,30 @@ func ValidateRecheckOnboardingReadinessUnexpectedResponseBody(body *RecheckOnboa
 // ValidateRecheckOnboardingReadinessGatewayErrorResponseBody runs the
 // validations defined on recheckOnboardingReadiness_gateway_error_response_body
 func ValidateRecheckOnboardingReadinessGatewayErrorResponseBody(body *RecheckOnboardingReadinessGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRecheckOnboardingReadinessUnavailableResponseBody runs the
+// validations defined on recheckOnboardingReadiness_unavailable_response_body
+func ValidateRecheckOnboardingReadinessUnavailableResponseBody(body *RecheckOnboardingReadinessUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7633,6 +8176,31 @@ func ValidateDistributeOnboardingCandidateGatewayErrorResponseBody(body *Distrib
 	return
 }
 
+// ValidateDistributeOnboardingCandidateUnavailableResponseBody runs the
+// validations defined on
+// distributeOnboardingCandidate_unavailable_response_body
+func ValidateDistributeOnboardingCandidateUnavailableResponseBody(body *DistributeOnboardingCandidateUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRemoveOnboardingDistributionUnauthorizedResponseBody runs the
 // validations defined on
 // removeOnboardingDistribution_unauthorized_response_body
@@ -7856,6 +8424,30 @@ func ValidateRemoveOnboardingDistributionUnexpectedResponseBody(body *RemoveOnbo
 // validations defined on
 // removeOnboardingDistribution_gateway_error_response_body
 func ValidateRemoveOnboardingDistributionGatewayErrorResponseBody(body *RemoveOnboardingDistributionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemoveOnboardingDistributionUnavailableResponseBody runs the
+// validations defined on removeOnboardingDistribution_unavailable_response_body
+func ValidateRemoveOnboardingDistributionUnavailableResponseBody(body *RemoveOnboardingDistributionUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8120,6 +8712,30 @@ func ValidateRepairOnboardingPublicationGatewayErrorResponseBody(body *RepairOnb
 	return
 }
 
+// ValidateRepairOnboardingPublicationUnavailableResponseBody runs the
+// validations defined on repairOnboardingPublication_unavailable_response_body
+func ValidateRepairOnboardingPublicationUnavailableResponseBody(body *RepairOnboardingPublicationUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDismissOnboardingUnauthorizedResponseBody runs the validations
 // defined on dismissOnboarding_unauthorized_response_body
 func ValidateDismissOnboardingUnauthorizedResponseBody(body *DismissOnboardingUnauthorizedResponseBody) (err error) {
@@ -8339,6 +8955,30 @@ func ValidateDismissOnboardingUnexpectedResponseBody(body *DismissOnboardingUnex
 // ValidateDismissOnboardingGatewayErrorResponseBody runs the validations
 // defined on dismissOnboarding_gateway_error_response_body
 func ValidateDismissOnboardingGatewayErrorResponseBody(body *DismissOnboardingGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDismissOnboardingUnavailableResponseBody runs the validations
+// defined on dismissOnboarding_unavailable_response_body
+func ValidateDismissOnboardingUnavailableResponseBody(body *DismissOnboardingUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

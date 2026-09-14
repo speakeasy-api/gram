@@ -64,10 +64,12 @@ func TestServePublic_McpEndpoint_IssuerGated_RecordsRejectedRequests(t *testing.
 		attr.OAuthFailureReason("no_credentials"),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(mcpmetrics.SurfaceHosting)),
+		attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
 	)])
 	require.Equal(t, int64(1), points[attribute.NewSet(
 		attr.OAuthFailureReason("invalid_bearer_token"),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(mcpmetrics.SurfaceHosting)),
+		attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
 	)])
 }

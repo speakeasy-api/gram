@@ -253,7 +253,11 @@ function renderMcpDetailTabContent(
       return (
         <RequireScope scope="org:read" level="page">
           <RequireScope scope="mcp:read" resourceId={toolset.id} level="page">
-            <MCPTeamAccessTab resourceId={toolset.id} tools={toolset.tools} />
+            <MCPTeamAccessTab
+              resourceId={toolset.id}
+              serverName={toolset.name}
+              tools={toolset.tools}
+            />
           </RequireScope>
         </RequireScope>
       );

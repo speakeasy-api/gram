@@ -40,6 +40,10 @@ vi.mock("@/pages/org/litellm-integration-row", () => ({
   LiteLLMIntegrationRow: () => <div>LiteLLM push integration</div>,
 }));
 
+vi.mock("./anthropic-inference-integration-row", () => ({
+  AnthropicInferenceIntegrationRow: () => <div>Anthropic inference hooks</div>,
+}));
+
 beforeEach(() => {
   state.isAdmin = false;
 });
@@ -51,6 +55,7 @@ describe("OrgAIIntegrationsInner", () => {
     render(<OrgAIIntegrationsInner />);
 
     expect(screen.queryByText("LiteLLM push integration")).toBeNull();
+    expect(screen.queryByText("Anthropic inference hooks")).toBeNull();
   });
 
   it("shows LiteLLM to admins", () => {
@@ -59,5 +64,6 @@ describe("OrgAIIntegrationsInner", () => {
     render(<OrgAIIntegrationsInner />);
 
     expect(screen.getByText("LiteLLM push integration")).toBeDefined();
+    expect(screen.getByText("Anthropic inference hooks")).toBeDefined();
   });
 });

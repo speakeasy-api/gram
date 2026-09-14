@@ -81,8 +81,10 @@ type ListUserSessionIssuerCimdClientsResponseBody struct {
 type GetUserSessionIssuerCimdClientResponseBody struct {
 	// The user_session_issuer_cimd_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned entries.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The user_session_issuer this URL is allowed on.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The exact https URL admitted as a client_id.
@@ -1263,8 +1265,10 @@ type CimdClientPresetResponseBody struct {
 type UserSessionIssuerCimdClientResponseBody struct {
 	// The user_session_issuer_cimd_client id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned entries.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// The user_session_issuer this URL is allowed on.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The exact https URL admitted as a client_id.
@@ -1346,6 +1350,7 @@ func NewGetUserSessionIssuerCimdClientResponseBody(res *types.UserSessionIssuerC
 	body := &GetUserSessionIssuerCimdClientResponseBody{
 		ID:                  res.ID,
 		ProjectID:           res.ProjectID,
+		OrganizationID:      res.OrganizationID,
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		ClientIDMetadataURI: res.ClientIDMetadataURI,
 		CreatedAt:           res.CreatedAt,

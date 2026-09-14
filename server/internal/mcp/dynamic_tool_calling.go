@@ -8,21 +8,17 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-const (
-	searchToolsToolName = "search_tools"
-)
+const searchToolsToolName = "search_tools"
+
+var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
 func buildDynamicSearchToolsSchema(availableTags []string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{
@@ -63,10 +59,9 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) ([]*toolListEntry, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
-		return nil, fmt.Errorf("failed to index toolset: %w", err)
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
+		return nil, fmt.Errorf("check tool search index: %w", err)
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
@@ -156,9 +151,11 @@ func handleSearchToolsCall(
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
+		if errors.Is(err, errToolSearchIndexUnavailable) {
+			return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").LogError(ctx, logger)
 	}
 
@@ -272,31 +269,18 @@ func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.Tool
 	return results, nil
 }
 
-func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporalEnv *temporal.Environment) error {
+func requireToolSearchIndex(ctx context.Context, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) error {
+	if len(toolset.Tools) == 0 {
+		return nil
+	}
+
 	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
 	if err != nil {
 		return fmt.Errorf("failed to check toolset indexing status: %w", err)
 	}
 
 	if !indexed {
-		wr, indexErr := background.ExecuteIndexToolset(
-			ctx,
-			temporalEnv,
-			background.IndexToolsetParams{
-				ProjectID:   uuid.MustParse(toolset.ProjectID),
-				ToolsetSlug: toolset.Slug,
-			},
-		)
-
-		if indexErr != nil {
-			return fmt.Errorf("failed to prepare tool search index: %w", indexErr)
-		}
-
-		wrError := wr.Get(ctx, nil)
-		if wrError != nil {
-			return fmt.Errorf("failed to build tool search index: %w", wrError)
-
-		}
+		return errToolSearchIndexUnavailable
 	}
 
 	return nil

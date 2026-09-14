@@ -21,6 +21,10 @@ type Client struct {
 	// endpoint.
 	CreateKeyDoer goahttp.Doer
 
+	// RotateKey Doer is the HTTP client used to make requests to the rotateKey
+	// endpoint.
+	RotateKeyDoer goahttp.Doer
+
 	// ListKeys Doer is the HTTP client used to make requests to the listKeys
 	// endpoint.
 	ListKeysDoer goahttp.Doer
@@ -54,6 +58,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateKeyDoer:       doer,
+		RotateKeyDoer:       doer,
 		ListKeysDoer:        doer,
 		RevokeKeyDoer:       doer,
 		VerifyKeyDoer:       doer,
@@ -84,6 +89,30 @@ func (c *Client) CreateKey() goa.Endpoint {
 		resp, err := c.CreateKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("keys", "createKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RotateKey returns an endpoint that makes HTTP requests to the keys service
+// rotateKey server.
+func (c *Client) RotateKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRotateKeyRequest(c.encoder)
+		decodeResponse = DecodeRotateKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRotateKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RotateKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("keys", "rotateKey", err)
 		}
 		return decodeResponse(resp)
 	}

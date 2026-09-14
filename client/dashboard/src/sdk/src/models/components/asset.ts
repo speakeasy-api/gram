@@ -9,14 +9,14 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Kind = {
+export const AssetKind = {
   Openapiv3: "openapiv3",
   Image: "image",
   Functions: "functions",
   ChatAttachment: "chat_attachment",
   Unknown: "unknown",
 } as const;
-export type Kind = ClosedEnum<typeof Kind>;
+export type AssetKind = ClosedEnum<typeof AssetKind>;
 
 export type Asset = {
   /**
@@ -35,7 +35,7 @@ export type Asset = {
    * The ID of the asset
    */
   id: string;
-  kind: Kind;
+  kind: AssetKind;
   /**
    * The SHA256 hash of the asset
    */
@@ -47,7 +47,9 @@ export type Asset = {
 };
 
 /** @internal */
-export const Kind$inboundSchema: z.ZodMiniEnum<typeof Kind> = z.enum(Kind);
+export const AssetKind$inboundSchema: z.ZodMiniEnum<typeof AssetKind> = z.enum(
+  AssetKind,
+);
 
 /** @internal */
 export const Asset$inboundSchema: z.ZodMiniType<Asset, unknown> = z.pipe(
@@ -59,7 +61,7 @@ export const Asset$inboundSchema: z.ZodMiniType<Asset, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    kind: Kind$inboundSchema,
+    kind: AssetKind$inboundSchema,
     sha256: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

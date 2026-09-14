@@ -16,7 +16,8 @@ import (
 // CreateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
 // service "createUserSessionIssuer" endpoint HTTP request body.
 type CreateUserSessionIssuerRequestBody struct {
-	// Project-unique slug.
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
@@ -47,9 +48,12 @@ type UpdateUserSessionIssuerRequestBody struct {
 type CreateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -73,9 +77,12 @@ type CreateUserSessionIssuerResponseBody struct {
 type UpdateUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -107,9 +114,12 @@ type ListUserSessionIssuersResponseBody struct {
 type GetUserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -1083,9 +1093,12 @@ type DeleteUserSessionIssuerGatewayErrorResponseBody struct {
 type UserSessionIssuerResponseBody struct {
 	// The user_session_issuer id.
 	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id.
+	// The owning project id; empty for organization-owned issuers.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project-unique slug.
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
@@ -1111,6 +1124,7 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 	body := &CreateUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
@@ -1128,6 +1142,7 @@ func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Updat
 	body := &UpdateUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
@@ -1167,6 +1182,7 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 	body := &GetUserSessionIssuerResponseBody{
 		ID:                            res.ID,
 		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
 		Slug:                          res.Slug,
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
@@ -2014,6 +2030,16 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
 		}
 	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
 	return
 }
 
@@ -2029,6 +2055,16 @@ func ValidateUpdateUserSessionIssuerRequestBody(body *UpdateUserSessionIssuerReq
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 1, true))
+		}
+	}
+	if body.SessionDurationHours != nil {
+		if *body.SessionDurationHours > 2.562047e+06 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
 		}
 	}
 	if body.ClientIDMetadataAdmissionMode != nil {

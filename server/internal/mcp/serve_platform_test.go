@@ -27,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -104,6 +106,39 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a non-managed assistant must be rejected at the entrypoint")
 	require.Contains(t, err.Error(), "not found")
+}
+
+func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	slug := platformtools.ManagedAssistantPlatformToolsetSlug
+	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(toolsListBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20260728)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("toolsetSlug", slug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	err := ti.service.ServePlatformToolset(w, req)
+	require.NoError(t, err)
+	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedPlatformToolset())
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+func TestServePlatformToolset_EmptyBodyRequiresTokenAuthentication(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	_, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, nil, "")
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
 // The research tools are the MCP research runner's, and it holds them

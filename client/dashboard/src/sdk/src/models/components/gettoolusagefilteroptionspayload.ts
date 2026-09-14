@@ -12,6 +12,7 @@ import { ClosedEnum } from "../../types/enums.js";
 export const OptionTypes = {
   HostedServers: "hosted_servers",
   ShadowServers: "shadow_servers",
+  Gateways: "gateways",
   Users: "users",
 } as const;
 /**

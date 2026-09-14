@@ -6,33 +6,132 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClientResolveScopes(t *testing.T) {
+func TestClientRequestedScopes(t *testing.T) {
 	t.Parallel()
 
-	t.Run("prefers client override when set", func(t *testing.T) {
-		t.Parallel()
-		c := Client{
-			ClientScope:           []string{"read:tools"},
-			IssuerScopesSupported: []string{"openid", "profile"},
-		}
-		require.Equal(t, []string{"read:tools"}, c.resolveScopes())
-	})
+	cases := []struct {
+		name        string
+		client      Client
+		wantScopes  []string
+		wantWidened []string
+	}{
+		{
+			name: "client scope is the base and the issuer's standard scopes are appended",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{"openid", "profile", "email", "offline_access", "admin"},
+			},
+			wantScopes:  []string{"read:tools", "openid", "email", "profile", "offline_access"},
+			wantWidened: []string{"openid", "email", "profile", "offline_access"},
+		},
+		{
+			name: "standard scopes the issuer does not advertise are never added",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{"read:tools", "write:tools"},
+			},
+			wantScopes:  []string{"read:tools"},
+			wantWidened: nil,
+		},
+		{
+			name: "issuer scopes_supported is the base when the client has no scope, and appending is a no-op",
+			client: Client{
+				ClientScope:           nil,
+				IssuerScopesSupported: []string{"openid", "profile"},
+			},
+			wantScopes:  []string{"openid", "profile"},
+			wantWidened: nil,
+		},
+		{
+			name: "an empty client scope is the same as none",
+			client: Client{
+				ClientScope:           []string{},
+				IssuerScopesSupported: []string{"openid"},
+			},
+			wantScopes:  []string{"openid"},
+			wantWidened: nil,
+		},
+		{
+			name: "a NULL issuer scopes_supported leaves the client scope alone",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: nil,
+			},
+			wantScopes:  []string{"read:tools"},
+			wantWidened: nil,
+		},
+		{
+			name: "an empty issuer scopes_supported leaves the client scope alone",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{},
+			},
+			wantScopes:  []string{"read:tools"},
+			wantWidened: nil,
+		},
+		{
+			name: "a standard scope already in the client scope is not repeated or counted as widening",
+			client: Client{
+				ClientScope:           []string{"openid", "read:tools"},
+				IssuerScopesSupported: []string{"openid", "email"},
+			},
+			wantScopes:  []string{"openid", "read:tools", "email"},
+			wantWidened: []string{"email"},
+		},
+		{
+			name: "the issuer's scope override is requested verbatim",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{"openid", "email", "offline_access"},
+				IssuerScopeOverride:   []string{"custom:one", "custom:two"},
+			},
+			wantScopes:  []string{"custom:one", "custom:two"},
+			wantWidened: nil,
+		},
+		{
+			name: "an empty override is unset and falls through to the base path",
+			client: Client{
+				ClientScope:           []string{"read:tools"},
+				IssuerScopesSupported: []string{"openid"},
+				IssuerScopeOverride:   []string{},
+			},
+			wantScopes:  []string{"read:tools", "openid"},
+			wantWidened: []string{"openid"},
+		},
+		{
+			name:        "nothing configured requests nothing",
+			client:      Client{},
+			wantScopes:  nil,
+			wantWidened: nil,
+		},
+	}
 
-	t.Run("falls back to issuer scopes_supported when client override is nil", func(t *testing.T) {
-		t.Parallel()
-		c := Client{
-			ClientScope:           nil,
-			IssuerScopesSupported: []string{"openid", "profile"},
-		}
-		require.Equal(t, []string{"openid", "profile"}, c.resolveScopes())
-	})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scopes, widened := tc.client.RequestedScopes()
+			if tc.wantScopes == nil {
+				require.Empty(t, scopes)
+			} else {
+				require.Equal(t, tc.wantScopes, scopes)
+			}
+			require.Equal(t, tc.wantWidened, widened)
+		})
+	}
+}
 
-	t.Run("falls back to issuer scopes_supported when client override is empty", func(t *testing.T) {
-		t.Parallel()
-		c := Client{
-			ClientScope:           []string{},
-			IssuerScopesSupported: []string{"openid"},
-		}
-		require.Equal(t, []string{"openid"}, c.resolveScopes())
-	})
+// The resolved set is a copy: mutating it must not reach back into the
+// client's stored scope or override.
+func TestClientRequestedScopes_DoesNotAliasInputs(t *testing.T) {
+	t.Parallel()
+
+	override := Client{IssuerScopeOverride: []string{"a"}}
+	scopes, _ := override.RequestedScopes()
+	scopes[0] = "mutated"
+	require.Equal(t, []string{"a"}, override.IssuerScopeOverride)
+
+	base := Client{ClientScope: []string{"a"}, IssuerScopesSupported: []string{"openid"}}
+	scopes, _ = base.RequestedScopes()
+	scopes[0] = "mutated"
+	require.Equal(t, []string{"a"}, base.ClientScope)
 }

@@ -24,13 +24,26 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 	server := adminserver.New(gen.NewEndpoints(svc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 
 	want := map[string]string{
-		"GetSession":                          "GET /admin/session.get",
-		"GetOrganizationFeatures":             "GET /admin/organization.features",
-		"SetOrganizationFeature":              "POST /admin/organization.features",
-		"GetOrganizationChatAnalysisSettings": "GET /admin/organization.chatAnalysisSettings",
-		"SetOrganizationChatAnalysisSettings": "POST /admin/organization.chatAnalysisSettings",
-		"TriggerOrganizationChatAnalysis":     "POST /admin/organization.chatAnalysisTrigger",
-		"OpenOrganizationInDashboard":         "POST /admin/organization.open-dashboard",
+		"MigrateToGlobalIssuer":                 "POST /admin/remote-session-issuers.migrateToGlobalIssuer",
+		"GetGlobalIssuerMigratePreflight":       "GET /admin/remote-session-issuers.getGlobalIssuerMigratePreflight",
+		"ListGlobalIssuerConvergenceCandidates": "GET /admin/remote-session-issuers.listGlobalIssuerConvergenceCandidates",
+		"RefreshGlobalIssuerMetadata":           "POST /admin/remote-session-issuers.refreshGlobalIssuerMetadata",
+		"FetchGlobalIssuerMetadata":             "POST /admin/remote-session-issuers.fetchGlobalIssuerMetadata",
+		"DeleteGlobalIssuer":                    "DELETE /admin/remote-session-issuers.deleteGlobalIssuer",
+		"UpdateGlobalIssuer":                    "POST /admin/remote-session-issuers.updateGlobalIssuer",
+		"GetGlobalIssuer":                       "GET /admin/remote-session-issuers.getGlobalIssuer",
+		"GetGlobalIssuerDuplicatePreflight":     "GET /admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight",
+		"CreateGlobalIssuer":                    "POST /admin/remote-session-issuers.createGlobalIssuer",
+		"ListGlobalIssuers":                     "GET /admin/remote-session-issuers.list",
+		"GetSession":                            "GET /admin/session.get",
+		"GetOrganizationFeatures":               "GET /admin/organization.features",
+		"SetOrganizationFeature":                "POST /admin/organization.features",
+		"GetOrganizationChatAnalysisSettings":   "GET /admin/organization.chatAnalysisSettings",
+		"SetOrganizationChatAnalysisSettings":   "POST /admin/organization.chatAnalysisSettings",
+		"TriggerOrganizationChatAnalysis":       "POST /admin/organization.chatAnalysisTrigger",
+		"GetStripeCustomer":                     "GET /admin/organization.stripeCustomer",
+		"SetStripeCustomer":                     "POST /admin/organization.setStripeCustomer",
+		"OpenOrganizationInDashboard":           "POST /admin/organization.open-dashboard",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {
@@ -57,6 +70,8 @@ func TestGeneratedAdminBillingRoutes_MapUnavailable(t *testing.T) {
 
 	for name, request := range map[string]*http.Request{
 		"summary":             httptest.NewRequest(http.MethodGet, "/admin/organization.paygBillingSummary?organization_id=org_test", nil),
+		"get customer":        httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer?organization_id=org_test&stripe_customer_id=cus_test", nil),
+		"set customer":        httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{"organization_id":"org_test","stripe_customer_id":"cus_test"}`)),
 		"get subscription":    httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscription?organization_id=org_test", nil),
 		"cancel subscription": httptest.NewRequest(http.MethodPost, "/admin/organization.cancelStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
 		"resume subscription": httptest.NewRequest(http.MethodPost, "/admin/organization.resumeStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
@@ -83,13 +98,15 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	unauthenticatedHandler := handler
 
 	for name, request := range map[string]*http.Request{
-		"session":          httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
-		"features get":     httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
-		"features set":     httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
-		"settings get":     httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
-		"settings set":     httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),
-		"analysis trigger": httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
-		"open dashboard":   httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
+		"session":             httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
+		"features get":        httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
+		"features set":        httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
+		"settings get":        httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
+		"settings set":        httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),
+		"set Stripe customer": httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{`)),
+		"get Stripe customer": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer", nil),
+		"analysis trigger":    httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
+		"open dashboard":      httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

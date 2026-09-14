@@ -25,6 +25,7 @@ export const FeatureName = {
   RemoteSessionAutoRefreshEnforced: "remote_session_auto_refresh_enforced",
   ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
+  NetworkIngress: "network_ingress",
 } as const;
 export type FeatureName = ClosedEnum<typeof FeatureName>;
 

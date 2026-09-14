@@ -51,6 +51,10 @@ import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
+import {
+  rememberPreservedStorageKey,
+  restorePreservedStorageBackup,
+} from "./lib/logout-storage";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
@@ -60,6 +64,11 @@ import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+
+// Logout may have navigated here after Clear-Site-Data emptied localStorage.
+// theme-init.ts already restores when it can; this covers the module path
+// (tests, and any load that skipped the classic script).
+restorePreservedStorageBackup();
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
@@ -81,6 +90,7 @@ export default function App(): JSX.Element {
     root.classList.remove(theme === "dark" ? "light" : "dark");
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
+    rememberPreservedStorageKey(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
   };
@@ -243,7 +253,10 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
-    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
+    // The killswitch addresses only forward to the identity they belong to,
+    // so recording one would file a redirect under the reader's recent pages
+    // instead of the page they actually ended up on.
+    if (orgRoutes.killswitch.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -319,7 +332,10 @@ const RouteProvider = () => {
       Object.entries(orgRoutes).filter(
         ([key, route]) =>
           (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          (key !== "killswitch" || killswitchAccess.canAccess),
+          // Killswitch routes only redirect to identity access.
+          key !== "killswitch" &&
+          // Parameterized routes have no destination without an id.
+          !route.url.includes(":"),
       ),
     );
     const orgActions = routesToNavActions(
@@ -340,7 +356,6 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
-    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);

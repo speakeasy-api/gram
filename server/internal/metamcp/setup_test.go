@@ -134,9 +134,12 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 // project.
 func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
+	project, err := projectsrepo.New(conn).GetProjectByID(ctx, projectID)
+	require.NoError(t, err)
 
 	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(project.OrganizationID),
 		Slug:               "usi-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
 		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},

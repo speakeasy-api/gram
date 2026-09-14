@@ -36,6 +36,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Activity, Network } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -80,6 +82,8 @@ export default function Plugins(): JSX.Element {
     { refetchInterval: 5_000 },
   );
   const { data: marketplaceSettings } = useMarketplaceSettingsSuspense();
+  const { hasScope } = useRBAC();
+  const canManageMarketplace = hasScope("org:admin");
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
@@ -197,26 +201,14 @@ export default function Plugins(): JSX.Element {
   );
   const updateMarketplaceSettingsMutation =
     useUpdateMarketplaceSettingsMutation({
-      onSuccess: async (data) => {
+      onSuccess: async () => {
         await Promise.all([
           invalidateAllMarketplaceSettings(queryClient),
           invalidateAllPublishStatus(queryClient),
         ]);
-        setMarketplaceNameInput(data.settings.marketplaceName ?? "");
-        if (data.hooksUpdateDeferred) {
-          toast.warning(
-            "Marketplace name updated, but the observability hooks plugin can't be updated yet: your organization isn't approved for the latest hooks version. It will update automatically once your org is rolled forward.",
-          );
-        } else {
-          toast.success(
-            data.republished
-              ? "Marketplace name updated and republished"
-              : "Marketplace name saved",
-          );
-        }
       },
       onError: () => {
-        toast.error("Failed to update marketplace name");
+        toast.error("Failed to update marketplace settings");
       },
     });
 
@@ -255,17 +247,59 @@ export default function Plugins(): JSX.Element {
         security: { sessionHeaderGramSession: "" },
         request: {
           updateMarketplaceSettingsRequestBody: {
-            marketplaceName: trimmedMarketplaceName || undefined,
+            marketplaceName: trimmedMarketplaceName,
           },
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          setMarketplaceNameInput(data.settings.marketplaceName ?? "");
+          if (data.hooksUpdateDeferred) {
+            toast.warning(
+              "Marketplace name updated, but the observability hooks plugin can't be updated yet: your organization isn't approved for the latest hooks version. It will update automatically once your org is rolled forward.",
+            );
+          } else {
+            toast.success(
+              data.republished
+                ? "Marketplace name updated and republished"
+                : "Marketplace name saved",
+            );
+          }
           setIsMarketplaceSettingsDialogOpen(false);
           if (chainToPublishAfterSave) {
             setChainToPublishAfterSave(false);
             setIsPublishDialogOpen(true);
           }
+        },
+      },
+    );
+  };
+
+  const handleObservabilityEnabledChange = (enabled: boolean) => {
+    updateMarketplaceSettingsMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          updateMarketplaceSettingsRequestBody: {
+            observabilityEnabled: enabled,
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (data.republished) {
+            toast.success(
+              enabled
+                ? "Observability plugin enabled and republished"
+                : "Observability plugin disabled and removed from the marketplace",
+            );
+            return;
+          }
+          toast.success(
+            enabled
+              ? "Observability plugin enabled"
+              : "Observability plugin disabled",
+          );
         },
       },
     );
@@ -323,6 +357,9 @@ export default function Plugins(): JSX.Element {
                     onAddCollaborators={() =>
                       setIsManageCollaboratorsOpen(true)
                     }
+                    observabilityEnabled={
+                      marketplaceSettings.observabilityEnabled
+                    }
                   />
                   <div className="border-border border-t" />
                 </>
@@ -336,6 +373,9 @@ export default function Plugins(): JSX.Element {
                     onRename={handleOpenMarketplaceSettings}
                     onSync={() => handlePublish([])}
                     isSyncing={publishMutation.isPending}
+                    observabilityEnabled={
+                      marketplaceSettings.observabilityEnabled
+                    }
                   />
                   <div className="border-border border-t" />
                 </>
@@ -350,6 +390,9 @@ export default function Plugins(): JSX.Element {
                   }
                   onSetup={handleStartSetup}
                   onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                  observabilityEnabled={
+                    marketplaceSettings.observabilityEnabled
+                  }
                 />
                 <div className="border-border border-t" />
               </>
@@ -380,6 +423,10 @@ export default function Plugins(): JSX.Element {
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <ObservabilityPluginCard
               publishStatus={publishStatus}
+              enabled={marketplaceSettings.observabilityEnabled}
+              canToggle={canManageMarketplace}
+              isToggling={updateMarketplaceSettingsMutation.isPending}
+              onEnabledChange={handleObservabilityEnabledChange}
               isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
               onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
               isDownloading={isDownloadingObservability !== null}
@@ -521,12 +568,20 @@ export default function Plugins(): JSX.Element {
 // affordance" distinguishing it from user-created plugins in the grid.
 function ObservabilityPluginCard({
   publishStatus,
+  enabled,
+  canToggle,
+  isToggling,
+  onEnabledChange,
   isDownloadMenuOpen,
   onDownloadMenuOpenChange,
   isDownloading,
   onDownload,
 }: {
   publishStatus: PublishStatusResult | undefined;
+  enabled: boolean;
+  canToggle: boolean;
+  isToggling: boolean;
+  onEnabledChange: (enabled: boolean) => void;
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
@@ -550,100 +605,113 @@ function ObservabilityPluginCard({
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
-      <div className="mb-2 flex items-center gap-1.5">
-        <Text
-          variant="subheading"
-          as="div"
-          className="text-md truncate"
-          title="Observability"
-        >
-          Observability
-        </Text>
-        <Badge variant="information">
-          <Badge.Text>Platform</Badge.Text>
-        </Badge>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <Text
+            variant="subheading"
+            as="div"
+            className="text-md truncate"
+            title="Observability"
+          >
+            Observability
+          </Text>
+          <Badge variant="information">
+            <Badge.Text>Platform</Badge.Text>
+          </Badge>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+          disabled={!canToggle || isToggling}
+          aria-label={
+            enabled
+              ? "Disable observability plugin"
+              : "Enable observability plugin"
+          }
+        />
       </div>
 
       <Text small muted className="mb-3 line-clamp-3">
-        Forwards tool events from your team&apos;s coding agent installs to your
-        project dashboard. Ships first in your marketplace, marked Required.
+        {enabled
+          ? "Forwards tool events from your team's coding agent installs to your project dashboard. Ships first in your marketplace, marked Required."
+          : "Disabled for this project. It is not listed in the marketplace and the device agent will not install it."}
       </Text>
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <Text small muted>
-          {isConnected
-            ? "Included in your marketplace"
-            : "Available as a direct download"}
+          {observabilityInstallHint(enabled, isConnected)}
         </Text>
-        <DropdownMenu
-          open={isDownloadMenuOpen}
-          onOpenChange={onDownloadMenuOpenChange}
-        >
-          <DropdownMenuTrigger asChild>
-            <PluginInstallButton size="sm" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={!installTarget}
-              onClick={() => {
-                // Defer until after the dropdown has fully closed to avoid a
-                // Radix focus-trap/body-lock conflict between the closing
-                // menu and the opening sheet (same pattern as MCPDetails.tsx).
-                setTimeout(() => setIsInstallSheetOpen(true), 0);
-              }}
-            >
-              <div className="flex flex-col">
-                <span>GitHub installation (preferred)</span>
-                {!installTarget && (
-                  <span className="text-muted-foreground text-xs">
-                    Requires marketplace setup
-                  </span>
-                )}
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("claude");
-              }}
-            >
-              Download as zip — Claude
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("cursor");
-              }}
-            >
-              Download as zip — Cursor
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("codex");
-              }}
-            >
-              Download as zip — Codex
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("opencode");
-              }}
-            >
-              Download as zip — OpenCode
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isDownloading}
-              onClick={() => {
-                onDownload("openclaw");
-              }}
-            >
-              Download as zip — OpenClaw
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {enabled ? (
+          <DropdownMenu
+            open={isDownloadMenuOpen}
+            onOpenChange={onDownloadMenuOpenChange}
+          >
+            <DropdownMenuTrigger asChild>
+              <PluginInstallButton size="sm" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                disabled={!installTarget}
+                onClick={() => {
+                  // Defer until after the dropdown has fully closed to avoid a
+                  // Radix focus-trap/body-lock conflict between the closing
+                  // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                  setTimeout(() => setIsInstallSheetOpen(true), 0);
+                }}
+              >
+                <div className="flex flex-col">
+                  <span>GitHub installation (preferred)</span>
+                  {!installTarget && (
+                    <span className="text-muted-foreground text-xs">
+                      Requires marketplace setup
+                    </span>
+                  )}
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("claude");
+                }}
+              >
+                Download as zip — Claude
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("cursor");
+                }}
+              >
+                Download as zip — Cursor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("codex");
+                }}
+              >
+                Download as zip — Codex
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("opencode");
+                }}
+              >
+                Download as zip — OpenCode
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isDownloading}
+                onClick={() => {
+                  onDownload("openclaw");
+                }}
+              >
+                Download as zip — OpenClaw
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet
@@ -657,6 +725,19 @@ function ObservabilityPluginCard({
       />
     </Card.Entity>
   );
+}
+
+function observabilityInstallHint(
+  enabled: boolean,
+  isConnected: boolean,
+): string {
+  if (!enabled) {
+    return "Not included in your marketplace";
+  }
+  if (isConnected) {
+    return "Included in your marketplace";
+  }
+  return "Available as a direct download";
 }
 
 function PlatformMCPPluginCard(): JSX.Element {

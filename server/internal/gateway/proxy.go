@@ -945,6 +945,7 @@ func (tp *ToolProxy) doExternalMCP(
 	// Build headers from environment variables
 	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
 	opts := &externalmcp.ClientOptions{
+		Metrics:          nil,
 		Authorization:    "",
 		Headers:          headers,
 		DisableRetries:   false,
@@ -959,7 +960,7 @@ func (tp *ToolProxy) doExternalMCP(
 	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
 
 	// Call the tool on the external MCP server
-	callResult, err := client.CallTool(ctx, toolName, arguments)
+	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}

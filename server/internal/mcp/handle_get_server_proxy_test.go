@@ -160,6 +160,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.cacheAdapter,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
+		nil,
 	)
 
 	mux := goahttp.NewMuxer()

@@ -11,6 +11,7 @@ import (
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	chatv1 "github.com/speakeasy-api/gram/infra/gen/gram/chat/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -32,6 +33,8 @@ const (
 	GramChatV1HookMessage Topic = "gram.chat.v1.HookMessage"
 	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
 	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
+	// GramNetworkingressV1ReconcileRequested publishes to gram-networkingress-v1-reconcile-requested.
+	GramNetworkingressV1ReconcileRequested Topic = "gram.networkingress.v1.ReconcileRequested"
 	// GramOtelV1InboundLogRecord publishes to gram-otel-v1-inbound-log-record.
 	GramOtelV1InboundLogRecord Topic = "gram.otel.v1.InboundLogRecord"
 	// GramOtelV1InboundMetric publishes to gram-otel-v1-inbound-metric.
@@ -74,6 +77,7 @@ func All() []Topic {
 		GramAuthzV1Challenge,
 		GramChatV1HookMessage,
 		GramMeteringV1MeterReading,
+		GramNetworkingressV1ReconcileRequested,
 		GramOtelV1InboundLogRecord,
 		GramOtelV1InboundMetric,
 		GramOtelV1InboundSpan,
@@ -103,6 +107,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramChatV1HookMessage, true
 	case GramMeteringV1MeterReading:
 		return GramMeteringV1MeterReading, true
+	case GramNetworkingressV1ReconcileRequested:
+		return GramNetworkingressV1ReconcileRequested, true
 	case GramOtelV1InboundLogRecord:
 		return GramOtelV1InboundLogRecord, true
 	case GramOtelV1InboundMetric:
@@ -154,6 +160,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &chatv1.HookMessage{}, gcp.WithEncodedPublishSettings(settings))
 	case GramMeteringV1MeterReading:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
+	case GramNetworkingressV1ReconcileRequested:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &networkingressv1.ReconcileRequested{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundLogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundLogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundMetric:

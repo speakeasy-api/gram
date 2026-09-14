@@ -3,6 +3,7 @@ package skills_test
 import (
 	"reflect"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,4 +148,38 @@ func TestListSkillFeedbackValidatesAccessLimitCursorAndPrivacyShape(t *testing.T
 		_, found := typeOfFeedback.FieldByName(privateField)
 		require.False(t, found)
 	}
+}
+
+// The application clock in a synctest bubble starts in 2000, while PostgreSQL
+// keeps its real clock. Feedback timestamps are left at their database defaults.
+func TestListSkillFeedbackUsesDatabaseClock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "feedback-clock", "Clock regression.")
+	row := recordResolvedFeedback(t, ti, ti.projectID, uuid.MustParse(created.Skill.ID), uuid.MustParse(created.Version.ID), created.Skill.Name, skillservice.FeedbackOutcomeHelped, nil)
+	countParams := repo.CountSkillFeedbackOutcomesParams{
+		ProjectID: ti.projectID, SkillID: uuid.NullUUID{UUID: uuid.MustParse(created.Skill.ID), Valid: true},
+	}
+	before, err := ti.repo.CountSkillFeedbackOutcomes(ctx, countParams)
+	require.NoError(t, err)
+	synctest.Test(t, func(t *testing.T) {
+		require.True(t, row.CreatedAt.Time.After(time.Now()), "database clock must be ahead of the fake application clock")
+		result, err := ti.service.ListFeedback(ctx, &gen.ListFeedbackPayload{ID: created.Skill.ID, Limit: 20, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), result.Counts.Total)
+		require.Equal(t, int64(1), result.Metrics.FeedbackInWindow)
+		after, err := ti.repo.CountSkillFeedbackOutcomes(ctx, countParams)
+		require.NoError(t, err)
+		windowEnd, err := time.Parse(time.RFC3339Nano, result.Metrics.WindowEnd)
+		require.NoError(t, err)
+		require.False(t, windowEnd.Before(before.WindowEnd.Time))
+		require.False(t, windowEnd.After(after.WindowEnd.Time))
+		require.Equal(t, windowEnd.UTC().Truncate(24*time.Hour).Add(-29*24*time.Hour).Format(time.RFC3339Nano), result.Metrics.WindowStart)
+		var total int64
+		for _, point := range result.Timeline {
+			total += point.FeedbackCount
+		}
+		require.Len(t, result.Timeline, 30)
+		require.Equal(t, result.Metrics.FeedbackInWindow, total)
+	})
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var _ = Service("mcpServers", func() {
@@ -14,6 +15,16 @@ var _ = Service("mcpServers", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
 
 	Method("createMcpServer", func() {
 		Description("Create a new MCP server")

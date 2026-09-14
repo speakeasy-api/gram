@@ -415,3 +415,39 @@ RETURNING *;
 SELECT count(*)
 FROM ai_integration_syncs
 WHERE ai_integration_config_id = @ai_integration_config_id;
+
+-- Inference hooks are push integrations and deliberately have no poll schedules.
+-- name: GetAnthropicInferenceConfig :one
+SELECT * FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = 'anthropic_inference'
+  AND deleted IS FALSE;
+
+-- The random endpoint identifier is the credential lookup key before signature
+-- verification; it does not itself authorize ingestion.
+-- name: GetAnthropicInferenceConfigByID :one
+SELECT c.* FROM ai_integration_configs c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
+WHERE c.id = @id AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE AND p.deleted IS FALSE;
+
+-- Serialize organization-level setup, including concurrent first-time requests.
+-- name: LockAnthropicInferenceConfig :exec
+SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || @organization_id::text, 0));
+
+-- name: UpdateAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET api_key_encrypted = @api_key_encrypted,
+    enabled = @enabled,
+    updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id
+  AND project_id = @project_id AND provider = 'anthropic_inference'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteAnthropicInferenceConfig :one
+UPDATE ai_integration_configs
+SET deleted_at = clock_timestamp(), enabled = false
+WHERE organization_id = @organization_id AND project_id = @project_id
+  AND provider = 'anthropic_inference' AND deleted IS FALSE
+RETURNING *;

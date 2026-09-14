@@ -46,11 +46,13 @@ import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
 import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { NetworkIngress } from "./networkingress.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
+import { OrganizationUserSessionIssuers } from "./organizationusersessionissuers.js";
 import { Otel } from "./otel.js";
 import { Packages } from "./packages.js";
 import { PlatformKillswitches } from "./platformkillswitches.js";
@@ -306,6 +308,11 @@ export class Gram extends ClientSDK {
     return (this._modelKeys ??= new ModelKeys(this._options));
   }
 
+  private _networkIngress?: NetworkIngress;
+  get networkIngress(): NetworkIngress {
+    return (this._networkIngress ??= new NetworkIngress(this._options));
+  }
+
   private _organizationAssets?: OrganizationAssets;
   get organizationAssets(): OrganizationAssets {
     return (this._organizationAssets ??= new OrganizationAssets(this._options));
@@ -328,6 +335,12 @@ export class Gram extends ClientSDK {
     return (this._organizationRemoteSessions ??= new OrganizationRemoteSessions(
       this._options,
     ));
+  }
+
+  private _organizationUserSessionIssuers?: OrganizationUserSessionIssuers;
+  get organizationUserSessionIssuers(): OrganizationUserSessionIssuers {
+    return (this._organizationUserSessionIssuers ??=
+      new OrganizationUserSessionIssuers(this._options));
   }
 
   private _organizations?: Organizations;

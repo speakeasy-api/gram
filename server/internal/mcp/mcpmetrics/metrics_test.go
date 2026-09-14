@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -28,6 +30,7 @@ func TestNewMetrics(t *testing.T) {
 		require.NotNil(t, m)
 		require.NotNil(t, m.mcpToolCallCounter)
 		require.NotNil(t, m.mcpRequestDuration)
+		require.NotNil(t, m.mcpProtocolVersionRejectedCounter)
 		require.NotNil(t, m.identityCoverage)
 	})
 }
@@ -130,6 +133,15 @@ func TestMetrics_RecordOAuthFlowDeclined(t *testing.T) {
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 }
 
+func TestMetrics_RecordOAuthAuthorityUnavailable(t *testing.T) {
+	t.Parallel()
+
+	meter := testenv.NewMeterProvider(t).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
+}
+
 func TestMetrics_RecordOAuthRefreshTokenReplayServed(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +161,7 @@ func TestMetrics_RecordOAuthFlow_NilCountersDoNotPanic(t *testing.T) {
 	m.RecordOAuthFlowCompleted(t.Context(), "issuer-1", "mcp-slug-1")
 	m.RecordOAuthFlowFailed(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageConsent)
 	m.RecordOAuthFlowDeclined(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageIDPCallback)
+	m.RecordOAuthAuthorityUnavailable(t.Context(), "issuer-1", "mcp-slug-1", OAuthFlowStageToken)
 	m.RecordOAuthRefreshTokenReplayServed(t.Context(), "issuer-1", "mcp-slug-1")
 }
 
@@ -185,6 +198,50 @@ func TestMetricsRecordMCPRequest_ForwardsToCensus(t *testing.T) {
 	nilMetrics.RecordMCPRequest(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
 }
 
+func TestRecordMCPProtocolVersionRejected_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceMeta)
+
+	got := collectMetric(t, reader, InstrumentMCPProtocolVersionRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceMeta)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+func TestRecordMCPProtocolVersionRejected_ClampsAndIsNilSafe(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPProtocolVersionRejected(t.Context(), "2031-01-01", "extension/unbounded", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPProtocolVersionRejected),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
+		attr.McpMethod(mcprequests.MethodOther),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+	empty := &Metrics{}
+	empty.RecordMCPProtocolVersionRejected(t.Context(), mcpversions.Version20260728, "tools/list", SurfaceHosting)
+}
+
 // TestRequestCounterRecord_PinsInstrumentAndDimensions pins the census wiring
 // a noop meter cannot see: the instrument name, the three attribute keys, and
 // that a known version passes through the clamp intact.
@@ -201,6 +258,7 @@ func TestRequestCounterRecord_PinsInstrumentAndDimensions(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
 		attr.McpMethod("tools/list"),
 		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
 	)
 }
 
@@ -221,6 +279,29 @@ func TestRequestCounterRecord_ClampsAtRecordSite(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpSurface(string(SurfacePlatform)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+}
+
+func TestRequestCounterRecordUsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewRequestCounter(meter, testenv.NewLogger(t)).Record(ctx, mcpversions.Version20260728, "tools/list", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPRequest),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePrivate),
 	)
 }
 

@@ -7,6 +7,21 @@
 
 package server
 
+// GetAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getAnthropicInferenceConfig HTTP endpoint.
+func GetAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.getAnthropicInferenceConfig"
+}
+
+// UpsertAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service upsertAnthropicInferenceConfig HTTP endpoint.
+func UpsertAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.upsertAnthropicInferenceConfig"
+}
+
+// DeleteAnthropicInferenceConfigAiIntegrationsPath returns the URL path to the aiIntegrations service deleteAnthropicInferenceConfig HTTP endpoint.
+func DeleteAnthropicInferenceConfigAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.deleteAnthropicInferenceConfig"
+}
+
 // GetConfigAiIntegrationsPath returns the URL path to the aiIntegrations service getConfig HTTP endpoint.
 func GetConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.getConfig"

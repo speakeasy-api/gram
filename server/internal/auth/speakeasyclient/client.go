@@ -338,6 +338,7 @@ func (c *Client) syncWorkOSMemberships(ctx context.Context, user userRepo.Upsert
 	qtx := orgRepo.New(tx)
 	lost, err := qtx.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
 		UserID:              conv.ToPGText(user.ID),
+		PreserveExisting:    false,
 		WorkosOrgIds:        workosOrgIDs,
 		WorkosMembershipIds: membershipIDs,
 	})

@@ -25,6 +25,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
 export function MetaToolUsageChart({
   items,
   chartId,
+  titleHref,
   expandedChart,
   onExpand,
   loading,
@@ -32,6 +33,7 @@ export function MetaToolUsageChart({
 }: {
   items: MetaToolUsageItem[];
   chartId: string;
+  titleHref?: string;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
   loading?: boolean;
@@ -108,6 +110,7 @@ export function MetaToolUsageChart({
   return (
     <ChartCard
       title="Gateway tool usage"
+      titleHref={titleHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}

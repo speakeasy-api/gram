@@ -107,11 +107,6 @@ import {
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
-import {
-  PlatformRemoteIdentityProvidersPage,
-  PlatformRemoteIdentityProvidersRoot,
-} from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders";
-import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
@@ -122,6 +117,7 @@ import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
+import { RoleEditorPage } from "./pages/access/RoleEditorPage";
 import RequestAccess from "./pages/access/RequestAccess";
 import Settings from "./pages/settings/Settings";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
@@ -141,27 +137,20 @@ import PolicyCenter, { PolicyCenterRoot } from "./pages/security/PolicyCenter";
 import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
-import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
+import {
+  KillswitchesRoot,
+  KillswitchIndexRedirect,
+  KillswitchRecordRedirect,
+} from "./pages/killswitch/KillswitchesRoot";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const Killswitches = React.lazy(() =>
-  import("./pages/killswitch/Killswitches").then((module) => ({
-    default: module.default,
-  })),
-);
-const KillswitchDetail = React.lazy(
-  () => import("./pages/killswitch/KillswitchDetail"),
-);
 const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupWizard = React.lazy(() =>
-  import("./pages/setup/components/onboarding-wizard").then((module) => ({
-    default: module.SetupWizard,
-  })),
-);
+const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
+const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
 
 type AppRouteBasic = {
   title: string;
@@ -1290,18 +1279,21 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  // Killswitches are managed on the identity of the person they restrict, so
+  // this route no longer carries a roster: its index forwards to the people it
+  // would have listed, and the detail record stays where the audit log links
+  // to it.
   killswitch: {
     title: "Killswitch",
     url: "killswitch",
     icon: "shield-off",
-    stage: "beta",
     component: KillswitchesRoot,
-    indexComponent: Killswitches,
+    indexComponent: KillswitchIndexRedirect,
     subPages: {
       detail: {
         title: "Killswitch detail",
         url: ":killswitchId",
-        component: KillswitchDetail,
+        component: KillswitchRecordRedirect,
       },
     },
   },
@@ -1342,34 +1334,6 @@ const ORG_ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-    },
-  },
-  // The platform catalog gets its own base path rather than a static segment
-  // under remote-identity-providers, where it would be a sibling of the
-  // `:issuerId` route and rely on the router ranking static above dynamic to
-  // not be swallowed by it. Platform-admin only; see PlatformAdminOnly.
-  platformRemoteIdentityProviders: {
-    // Kept distinct from the tenant route's title: nav items register by title
-    // (see CollapsibleNavItem), and Recents and the command palette show it
-    // without a group header to disambiguate. The sidebar renders the shorter
-    // "Remote Identity Providers" under the Platform Admin header, and this
-    // also matches the URL-derived breadcrumb.
-    title: "Platform Remote Identity Providers",
-    url: "platform-remote-identity-providers",
-    icon: "key-round",
-    component: PlatformRemoteIdentityProvidersRoot,
-    indexComponent: PlatformRemoteIdentityProvidersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Platform Remote Identity Provider",
-        url: ":issuerId",
-        component: PlatformRemoteIdentityProviderDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          convergence: { title: "Convergence", url: "convergence" },
           settings: { title: "Settings", url: "settings" },
         },
       },
@@ -1454,6 +1418,21 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // Role authoring is its own page, not a sheet: a role can carry a dozen
+  // permissions, each with rules of its own, which is more than a sheet can
+  // show without scrolling away the thing being edited. These are siblings of
+  // `access` rather than sub-pages because the access page renders tabs, not
+  // an outlet.
+  createRole: {
+    title: "Create Role",
+    url: "access/roles/create",
+    component: RoleEditorPage,
+  },
+  editRole: {
+    title: "Edit Role",
+    url: "access/roles/:roleId/edit",
+    component: RoleEditorPage,
+  },
   requestAccess: {
     title: "Request Access",
     url: "request-access",
@@ -1467,13 +1446,23 @@ const ORG_ROUTE_STRUCTURE = {
     component: SetupBoard,
     outsideMainLayout: true,
   },
-  // The linear wizard walks one owner through setup step by step; the board at
-  // /setup is the default. SetupViewToggle swaps between the two.
+  // The linear wizard walks every board card in order, one owner in one
+  // sitting; the board at /setup stays the default. The header's view button
+  // swaps between the two. Static, so it wins over setup/:taskSlug below.
   setupWizard: {
     title: "Setup wizard",
     url: "setup/wizard",
     icon: "list-checks",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Each board card opens as its own page at a short slug (setup/idp,
+  // setup/anthropic-observability, ...), with a rail of that card's own steps.
+  setupTask: {
+    title: "Setup task",
+    url: "setup/:taskSlug",
+    icon: "list-checks",
+    component: SetupTaskPage,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

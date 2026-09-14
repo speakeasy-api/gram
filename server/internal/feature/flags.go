@@ -25,6 +25,9 @@ const (
 	// FlagAgentManagement gates the first-class agent management API. It is
 	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
+	// FlagAgentIdentityCredentials gates agent credential issuance and management.
+	// It is evaluated per organization and fails closed unless explicitly on.
+	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
 
 	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
 	// authorization challenge. It remains independently default-off until the M2
@@ -70,6 +73,15 @@ const (
 	// approval decisions exposed through Platform MCP. It is evaluated at
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
+	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
+	// behavior for direct-remote distribution. An enabled flag must carry a closed
+	// mode payload; missing or invalid configuration fails closed for expanding
+	// writes.
+	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
+	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
+	// expanding direct-remote distribution. Cleanup, audience narrowing, and
+	// disable paths remain available while it is enabled.
+	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
@@ -136,6 +148,11 @@ const (
 	// state from before. Fails closed: research must not run while the state
 	// of its stop control is unknown.
 	FlagMCPResearchKill Flag = "gram-mcp-research-kill"
+
+	// FlagNetworkIngressRollout is temporary release clearance for private
+	// network expansion. It is evaluated against the canonical organization
+	// group and never substitutes for RBAC or the durable product entitlement.
+	FlagNetworkIngressRollout Flag = "gram-network-ingress-rollout"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its

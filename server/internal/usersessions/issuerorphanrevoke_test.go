@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -137,6 +138,62 @@ func seedRevocableClient(t *testing.T, ctx context.Context, ti *testInstance, us
 		UserSessionIssuerID:   userSessionIssuerID,
 	}))
 
+	return client.ID
+}
+
+// seedLegacyProjectRevocableClient mirrors a project client written before
+// remote_session_clients.organization_id was populated. The project remains
+// the authoritative source of its organization tenancy.
+func seedLegacyProjectRevocableClient(t *testing.T, ctx context.Context, ti *testInstance, userSessionIssuerID uuid.UUID, slug string, revocationEndpoint string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	q := remotesessionsrepo.New(ti.conn)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		Name:                              pgtype.Text{String: "", Valid: false},
+		LogoAssetID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientSetupDocumentationUrl:       pgtype.Text{String: "", Valid: false},
+		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
+		RevocationEndpoint:                conv.ToPGTextEmpty(revocationEndpoint),
+		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
+		JwksUri:                           pgtype.Text{String: "", Valid: false},
+		ServiceDocumentation:              pgtype.Text{String: "", Valid: false},
+		OpPolicyUri:                       pgtype.Text{String: "", Valid: false},
+		OpTosUri:                          pgtype.Text{String: "", Valid: false},
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+		ClientIDMetadataDocumentSupported: false,
+		Oidc:                              false,
+		Passthrough:                       false,
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                slug + "-cid",
+		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		TokenEndpointAuthMethod: conv.ToPGTextEmpty("none"),
+		Scope:                   nil,
+		Audience:                pgtype.Text{String: "", Valid: false},
+		LegacyCallbackUrl:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userSessionIssuerID,
+	}))
 	return client.ID
 }
 
@@ -414,6 +471,29 @@ func TestDeleteUserSessionIssuer_RevokesOrgLevelClientAcrossProjects(t *testing.
 
 	_, tokens := spy.snapshot()
 	require.Equal(t, []string{refreshToken}, tokens, "the cross-project grant is revoked with the client")
+}
+
+func TestDeleteOrganizationUserSessionIssuer_RevokesLegacyProjectClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &orphanRevocationSpy{}
+	upstream := newOrphanRevocationUpstream(t, spy)
+	issuer, err := ti.service.CreateIssuer(ctx, &orgissuersgen.CreateIssuerPayload{
+		SessionToken:         nil,
+		Slug:                 "orphan-org-legacy-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+	clientID := seedLegacyProjectRevocableClient(t, ctx, ti, issuerID, "orphan-org-legacy", upstream.URL+"/revoke")
+	refreshToken := seedRemoteSession(t, ctx, ti, issuerID, clientID, "orphan-org-legacy-subject")
+
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{ID: issuer.ID, SessionToken: nil}))
+	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID))
+	_, tokens := spy.snapshot()
+	require.Equal(t, []string{refreshToken}, tokens)
 }
 
 // A failing upstream revocation endpoint does not undo the local tombstone:

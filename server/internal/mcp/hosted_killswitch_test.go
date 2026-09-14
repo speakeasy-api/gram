@@ -59,18 +59,18 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 
 	attachMissingRemoteSession(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID)
 
-	for _, tt := range []struct {
-		name string
-		body []byte
-	}{
-		{name: "non-tools/call", body: makeToolsListBody()},
-		{name: "malformed", body: []byte(`{`)},
-	} {
-		response, err := servePublicHTTP(t, ctx, ti, endpointSlug, tt.body, userToken, sessionHeaders)
-		require.Error(t, err, tt.name)
-		require.Contains(t, err.Error(), "unauthorized", tt.name)
-		require.NotEmpty(t, response.Header().Get("WWW-Authenticate"), tt.name)
-	}
+	response, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsListBody(), userToken, sessionHeaders)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unauthorized")
+	require.NotEmpty(t, response.Header().Get("WWW-Authenticate"))
+
+	// Only well-formed requests can supply protocol metadata to the pre-auth
+	// version gate. Malformed input retains the endpoint's normal authentication
+	// ordering and cannot bypass credential resolution.
+	response, err = servePublicHTTP(t, ctx, ti, endpointSlug, []byte(`{`), userToken, sessionHeaders)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unauthorized")
+	require.NotEmpty(t, response.Header().Get("WWW-Authenticate"))
 
 	for _, toolName := range []string{"missing_tool", "search_tools", "describe_tools", "execute_tool"} {
 		response, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody(toolName), userToken, sessionHeaders)

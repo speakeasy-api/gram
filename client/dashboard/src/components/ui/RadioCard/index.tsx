@@ -104,7 +104,7 @@ export function RadioCard({
       className={cn(
         "bg-card text-card-foreground flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-4 shadow-xs transition-colors ease-in-out-quad",
         "hover:bg-background/70 has-data-[state=checked]:border-primary hover:border-primary/50 has-data-[state=checked]:bg-background",
-        "has-[[data-slot=radio-group-item]:focus-visible]:border-ring has-[[data-slot=radio-group-item]:focus-visible]:ring-ring/50 has-[[data-slot=radio-group-item]:focus-visible]:ring-[3px]",
+        "has-[[data-slot=radio-group-item]:focus-visible]:border-ring has-[[data-slot=radio-group-item]:focus-visible]:ring-ring/40 has-[[data-slot=radio-group-item]:focus-visible]:ring-1",
         "has-[[data-slot=radio-group-item]:disabled]:cursor-not-allowed has-[[data-slot=radio-group-item]:disabled]:opacity-50 has-[[data-slot=radio-group-item]:disabled]:hover:bg-card",
         className,
       )}

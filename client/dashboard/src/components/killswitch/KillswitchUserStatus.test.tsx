@@ -1,15 +1,12 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
-import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { KillswitchUserBadgeLink } from "./KillswitchUserBadgeLink";
 import { MCP_TOOL_CALLS_CAPABILITY } from "./killswitch-routing";
 import {
   BADGE_REFRESH_INTERVAL_MS,
   canonicalUserId,
   killswitchCreateHref,
-  killswitchStatusHref,
   mcpSessionsUserHref,
   useKillswitchUserBadges,
 } from "./KillswitchUserStatus";
@@ -91,21 +88,23 @@ describe("Killswitch user status", () => {
     expect(canonicalUserId("anonymous:user-1")).toBeUndefined();
     expect(canonicalUserId("user:user-1:other")).toBeUndefined();
 
-    expect(killswitchStatusHref("/org/killswitch", "user-1")).toBe(
-      "/org/killswitch?user=user-1",
-    );
     expect(mcpSessionsUserHref("/org/mcp-sessions", "user-1")).toBe(
       "/org/mcp-sessions?subjectUrn=user%3Auser-1",
     );
     expect(
-      killswitchCreateHref("/org/killswitch", {
-        userId: "user-1",
+      killswitchCreateHref("/org/projects/p/identities/user%3Auser-1/access", {
         capabilityKey: MCP_TOOL_CALLS_CAPABILITY,
         originatingMcpServerId: "server-1",
       }),
     ).toBe(
-      "/org/killswitch?create=1&createUser=user-1&createCapability=mcp_tool_calls&originServer=server-1",
+      "/org/projects/p/identities/user%3Auser-1/access?create=1&createCapability=mcp_tool_calls&originServer=server-1",
     );
+    // The window the sender had open rides along rather than being replaced.
+    expect(
+      killswitchCreateHref(
+        "/org/projects/p/identities/user%3Auser-1/access?range=7d",
+      ),
+    ).toBe("/org/projects/p/identities/user%3Auser-1/access?range=7d&create=1");
   });
 
   it("bounds chunk concurrency and preserves successes when one chunk fails", async () => {
@@ -253,45 +252,5 @@ describe("Killswitch user status", () => {
     render(<BadgeHarness userIds={["user-1"]} />);
     expect(state.mutationHookFactory).not.toHaveBeenCalled();
     expect(state.mutateAsync).not.toHaveBeenCalled();
-  });
-
-  it("links effective, scheduled, and unavailable states with a 24px hit target", () => {
-    const view = render(
-      <MemoryRouter>
-        <div>
-          <KillswitchUserBadgeLink
-            href="/org/killswitch?user=user-1"
-            badge={{
-              userId: "user-1",
-              affected: true,
-              affectedNow: true,
-              scheduled: true,
-            }}
-          />
-          <KillswitchUserBadgeLink
-            href="/org/killswitch?user=user-2"
-            badge={{
-              userId: "user-2",
-              affected: true,
-              affectedNow: false,
-              scheduled: true,
-            }}
-          />
-          <KillswitchUserBadgeLink
-            href="/org/killswitch?user=user-3"
-            unavailable
-          />
-        </div>
-      </MemoryRouter>,
-    );
-    const links = view.getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual([
-      "Killswitched",
-      "Scheduled killswitch",
-      "Killswitch status unavailable",
-    ]);
-    expect(links.every((link) => link.classList.contains("min-h-6"))).toBe(
-      true,
-    );
   });
 });

@@ -41,19 +41,22 @@ import (
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	auth           *auth.Auth
-	authz          *authz.Engine
-	temporalClient TemporalClient
-	audit          *audit.Logger
+	tracer             trace.Tracer
+	logger             *slog.Logger
+	db                 *pgxpool.Pool
+	auth               *auth.Auth
+	authz              *authz.Engine
+	temporalClient     TemporalClient
+	audit              *audit.Logger
+	networkIngressPins NetworkIngressPinChecker
 	// expectedTargetCNAME and expectedARecords are the DNS targets surfaced to
 	// customers: the CNAME target for subdomains and the static ingress IPs
 	// for apex domains, which cannot carry a CNAME.
 	expectedTargetCNAME string
 	expectedARecords    []netip.Addr
 }
+
+type NetworkIngressPinChecker func(ctx context.Context, dbtx pgx.Tx, organizationID string, customDomainID uuid.UUID) (bool, error)
 
 type TemporalClient interface {
 	GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error)
@@ -75,6 +78,7 @@ func NewService(
 	temporal TemporalClient,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	networkIngressPins NetworkIngressPinChecker,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
 ) *Service {
@@ -88,6 +92,7 @@ func NewService(
 		authz:               authzEngine,
 		temporalClient:      temporal,
 		audit:               auditLogger,
+		networkIngressPins:  networkIngressPins,
 		expectedTargetCNAME: expectedTargetCNAME,
 		expectedARecords:    expectedARecords,
 	}
@@ -697,6 +702,17 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain for deletion").LogError(ctx, s.logger)
+	}
+
+	if s.networkIngressPins == nil {
+		return oops.E(oops.CodeUnexpected, nil, "network ingress pin checker is unavailable").LogError(ctx, s.logger)
+	}
+	pinned, err := s.networkIngressPins(ctx, dbtx, authCtx.ActiveOrganizationID, domain.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check custom domain network ingress pin").LogError(ctx, s.logger)
+	}
+	if pinned {
+		return oops.E(oops.CodeConflict, nil, "custom domain is pinned by an active network ingress")
 	}
 
 	// The mcp_endpoints.custom_domain_id FK has ON DELETE SET NULL, but that

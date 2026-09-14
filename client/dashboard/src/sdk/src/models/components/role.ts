@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RoleGrant, RoleGrant$inboundSchema } from "./rolegrant.js";
 
 export type Role = {
+  /**
+   * IDs of the agent principals assigned to this role.
+   */
+  agentIds?: Array<string> | undefined;
   createdAt: Date;
   /**
    * Human-readable description.
@@ -49,6 +53,7 @@ export type Role = {
 /** @internal */
 export const Role$inboundSchema: z.ZodMiniType<Role, unknown> = z.pipe(
   z.object({
+    agent_ids: z.optional(z.array(z.string())),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -68,6 +73,7 @@ export const Role$inboundSchema: z.ZodMiniType<Role, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_ids": "agentIds",
       "created_at": "createdAt",
       "is_system": "isSystem",
       "member_count": "memberCount",

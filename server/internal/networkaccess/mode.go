@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -111,11 +112,28 @@ func (m Mode) IsPublicOnly() bool {
 	return m == ModePublicOnly
 }
 
-// EligibilityChecker authorizes admission to a non-public network mode. The
-// control-plane implementation arrives in a later checkpoint; nil and errors
-// must be treated as denial by callers.
+// AdmissionFinalizer is minted only after preflight succeeds. Its zero value
+// fails closed, and callers invoke Finalize inside their write transaction so
+// safety-sensitive implementations can hold admission locks through commit.
+type AdmissionFinalizer struct {
+	finalize func(ctx context.Context, tx pgx.Tx) error
+}
+
+func NewAdmissionFinalizer(finalize func(ctx context.Context, tx pgx.Tx) error) AdmissionFinalizer {
+	return AdmissionFinalizer{finalize: finalize}
+}
+
+func (f AdmissionFinalizer) Finalize(ctx context.Context, tx pgx.Tx) error {
+	if f.finalize == nil {
+		return fmt.Errorf("network access admission finalizer is unavailable")
+	}
+	return f.finalize(ctx, tx)
+}
+
+// EligibilityChecker authorizes admission to a non-public network mode without
+// reserving a database connection, then returns the transaction-bound finalizer.
 type EligibilityChecker interface {
-	CheckNetworkAccess(ctx context.Context, input EligibilityInput) error
+	PrepareNetworkAccess(ctx context.Context, input EligibilityInput) (AdmissionFinalizer, error)
 }
 
 type EligibilityInput struct {
@@ -125,6 +143,6 @@ type EligibilityInput struct {
 
 type DenyAllChecker struct{}
 
-func (DenyAllChecker) CheckNetworkAccess(context.Context, EligibilityInput) error {
-	return fmt.Errorf("private network access is not enabled")
+func (DenyAllChecker) PrepareNetworkAccess(context.Context, EligibilityInput) (AdmissionFinalizer, error) {
+	return AdmissionFinalizer{}, fmt.Errorf("private network access is not enabled")
 }

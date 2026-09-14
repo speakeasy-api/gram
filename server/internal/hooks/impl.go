@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -75,6 +76,7 @@ type Service struct {
 	// piScanner flags captured skill manifests that read as prompt injections.
 	// Optional: when nil, skill capture stores content and scans nothing.
 	piScanner       *promptinjection.Scanner
+	riskRecorder    *metering.RiskRecorder
 	policyBypass    *risk.PolicyBypassEvaluator
 	spendGate       *spendrules.Gate
 	shadowMCPClient *shadowmcp.Client
@@ -279,6 +281,7 @@ func NewService(
 	jwtSecret string,
 	chatMessages gcp.Publisher[*chatv1.HookMessage],
 	flags feature.Provider,
+	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	inv.Require(
 		"hooks service",
@@ -303,6 +306,7 @@ func NewService(
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		piScanner:          piScanner,
+		riskRecorder:       riskRecorder,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,

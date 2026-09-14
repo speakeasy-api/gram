@@ -67,6 +67,12 @@ type RemoteSessionIssuerDraft struct {
 	// Whether the discovery document advertises the RFC 9207 iss parameter in
 	// authorization responses; false when the document omits the field.
 	AuthorizationResponseIssParameterSupported bool
+	// Operator-pinned scope request. Never proposed by discovery, so always null
+	// on a draft.
+	ScopeOverride []string `json:"scope_override"`
+	// Whether the issuer accepts the RFC 8707 resource parameter. Never proposed
+	// by discovery, so always null on a draft.
+	ResourceIndicatorSupported *bool
 	// Warnings describing any RFC 8414 deviations encountered during discovery.
 	DiscoveryWarnings []string
 }

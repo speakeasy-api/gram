@@ -239,3 +239,16 @@ func TestCreateForAnotherOwnerUsesProspectiveAgentSelector(t *testing.T) {
 	_, err = authorizer.RequireCreate(ctx, conn, uuid.New(), "missing-owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestHumanContextLiveGrantsAreIsolated(t *testing.T) {
+	t.Parallel()
+	original := authz.NewGrant(authz.ScopeMCPConnect, "example-server")
+	human := HumanContext{Auth: nil, grants: []authz.Grant{original}}
+	grants := human.LiveGrants()
+	require.Equal(t, human.grants, grants)
+	grants[0].Scope = authz.ScopeMCPWrite
+	grants[0].Selector[authz.SelectorKeyResourceID] = "*"
+	require.Equal(t, authz.ScopeMCPConnect, human.grants[0].Scope)
+	require.Equal(t, "example-server", human.grants[0].Selector[authz.SelectorKeyResourceID])
+	require.Nil(t, (HumanContext{}).LiveGrants())
+}

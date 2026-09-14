@@ -58,6 +58,14 @@ export type AdminOrganization = {
    */
   slug: string;
   /**
+   * Stripe customer ID, if billing metadata has a customer.
+   */
+  stripeCustomerId?: string | undefined;
+  /**
+   * Current Stripe subscription ID, if subscribed.
+   */
+  stripeSubscriptionId?: string | undefined;
+  /**
    * The time at which the trial converted to a paid plan, if any.
    */
   trialConvertedAt?: Date | undefined;
@@ -113,6 +121,8 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     member_count: z.int(),
     name: z.string(),
     slug: z.string(),
+    stripe_customer_id: z.optional(z.string()),
+    stripe_subscription_id: z.optional(z.string()),
     trial_converted_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -137,6 +147,8 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "disabled_at": "disabledAt",
       "member_count": "memberCount",
+      "stripe_customer_id": "stripeCustomerId",
+      "stripe_subscription_id": "stripeSubscriptionId",
       "trial_converted_at": "trialConvertedAt",
       "trial_demoted_at": "trialDemotedAt",
       "trial_ends_at": "trialEndsAt",

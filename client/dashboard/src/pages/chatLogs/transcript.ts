@@ -108,6 +108,8 @@ export function findQueryRanges(
 
 /** A plain user / assistant / system turn rendered as a chat bubble. */
 export interface MessageRow {
+  /** A channel message starts its own author header within a captured turn. */
+  separateTurn?: boolean;
   kind: "message";
   id: string;
   entryType: MessageEntryType;
@@ -587,13 +589,18 @@ export function buildDisplayItems({
     // Open a new turn whenever authorship flips (user ↔ assistant), grouping an
     // assistant's text + tool calls under one header.
     const author = rowTurnAuthor(row);
-    if (author !== lastAuthor) {
+    if (author !== lastAuthor || (row.kind === "message" && row.separateTurn)) {
       // Collect every message in this turn (look ahead until authorship flips)
       // so the header can aggregate the turn's findings + exclusion actions.
       const messageIds: string[] = [];
       for (
         let j = i;
-        j < rows.length && rowTurnAuthor(rows[j]!) === author;
+        j < rows.length &&
+        rowTurnAuthor(rows[j]!) === author &&
+        (j === i ||
+          !(
+            rows[j]!.kind === "message" && (rows[j] as MessageRow).separateTurn
+          ));
         j++
       ) {
         messageIds.push(...rowMessageIds(rows[j]!));

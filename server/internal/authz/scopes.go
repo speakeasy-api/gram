@@ -192,6 +192,13 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // Preserves qstearns' non-escalation rule: project:read does not grant environment access
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
+//
+// The mcp:blocked_* scopes are deliberately independent of each other, unlike
+// the other blocklist families. Connecting to a server and administering it
+// are different jobs — an operator who never calls a server's tools may still
+// have to manage it — so "cannot connect" has to be expressible without also
+// meaning "cannot see or manage". Anything that takes a principal off a
+// server entirely writes all three.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -203,9 +210,9 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeProjectWrite:            nil,
 	ScopeProjectBlockedWrite:     {ScopeProjectBlockedRead},
 	ScopeMCPRead:                 {ScopeMCPWrite},
-	ScopeMCPBlockedRead:          {ScopeMCPBlockedConnect},
+	ScopeMCPBlockedRead:          nil,
 	ScopeMCPWrite:                nil,
-	ScopeMCPBlockedWrite:         {ScopeMCPBlockedRead, ScopeMCPBlockedConnect},
+	ScopeMCPBlockedWrite:         nil,
 	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
 	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},

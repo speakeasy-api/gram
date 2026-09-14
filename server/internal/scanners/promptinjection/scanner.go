@@ -51,6 +51,16 @@ type Result struct {
 	DirectiveKind string
 	Target        string
 	Operational   bool
+	// STokens counts the exact prepared content-bearing values sent to the
+	// classifier.
+	STokens int64
+	// Completed reports that a real classifier returned a valid verdict and its
+	// prepared content was counted successfully.
+	Completed bool
+	// Model identifies the classifier model when applicable.
+	Model string
+	// Provider identifies the classifier provider when applicable.
+	Provider string
 }
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
@@ -60,7 +70,7 @@ type Classifier func(ctx context.Context, req Request) ([]Result, error)
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false}
+		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: "", Provider: ""}
 	}
 	return results, nil
 }
@@ -83,28 +93,42 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 
 // Scan fails open: a judge that cannot reach a verdict yields no findings, so
 // an outage never turns into a blocked message on the gating path.
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) ([]scanners.Finding, error) {
-	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg, trajectories...)
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) (scanners.Result, error) {
+	result, _, err := s.ScanWithVerdict(ctx, text, orgID, projectID, userID, msg, trajectories...)
+	return result, err
+}
+
+// ScanWithVerdict preserves provider attribution for the executor that emits
+// usage while keeping enforcement findings in the shared scanner result.
+func (s *Scanner) ScanWithVerdict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) (scanners.Result, Result, error) {
+	result, verdict, err := s.ScanStrictWithVerdict(ctx, text, orgID, projectID, userID, msg, trajectories...)
 	if err != nil {
 		if errors.Is(err, ErrNoVerdict) {
-			return nil, nil
+			return scanners.Result{Findings: nil, STokens: verdict.STokens, Completed: false}, verdict, nil
 		}
 		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-		return nil, nil
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, verdict, nil
 	}
-	return findings, nil
+	return result, verdict, nil
 }
 
 // ScanStrict reports a judge failure instead of failing open. Callers that
 // record whether a scan happened need to tell "judged clean" apart from "never
 // judged" - collapsing the two writes down a durable claim that content is
 // clean on the strength of an outage.
-func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) ([]scanners.Finding, error) {
+func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) (scanners.Result, error) {
+	result, _, err := s.ScanStrictWithVerdict(ctx, text, orgID, projectID, userID, msg, trajectories...)
+	return result, err
+}
+
+// ScanStrictWithVerdict returns provider failure instead of failing open and
+// preserves provider attribution for successful usage emission.
+func (s *Scanner) ScanStrictWithVerdict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, trajectories ...judgemessage.Trajectory) (scanners.Result, Result, error) {
 	if text == "" && !msg.HasContent() {
-		return nil, nil
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, Result{Label: "", Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: "", Provider: ""}, nil
 	}
 
 	trajectory := judgemessage.Trajectory{PriorUserRequest: "", RecentUntrustedContent: ""}
@@ -113,28 +137,37 @@ func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID
 	}
 	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, Trajectories: []judgemessage.Trajectory{trajectory}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
 	if err != nil {
-		return nil, fmt.Errorf("pi judge classify: %w", err)
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, Result{Label: "", Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: "", Provider: ""}, fmt.Errorf("pi judge classify: %w", err)
 	}
 	if len(results) != 1 {
-		return nil, fmt.Errorf("pi judge returned %d results for 1 message", len(results))
+		return scanners.Result{Findings: nil, STokens: 0, Completed: false}, Result{Label: "", Score: 0, Rationale: "", DirectiveKind: "", Target: "", Operational: false, STokens: 0, Completed: false, Model: "", Provider: ""}, fmt.Errorf("pi judge returned %d results for 1 message", len(results))
 	}
-	if results[0].Label == LabelUnavailable {
-		return nil, ErrNoVerdict
+	verdict := results[0]
+	if verdict.Label == LabelUnavailable {
+		return scanners.Result{Findings: nil, STokens: verdict.STokens, Completed: false}, verdict, ErrNoVerdict
 	}
 
-	if f := s.findingFromResult(text, results[0]); f != nil {
-		return []scanners.Finding{*f}, nil
+	findings := []scanners.Finding{}
+	if f := s.findingFromResult(text, verdict); f != nil {
+		findings = append(findings, *f)
 	}
-	return nil, nil
+	return scanners.Result{Findings: findings, STokens: verdict.STokens, Completed: verdict.Completed}, verdict, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, trajectorySets ...[]judgemessage.Trajectory) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(texts))
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, trajectorySets ...[]judgemessage.Trajectory) ([]scanners.Result, error) {
+	out, _, err := s.ScanBatchWithVerdicts(ctx, texts, orgID, projectID, userIDs, msgs, trajectorySets...)
+	return out, err
+}
+
+// ScanBatchWithVerdicts preserves provider attribution alongside the scanner
+// results for callers that emit per-item usage.
+func (s *Scanner) ScanBatchWithVerdicts(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, trajectorySets ...[]judgemessage.Trajectory) ([]scanners.Result, []Result, error) {
+	out := make([]scanners.Result, len(texts))
 	if len(msgs) != len(texts) {
 		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
 			attr.SlogError(errors.New("len(msgs) != len(texts)")),
 		)
-		return out, nil
+		return out, nil, nil
 	}
 
 	var trajectories []judgemessage.Trajectory
@@ -153,24 +186,29 @@ func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectI
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-		return out, nil
+		return out, nil, nil
 	}
 	if len(results) != len(texts) {
 		s.logger.WarnContext(ctx, "pi judge returned mismatched batch size, dropping prompt injection findings",
 			attr.SlogError(errors.New("len(results) != len(texts)")),
 		)
-		return out, nil
+		return out, results, nil
 	}
 
 	for i, r := range results {
 		if texts[i] == "" && !msgs[i].HasContent() {
 			continue
 		}
-		if f := s.findingFromResult(texts[i], r); f != nil {
-			out[i] = append(out[i], *f)
+		if r.Label == LabelUnavailable {
+			continue
 		}
+		findings := []scanners.Finding{}
+		if f := s.findingFromResult(texts[i], r); f != nil {
+			findings = append(findings, *f)
+		}
+		out[i] = scanners.Result{Findings: findings, STokens: r.STokens, Completed: r.Completed}
 	}
-	return out, nil
+	return out, results, nil
 }
 
 func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {

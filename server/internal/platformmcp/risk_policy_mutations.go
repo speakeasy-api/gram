@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -55,7 +56,6 @@ type createRiskPolicyInput struct {
 	Enabled                bool                 `json:"enabled"`
 	Action                 string               `json:"action,omitempty"`
 	Score                  *float64             `json:"score,omitempty"`
-	MessageTypes           []string             `json:"message_types,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Sources                []string             `json:"sources,omitempty"`
 	PresidioEntities       []string             `json:"presidio_entities,omitempty"`
@@ -88,7 +88,6 @@ type normalizedCreateRiskPolicy struct {
 	Enabled                bool                 `json:"enabled"`
 	Action                 string               `json:"action"`
 	Score                  float64              `json:"score"`
-	MessageTypes           []string             `json:"message_types"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Sources                []string             `json:"sources"`
 	PresidioEntities       []string             `json:"presidio_entities"`
@@ -163,6 +162,9 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskPolicy, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy create: %w", err)
+		}
 		if err := riskrepo.New(tx).LockRiskPolicyMutations(ctx, project.ID.String()); err != nil {
 			return nil, fmt.Errorf("lock risk policy create convergence: %w", err)
 		}
@@ -235,6 +237,9 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		Operation: operationUpdateRiskPolicy, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
+		}
 		current, err := riskrepo.New(tx).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, riskPolicyNotFound()
@@ -247,7 +252,7 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 			return nil, err
 		}
 		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) (policycore.Policy, error) {
-			state, err := riskPolicyVersionState(ctx, tx, locked, true)
+			state, err := riskPolicyVersionState(ctx, tx, locked)
 			if err != nil {
 				return policycore.Policy{}, riskMutationUnavailableWithCause(err)
 			}
@@ -319,7 +324,7 @@ func normalizeRiskPolicyPatchForReceipt(patch map[string]json.RawMessage) (map[s
 				return nil, invalidRiskPolicyRequest()
 			}
 			normalized[field] = value
-		case "message_types", "sources", "presidio_entities", "prompt_injection_rules", "disabled_rules", "approved_email_domains":
+		case "sources", "presidio_entities", "prompt_injection_rules", "disabled_rules", "approved_email_domains":
 			var value []string
 			if json.Unmarshal(raw, &value) != nil {
 				return nil, invalidRiskPolicyRequest()
@@ -380,24 +385,20 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	if !slices.Contains(s.catalog.Actions, action) || score < 0.1 || score > 10 || !utf8.ValidString(input.Name) {
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
-	messageTypes := canonicalStrings(input.MessageTypes)
-	if input.MessageTypes == nil {
-		messageTypes = slices.Clone(s.catalog.PolicyMessageTypes)
-	}
-	if !allIn(messageTypes, s.catalog.PolicyMessageTypes) || len(messageTypes) == 0 || invalidUserMessage(input.UserMessage) {
+	if invalidUserMessage(input.UserMessage) {
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
 
 	normalized := normalizedCreateRiskPolicy{
 		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: input.Enabled,
-		Action: action, Score: score, MessageTypes: messageTypes, UserMessage: input.UserMessage,
+		Action: action, Score: score, UserMessage: input.UserMessage,
 		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "",
 	}
 	params := riskrepo.CreateRiskPolicyParams{
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
 		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil,
-		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{}, MessageTypes: messageTypes,
-		ScopeInclude: pgtype.Text{String: "", Valid: false}, ScopeExempt: pgtype.Text{String: "", Valid: false}, Enabled: input.Enabled, Action: action,
+		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
+		Enabled: input.Enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
 		UserMessage: conv.PtrToPGTextEmpty(input.UserMessage), Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
 		Score: pgtype.Float8{Float64: score, Valid: true},
@@ -473,8 +474,8 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
 		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig),
-		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds), MessageTypes: slices.Clone(current.MessageTypes),
-		ScopeInclude: current.ScopeInclude, ScopeExempt: current.ScopeExempt, Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
+		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds),
+		Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
 		UserMessage: current.UserMessage, Prompt: current.Prompt, ModelConfig: slices.Clone(current.ModelConfig), Score: pgtype.Float8{Float64: current.Score, Valid: true},
 	}
 	normalized := make(map[string]any, len(input.Patch))
@@ -484,7 +485,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	// depend on randomized Go map order.
 	for _, field := range []string{
 		"sources", "presidio_entities", "action", "name", "enabled", "score", "prompt", "user_message",
-		"message_types", "presidio_score_threshold", "approved_email_domains", "prompt_injection_rules", "disabled_rules", "detection_scopes",
+		"presidio_score_threshold", "approved_email_domains", "prompt_injection_rules", "disabled_rules", "detection_scopes",
 	} {
 		raw, ok := input.Patch[field]
 		if !ok {
@@ -537,17 +538,6 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 				return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 			}
 			params.UserMessage = conv.ToPGTextEmpty(value)
-			normalized[field] = value
-		case "message_types":
-			var value []string
-			if json.Unmarshal(raw, &value) != nil {
-				return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
-			}
-			value = canonicalStrings(value)
-			if len(value) == 0 || !allIn(value, s.catalog.PolicyMessageTypes) {
-				return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
-			}
-			params.MessageTypes = value
 			normalized[field] = value
 		case "sources":
 			if current.PolicyType != "standard" {
@@ -789,7 +779,7 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 		if err != nil {
 			return nil, fmt.Errorf("load risk policy audience for create convergence: %w", err)
 		}
-		if riskPolicyCreateMatches(row, audience, prepared.params) {
+		if riskPolicyCreateMatches(row, audience, prepared.params, s.catalog) {
 			matches = append(matches, policycore.MutationResult{Row: row, AudiencePrincipalURNs: audience})
 		}
 	}
@@ -802,10 +792,14 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 	return nil, nil
 }
 
-func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams) bool {
+// riskPolicyCreateMatches decides whether an existing row is the same policy a
+// create describes. Platform MCP creates carry no legacy scope, so a row still
+// narrowed by the legacy message_types column is a different, narrower policy
+// and must not satisfy the create.
+func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams, catalog policycatalog.Catalog) bool {
 	return row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
-		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 && reflect.DeepEqual(canonicalStrings(row.MessageTypes), canonicalStrings(desired.MessageTypes)) &&
-		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ScopeInclude == desired.ScopeInclude && row.ScopeExempt == desired.ScopeExempt && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
+		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 &&
+		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
 }
 
 func canonicalJSONEqual(a, b []byte) bool {
@@ -815,7 +809,7 @@ func canonicalJSONEqual(a, b []byte) bool {
 }
 
 func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string, matched bool) (CreateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return CreateRiskPolicyReceiptResult{}, err
 	}
@@ -831,7 +825,7 @@ func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db 
 }
 
 func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string) (UpdateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return UpdateRiskPolicyReceiptResult{}, err
 	}

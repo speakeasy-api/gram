@@ -43,7 +43,11 @@ export type UserSessionIssuer = {
    */
   id: string;
   /**
-   * The owning project id.
+   * The owning organization id.
+   */
+  organizationId: string;
+  /**
+   * The owning project id; empty for organization-owned issuers.
    */
   projectId: string;
   /**
@@ -51,7 +55,7 @@ export type UserSessionIssuer = {
    */
   sessionDurationHours: number;
   /**
-   * Project-unique slug.
+   * Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
    */
   slug: string;
   updatedAt: Date;
@@ -76,6 +80,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    organization_id: z.string(),
     project_id: z.string(),
     session_duration_hours: z.int(),
     slug: z.string(),
@@ -89,6 +94,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       "authn_challenge_mode": "authnChallengeMode",
       "client_id_metadata_admission_mode": "clientIdMetadataAdmissionMode",
       "created_at": "createdAt",
+      "organization_id": "organizationId",
       "project_id": "projectId",
       "session_duration_hours": "sessionDurationHours",
       "updated_at": "updatedAt",

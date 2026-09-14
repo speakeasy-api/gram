@@ -26,6 +26,7 @@ type ProductFeaturesSnapshot struct {
 	RemoteSessionAutoRefreshEnforcedEnabled bool
 	ConsentToolFilteringEnabled             bool
 	SessionPortabilityEnabled               bool
+	NetworkIngressEnabled                   bool
 	DeviceAgent                             bool
 }
 
@@ -75,6 +76,7 @@ func (c *Client) Snapshot(ctx context.Context, organizationID string) ProductFea
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
 		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
+		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		DeviceAgent:                             deviceAgent,
 	}
 }

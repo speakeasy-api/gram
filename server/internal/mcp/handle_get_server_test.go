@@ -34,6 +34,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.cacheAdapter,
 		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
 		testInstance.audit,
+		nil,
 	)
 
 	tests := []struct {

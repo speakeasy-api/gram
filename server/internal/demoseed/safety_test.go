@@ -91,6 +91,9 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
+	require.NoError(t, demoseedtest.PlantPrivateNetworkState(
+		ctx, db, otherTenantSpec.OrgID,
+	))
 	milestoneCount, err := demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	)

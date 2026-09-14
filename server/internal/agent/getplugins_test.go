@@ -57,6 +57,23 @@ func TestGetPlugins_ObservabilityWithoutAssignments(t *testing.T) {
 		"a published marketplace always yields observability, even with no assignments")
 }
 
+func TestGetPlugins_OmitsObservabilityWhenDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	assigned := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "assigned-tool")
+	assignPlugin(t, ctx, ti.conn, assigned, ti.orgID, "*")
+	disableObservability(t, ctx, ti.conn, ti.projectID)
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
+	require.NoError(t, err)
+
+	require.Len(t, res.Marketplaces, 1)
+	require.Equal(t, []string{"assigned-tool"}, pluginSlugs(res),
+		"a disabled observability plugin must not be installed by the device agent")
+}
+
 // TestGetPlugins_ScopesToAssignedPrincipals pins per-principal scoping (DNO-239):
 // a plugin is delivered only when its assignment matches the caller's resolved
 // principal set. Unassigned plugins, and plugins assigned to a different

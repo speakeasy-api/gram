@@ -115,6 +115,7 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 		"anonymous":    testIdentity(t, mcpidentity.KindAnonymous, ""),
 		"api key":      testIdentity(t, mcpidentity.KindAPIKey, ""),
 		"assistant":    testIdentity(t, mcpidentity.KindAssistant, ""),
+		"agent":        testIdentity(t, mcpidentity.KindAgent, ""),
 		"chat session": testIdentity(t, mcpidentity.KindChatSession, ""),
 	} {
 		result, err := adapter.DeriveCandidates(t.Context(), organization, identity)

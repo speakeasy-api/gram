@@ -1346,6 +1346,9 @@ SELECT
     ',"gram.event.source":"tool_call"',
     ',"gram.mcp_server.id":"', member, '"',
     if(toolset_slug = '', concat(',"gram.remote_mcp_server.id":"', remote, '"'), ''),
+    -- The proxy stamps the urn's source segment as the tool call source; the
+    -- tool-usage classifier reads it to attribute the call to the member.
+    if(toolset_slug = '', concat(',"gram.tool_call.source":"', remote, '"'), ''),
     ',"gram.meta_mcp_server.id":"', gateway, '"',
     ',"http.response.status_code":', toString(status),
     ',"http.server.request.duration":', toString(round(0.05 + (cityHash64('gwc', i) % 300) / 100, 3)),
@@ -1392,6 +1395,116 @@ FROM (
   FROM numbers(240)
 );
 
+-- Dispatches to GitHub from before it left the gateway (its membership is
+-- soft-deleted in Postgres three days ago). They count toward the gateway's
+-- dispatched-call totals but must not appear in Calls by member.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwgone-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"', tool_urn, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.event.source":"tool_call"',
+    ',"gram.mcp_server.id":"', member, '"',
+    ',"gram.remote_mcp_server.id":"', remote, '"',
+    ',"gram.tool_call.source":"', remote, '"',
+    ',"gram.meta_mcp_server.id":"', gateway, '"',
+    ',"http.response.status_code":', toString(status),
+    ',"http.server.request.duration":', toString(round(0.08 + (cityHash64('gwgc', i) % 200) / 100, 3)),
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"',
+    ',"gram.external_user.id":"', email, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  tool_urn,
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    lower(hex(MD5('gram-demo-metamcp-1'))) AS gh,
+    concat(substring(gh, 1, 8), '-', substring(gh, 9, 4), '-5', substring(gh, 14, 3), '-8',
+           substring(gh, 18, 3), '-', substring(gh, 21, 12)) AS gateway,
+    lower(hex(MD5('gram-demo-mcpserver-github'))) AS mh,
+    concat(substring(mh, 1, 8), '-', substring(mh, 9, 4), '-5', substring(mh, 14, 3), '-8',
+           substring(mh, 18, 3), '-', substring(mh, 21, 12)) AS member,
+    lower(hex(MD5('gram-demo-remotemcp-github'))) AS rh,
+    concat(substring(rh, 1, 8), '-', substring(rh, 9, 4), '-5', substring(rh, 14, 3), '-8',
+           substring(rh, 18, 3), '-', substring(rh, 21, 12)) AS remote,
+    arrayElement(['list_pull_requests', 'get_issue', 'search_code'], 1 + (cityHash64('gwgt', number) % 3)) AS tool_name,
+    concat('tools:externalmcp:', remote, ':', tool_name) AS tool_urn,
+    if(cityHash64('gwge', number) % 8 = 0, 502, 200) AS status,
+    arrayElement(['amara@demo.getgram.ai', 'priya@demo.getgram.ai', 'mateo@demo.getgram.ai'],
+                 1 + (cityHash64('gwgu', number) % 3)) AS email,
+    -- Only while GitHub was still a member: four to eleven days back.
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(4 + (number % 8)) + toIntervalHour(9 + (cityHash64('gwgh', number) % 9))
+      + toIntervalMinute(cityHash64('gwgm', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(24)
+);
+
+-- What the Claude Code hooks record when an agent calls the gateway itself:
+-- hook rows whose gram.mcp.server_url is the gateway endpoint URL. The tool
+-- usage classifier matches that URL to the gateway, so Tool Logs and Insights
+-- show them as the gateway rather than as an unknown (shadow) MCP server.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Hook: PostToolUse ', tool_name),
+  lower(hex(MD5(concat('gram-demo-gwhook-', toString(i))))),
+  concat(
+    '{"gram.event.source":"hook"',
+    ',"gram.hook.source":"claude-code"',
+    ',"gram.hook.event":"PostToolUse"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.tool_call.source":"acme-demo-gateway"',
+    ',"gram.mcp.match":"https://app.getgram.ai/mcp/acme-demo-gateway"',
+    ',"gram.mcp.server_url":"https://app.getgram.ai/mcp/acme-demo-gateway"',
+    ',"gen_ai.tool.call.result":"ok"',
+    ',"gen_ai.tool.call.id":"call_demo_gw_', toString(i), '"',
+    ',"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', email, '"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  '',
+  '',
+  chat_id
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    -- Odd chats carry Claude provenance, matching the rest of the hook rows.
+    lower(hex(MD5(concat('gram-demo-chat-', toString(2 * number + 1))))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    -- Same funnel shape as the discovery rows, ending in an execute_tool.
+    multiIf(number % 10 < 4, 'list_servers', number % 10 < 6, 'describe_server',
+            number % 10 < 8, 'describe_tools', 'execute_tool') AS tool_name,
+    arrayElement(['amara@demo.getgram.ai', 'jonas@demo.getgram.ai', 'priya@demo.getgram.ai',
+                  'mateo@demo.getgram.ai', 'hana@demo.getgram.ai', 'lucas@demo.getgram.ai'],
+                 1 + (cityHash64('gwhu', number) % 6)) AS email,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(number % 12) + toIntervalHour(8 + (cityHash64('gwhh', number) % 11))
+      + toIntervalMinute(cityHash64('gwhm', number) % 60) AS ts0,
+    toUnixTimestamp64Nano(if(ts0 > now64(9) - toIntervalMinute(30), ts0 - toIntervalDay(1), ts0)) AS nano
+  FROM numbers(40)
+);
+
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
 -- exit for the runner) when violated.
@@ -1414,6 +1527,25 @@ SELECT throwIf(
      AND meta_mcp_server_id != ''
      AND event_source = 'tool_call') < 4,
   'demo seed postflight: gateway member calls do not cover every member');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND meta_mcp_server_id != ''
+     AND event_source = 'tool_call'
+     AND mcp_server_id = concat(substring(lower(hex(MD5('gram-demo-mcpserver-github'))), 1, 8), '-',
+                                substring(lower(hex(MD5('gram-demo-mcpserver-github'))), 9, 4), '-5',
+                                substring(lower(hex(MD5('gram-demo-mcpserver-github'))), 14, 3), '-8',
+                                substring(lower(hex(MD5('gram-demo-mcpserver-github'))), 18, 3), '-',
+                                substring(lower(hex(MD5('gram-demo-mcpserver-github'))), 21, 12))) < 24,
+  'demo seed postflight: removed gateway member dispatches missing');
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND event_source = 'hook'
+     AND endsWith(toString(attributes.gram.mcp.server_url), '/mcp/acme-demo-gateway')) < 40,
+  'demo seed postflight: hook-observed gateway calls missing');
 
 SELECT throwIf(
   (SELECT uniqExact(chat_id) FROM chat_session_summaries WHERE gram_project_id IN

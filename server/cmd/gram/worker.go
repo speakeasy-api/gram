@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -45,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -313,6 +316,8 @@ func newWorkerCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -568,7 +573,9 @@ func newWorkerCommand() *cli.Command {
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{
-					DevMode: c.String("environment") == "local",
+					AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
+					AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
+					DevMode:                          c.String("environment") == "local",
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
@@ -598,7 +605,7 @@ func newWorkerCommand() *cli.Command {
 			// riskSignaler.Shutdown is flushed synchronously after temporalWorker.Run
 			// returns (below), not via shutdownFuncs, to avoid racing the concurrent
 			// temporalClient.Close() over the same gRPC connection.
-			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+			chatWriter.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger, metering.NewRiskRecorder(publishers.MeterReadings)))
 
 			// Throttled for the same reason riskSignaler is: the writer emits one
 			// wake per durable message write and a wake carries no payload, so a
@@ -750,6 +757,9 @@ func newWorkerCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
+			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:            guardianPolicy,
 				DB:                        db,
@@ -781,7 +791,8 @@ func newWorkerCommand() *cli.Command {
 				ClickhouseConn:            chDB,
 				TelemetryRepo:             telemetryrepo.New(chDB),
 				TriggersApp:               triggerApp,
-				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				CacheAdapter:              remoteSessionsCache,
+				IssuerMetadataRefresher:   issuerMetadataRefresher,
 				AssistantsCore:            assistantsCore,
 				TemporalEnv:               temporalEnv,
 				PIIScanner:                piiScanner,
@@ -798,6 +809,16 @@ func newWorkerCommand() *cli.Command {
 				RiskFingerprinter:         riskFingerprinter,
 				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
+
+			networkIngressConfig, err := networkIngressConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
+			if err != nil {
+				return err
+			}
+			temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 
 			// Flush the throttle's queued trailing risk signals before this Action
 			// returns, while the Temporal client is still open. The cli After hook runs
@@ -819,7 +840,11 @@ func newWorkerCommand() *cli.Command {
 				}
 			}()
 
-			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+			err = temporalWorker.Run(worker.InterruptCh())
+			// Temporal can return before a cancelled activity's goroutine has, so
+			// close admission and drain the detached work before the DB closes.
+			issuerMetadataRefresher.Shutdown()
+			if err != nil {
 				return fmt.Errorf("run temporal worker: %w", err)
 			}
 

@@ -97,6 +97,7 @@ func TestIsConfigured(t *testing.T) {
 
 type fakeStripeAPI struct {
 	customerParams             *stripesdk.CustomerCreateParams
+	customer                   *stripesdk.Customer
 	customerUpdateID           string
 	customerUpdateParams       *stripesdk.CustomerUpdateParams
 	checkoutSessionParams      *stripesdk.CheckoutSessionCreateParams
@@ -127,6 +128,11 @@ func (f *fakeStripeAPI) createCustomer(_ context.Context, params *stripesdk.Cust
 	f.calls++
 	f.customerParams = params
 	return &stripesdk.Customer{ID: "cus_test"}, f.err
+}
+
+func (f *fakeStripeAPI) retrieveCustomer(context.Context, string, *stripesdk.CustomerRetrieveParams) (*stripesdk.Customer, error) {
+	f.calls++
+	return f.customer, f.err
 }
 
 func (f *fakeStripeAPI) updateCustomer(_ context.Context, id string, params *stripesdk.CustomerUpdateParams) (*stripesdk.Customer, error) {

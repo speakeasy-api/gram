@@ -60,7 +60,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	}
 }
 
-func TestGetOrganizationFeatures_ReturnsNineteenFields(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -90,7 +90,7 @@ func TestGetOrganizationFeatures_ReturnsNineteenFields(t *testing.T) {
 		"skills_enabled": {}, "skill_capture_metadata_only": {}, "ai_platform_push_integrations_enabled": {},
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
-		"consent_tool_filtering_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
+		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {

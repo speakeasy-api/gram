@@ -281,10 +281,12 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		ClaimsSupported:                            metadata.ClaimsSupported,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
-		Metadata:             metadata.Metadata,
-		MetadataFetchedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
-		MetadataLastError:    metadata.UnreadableMessage,
-		MetadataLastErrorUrl: metadata.UnreadableURL,
+		ScopeOverride:                              nil,
+		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
+		Metadata:                                   metadata.Metadata,
+		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		MetadataLastError:                          metadata.UnreadableMessage,
+		MetadataLastErrorUrl:                       metadata.UnreadableURL,
 	})
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)

@@ -277,6 +277,40 @@ func TestChatMessageWriterRejectsCorrelatedChatOwnedByAnotherProject(t *testing.
 	require.Empty(t, meterMessages(t, ti))
 }
 
+func TestChatMessageWriterRejectsCorrelatedPromotionForAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated promotion")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	param := minimalChatMessageParams(foreignChat, otherProject)
+	param.Source = conv.ToPGText("litellm")
+	correlationID := "cross-project-promotion"
+	written, err := writer.WriteCorrelated(ctx, otherProject, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
+	initialMessages := listAllMessages(t, ctx, ti.conn, foreignChat, otherProject)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+
+	param.Source = conv.ToPGText("codex")
+	param.Model = conv.ToPGText("native-model")
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: param,
+	}, correlationID)
+	require.Error(t, err)
+	require.Zero(t, written)
+	require.Equal(t, initialMessages, listAllMessages(t, ctx, ti.conn, foreignChat, otherProject))
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "rejected promotion must not change usage")
+}
+
 func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -299,7 +333,7 @@ func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T)
 	require.Empty(t, meterMessages(t, ti))
 }
 
-func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
+func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -324,7 +358,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 		UserID:           pgtype.Text{},
 		ExternalUserID:   pgtype.Text{},
 		FinishReason:     pgtype.Text{},
-		ToolCalls:        nil,
+		ToolCalls:        []byte(`[{"function":{"name":"lookup","arguments":"{}"}}]`),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -351,10 +385,13 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	initialReadings := meterMessages(t, ti)
 	require.Len(t, initialReadings, 1)
 	require.Equal(t, proxyBillingUserID, initialReadings[0].GetAttributes()[metering.AttributeBillingUserID])
+	initialMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, initialMessages, 1)
 
 	promoted := base
 	promoted.ID = uuid.Nil
 	promoted.Content = "Native hook content must not replace the persisted correlated prompt when metering"
+	promoted.ToolCalls = []byte(`[{"function":{"name":"different_tool","arguments":"{\"changed\":true}"}}]`)
 	promoted.Source = conv.ToPGText("codex")
 	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
 		Params:        promoted,
@@ -368,35 +405,58 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
 
-	expectedValue, err := stokens.NewCodec().Count(ctx, base.Content)
+	expectedValue, err := stokens.NewCodec().Count(ctx, base.Content, "lookup", "{}")
 	require.NoError(t, err)
-	incomingValue, err := stokens.NewCodec().Count(ctx, promoted.Content)
-	require.NoError(t, err)
-	require.NotEqual(t, expectedValue, incomingValue)
-
 	readings := meterMessages(t, ti)
-	require.Len(t, readings, 2)
-	var promotedReading *meteringv1.MeterReading
-	for _, reading := range readings {
-		if reading.GetAttributes()[metering.AttributeHookSource] == "codex" {
-			promotedReading = reading
-			break
-		}
-	}
-	require.NotNil(t, promotedReading)
-	require.Equal(t, initialReadings[0].GetId(), promotedReading.GetId())
-	require.Equal(t, initialReadings[0].GetOperationId(), promotedReading.GetOperationId())
-	require.Equal(t, int64(expectedValue), promotedReading.GetValue())
-	require.Equal(t, map[string]string{
-		metering.AttributeChatID:           chatID.String(),
-		metering.AttributeProvider:         "openai",
-		metering.AttributeHookSource:       "codex",
-		metering.AttributeHookHostname:     "workstation.example.test",
-		metering.AttributeAccountType:      "team",
-		metering.AttributeBillingMode:      "metered",
-		metering.AttributeBillingUserID:    nativeBillingUserID,
-		metering.AttributeMessageUserEmail: "native-observed@example.test",
-	}, promotedReading.GetAttributes())
+	require.Len(t, readings, 1)
+	require.Equal(t, int64(expectedValue), readings[0].GetValue())
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "promotion must preserve the entire initial usage fact")
+
+	storedMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, storedMessages, 1)
+	require.Equal(t, initialMessages[0].ID, storedMessages[0].ID)
+	require.Equal(t, "codex", storedMessages[0].Source.String)
+	require.Equal(t, base.Content, storedMessages[0].Content)
+	require.JSONEq(t, string(base.ToolCalls), string(storedMessages[0].ToolCalls))
+}
+
+func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "native-first correlated message")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	native := minimalChatMessageParams(chatID, ti.projectID)
+	native.Content = "Native prompt"
+	native.Source = conv.ToPGText("codex")
+	externalMessageID := "agent-prompt:v1:native-first"
+	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: native,
+	}, externalMessageID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), written)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
+	require.Equal(t, "codex", initialReadings[0].GetAttributes()[metering.AttributeHookSource])
+
+	proxy := native
+	proxy.Content = "Proxy observation must not replace the native prompt"
+	proxy.Source = conv.ToPGText("litellm")
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params: proxy,
+	}, externalMessageID)
+	require.NoError(t, err)
+	require.Zero(t, written)
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 1)
+	require.True(t, proto.Equal(initialReadings[0], readings[0]), "a later proxy observation must not change usage")
+
+	storedMessages := listAllMessages(t, ctx, ti.conn, chatID, ti.projectID)
+	require.Len(t, storedMessages, 1)
+	require.Equal(t, native.Content, storedMessages[0].Content)
+	require.Equal(t, "codex", storedMessages[0].Source.String)
 }
 
 func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {

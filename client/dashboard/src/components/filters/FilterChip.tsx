@@ -209,7 +209,7 @@ export function CustomFilterChip({
               }
             }}
             placeholder={valuePlaceholder}
-            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/40 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-1"
             autoFocus
           />
         </div>

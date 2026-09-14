@@ -69,10 +69,14 @@ vi.mock("@/components/ui/MoreActions", () => ({
 }));
 
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ killswitch: { href: () => "/example/killswitch" } }),
+  useOrgRoutes: () => ({}),
   useRoutes: () => ({
     identities: {
-      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
+      href: () => "/identities",
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}` },
+        access: { href: (urn: string) => `/identities/${urn}/access` },
+      },
     },
   }),
 }));
@@ -360,10 +364,10 @@ describe("ClientsAndSessionsTab", () => {
       },
     });
     expect(
-      (await screen.findByRole("link", { name: /Killswitched/ })).getAttribute(
-        "href",
-      ),
-    ).toBe("/example/killswitch?user=u1");
+      (
+        await screen.findByRole("link", { name: /Killswitch active/ })
+      ).getAttribute("href"),
+    ).toBe("/identities/user%3Au1/access");
     expect(screen.getByText("View killswitches")).toBeDefined();
     fireEvent.click(screen.getByText("New killswitch…"));
     expect(revokeSessionMutate).not.toHaveBeenCalled();
@@ -373,7 +377,7 @@ describe("ClientsAndSessionsTab", () => {
         .getByRole("link", { name: "New killswitch…" })
         .getAttribute("href"),
     ).toBe(
-      "/example/killswitch?create=1&createUser=u1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
+      "/identities/user%3Au1/access?create=1&createCapability=mcp_tool_calls&originServer=mcp-server-1",
     );
   });
 

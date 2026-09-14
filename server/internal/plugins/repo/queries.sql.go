@@ -631,6 +631,41 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	return i, err
 }
 
+const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND (is_default IS TRUE OR slug = 'default')
+  AND deleted IS FALSE
+ORDER BY (is_default IS TRUE) DESC
+LIMIT 1
+`
+
+type GetProspectiveDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspectiveDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getProspectiveDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id
@@ -1539,6 +1574,33 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
+INSERT INTO project_marketplace_settings (project_id)
+VALUES ($1)
+ON CONFLICT (project_id) DO UPDATE
+  SET project_id = EXCLUDED.project_id
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
+`
+
+// Ensures a project's marketplace settings row exists and locks it for the rest
+// of the transaction, returning the values currently stored. Callers snapshot
+// the state their update is about to replace; the lock is what keeps that
+// snapshot from describing a row a concurrent update already replaced. A row of
+// all-NULL columns is the same as no row: every column falls back to its
+// server-side default.
+func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UUID) (ProjectMarketplaceSetting, error) {
+	row := q.db.QueryRow(ctx, lockMarketplaceSettings, projectID)
+	var i ProjectMarketplaceSetting
+	err := row.Scan(
+		&i.ProjectID,
+		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers
@@ -2048,23 +2110,46 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 }
 
 const upsertMarketplaceSettings = `-- name: UpsertMarketplaceSettings :one
-INSERT INTO project_marketplace_settings (project_id, marketplace_name)
-VALUES ($1, $2)
+INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
+VALUES (
+  $1,
+  CASE WHEN $2::boolean THEN $3::text END,
+  CASE WHEN $4::boolean THEN $5::boolean END
+)
 ON CONFLICT (project_id) DO UPDATE
-  SET marketplace_name = EXCLUDED.marketplace_name,
+  SET marketplace_name = CASE
+        WHEN $2::boolean THEN EXCLUDED.marketplace_name
+        ELSE project_marketplace_settings.marketplace_name
+      END,
+      observability_enabled = CASE
+        WHEN $4::boolean THEN EXCLUDED.observability_enabled
+        ELSE project_marketplace_settings.observability_enabled
+      END,
       updated_at = clock_timestamp()
 RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
 `
 
 type UpsertMarketplaceSettingsParams struct {
-	ProjectID       uuid.UUID
-	MarketplaceName pgtype.Text
+	ProjectID               uuid.UUID
+	SetMarketplaceName      bool
+	MarketplaceName         pgtype.Text
+	SetObservabilityEnabled bool
+	ObservabilityEnabled    pgtype.Bool
 }
 
-// Sets the marketplace name override for a project. Pass NULL to clear the
-// override and fall back to the server-side default.
+// Writes only the settings the caller supplied: each column is applied when its
+// set_* flag is true and otherwise keeps the stored value, so a name-only and an
+// observability-only update running concurrently can't clobber each other. A
+// NULL marketplace_name clears the override and falls back to the server-side
+// default; a NULL observability_enabled keeps the historical default (enabled).
 func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarketplaceSettingsParams) (ProjectMarketplaceSetting, error) {
-	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName)
+	row := q.db.QueryRow(ctx, upsertMarketplaceSettings,
+		arg.ProjectID,
+		arg.SetMarketplaceName,
+		arg.MarketplaceName,
+		arg.SetObservabilityEnabled,
+		arg.ObservabilityEnabled,
+	)
 	var i ProjectMarketplaceSetting
 	err := row.Scan(
 		&i.ProjectID,

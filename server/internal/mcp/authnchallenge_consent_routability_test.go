@@ -149,6 +149,13 @@ func expect(t *testing.T, fx consentActionFixture, connected, total int, reconne
 	}
 }
 
+func expectRechecks(t *testing.T, fx consentActionFixture, count int) {
+	t.Helper()
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Equal(t, count, strings.Count(html, "data-validate-link"), html)
+}
+
 // expectAutoReconnect asserts the page sent the subject straight to the
 // provider with the resource the new grant will record.
 func expectAutoReconnect(t *testing.T, fx consentActionFixture, resource string) {
@@ -174,6 +181,7 @@ func TestServeConsent_MetaRemoteMemberLegacyGrantAsksForReconnect(t *testing.T) 
 	expect(t, fx, 0, 1, true)
 	grant(t, ctx, fx, clientID, upstream+"/")
 	expect(t, fx, 1, 1, false)
+	expectRechecks(t, fx, 1)
 }
 
 // A tunneled member accepts an unqualified grant; only one qualified to
@@ -199,6 +207,7 @@ func TestServeConsent_MetaUnclaimedProviderKeepsStoredStatus(t *testing.T) {
 	ctx, fx, _, clientID, _ := metaConsent(t, "rt-unclaimed")
 	grant(t, ctx, fx, clientID, "")
 	expect(t, fx, 1, 1, false)
+	expectRechecks(t, fx, 0)
 }
 
 // Two grants naming one remote upstream make the runtime refuse both.
@@ -251,6 +260,8 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	grant(t, ctx, fx, other, "https://unrelated.example.com/mcp")
 	grant(t, ctx, fx, own, "")
 	expect(t, fx, 2, 2, false)
+	expectRechecks(t, fx, 1)
 	grant(t, ctx, fx, own, "urn:gram:tunnel:other")
 	expect(t, fx, 1, 2, true)
+	expectRechecks(t, fx, 0)
 }

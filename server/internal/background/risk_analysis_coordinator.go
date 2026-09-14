@@ -119,7 +119,6 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					MessageIDs:       batch,
 					ContentPartIDs:   nil,
 					Sources:          policy.Sources,
-					MessageTypes:     policy.MessageTypes,
 					PresidioEntities: policy.PresidioEntities,
 					// Derived authoritatively from the policy inside AnalyzeBatch.Do;
 					// left unset here to avoid a second config source.
@@ -143,7 +142,6 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					MessageIDs:             nil,
 					ContentPartIDs:         batch,
 					Sources:                policy.Sources,
-					MessageTypes:           policy.MessageTypes,
 					PresidioEntities:       policy.PresidioEntities,
 					PresidioScoreThreshold: 0,
 					ApprovedEmailDomains:   nil,

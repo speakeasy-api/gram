@@ -910,12 +910,16 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// A chat-session token minted via an API key restores that key's APIKeyID
 	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
 	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Only direct
-	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
-	// token has none, so gate the exemption on the scopes being present.
+	// an end user's chat-session token read every project chat. Direct legacy
+	// Gram-Key auth carries scopes, while direct principal auth is
+	// identified by its private mode. API-key-minted chat tokens may retain legacy
+	// mode but have no scopes, so they still go through owner matching.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
-	isAPIKeyChatSession := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) == 0
+	apiKeyMode, hasAPIKeyAuthorization := contextvalues.APIKeyAuthorization(ctx)
+	isDirectLegacyAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModeLegacy && len(authCtx.APIKeyScopes) > 0
+	isDirectPrincipalAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModePrincipal
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && (isDirectLegacyAPIKey || isDirectPrincipalAPIKey)
+	isAPIKeyChatSession := authCtx.APIKeyID != "" && !isDirectAPIKeyCall
 	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {

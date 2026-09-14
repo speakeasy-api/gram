@@ -16,6 +16,7 @@
 package clidestructive
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -23,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
 // Source labels findings produced by this scanner. Mirrors
@@ -37,25 +39,32 @@ type ToolCall struct {
 	Arguments string
 }
 
-// Scanner scans recorded tool calls for destructive CLI command content. It is
-// stateless — the curated pattern set is compiled once at package init — and
-// safe for concurrent use.
-type Scanner struct{}
+// Scanner scans recorded tool calls for destructive CLI command content. The
+// curated pattern set is compiled once at package init. Scanner is safe for
+// concurrent use.
+type Scanner struct {
+	stokenCodec *stokens.Codec
+}
 
 // NewScanner returns a ready-to-use Scanner.
-func NewScanner() *Scanner { return &Scanner{} }
+func NewScanner() *Scanner {
+	return &Scanner{stokenCodec: stokens.NewCodec()}
+}
 
-// Scan returns one Finding per tool call whose arguments contain a destructive
-// command pattern. Calls with no name are skipped. Only the first matching
-// pattern per call is reported, keeping the hot path predictable.
-func (s *Scanner) Scan(calls []ToolCall) []scanners.Finding {
+// Scan returns one Finding per tool call whose prepared string arguments contain
+// a destructive command pattern. Calls with no name are skipped. Only the first
+// matching pattern per call is reported, keeping the hot path predictable.
+func (s *Scanner) Scan(ctx context.Context, calls []ToolCall) scanners.Result {
 	var findings []scanners.Finding
+	var prepared []string
 	for _, call := range calls {
 		if call.Name == "" {
 			continue
 		}
 
-		matched, ok := scanForCLIDestructive(parseToolInput(call.Arguments))
+		values := flattenCLIStrings(parseToolInput(call.Arguments))
+		prepared = append(prepared, values...)
+		matched, ok := scanPreparedStrings(values)
 		if !ok {
 			continue
 		}
@@ -78,7 +87,11 @@ func (s *Scanner) Scan(calls []ToolCall) []scanners.Finding {
 			Path:                "",
 		})
 	}
-	return findings
+	if len(prepared) == 0 {
+		return scanners.Result{Findings: findings, STokens: 0, Completed: false}
+	}
+	stokenCount, err := s.stokenCodec.Count(ctx, prepared...)
+	return scanners.Result{Findings: findings, STokens: int64(stokenCount), Completed: err == nil}
 }
 
 // parseToolInput parses a recorded tool call's raw arguments string into a
@@ -298,7 +311,11 @@ func flattenCLIStrings(input any) []string {
 // in any string value reachable from input, or zero value + false when nothing
 // matches. The first-match-wins ordering keeps the hot path predictable.
 func scanForCLIDestructive(input any) (cliDestructivePattern, bool) {
-	for _, str := range flattenCLIStrings(input) {
+	return scanPreparedStrings(flattenCLIStrings(input))
+}
+
+func scanPreparedStrings(values []string) (cliDestructivePattern, bool) {
+	for _, str := range values {
 		if matched, ok := matchCLIDestructiveString(str); ok {
 			return matched, true
 		}

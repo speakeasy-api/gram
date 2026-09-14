@@ -19,12 +19,12 @@ import { useEnableAdminOpenRouterKeyMutation } from "@gram/client/react-query/en
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import {
   causeLabels,
   effectiveDisabled,
   keyAction,
 } from "./openRouterKeyState";
+import { StrictPlatformAdminGate } from "./StrictPlatformAdminGate";
 
 // Rows per page; also the ceiling on concurrent live usage fetches, since
 // only mounted rows request usage.
@@ -54,29 +54,6 @@ export default function PlatformAdminOpenRouterKeys(): JSX.Element {
       </Page.Body>
     </Page>
   );
-}
-
-// Unlike PlatformAdminGate, no local-dev bypass: this page manages live
-// upstream OpenRouter credentials across every organization, so it stays
-// strictly admin-gated like Remote Identity Providers. Local developers can
-// still reach it through the impersonation toggle on the Overview page, which
-// flips the platform-admin flag itself.
-function StrictPlatformAdminGate({
-  children,
-}: {
-  children: React.ReactNode;
-}): JSX.Element {
-  const isPlatformAdmin = useIsPlatformAdmin();
-
-  if (!isPlatformAdmin) {
-    return (
-      <Text muted className="py-8 text-center">
-        This page is available to platform admins only.
-      </Text>
-    );
-  }
-
-  return <>{children}</>;
 }
 
 // Usage is fetched live per visible row rather than stored: nothing in the

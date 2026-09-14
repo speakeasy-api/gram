@@ -56,6 +56,7 @@ import (
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -197,21 +198,22 @@ type hostedPageData struct {
 }
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	repo           *repo.Queries
-	toolsetRepo    *toolsets_repo.Queries
-	mcpServersRepo *mcpservers_repo.Queries
-	projectsRepo   *projects_repo.Queries
-	orgsRepo       *organizations_repo.Queries
-	domainsRepo    *customdomains_repo.Queries
-	auth           *auth.Auth
-	serverURL      *url.URL
-	siteURL        *url.URL
-	toolsetCache   cache.TypedCacheObject[mv.ToolsetBaseContents]
-	audit          *audit.Logger
-	legacyFallback *mcpmetrics.LegacyFallbackCounter
+	tracer               trace.Tracer
+	logger               *slog.Logger
+	db                   *pgxpool.Pool
+	repo                 *repo.Queries
+	toolsetRepo          *toolsets_repo.Queries
+	mcpServersRepo       *mcpservers_repo.Queries
+	projectsRepo         *projects_repo.Queries
+	orgsRepo             *organizations_repo.Queries
+	domainsRepo          *customdomains_repo.Queries
+	auth                 *auth.Auth
+	serverURL            *url.URL
+	siteURL              *url.URL
+	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
+	audit                *audit.Logger
+	legacyFallback       *mcpmetrics.LegacyFallbackCounter
+	metaInstallAdmission func(context.Context, string) error
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -234,6 +236,7 @@ func NewService(
 	cacheAdapter cache.Cache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	metaInstallAdmission func(context.Context, string) error,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_metadata"))
 
@@ -258,6 +261,7 @@ func NewService(
 		audit:          auditLogger,
 		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
+		metaInstallAdmission:  metaInstallAdmission,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
@@ -1048,8 +1052,20 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
-		// Disabled gateways never resolve (policy denial above), so a
-		// resolved gateway is private and session-gated by the caller.
+		mode, err := networkaccess.Effective(metaServer.NetworkAccessMode)
+		if err != nil {
+			return nil, fmt.Errorf("%w: invalid network access mode", errToolsetNotFound)
+		}
+		// Existing public-network gateways remain available independently of
+		// private ingress rollout. Non-public modes require rollout admission.
+		if !mode.IsPublicOnly() {
+			if s.metaInstallAdmission == nil {
+				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+			}
+			if err := s.metaInstallAdmission(ctx, metaServer.OrganizationID); err != nil {
+				return nil, fmt.Errorf("%w: meta install page is unavailable", errToolsetNotFound)
+			}
+		}
 		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
 		if err != nil {
 			return nil, fmt.Errorf("load organization: %w", err)

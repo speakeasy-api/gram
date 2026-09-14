@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   showPylonChat: vi.fn(),
+  navigate: vi.fn(),
+  goToTask: vi.fn(),
+  searchParams: new URLSearchParams(),
 }));
 
 vi.mock("@/components/page-layout", () => {
@@ -136,25 +139,17 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("./components/setup-task-dialog", () => ({
-  SetupTaskDialog: ({
-    task,
-    onClose,
-    onComplete,
-    onSupport,
-  }: {
-    task: SetupTask | null;
-    onClose: () => void;
-    onComplete: () => void;
-    onSupport: () => void;
-  }) =>
-    task ? (
-      <div role="dialog" aria-label={task.title}>
-        <button onClick={onClose}>Back</button>
-        <button onClick={onComplete}>Complete task</button>
-        <button onClick={onSupport}>Get support</button>
-      </div>
-    ) : null,
+vi.mock("react-router", () => ({
+  useNavigate: () => mocks.navigate,
+  useSearchParams: () => [mocks.searchParams, vi.fn()],
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setupTask: {
+      goTo: mocks.goToTask,
+      href: (slug: string) => `/acme/setup/${slug}`,
+    },
+  }),
 }));
 
 vi.mock("./components/setup-task-assignment-dialog", () => ({
@@ -243,6 +238,9 @@ beforeEach(() => {
   mocks.platformAdmin = false;
   mocks.canAdmin = true;
   mocks.setupQuery.mockReset();
+  mocks.navigate.mockReset();
+  mocks.goToTask.mockReset();
+  mocks.searchParams = new URLSearchParams();
   mocks.setupQuery.mockReturnValue({
     data: { tasks },
     isPending: false,
@@ -262,7 +260,7 @@ beforeEach(() => {
 });
 
 describe("SetupBoard", () => {
-  it("renders four status columns, blocks prerequisites, and completes dialog tasks", async () => {
+  it("renders four status columns, blocks prerequisites, and opens tasks as pages", () => {
     render(<SetupBoard />);
 
     for (const heading of [
@@ -281,10 +279,8 @@ describe("SetupBoard", () => {
     });
     expect(viewBlockedTask.hasAttribute("disabled")).toBe(false);
     fireEvent.click(viewBlockedTask);
-    expect(
-      screen.getByRole("dialog", { name: "Confirm traffic" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(mocks.goToTask).toHaveBeenCalledWith("confirm-traffic");
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("1 of 4 tasks complete")).toBeTruthy();
     expect(screen.queryByRole("progressbar")).toBeNull();
     expect(screen.queryByText("4 tasks")).toBeNull();
@@ -294,31 +290,19 @@ describe("SetupBoard", () => {
         name: "Start: Connect identity provider",
       }),
     );
-    expect(
-      screen.getByRole("dialog", { name: "Connect identity provider" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(
-      screen.queryByRole("dialog", { name: "Connect identity provider" }),
-    ).toBeNull();
+    expect(mocks.goToTask).toHaveBeenLastCalledWith("connect-idp");
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
 
-    fireEvent.click(
-      within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: "Start: Connect identity provider",
-      }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Complete task" }));
+  it("opens the task named by ?step= as a page", async () => {
+    mocks.searchParams = new URLSearchParams("step=connect-idp");
+    render(<SetupBoard />);
+
     await waitFor(() =>
-      expect(mocks.update).toHaveBeenCalledWith({
-        request: {
-          updateSetupTaskRequestBody: {
-            taskKey: "connect-idp",
-            status: "done",
-          },
-        },
+      expect(mocks.navigate).toHaveBeenCalledWith("/acme/setup/connect-idp", {
+        replace: true,
       }),
     );
-    expect(mocks.invalidate).toHaveBeenCalled();
   });
 
   it("lets admins view another owner's task without calling it continue", () => {
@@ -346,42 +330,6 @@ describe("SetupBoard", () => {
     });
     expect(viewTask.hasAttribute("disabled")).toBe(false);
     expect(within(card).queryByText("Continue task")).toBeNull();
-  });
-
-  it("persists support status before opening chat and closing the modal", async () => {
-    let finishUpdate = (_value: SetupTask) => {};
-    mocks.update.mockReturnValueOnce(
-      new Promise<SetupTask>((resolve) => {
-        finishUpdate = resolve;
-      }),
-    );
-    render(<SetupBoard />);
-
-    fireEvent.click(
-      within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: "Start: Connect identity provider",
-      }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Get support" }));
-
-    expect(mocks.update).toHaveBeenCalledWith({
-      request: {
-        updateSetupTaskRequestBody: {
-          taskKey: "connect-idp",
-          status: "awaiting_support",
-        },
-      },
-    });
-    expect(
-      screen.getByRole("dialog", { name: "Connect identity provider" }),
-    ).toBeTruthy();
-    expect(mocks.showPylonChat).not.toHaveBeenCalled();
-
-    finishUpdate(tasks[0]!);
-    await waitFor(() => expect(mocks.showPylonChat).toHaveBeenCalledOnce());
-    expect(
-      screen.queryByRole("dialog", { name: "Connect identity provider" }),
-    ).toBeNull();
   });
 
   it("does not offer awaiting support in the generic status menu", () => {

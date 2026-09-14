@@ -3,6 +3,7 @@ package requestorigin
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -49,6 +50,23 @@ func BaseURL(ctx context.Context, fallback string) string {
 		return origin.BaseURL
 	}
 	return fallback
+}
+
+// HTTPSBaseURL returns a canonical externally visible HTTPS origin for a host
+// that has already passed the same authority validation used for request routing.
+func HTTPSBaseURL(rawHost string) (string, error) {
+	host := strings.ToLower(rawHost)
+	if net.ParseIP(host) == nil {
+		var err error
+		host, err = CanonicalHost(rawHost)
+		if err != nil {
+			return "", err
+		}
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return (&url.URL{Scheme: "https", Host: host}).String(), nil
 }
 
 // CanonicalHost returns the lowercase hostname used for request routing. A

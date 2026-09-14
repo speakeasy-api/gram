@@ -70,9 +70,7 @@ function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="beta" area="">
-        {pageTitle}
-      </Page.Section.Title>
+      <Page.Section.Title area="">{pageTitle}</Page.Section.Title>
       <Page.Section.Description>
         Every MCP server this project knows about — observed in agent traffic or
         raised in an access request — with its review state. Click a server for

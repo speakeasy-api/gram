@@ -184,7 +184,7 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	}
 	normalized := normalizedCreateMCPAccessRole{ProjectID: project.ID.String(), Name: name, Description: description, Rules: rules}
 	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
-		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil})
+		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}
@@ -270,7 +270,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
-		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil})
+		result, _, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: accessRoleRulesToGenGrants(addRules, project.ID), RemoveGrants: accessRoleRulesToGenGrants(removeRules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
 		}

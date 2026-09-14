@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -37,6 +38,7 @@ func newTranscriptWriter(
 	db *pgxpool.Pool,
 	temporalEnv *temporal.Environment,
 	auditLogger *audit.Logger,
+	riskRecorder *metering.RiskRecorder,
 ) (*chat.ChatMessageWriter, func(context.Context) error) {
 	writer, writerShutdown := chat.NewChatMessageWriter(logger, db, nil)
 
@@ -60,7 +62,7 @@ func newTranscriptWriter(
 		logger.With(attr.SlogComponent("chat-analysis")),
 	)
 
-	writer.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger))
+	writer.AddObserver(risk.NewObserver(logger, tracerProvider, db, riskSignaler, auditLogger, riskRecorder))
 	writer.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	writer.AddObserver(analysis.NewObserver(logger, chatAnalysisSignaler))
 

@@ -106,7 +106,12 @@ export function useListAPIKeysSuspense(
 
 export function setListAPIKeysData(
   client: QueryClient,
-  queryKeyBase: [parameters: { gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      agentId?: string | undefined;
+      gramSession?: string | undefined;
+    },
+  ],
   data: ListAPIKeysQueryData,
 ): ListAPIKeysQueryData | undefined {
   const key = queryKeyListAPIKeys(...queryKeyBase);
@@ -117,7 +122,10 @@ export function setListAPIKeysData(
 export function invalidateListAPIKeys(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { gramSession?: string | undefined }]
+    [parameters: {
+      agentId?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

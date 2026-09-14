@@ -498,6 +498,92 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
+	Method("listResourceAudience", func() {
+		Description("List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to describe.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to describe.")
+			Required("resource_kind", "resource_id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listResourceAudience")
+			Param("resource_kind")
+			Param("resource_id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResourceAudience"}`)
+	})
+
+	Method("setResourceAudience", func() {
+		Description("Replace the rules that name one resource. Organization-wide rules are left untouched.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetResourceAudienceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setResourceAudience")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetResourceAudience", "type": "mutation"}`)
+	})
+
+	Method("listAudienceOptions", func() {
+		Description("List the principals that can be given access: everyone, roles, people, and agents.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListAudienceOptionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAudienceOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
+	})
+
 	Method("requestAccess", func() {
 		Description("Request access to a scope by sending an email notification to organization administrators.")
 		Security(security.ByKey, func() {
@@ -666,6 +752,32 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveChallenge"}`)
 	})
 
+	Method("listIdentityAccess", func() {
+		Description("List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, func() {
+				Description("The Gram user ID to look up accessible resources for.")
+			})
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(ListIdentityAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listIdentityAccess")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -740,6 +852,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -754,7 +867,7 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility")
+	Required("slug", "description", "resource_type", "visibility", "agent_eligible")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
@@ -769,6 +882,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
 	})
+	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
 		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
@@ -787,6 +901,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -798,6 +915,90 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
+})
+
+// One principal's standing on a single resource. `level` is the access it has,
+// or one of the "blocked_" levels when a rule takes access away; `applies_to`
+// says whether the rule names this resource or covers every resource of its
+// kind.
+var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to")
+
+	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+	Attribute("level", String, "Access this principal has on the resource, or the access a rule takes away.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
+		Enum("resource", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
+	Required("entries", "version")
+	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
+})
+
+var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
+	Required("principal_urn", "level")
+
+	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
+	Attribute("level", String, "Access to give the principal on this resource. The \"blocked_\" levels take access away, one scope each and nothing else: \"blocked\" removes connect, \"blocked_view\" removes view, \"blocked_manage\" removes manage. Taking a principal off a resource entirely means writing all three.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
+	Required("resource_kind", "resource_id", "entries", "expected_version")
+
+	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
+		Enum("mcp")
+	})
+	Attribute("resource_id", String, "The resource being changed.")
+	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+	Attribute("expected_version", String, "The version this edit was based on, from the last read. The save is refused if the rules changed since.")
+})
+
+var AudienceOptionModel = Type("AudienceOption", func() {
+	Required("principal_urn", "kind", "display_name")
+
+	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+})
+
+var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
+	Required("options")
+	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
 })
 
 var MemberModel = Type("AccessMember", func() {
@@ -1081,7 +1282,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1141,7 +1342,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1242,4 +1443,44 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
 	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+})
+
+var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
+	Description("An MCP server an identity is authorized to reach.")
+	Required("id", "name", "slug", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name of the server.")
+	Attribute("slug", String, "URL-safe server slug.")
+	Attribute("project_id", String, func() {
+		Description("Project the server belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the server belongs to.")
+})
+
+var AccessibleSkillModel = Type("AccessibleSkill", func() {
+	Description("A skill an identity is authorized to reach.")
+	Required("id", "name", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique skill identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Internal name of the skill.")
+	Attribute("display_name", String, "Human-readable display name, when set.")
+	Attribute("project_id", String, func() {
+		Description("Project the skill belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
+})
+
+var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
+	Required("servers", "skills")
+	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
+	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
 })

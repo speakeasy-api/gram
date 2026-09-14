@@ -30,6 +30,7 @@ export const PrincipalType = {
   User: "user",
   ApiKey: "api_key",
   Assistant: "assistant",
+  Agent: "agent",
 } as const;
 /**
  * Kind of principal.

@@ -2,6 +2,7 @@ package externalmcp
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 
@@ -36,7 +37,8 @@ type SystemEnvLoader func(ctx context.Context, toolURN urn.Tool) (*toolconfig.Ca
 // ToolCallPlan contains the execution plan for calling a tool on an external MCP server.
 type ToolCallPlan struct {
 	RemoteURL         string
-	ToolName          string // The tool name to call on the MCP server
+	ToolName          string          // The tool name to call on the MCP server
+	InputSchema       json.RawMessage // Original upstream schema; nil for a proxy placeholder
 	Slug              string
 	RequiresOAuth     bool
 	TransportType     externalmcptypes.TransportType
@@ -83,8 +85,12 @@ func (e *ProxyToolExecutor) MatchPlanInputs(ctx context.Context, toolName string
 			if err != nil {
 				return nil, err
 			}
-			plan.ToolName = externalToolName
-			return plan, nil
+			// The resolved plan describes the server-level proxy placeholder,
+			// not the requested tool. Do not treat its schema as tool metadata.
+			resolved := *plan
+			resolved.ToolName = externalToolName
+			resolved.InputSchema = nil
+			return &resolved, nil
 		}
 	}
 
@@ -154,6 +160,7 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 	headers := BuildHeaders(systemEnv, userConfig, plan.HeaderDefinitions, tokenForHeaders)
 
 	client, err := NewClient(ctx, e.logger, e.guardianPolicy, plan.RemoteURL, plan.TransportType, &ClientOptions{
+		Metrics:          nil,
 		Authorization:    "",
 		Headers:          headers,
 		DisableRetries:   false,

@@ -383,7 +383,7 @@ active_deployment AS (
   JOIN deployment_statuses ds ON ds.deployment_id = d.id
   WHERE d.project_id = @project_id
     AND ds.status = 'completed'
-  ORDER BY d.id DESC
+  ORDER BY d.seq DESC
   LIMIT 1
 )
 SELECT EXISTS (

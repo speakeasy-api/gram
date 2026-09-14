@@ -110,6 +110,30 @@
   * {
     @apply border-border outline-ring;
   }
+  /* Scroll lock must not move the page. Radix dialogs lock the body while
+     they are open, and react-remove-scroll compensates for the vanished
+     scrollbar with margin/padding — which shifts everything behind the modal.
+     Reserving the gutter permanently keeps the layout still. */
+  html {
+    scrollbar-gutter: stable;
+  }
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Focus is a hairline, not a slab: the ring colour is near-black in this
+     system, so a default-width outline reads as a second, heavier border.
+     Controls that draw their own ring get the hairline; the ones falling back
+     to the browser's indicator keep a 2px outline, which is all they have. */
+  :focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+  }
+  [class*="focus-visible:ring"]:focus-visible,
+  [class*="focus-visible:border"]:focus-visible {
+    outline-width: 1px;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-diatype);

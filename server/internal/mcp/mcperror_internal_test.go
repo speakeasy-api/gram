@@ -64,6 +64,22 @@ func TestMCPErrorHTTPStatus_UnresolvedRevisionKeeps200(t *testing.T) {
 	require.Equal(t, http.StatusOK, mcpErrorHTTPStatus(oops.MCPCodeMethodNotFound, "not-a-revision"))
 }
 
+func TestMCPErrorHTTPStatus_UnsupportedVersionAlwaysUsesBadRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, revision := range []string{
+		"",
+		mcpversions.Version20241105,
+		mcpversions.Version20250326,
+		mcpversions.Version20250618,
+		mcpversions.Version20251125,
+		mcpversions.Version20260728,
+		"2031-01-01",
+	} {
+		require.Equal(t, http.StatusBadRequest, mcpErrorHTTPStatus(oops.MCPCodeUnsupportedProtocolVersion, revision), "revision %q", revision)
+	}
+}
+
 // TestMCPErrorHTTPStatus_UnmandatedCodesKeep200OnModernRevision guards the
 // scope of the change. The specification assigns a status to five conditions
 // and says nothing about the rest, which is most of what Gram emits; giving
@@ -123,6 +139,36 @@ func TestWriteMCPError_WritesStatusCodeAndBodyTogether(t *testing.T) {
 	require.Equal(t, "2.0", response.JSONRPC)
 	require.Equal(t, "req-1", response.ID)
 	require.Equal(t, oops.MCPCodeMethodNotFound, response.Error.Code)
+}
+
+func TestWriteMCPError_UnsupportedVersionMatchesSpecificationShape(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	supported := []string{mcpversions.Version20250326, mcpversions.Version20251125}
+	err := writeMCPError(
+		t.Context(),
+		testenv.NewLogger(t),
+		rec,
+		mcpjsonrpc.StringID("req-unsupported"),
+		mcpversions.DefaultInEffect,
+		unsupportedProtocolVersionError(mcpjsonrpc.StringID("req-unsupported"), mcpversions.Version20260728, supported),
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.JSONEq(t, `{
+		"jsonrpc":"2.0",
+		"id":"req-unsupported",
+		"error":{
+			"code":-32022,
+			"message":"Unsupported protocol version",
+			"data":{
+				"supported":["2025-03-26","2025-11-25"],
+				"requested":"2026-07-28"
+			}
+		}
+	}`, rec.Body.String())
 }
 
 // TestWriteMCPError_LegacyRevisionWritesOKWithTheSameBody is the invariant that

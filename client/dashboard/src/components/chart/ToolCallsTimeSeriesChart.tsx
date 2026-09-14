@@ -50,6 +50,7 @@ ChartJS.register(
 
 export interface ToolCallsTimeSeriesChartProps {
   title: string;
+  titleHref?: string;
   chartId: string;
   timeSeries: TimeSeriesBucket[];
   // Span of the selected window in milliseconds, used to pick the axis label format.
@@ -72,6 +73,7 @@ export interface ToolCallsTimeSeriesChartProps {
  */
 export function ToolCallsTimeSeriesChart({
   title,
+  titleHref,
   chartId,
   timeSeries,
   timeRangeMs,
@@ -229,6 +231,7 @@ export function ToolCallsTimeSeriesChart({
   return (
     <ChartCard
       title={title}
+      titleHref={titleHref}
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}

@@ -159,6 +159,28 @@ afterEach(() => {
 });
 
 describe("Overview", () => {
+  it("keeps a Stripe customer copyable without a current subscription", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      stripe_customer_id: "cus_example",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const copy = await screen.findByRole("button", {
+      name: "Copy Stripe customer ID",
+    });
+    fireEvent.click(copy);
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("cus_example");
+    });
+    expect(valueBeside("Stripe subscription ID").textContent).toBe("-");
+    expect(
+      screen.queryByRole("button", { name: "Copy Stripe subscription ID" }),
+    ).toBeNull();
+  });
+
   it("matches the approved active-trial hierarchy", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
@@ -528,6 +550,7 @@ describe("Overview", () => {
     });
     qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
     });
 
@@ -810,6 +833,7 @@ describe("Overview", () => {
       },
     });
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -846,6 +870,7 @@ describe("Overview", () => {
       converted,
     );
     expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -1047,6 +1072,7 @@ describe("Overview", () => {
       },
     });
     qc.setQueryData(organizationsListQuery().queryKey, {
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });
@@ -1107,6 +1133,7 @@ describe("Overview", () => {
       converted,
     );
     expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      total: 1,
       organizations: [ORG],
       next_cursor: undefined,
     });

@@ -83,7 +83,10 @@ export default function GatewayDetails(): JSX.Element {
                   other MCP resource (selector.go), so the tab is reused with
                   the gateway id. No `tools` prop: a gateway exposes the fixed
                   meta-tools, not a per-tool catalog. */}
-              <MCPTeamAccessTab resourceId={metaMcpServer.id} />
+              <MCPTeamAccessTab
+                resourceId={metaMcpServer.id}
+                serverName={metaMcpServer.name}
+              />
             </RequireScope>
           </RequireScope>
         );

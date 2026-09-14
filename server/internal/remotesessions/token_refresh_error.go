@@ -65,6 +65,12 @@ func (e *TokenRefreshError) invalidGrant() bool {
 	return e.code == oautherr.CodeInvalidGrant
 }
 
+// invalidTarget reports whether the upstream answered with RFC 8707
+// invalid_target: the resource parameter, not the grant, was refused.
+func (e *TokenRefreshError) invalidTarget() bool {
+	return e.code == oautherr.CodeInvalidTarget
+}
+
 // IsTokenRefreshRateLimited reports whether an upstream token endpoint
 // explicitly returned HTTP 429. Callers use it to stop contacting that
 // provider for the remainder of a best-effort refresh sweep.

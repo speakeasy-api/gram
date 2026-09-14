@@ -32,6 +32,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -268,6 +269,66 @@ func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
 	require.NoError(t, err)
 	require.True(t, eligible)
+}
+
+func TestRegistrationStoreRejectsProjectOutsideOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_wrong_organization")
+	require.NoError(t, err)
+
+	_, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+
+	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, "org_"+uuid.NewString(), project)
+	require.NoError(t, err)
+	require.False(t, eligible)
+}
+
+func TestRegistrationStoreAllowsLegacyToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_legacy_toolset")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+		Name:           "Legacy hosted server",
+		Slug:           "legacy-" + uuid.NewString()[:8],
+		McpSlug:        conv.ToPGText("legacy-mcp-" + uuid.NewString()[:8]),
+		McpEnabled:     true,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:         uuid.New(),
+		ProjectID:  project.ID,
+		Name:       conv.ToPGText("Legacy hosted server"),
+		Slug:       conv.ToPGText("legacy-server-" + uuid.NewString()[:8]),
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
+	require.NoError(t, err)
+	require.True(t, eligible)
+
+	request := registrationRequest(project, "reviewed", "legacy-coexistence-key")
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+	require.NoError(t, err)
+	completed, err := store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://reviewed.example.test/mcp")
+	require.NoError(t, err)
+	require.Equal(t, receiptStatusSucceeded, completed.Status)
+	require.Equal(t, receiptResultRegistered, completed.ResultCode)
 }
 
 func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {

@@ -24,9 +24,16 @@ func NewScanner(logger *slog.Logger, evaluate Evaluator) *Scanner {
 
 // Scan evaluates one message; userID is the scanned chat's owner (empty when
 // unattributed), threaded onto the judge's completion telemetry.
-func (s *Scanner) Scan(ctx context.Context, orgID, projectID, userID, prompt string, cfg Config, msg judgemessage.Message) []scanners.Finding {
+func (s *Scanner) Scan(ctx context.Context, orgID, projectID, userID, prompt string, cfg Config, msg judgemessage.Message) scanners.Result {
+	result, _ := s.ScanWithVerdict(ctx, orgID, projectID, userID, prompt, cfg, msg)
+	return result
+}
+
+// ScanWithVerdict preserves model/provider attribution for the executor that
+// emits usage while keeping fail-mode findings independent from completion.
+func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID, prompt string, cfg Config, msg judgemessage.Message) (scanners.Result, *Verdict) {
 	if s == nil || s.evaluate == nil || strings.TrimSpace(prompt) == "" {
-		return FindingsFromEvaluation(cfg, nil, nil, true)
+		return scanners.Result{Findings: FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}, nil
 	}
 
 	verdict, err := s.evaluate(ctx, Input{
@@ -43,7 +50,12 @@ func (s *Scanner) Scan(ctx context.Context, orgID, projectID, userID, prompt str
 			attr.SlogOrganizationID(orgID),
 		)
 	}
-	return FindingsFromEvaluation(cfg, verdict, err, false)
+	result := scanners.Result{Findings: FindingsFromEvaluation(cfg, verdict, err, false), STokens: 0, Completed: false}
+	if err == nil && verdict != nil && verdict.Completed {
+		result.STokens = verdict.STokens
+		result.Completed = true
+	}
+	return result, verdict
 }
 
 func FindingsFromEvaluation(cfg Config, verdict *Verdict, err error, judgeUnavailable bool) []scanners.Finding {

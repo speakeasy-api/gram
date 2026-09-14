@@ -33,6 +33,8 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("slug", String, "The slug of the organization")
 	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
+	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
+	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
@@ -178,6 +180,16 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 
 	Attribute("updated_ids", ArrayOf(String), "IDs of the organizations whose account type was set. Order is unspecified: do not rely on it.")
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
+})
+
+var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
+	Description("Stripe customer details shown to an admin before assignment.")
+	Required("id", "livemode")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("email", String)
+	Attribute("description", String)
+	Attribute("livemode", Boolean)
 })
 
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
@@ -381,6 +393,7 @@ var _ = Service("admin", func() {
 
 	Method("setOrganizationFeature", func() {
 		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationFeatureRequestBody")
 			security.AdminAuthPayload()
 			Attribute("organization_id", String)
 			Attribute("feature_name", shared.ProductFeatureName)
@@ -415,7 +428,12 @@ var _ = Service("admin", func() {
 	})
 
 	Method("triggerOrganizationChatAnalysis", func() {
-		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Payload(func() {
+			Meta("openapi:typename", "TriggerOrganizationChatAnalysisRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Required("organization_id")
+		})
 		Result(AdminChatAnalysisTriggerResult)
 		HTTP(func() { POST("/admin/organization.chatAnalysisTrigger"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminTriggerOrganizationChatAnalysis")
@@ -652,7 +670,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("listOrganizations", func() {
-		Description("Lists organizations for admin operations with optional search and filters.")
+		Description("Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -663,10 +681,10 @@ var _ = Service("admin", func() {
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_states", ArrayOf(String), "Match any of active or disabled. Empty falls back to include_disabled. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("include_disabled", Boolean, "Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.")
-			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.")
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
-			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.")
-			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.")
+			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
+			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.")
 			Attribute("page", Int, "1-based page number for offset paging (default 1). Supplying it selects offset paging.")
 		})
 
@@ -864,6 +882,51 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminGetPaygBillingSummary")
 	})
 
+	Method("getStripeCustomer", func() {
+		Description("Returns Stripe customer details for confirmation before assigning the customer to an organization.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeCustomer)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeCustomer")
+			Param("organization_id")
+			Param("stripe_customer_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeCustomer")
+	})
+
+	Method("setStripeCustomer", func() {
+		Description("Sets an organization's Stripe customer ID when it has no existing Stripe customer or subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_customer_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_customer_id", String, func() {
+				Pattern(`^cus_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeCustomerRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeCustomer")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeCustomer")
+	})
+
 	Method("getStripeSubscription", func() {
 		Description("Returns the live Stripe subscription and payment state for an organization.")
 		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
@@ -936,4 +999,6 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
+	remoteSessionIssuerMethods()
+	platformAssetMethods()
 })

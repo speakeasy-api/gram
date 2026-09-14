@@ -51,6 +51,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -74,6 +75,7 @@ type Service struct {
 	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
 	revoker                  *remotesessions.UpstreamRevoker
 	networkAccessEligibility networkaccess.EligibilityChecker
+	distributionAdmission    *admission.Guard
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -108,6 +110,7 @@ func NewService(
 		assets:                   assetsService,
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
+		distributionAdmission:    admission.NewGuard(nil, nil),
 	}
 }
 
@@ -164,16 +167,19 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
 		return nil, err
 	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
@@ -353,19 +359,22 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 // unauthorized member cannot contend server-lifecycle locks. It keys on a
 // non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
 // locked row, which is authoritative if the backing changes concurrently.
-func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) error {
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) (repo.McpServer, error) {
 	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+			return repo.McpServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String()))
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String())); err != nil {
+		return repo.McpServer{}, err
+	}
+	return server, nil
 }
 
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
@@ -618,9 +627,24 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	unlocked, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
 		return nil, err
 	}
+	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
+	if err != nil {
+		if payload.NetworkAccessMode == nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "invalid stored network access mode").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	finalizeNetworkAccess, err := s.prepareNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, preflightMode, ids.UnproxiedMcpServerID.Valid)
+	if err != nil {
+		return nil, err
+	}
+	var rollout admission.RolloutConfig
+	var rolloutErr error
+	rollout, rolloutErr = s.distributionRollout(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -628,7 +652,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
+		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
 	txRepo := repo.New(dbtx)
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
+	}
 
 	if payload.Visibility == VisibilityDisabled {
 		if err := LockMCPServerVisibilityDependencies(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
@@ -669,12 +699,38 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
-	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode, ids.UnproxiedMcpServerID.Valid); err != nil {
-		return nil, err
+	if mode != preflightMode {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp server network access mode changed concurrently; retry the update")
 	}
 
 	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+	}
+	if payload.Visibility == VisibilityPublic && existing.Visibility != VisibilityPublic {
+		if err := s.distributionAdmission.CheckPublicVisibility(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
+			switch {
+			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrDistributionDisabled):
+				return nil, oops.E(oops.CodeConflict, err, "direct-remote public visibility is not admitted")
+			case errors.Is(err, admission.ErrUnavailable):
+				return nil, oops.E(oops.CodeUnavailable, err, "direct-remote public visibility admission unavailable")
+			default:
+				return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote public visibility admission").LogError(ctx, logger)
+			}
+		}
+	}
+	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
+	if payload.Visibility != VisibilityDisabled && (backendChanged || existing.Visibility == VisibilityDisabled) {
+		proposedURL := ""
+		if ids.RemoteMcpServerID.Valid {
+			remote, remoteErr := remotemcprepo.New(dbtx).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: ids.RemoteMcpServerID.UUID, ProjectID: *authCtx.ProjectID})
+			if remoteErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, remoteErr, "resolve proposed remote MCP target").LogError(ctx, logger)
+			}
+			proposedURL = remote.Url
+		}
+		if err := s.checkDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := verifyMetaMcpBackendUniqueness(ctx, dbtx, *authCtx.ProjectID, serverID, existing, ids, logger); err != nil {
@@ -765,7 +821,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// publishability there).
 	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated, rollout, rolloutErr)
 		if err != nil {
 			return nil, err
 		}
@@ -800,7 +856,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // callers should enqueue the publish for it, but only after their own
 // transaction commits, since this runs pre-commit and the DB writes could
 // still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, bool, error) {
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer, rollout admission.RolloutConfig, rolloutErr error) (bool, bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
@@ -810,6 +866,13 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	}
 	if len(endpoints) == 0 {
 		return false, false, nil
+	}
+
+	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+		}
+		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
@@ -848,20 +911,26 @@ func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkacc
 	return &mode
 }
 
-func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) error {
+func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode, unproxied bool) (networkaccess.AdmissionFinalizer, error) {
 	if mode.IsPublicOnly() {
-		return nil
+		return networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }), nil
 	}
 	if unproxied {
-		return oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
 	}
 	if s.networkAccessEligibility == nil {
-		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
 	}
-	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
-		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	finalize, err := s.networkAccessEligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode})
+	if err != nil {
+		return networkaccess.AdmissionFinalizer{}, oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
 	}
-	return nil
+	return networkaccess.NewAdmissionFinalizer(func(ctx context.Context, tx pgx.Tx) error {
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+		}
+		return nil
+	}), nil
 }
 
 // ServerDisplayName derives a default plugin-server display name from an
@@ -889,7 +958,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
 		return err
 	}
 
@@ -1048,15 +1117,17 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
+		if err := userSessionsRepo.LockUserSessionIssuerForOwnerBinding(ctx, deleted.UserSessionIssuerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server issuer for owner binding").LogError(ctx, logger)
+		}
 		// Lock the issuer row before the ownership check. A concurrent meta
 		// MCP attach holds this same row lock while writing its reference, so
 		// the statements below see any newly committed owner. A missing
 		// issuer must not block server deletion, so ErrNoRows skips the
 		// cascade entirely.
 		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
-			ID:             deleted.UserSessionIssuerID.UUID,
-			ProjectID:      *authCtx.ProjectID,
-			OrganizationID: authCtx.ActiveOrganizationID,
+			ID:        deleted.UserSessionIssuerID.UUID,
+			ProjectID: *authCtx.ProjectID,
 		})
 		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
@@ -1064,7 +1135,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
-			OrganizationID:      authCtx.ActiveOrganizationID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
 		})
 		if err != nil {
@@ -1073,9 +1143,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-				ID:             deleted.UserSessionIssuerID.UUID,
-				ProjectID:      *authCtx.ProjectID,
-				OrganizationID: authCtx.ActiveOrganizationID,
+				ID:        deleted.UserSessionIssuerID.UUID,
+				ProjectID: *authCtx.ProjectID,
 			})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
