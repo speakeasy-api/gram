@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  UpdateUserSessionIssuerForm,
-  UpdateUserSessionIssuerForm$Outbound,
-  UpdateUserSessionIssuerForm$outboundSchema,
-} from "../components/updateusersessionissuerform.js";
+  UpdateOrganizationUserSessionIssuerForm,
+  UpdateOrganizationUserSessionIssuerForm$Outbound,
+  UpdateOrganizationUserSessionIssuerForm$outboundSchema,
+} from "../components/updateorganizationusersessionissuerform.js";
 
 export type UpdateOrganizationUserSessionIssuerSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,8 @@ export type UpdateOrganizationUserSessionIssuerRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateUserSessionIssuerForm: UpdateUserSessionIssuerForm;
+  updateOrganizationUserSessionIssuerForm:
+    UpdateOrganizationUserSessionIssuerForm;
 };
 
 /** @internal */
@@ -57,7 +58,8 @@ export function updateOrganizationUserSessionIssuerSecurityToJSON(
 /** @internal */
 export type UpdateOrganizationUserSessionIssuerRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateUserSessionIssuerForm: UpdateUserSessionIssuerForm$Outbound;
+  UpdateOrganizationUserSessionIssuerForm:
+    UpdateOrganizationUserSessionIssuerForm$Outbound;
 };
 
 /** @internal */
@@ -68,12 +70,14 @@ export const UpdateOrganizationUserSessionIssuerRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      updateUserSessionIssuerForm: UpdateUserSessionIssuerForm$outboundSchema,
+      updateOrganizationUserSessionIssuerForm:
+        UpdateOrganizationUserSessionIssuerForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        updateUserSessionIssuerForm: "UpdateUserSessionIssuerForm",
+        updateOrganizationUserSessionIssuerForm:
+          "UpdateOrganizationUserSessionIssuerForm",
       });
     }),
   );

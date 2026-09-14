@@ -326,6 +326,28 @@ type Client struct {
 	// store, invalid when the issuer has no logo.
 	IssuerLogoAssetID uuid.NullUUID
 
+	// IssuerDocumentationURL is the issuer's stored service_documentation
+	// link, empty when unset.
+	IssuerDocumentationURL string
+
+	// IssuerPolicyURL is the issuer's stored op_policy_uri link, empty when
+	// unset.
+	IssuerPolicyURL string
+
+	// IssuerTosURL is the issuer's stored op_tos_uri link, empty when unset.
+	IssuerTosURL string
+
+	// ResourceIdentifier is the RFC 9728 resource the fields below were read for; empty when never captured.
+	ResourceIdentifier string
+
+	// ResourceName is the resource's own display name (RFC 9728 resource_name); empty when unset.
+	ResourceName string
+
+	// ResourceDocumentationURL, ResourcePolicyURL, and ResourceTosURL are the resource's own links; empty when unset.
+	ResourceDocumentationURL string
+	ResourcePolicyURL        string
+	ResourceTosURL           string
+
 	IssuerURL string
 
 	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
@@ -431,6 +453,14 @@ func (m *ChallengeManager) ListClients(
 			IssuerSlug:                       r.IssuerSlug,
 			IssuerName:                       conv.FromPGText[string](r.IssuerName),
 			IssuerLogoAssetID:                r.IssuerLogoAssetID,
+			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
 			IssuerURL:                        r.IssuerUrl,
 			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
 			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
@@ -985,6 +1015,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
+		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
 		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
@@ -1300,12 +1331,7 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("read token response body: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			parsed.Description = truncateForMessage(parsed.Description)
-			parsed.URI = truncateForMessage(parsed.URI)
-			return tokenResponse{}, fmt.Errorf("token endpoint %s: %w", resp.Status, parsed)
-		}
-		return tokenResponse{}, fmt.Errorf("token endpoint %s: %s", resp.Status, truncateForMessage(string(body)))
+		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
@@ -1316,6 +1342,47 @@ func (m *ChallengeManager) exchangeCode(
 	}
 	tok.raw = body
 	return tok, nil
+}
+
+// tokenEndpointError is a non-2xx code exchange; the status is kept for the reactive metadata refresh, the text is unchanged.
+type tokenEndpointError struct {
+	statusCode int
+	err        error
+}
+
+func (e *tokenEndpointError) Error() string { return e.err.Error() }
+
+func (e *tokenEndpointError) Unwrap() error { return e.err }
+
+// newTokenEndpointError wraps a parsed OAuth error body, or the raw body when none is recognisable.
+func newTokenEndpointError(statusCode int, status string, body []byte) *tokenEndpointError {
+	if parsed, ok := oautherr.ParseTokenError(body); ok {
+		parsed.Description = truncateForMessage(parsed.Description)
+		parsed.URI = truncateForMessage(parsed.URI)
+		return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
+	}
+	return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+}
+
+// exchangeIssuerReadBudget bounds the detached issuer read a withdrawn token endpoint triggers.
+const exchangeIssuerReadBudget = 2 * time.Second
+
+// noteExchangeTokenEndpointMissing requests a reactive metadata refresh when the code exchange hit a withdrawn token endpoint; the issuer row is read off the request path, only on that path.
+func (m *ChallengeManager) noteExchangeTokenEndpointMissing(ctx context.Context, logger *slog.Logger, clientRowID uuid.UUID, err error) {
+	var endpointErr *tokenEndpointError
+	var oauthErr oautherr.RFC6749Error
+	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !tokenEndpointMissing(endpointErr.statusCode, errors.As(err, &oauthErr)) {
+		return
+	}
+	statusCode := endpointErr.statusCode
+	m.issuerMetadata.detach(ctx, exchangeIssuerReadBudget, func(ctx context.Context) {
+		issuer, lerr := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
+		if lerr != nil {
+			logger.WarnContext(ctx, "load issuer for reactive metadata refresh", attr.SlogRemoteSessionClientID(clientRowID.String()), attr.SlogError(lerr))
+			return
+		}
+		noteTokenEndpointMissing(ctx, m.issuerMetadata, issuer, statusCode, false)
+	})
 }
 
 // identityFromExchange decides who the exchanged grant belongs to: the ID
@@ -1350,6 +1417,7 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 			return nil, nil
 		default:
 			logIdentityFailure(ctx, logger, "upstream id token rejected; session stored without identity", err, attr.SlogOAuthIssuer(issuer.IssuerUrl), attr.SlogRemoteSessionClientID(clientRowID.String()))
+			noteUnknownSigningKey(ctx, m.issuerMetadata, issuer, err)
 			// The marker keeps a later verify from taking a weaker identity for this grant.
 			return nil, map[string]interfaceRecord{IdentitySourceIDToken: {Status: interfaceStatusRejected, At: time.Now(), HTTPStatus: 0, Reason: "rejected at exchange"}}
 		}

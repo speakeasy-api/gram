@@ -216,6 +216,56 @@ func TestMigrateIssuer_EmptySourceIsIdempotentSuccess(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func TestMigrateIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	source, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-source", nil))
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-target", nil))
+	require.NoError(t, err)
+	sourceID, err := uuid.Parse(source.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "migrate-trusted-usi", sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(source.ID, target.ID))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, []*orgissuersgen.TrustedUserSessionIssuerReference{{ID: trustedIssuerID.String(), Slug: "migrate-trusted-usi"}}, preflight.TrustedUserSessionIssuers)
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(source.ID, target.ID))
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = repo.New(ti.conn).GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             sourceID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
+	})
+	require.NoError(t, err, "blocked migration must leave the source issuer active")
+}
+
+func TestMigrateIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "migrate-foreign-trust-source")
+	targetID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "migrate-foreign-trust-target")
+	otherOrgID := createOrganization(t, ctx, ti.conn, "migrate-foreign-trust-org")
+	createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, otherOrgID, "migrate-foreign-trust-usi", sourceID)
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Empty(t, preflight.TrustedUserSessionIssuers, "preflight must not disclose another organization's issuer")
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 // TestMigrateIssuer_EndpointMismatchConflict proves the parity guard blocks a
 // migration onto an issuer describing a different authorization server, which
 // would silently break token refresh for the migrated sessions.

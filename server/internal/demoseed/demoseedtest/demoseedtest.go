@@ -113,14 +113,15 @@ type ClickHouseTableState struct {
 	DemoCount uint64
 }
 
-// SnapshotClickHouse captures the state of every MergeTree-family table in the
-// current database. Each table is OPTIMIZE ... FINAL'd first so background
-// merges (which collapse rows in Summing/Aggregating tables) cannot shift
-// counts between two snapshots.
+// SnapshotClickHouse captures every MergeTree-family table in the current
+// database. Engines that collapse same-key rows are OPTIMIZE ... FINAL'd first
+// so background merges cannot shift counts between snapshots. Plain MergeTree
+// rows are already stable without merging.
 func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, projectIDs []string) (map[string]ClickHouseTableState, error) {
 	rows, err := ch.Query(ctx, `
 		SELECT name, engine FROM system.tables
-		WHERE database = currentDatabase() AND engine LIKE '%MergeTree%'
+		WHERE database = currentDatabase()
+			AND engine LIKE '%MergeTree%'
 		ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list clickhouse tables: %w", err)
@@ -149,8 +150,10 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 
 	snap := make(map[string]ClickHouseTableState, len(tables))
 	for _, t := range tables {
-		if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
-			return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+		if t.engine != "MergeTree" && t.engine != "ReplicatedMergeTree" && t.engine != "SharedMergeTree" {
+			if err := ch.Exec(ctx, fmt.Sprintf("OPTIMIZE TABLE `%s` FINAL", t.name)); err != nil {
+				return nil, fmt.Errorf("optimize %s: %w", t.name, err)
+			}
 		}
 
 		cols, err := ch.Query(ctx, `
@@ -283,6 +286,10 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
+	if err := PlantPrivateNetworkState(ctx, db, orgID); err != nil {
+		return fmt.Errorf("tamper postgres private network ingress: %w", err)
+	}
+
 	if err := PlantMCPServerDependents(ctx, db, orgID, projectID); err != nil {
 		return fmt.Errorf("tamper postgres MCP server dependents: %w", err)
 	}
@@ -293,6 +300,32 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	if err != nil {
 		return fmt.Errorf("tamper clickhouse telemetry row: %w", err)
 	}
+	return nil
+}
+
+// PlantPrivateNetworkState adds the private-network rows that are intentionally
+// absent from the seed. The entitlement and ingress are both tombstoned so the
+// reseed must delete retained state, not merely hide it from active-row queries.
+func PlantPrivateNetworkState(ctx context.Context, db *pgxpool.Pool, orgID string) error {
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_features (organization_id, feature_name, deleted_at)
+		VALUES ($1, 'network_ingress', clock_timestamp())`, orgID); err != nil {
+		return fmt.Errorf("insert private network entitlement: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, `
+		INSERT INTO network_ingresses (
+			organization_id, provider, hostname, endpoint_namespace_kind,
+			credentials_encrypted, attestor_namespace, attestor_service_account,
+			status, deleted_at
+		) VALUES (
+			$1, 'tailscale', 'demo-tamper', 'platform',
+			'DEMO-ENCRYPTED-TAMPER', 'gram-netingress-demo-tamper',
+			'gram-netingress-demo-tamper-attestor', 'deleted', clock_timestamp()
+		)`, orgID); err != nil {
+		return fmt.Errorf("insert private network ingress: %w", err)
+	}
+
 	return nil
 }
 

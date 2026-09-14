@@ -30,6 +30,62 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string) (*usage.
 	return v, nil
 }
 
+// BuildGetMeterUsagePayload builds the payload for the usage getMeterUsage
+// endpoint from CLI flags.
+func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsageFrom string, usageGetMeterUsageTo string, usageGetMeterUsageBreakdown string, usageGetMeterUsageSessionToken string) (*usage.GetMeterUsagePayload, error) {
+	var err error
+	var family string
+	{
+		family = usageGetMeterUsageFamily
+		if !(family == "agent_session_storage" || family == "mcp_bandwidth" || family == "risk_content_scans") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("family", family, []any{"agent_session_storage", "mcp_bandwidth", "risk_content_scans"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var from *string
+	{
+		if usageGetMeterUsageFrom != "" {
+			from = &usageGetMeterUsageFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if usageGetMeterUsageTo != "" {
+			to = &usageGetMeterUsageTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var breakdown *string
+	{
+		if usageGetMeterUsageBreakdown != "" {
+			breakdown = &usageGetMeterUsageBreakdown
+		}
+	}
+	var sessionToken *string
+	{
+		if usageGetMeterUsageSessionToken != "" {
+			sessionToken = &usageGetMeterUsageSessionToken
+		}
+	}
+	v := &usage.GetMeterUsagePayload{}
+	v.Family = family
+	v.From = from
+	v.To = to
+	v.Breakdown = breakdown
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetTokensUnderManagementPayload builds the payload for the usage
 // getTokensUnderManagement endpoint from CLI flags.
 func BuildGetTokensUnderManagementPayload(usageGetTokensUnderManagementSessionToken string) (*usage.GetTokensUnderManagementPayload, error) {

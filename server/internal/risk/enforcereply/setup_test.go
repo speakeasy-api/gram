@@ -13,11 +13,12 @@ import (
 )
 
 type inboxTestEnv struct {
-	redis  *miniredis.Miniredis
-	client *redis.Client
-	reader *sdkmetric.ManualReader
-	inbox  *Inbox
-	writer *Writer
+	redis         *miniredis.Miniredis
+	client        *redis.Client
+	reader        *sdkmetric.ManualReader
+	meterProvider *sdkmetric.MeterProvider
+	inbox         *Inbox
+	writer        *Writer
 }
 
 func newTestLogger() *slog.Logger {
@@ -45,7 +46,7 @@ func setupInboxTestWithDrainGate(t *testing.T, replicaID string, drainGate <-cha
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = inbox.Close() })
-	return &inboxTestEnv{redis: mr, client: client, reader: reader, inbox: inbox, writer: NewWriter(client)}
+	return &inboxTestEnv{redis: mr, client: client, reader: reader, meterProvider: meterProvider, inbox: inbox, writer: NewWriter(client)}
 }
 
 func waitForWaiter(t *testing.T, inbox *Inbox, _ string) {

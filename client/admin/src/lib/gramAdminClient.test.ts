@@ -15,7 +15,11 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
-import { isRedirectingToLogin as predecessorLatch } from "@/lib/gramAdminApi";
+import {
+  errorMessage,
+  isRedirectingToLogin as predecessorLatch,
+  type AdminOrganization,
+} from "@/lib/gramAdminApi";
 import * as boundary from "@/lib/gramAdminClient";
 
 const unauthorizedBody = JSON.stringify({
@@ -51,6 +55,12 @@ describe("generated admin boundary", () => {
         "adminMigrateToGlobalIssuer",
         "adminUploadPlatformImage",
         "adminIssuerImageQuery",
+        "disableOrganization",
+        "enableOrganization",
+        "extendTrial",
+        "rearmTrial",
+        "startTrial",
+        "organizationFromSdk",
         "isRedirectingToLogin",
         "organizationActivityQuery",
         "organizationFeaturesQuery",
@@ -258,6 +268,287 @@ describe("generated admin boundary", () => {
       /<form[\s\S]*method="post"[\s\S]*organizationDashboardUrl/,
     );
     expect(recordHeader).not.toMatch(/fetch\(|useMutation/);
+  });
+});
+
+// The five writes that answer with the organization in its new state. Each
+// one is named against its path, because the admin API is stripped from the
+// public SDK and nothing else checks a disable does not enable. The wire shape
+// is snake_case with ISO dates; the resolved value is the hand-written record
+// the list and peek read, so the cache never sees a camelCase field or a Date.
+describe("organization writes through the generated client", () => {
+  const WIRE = {
+    id: "org_placeholder_one",
+    name: "Placeholder One",
+    slug: "placeholder-one",
+    account_type: "enterprise",
+    whitelisted: false,
+    trial_state: "running",
+    trial_ends_at: "2026-05-06T00:00:00.000Z",
+    member_count: 1,
+    created_at: "2026-01-02T00:00:00.000Z",
+    updated_at: "2026-01-07T00:00:00.000Z",
+  };
+
+  const RECORD: AdminOrganization = {
+    id: WIRE.id,
+    name: WIRE.name,
+    slug: WIRE.slug,
+    account_type: WIRE.account_type,
+    workos_id: undefined,
+    stripe_customer_id: undefined,
+    stripe_subscription_id: undefined,
+    whitelisted: WIRE.whitelisted,
+    disabled_at: undefined,
+    trial_state: "running",
+    trial_ends_at: WIRE.trial_ends_at,
+    trial_tier: undefined,
+    trial_converted_at: undefined,
+    trial_demoted_at: undefined,
+    member_count: WIRE.member_count,
+    created_at: WIRE.created_at,
+    updated_at: WIRE.updated_at,
+  };
+
+  function stubFetch(): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(WIRE), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+
+  async function requestOf(fetch: ReturnType<typeof vi.fn>): Promise<{
+    path: string;
+    method: string;
+    contentType: string | null;
+    body: unknown;
+  }> {
+    const request = fetch.mock.calls.at(-1)?.[0] as Request;
+    return {
+      path: new URL(request.url).pathname,
+      method: request.method,
+      contentType: request.headers.get("Content-Type"),
+      body: (await request.json()) as unknown,
+    };
+  }
+
+  it("posts the id to the disable path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.disableOrganization({ id: WIRE.id }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/organization.disable",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id },
+    });
+  });
+
+  it("posts the id to the enable path", async () => {
+    const fetch = stubFetch();
+
+    await expect(boundary.enableOrganization({ id: WIRE.id })).resolves.toEqual(
+      RECORD,
+    );
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/organization.enable",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id },
+    });
+  });
+
+  it("posts the id and the day count to the extend path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.extendTrial({ id: WIRE.id, days: 30 }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/trial.extend",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id, days: 30 },
+    });
+  });
+
+  it("posts the id and the day count to the re-arm path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.rearmTrial({ id: WIRE.id, days: 14 }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/trial.rearm",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id, days: 14 },
+    });
+  });
+
+  it("posts the id and the day count to the start path", async () => {
+    const fetch = stubFetch();
+
+    await expect(
+      boundary.startTrial({ id: WIRE.id, days: 14 }),
+    ).resolves.toEqual(RECORD);
+
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/trial.start",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id, days: 14 },
+    });
+  });
+
+  // A record write takes the login redirect on a 401 like every read of the
+  // record does. The start is the exception below.
+  it("redirects an expired session on a record write", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+
+    await expect(
+      freshBoundary.extendTrial({ id: WIRE.id, days: 30 }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(freshBoundary.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  });
+
+  it("reports a start 401 in place without starting login", async () => {
+    vi.resetModules();
+    const freshBoundary = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+
+    await expect(
+      freshBoundary.startTrial({ id: WIRE.id, days: 14 }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(freshBoundary.isRedirectingToLogin()).toBe(false);
+    expect(href).not.toHaveBeenCalled();
+  });
+
+  // The server refuses an extension of a trial that has converted or already
+  // expired. The sentence the operator has to read travels on the error.
+  it("carries the conflict the server sends back", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            name: "conflict",
+            message: "organization has no running enterprise trial to extend",
+            id: "placeholder",
+            fault: false,
+            temporary: false,
+            timeout: false,
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const failure = await boundary
+      .extendTrial({ id: WIRE.id, days: 30 })
+      .catch((e: unknown) => e);
+
+    expect(errorMessage(failure)).toBe(
+      "organization has no running enterprise trial to extend",
+    );
+  });
+});
+
+describe("organizationFromSdk", () => {
+  it("reduces a fully populated record to the snake_case shape with ISO dates", () => {
+    expect(
+      boundary.organizationFromSdk({
+        id: "org_placeholder_one",
+        name: "Placeholder One",
+        slug: "placeholder-one",
+        accountType: "enterprise",
+        workosId: "org_workos_placeholder",
+        stripeCustomerId: "cus_placeholder",
+        stripeSubscriptionId: "sub_placeholder",
+        whitelisted: true,
+        disabledAt: new Date("2026-02-01T00:00:00Z"),
+        trialState: "converted",
+        trialEndsAt: new Date("2026-05-06T00:00:00Z"),
+        trialTier: "enterprise",
+        trialConvertedAt: new Date("2026-04-01T00:00:00Z"),
+        trialDemotedAt: new Date("2026-04-02T00:00:00Z"),
+        memberCount: 3,
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+        updatedAt: new Date("2026-01-07T00:00:00Z"),
+      }),
+    ).toEqual({
+      id: "org_placeholder_one",
+      name: "Placeholder One",
+      slug: "placeholder-one",
+      account_type: "enterprise",
+      workos_id: "org_workos_placeholder",
+      stripe_customer_id: "cus_placeholder",
+      stripe_subscription_id: "sub_placeholder",
+      whitelisted: true,
+      disabled_at: "2026-02-01T00:00:00.000Z",
+      trial_state: "converted",
+      trial_ends_at: "2026-05-06T00:00:00.000Z",
+      trial_tier: "enterprise",
+      trial_converted_at: "2026-04-01T00:00:00.000Z",
+      trial_demoted_at: "2026-04-02T00:00:00.000Z",
+      member_count: 3,
+      created_at: "2026-01-02T00:00:00.000Z",
+      updated_at: "2026-01-07T00:00:00.000Z",
+    } satisfies AdminOrganization);
+  });
+
+  it("leaves every optional field absent when the server sent none", () => {
+    const record = boundary.organizationFromSdk({
+      id: "org_placeholder_two",
+      name: "Placeholder Two",
+      slug: "placeholder-two",
+      accountType: "free",
+      whitelisted: false,
+      memberCount: 0,
+      createdAt: new Date("2026-01-02T00:00:00Z"),
+      updatedAt: new Date("2026-01-07T00:00:00Z"),
+    });
+
+    expect(record.disabled_at).toBeUndefined();
+    expect(record.trial_state).toBeUndefined();
+    expect(record.trial_ends_at).toBeUndefined();
+    expect(record.trial_converted_at).toBeUndefined();
+    expect(record.trial_demoted_at).toBeUndefined();
+    expect(record.workos_id).toBeUndefined();
+    expect(record.stripe_customer_id).toBeUndefined();
   });
 });
 

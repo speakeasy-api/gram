@@ -241,3 +241,8 @@ func UploadPlatformImageAdminPath() string {
 func ServeImageAdminPath() string {
 	return "/admin/assets.serveImage"
 }
+
+// StartTrialAdminPath returns the URL path to the admin service startTrial HTTP endpoint.
+func StartTrialAdminPath() string {
+	return "/admin/trial.start"
+}

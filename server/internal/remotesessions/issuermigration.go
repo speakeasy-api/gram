@@ -370,15 +370,22 @@ func sortedUnique(values []string) []string {
 // by migrateIssuer's own guards, so the dialog an admin confirms and the
 // mutation that runs cannot disagree about what blocks a migration.
 type migratePreflight struct {
-	clientCount               int64
-	mcpServerNames            []string
-	endpointMismatches        []issuerFieldMismatch
-	conflictingMcpServerNames []string
-	warnings                  []issuerFieldMismatch
+	clientCount                   int64
+	mcpServerNames                []string
+	endpointMismatches            []issuerFieldMismatch
+	conflictingMcpServerNames     []string
+	warnings                      []issuerFieldMismatch
+	trustedUserSessionIssuerCount int64
+	trustedUserSessionIssuers     []trustedUserSessionIssuerReference
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0
+	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+}
+
+type trustedUserSessionIssuerReference struct {
+	id   uuid.UUID
+	slug string
 }
 
 // buildMigratePreflight computes every blocker and impact figure for migrating
@@ -422,12 +429,31 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 	sort.Strings(conflicts)
 	conflicts = slices.Compact(conflicts)
 
+	trustedCount, err := r.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, source.ID)
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count user session issuers that trust source issuer: %w", err)
+	}
+
+	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams{
+		RemoteSessionIssuerID: source.ID,
+		OrganizationID:        conv.FromPGTextOrEmpty[string](source.OrganizationID),
+	})
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("list user session issuers that trust source issuer: %w", err)
+	}
+	trusted := make([]trustedUserSessionIssuerReference, 0, len(trustedRows))
+	for _, row := range trustedRows {
+		trusted = append(trusted, trustedUserSessionIssuerReference{id: row.ID, slug: row.Slug})
+	}
+
 	return migratePreflight{
-		clientCount:               clientCount,
-		mcpServerNames:            names,
-		endpointMismatches:        endpointMismatches(source, target),
-		conflictingMcpServerNames: conflicts,
-		warnings:                  migrationWarnings(source, target),
+		clientCount:                   clientCount,
+		mcpServerNames:                names,
+		endpointMismatches:            endpointMismatches(source, target),
+		conflictingMcpServerNames:     conflicts,
+		warnings:                      migrationWarnings(source, target),
+		trustedUserSessionIssuerCount: trustedCount,
+		trustedUserSessionIssuers:     trusted,
 	}, nil
 }
 
@@ -453,13 +479,14 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // is the whole of the operation apart from soft-deleting the source, which each
 // surface does with its own scoped delete query.
 //
-// The two guards are the reason this is shared rather than duplicated. Endpoint
+// The three guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
 // authorization server it was established with, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
-// remote_session_issuer) invariant, which no database constraint expresses. A
-// surface that drifted on either would not merely behave differently, it would
-// be less safe.
+// remote_session_issuer) invariant, which no database constraint expresses.
+// Trusted user-session-issuer references must be explicitly unlinked or
+// re-linked rather than silently following a migration. A surface that drifted
+// on any guard would not merely behave differently, it would be less safe.
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
@@ -480,6 +507,10 @@ func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logge
 
 	if len(preflight.conflictingMcpServerNames) > 0 {
 		return 0, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
+	}
+
+	if preflight.trustedUserSessionIssuerCount > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "source remote session issuer is trusted by active user session issuers; unlink or re-link them before migrating").LogError(ctx, logger)
 	}
 
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{

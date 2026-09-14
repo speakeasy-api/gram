@@ -424,6 +424,12 @@ const (
 	// dimension on gram.remote_session.validation.
 	OAuthValidationTriggerKey = attribute.Key("gram.oauth.validation_trigger")
 
+	// OAuthIssuerMetadataRefreshReasonKey names why a remote session issuer's
+	// metadata was refreshed: the on-use cadence or an upstream signal that the
+	// stored endpoints drifted. Used as a metric dimension on
+	// gram.remote_session_issuer.metadata_refresh.
+	OAuthIssuerMetadataRefreshReasonKey = attribute.Key("gram.oauth.issuer_metadata_refresh_reason")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -547,6 +553,7 @@ const (
 	RiskPathKey                    = attribute.Key("gram.risk.path")
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
+	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -1727,6 +1734,13 @@ func SlogOAuthValidationTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthValidationTriggerKey), v)
 }
 
+func OAuthIssuerMetadataRefreshReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIssuerMetadataRefreshReasonKey.String(string(v))
+}
+func SlogOAuthIssuerMetadataRefreshReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIssuerMetadataRefreshReasonKey), string(v))
+}
+
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
@@ -2234,6 +2248,10 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskEnforcementTruncated(v bool) attribute.KeyValue {
+	return RiskEnforcementTruncatedKey.Bool(v)
+}
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
 func SlogRiskScanRequestID(v string) slog.Attr {
