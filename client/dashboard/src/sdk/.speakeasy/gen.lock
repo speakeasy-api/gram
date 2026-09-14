@@ -1255,6 +1255,7 @@ trackedFiles:
   src/models/components/moveissuerrequestbody.ts: {}
   src/models/components/networkingress.ts: {}
   src/models/components/networkingressdeleteimpact.ts: {}
+  src/models/components/networkingressresult.ts: {}
   src/models/components/notmodified.ts: {}
   src/models/components/oauthenablementmetadata.ts: {}
   src/models/components/observabilitysummary.ts: {}
@@ -6151,7 +6152,7 @@ examples:
     speakeasy-default-get-network-ingress:
       responses:
         "200":
-          application/json: {"created_at": "2024-05-04T02:06:49.932Z", "credentials_configured": false, "enabled": true, "endpoint_namespace_kind": "custom_domain", "hostname": "slushy-scale.info", "id": "7370e4e3-349b-46fc-8821-05a3ba5c4d55", "identity_required": false, "organization_id": "<id>", "provider": "tailscale", "status": "<value>", "updated_at": "2025-10-31T07:05:00.594Z"}
+          application/json: {}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

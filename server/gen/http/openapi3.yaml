@@ -2371,7 +2371,7 @@ paths:
                 - admin_auth_header_Authorization: []
     /admin/organizations.list:
         get:
-            description: Lists organizations for admin operations with optional search and filters.
+            description: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
             operationId: adminListOrganizations
             parameters:
                 - allowEmptyValue: true
@@ -2423,11 +2423,11 @@ paths:
                     description: Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
                     type: boolean
                 - allowEmptyValue: true
-                  description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
+                  description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
                   in: query
                   name: cursor
                   schema:
-                    description: 'Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.'
+                    description: 'Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.'
                     type: string
                 - allowEmptyValue: true
                   description: Page size (default 50, max 100).
@@ -2438,18 +2438,18 @@ paths:
                     format: int64
                     type: integer
                 - allowEmptyValue: true
-                  description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                  description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
                   in: query
                   name: sort
                   schema:
-                    description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.'
+                    description: 'Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
                     type: string
                 - allowEmptyValue: true
-                  description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+                  description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
                   in: query
                   name: direction
                   schema:
-                    description: 'Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.'
+                    description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
                     type: string
                 - allowEmptyValue: true
                   description: 1-based page number for offset paging (default 1). Supplying it selects offset paging.
@@ -32063,6 +32063,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32167,6 +32173,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32270,6 +32282,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32381,6 +32399,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32494,6 +32518,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32624,6 +32654,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32708,6 +32744,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: listMcpServersForOrg mcpServers
@@ -32818,6 +32860,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -32932,6 +32980,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -33036,6 +33090,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -33140,6 +33200,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -33244,6 +33310,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -34847,7 +34919,7 @@ paths:
             x-speakeasy-name-override: deleteIngress
     /rpc/networkIngress.get:
         get:
-            description: Get the active network ingress for the current organization.
+            description: Get the active network ingress for the current organization, when configured.
             operationId: getNetworkIngress
             parameters:
                 - allowEmptyValue: true
@@ -34862,7 +34934,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/NetworkIngress'
+                                $ref: '#/components/schemas/NetworkIngressResult'
                     description: OK response.
                 "400":
                     content:
@@ -41628,6 +41700,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: dismissOnboarding platformMcp
@@ -41715,6 +41793,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: distributeOnboardingCandidate platformMcp
@@ -41796,6 +41880,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: getOnboarding platformMcp
@@ -41877,6 +41967,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: recheckOnboardingReadiness platformMcp
@@ -41958,6 +42054,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: recordAgentConfigurationCopied platformMcp
@@ -42041,6 +42143,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: recordDashboardCtaEvent platformMcp
@@ -42128,6 +42236,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: recordInstallIntent platformMcp
@@ -42215,6 +42329,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: removeOnboardingDistribution platformMcp
@@ -42302,6 +42422,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: repairOnboardingPublication platformMcp
@@ -42389,6 +42515,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: startOnboarding platformMcp
@@ -42470,6 +42602,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: startOnboardingSetup platformMcp
@@ -42564,6 +42702,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -42659,6 +42803,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -42751,6 +42901,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -42848,6 +43004,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -42958,6 +43120,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43081,6 +43249,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43168,6 +43342,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43264,6 +43444,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43353,6 +43539,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43442,6 +43634,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43531,6 +43729,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43626,6 +43830,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43727,6 +43937,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43822,6 +44038,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -43917,6 +44139,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -44012,6 +44240,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -44107,6 +44341,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
@@ -84697,6 +84937,12 @@ components:
                 - mcp_servers_private_only
                 - meta_mcp_servers_dual
                 - meta_mcp_servers_private_only
+        NetworkIngressResult:
+            type: object
+            properties:
+                ingress:
+                    $ref: '#/components/schemas/NetworkIngress'
+            description: The organization's active private network ingress, when configured.
         NotModified:
             type: object
             properties:
@@ -88895,11 +89141,6 @@ components:
                     type: string
                     description: The risk policy ID.
                     format: uuid
-                message_types:
-                    type: array
-                    items:
-                        type: string
-                    description: 'Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -88940,12 +89181,6 @@ components:
                     items:
                         type: string
                     description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
-                scope_exempt:
-                    type: string
-                    description: Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
-                scope_include:
-                    type: string
-                    description: Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
                 score:
                     type: number
                     description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.

@@ -366,7 +366,6 @@ export function ConfigurePoliciesStep({
             policyCategories: policyDetectionCategories(existing),
             detectionScopes: existing.detectionScopes,
             categoryDefinitions,
-            messageTypes: existing.messageTypes,
           })
         : categoryDefinitions === undefined
           ? // Recommendations have not loaded, so there is nothing to compose

@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -71,16 +72,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-func newWorkerCommand() *cli.Command {
-	var shutdownFuncs []func(context.Context) error
-
-	flags := []cli.Flag{
-		&cli.StringFlag{
-			Name:     "server-url",
-			Usage:    "The public URL of the server",
-			EnvVars:  []string{"GRAM_SERVER_URL"},
-			Required: true,
-		},
+func workerRuntimeFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -100,12 +93,6 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
-			Name:    "temporal-task-queue",
-			Usage:   "Task queue of the Temporal server",
-			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
-			Value:   "main",
-		},
-		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -114,12 +101,6 @@ func newWorkerCommand() *cli.Command {
 			Name:    "temporal-client-key",
 			Usage:   "Client key of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "control-address",
-			Value:   ":8081",
-			Usage:   "HTTP address to listen on",
-			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -142,6 +123,31 @@ func newWorkerCommand() *cli.Command {
 			Name:    "with-otel-metrics",
 			Usage:   "Enable OpenTelemetry metrics",
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+		},
+	}
+}
+
+func newWorkerCommand() *cli.Command {
+	var shutdownFuncs []func(context.Context) error
+
+	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "HTTP address to listen on",
+			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
@@ -311,7 +317,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
 		},
-	}
+	)
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
@@ -754,6 +760,9 @@ func newWorkerCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
+			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:            guardianPolicy,
 				DB:                        db,
@@ -785,7 +794,8 @@ func newWorkerCommand() *cli.Command {
 				ClickhouseConn:            chDB,
 				TelemetryRepo:             telemetryrepo.New(chDB),
 				TriggersApp:               triggerApp,
-				CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+				CacheAdapter:              remoteSessionsCache,
+				IssuerMetadataRefresher:   issuerMetadataRefresher,
 				AssistantsCore:            assistantsCore,
 				TemporalEnv:               temporalEnv,
 				PIIScanner:                piiScanner,
@@ -823,7 +833,11 @@ func newWorkerCommand() *cli.Command {
 				}
 			}()
 
-			if err := temporalWorker.Run(worker.InterruptCh()); err != nil {
+			err = temporalWorker.Run(worker.InterruptCh())
+			// Temporal can return before a cancelled activity's goroutine has, so
+			// close admission and drain the detached work before the DB closes.
+			issuerMetadataRefresher.Shutdown()
+			if err != nil {
 				return fmt.Errorf("run temporal worker: %w", err)
 			}
 

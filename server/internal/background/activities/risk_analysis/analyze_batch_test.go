@@ -239,7 +239,6 @@ func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
 		MessageIDs:             []uuid.UUID{msgID},
 		ContentPartIDs:         nil,
 		Sources:                []string{"gitleaks"},
-		MessageTypes:           nil,
 		PresidioEntities:       nil,
 		PresidioScoreThreshold: 0,
 		CustomRuleIds:          nil,
@@ -818,95 +817,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 	require.Len(t, *published, len(msgIDs))
 }
 
-func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-
-	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
-		ChatID:    td.chatID,
-		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
-		Role:      "user",
-		Content:   "hello",
-	})
-	require.NoError(t, err)
-
-	_, err = riskrepo.New(conn).InsertRiskResults(t.Context(), []riskrepo.InsertRiskResultsParams{{
-		ID:                uuid.New(),
-		ProjectID:         td.projectID,
-		OrganizationID:    td.orgID,
-		RiskPolicyID:      td.policyID,
-		RiskPolicyVersion: td.policyVersion,
-		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
-		Source:            "gitleaks",
-		Found:             true,
-		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
-		Description:       pgtype.Text{String: "stale finding", Valid: true},
-		Match:             pgtype.Text{String: "match", Valid: true},
-		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
-		EndPos:            pgtype.Int4{Int32: 5, Valid: true},
-		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
-		Tags:              []string{},
-		DeadLetterReason:  pgtype.Text{},
-	}})
-	require.NoError(t, err)
-
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		conn,
-		nil,
-		&risk_analysis.StubPIIScanner{},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		newPresidioPub(),
-		newGitleaksPub(),
-		newPromptInjectionPub(),
-		newPromptPolicyPub(),
-		newCustomRulesPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
-		mustCELEngine(t),
-		nil,
-		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-	)
-	require.NoError(t, err)
-
-	var ts testsuite.WorkflowTestSuite
-	env := ts.NewTestActivityEnvironment()
-	env.RegisterActivity(ab.Do)
-
-	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:        td.projectID,
-		OrganizationID:   td.orgID,
-		RiskPolicyID:     td.policyID,
-		PolicyVersion:    td.policyVersion,
-		MessageIDs:       []uuid.UUID{msgID},
-		Sources:          []string{"gitleaks"},
-		MessageTypes:     []string{message.ToolRequest},
-		PresidioEntities: nil,
-		CustomRuleIds:    nil,
-	})
-	require.NoError(t, err)
-
-	var result risk_analysis.AnalyzeBatchResult
-	require.NoError(t, val.Get(&result))
-	require.Equal(t, 0, result.Processed)
-	require.Equal(t, 0, result.Findings)
-
-	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
-		ProjectID:    td.projectID,
-		RiskPolicyID: td.policyID,
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
-}
-
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -949,7 +859,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -1001,7 +910,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -1049,7 +957,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -1109,7 +1016,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -1984,7 +1890,6 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
-		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
 		AudienceType:         policy.AudienceType,

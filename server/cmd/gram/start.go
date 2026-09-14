@@ -146,6 +146,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
@@ -297,7 +298,48 @@ func restoreLocalPluginRepositories(
 // value for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
+func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
+	if reconcileQueue == "" {
+		return false, nil
+	}
+	if reconcileQueue == temporalQueue {
+		return true, nil
+	}
+	if devSingleProcess {
+		return false, fmt.Errorf("dev-single-process requires private ingress reconciliation task queue %q to match Temporal task queue %q", reconcileQueue, temporalQueue)
+	}
+	return false, nil
+}
+
+// probeDrainTimeout bounds the wait for automatic remote-session verifications
+// after the HTTP drain; each probe is already bounded by its ValidationTimeout.
+const probeDrainTimeout = 20 * time.Second
+
 func newStartCommand() *cli.Command {
+	return newServerCommand("start", "Start the Gram API server", false)
+}
+
+func newNetworkIngressServerCommand() *cli.Command {
+	return newServerCommand("network-ingress-server", "Start the dedicated private network ingress server", true)
+}
+
+func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
+	if !enabled {
+		return errors.New("private network ingress runtime is disabled")
+	}
+	if address == "" {
+		return errors.New("private network ingress address is required")
+	}
+	if certFile == "" || keyFile == "" {
+		return errors.New("private network ingress TLS certificate and key are required")
+	}
+	if devSingleProcess {
+		return errors.New("private network ingress server cannot run the general worker")
+	}
+	return nil
+}
+
+func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 	dbClose := func() {}
 	clickhouseShutdown := noopShutdown
@@ -620,6 +662,8 @@ func newStartCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -632,16 +676,30 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, gcpFlags()...)
 
 	return &cli.Command{
-		Name:  "start",
-		Usage: "Start the Gram API server",
+		Name:  name,
+		Usage: commandUsage,
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
+			componentName := "server"
+			if privateOnly {
+				serviceName = "gram-network-ingress-server"
+				componentName = "network_ingress_server"
+				if err := validatePrivateServerConfig(
+					c.Bool("network-ingress-enabled"),
+					c.String("netingress-address"),
+					c.String("netingress-tls-cert-file"),
+					c.String("netingress-tls-key-file"),
+					c.Bool("dev-single-process"),
+				); err != nil {
+					return err
+				}
+			}
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
-			appinfo.Command = "server"
+			appinfo.Command = name
 			logger := PullLogger(c.Context).With(
-				attr.SlogComponent("server"),
+				attr.SlogComponent(componentName),
 				attr.SlogServiceName(serviceName),
 				attr.SlogServiceVersion(shortGitSHA()),
 				attr.SlogServiceEnv(serviceEnv),
@@ -1115,6 +1173,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("initialize remote session id token key resolver: %w", err)
 			}
 			idTokenVerifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
+			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -1128,6 +1187,9 @@ func newStartCommand() *cli.Command {
 					return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
 				}),
 				remotesessions.WithIDTokenVerifier(idTokenVerifier),
+				remotesessions.WithIssuerMetadataRefresher(issuerMetadataRefresher),
+				remotesessions.WithSessionEnricher(remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
+					ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
@@ -1185,7 +1247,6 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				ragService,
 				triggerApp,
-				temporalEnv,
 				authzEngine,
 				assistantTokenManager,
 				shadowMCPClient,
@@ -1210,6 +1271,8 @@ func newStartCommand() *cli.Command {
 				},
 				mcp.MetaRuntimeConfig{
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
+					ValidationTimeout: 0,
+					AutoVerifyWait:    0,
 				},
 			)
 			if err != nil {
@@ -1231,8 +1294,19 @@ func newStartCommand() *cli.Command {
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
-			// AIS-611 supplies lifecycle readiness independently of rollout clearance.
-			const networkIngressReconcilerReady = false
+			networkIngressConfig, err := networkIngressConfigFromCLI(c)
+			if err != nil {
+				return err
+			}
+			networkIngressLifecycleReady, err := networkIngressLifecycleDeliveryReady(
+				networkIngressConfig.ReconcileTaskQueue,
+				c.String("temporal-task-queue"),
+				c.Bool("dev-single-process"),
+			)
+			if err != nil {
+				return err
+			}
+			networkIngressReconcilerReady := networkIngressConfig.MutationReady() && networkIngressLifecycleReady && k8sClient.Clientset != nil && k8sClient.DynamicClient != nil
 			networkIngressEnabled := c.Bool("network-ingress-enabled")
 			networkIngressAdmission := networkingress.NewExpansionAdmission(productFeatures, featureFlags, orgRepo.New(db), networkIngressReconcilerReady, networkIngressEnabled)
 			mcpMetadataService := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, networkIngressAdmission.CheckExpansion)
@@ -1244,9 +1318,11 @@ func newStartCommand() *cli.Command {
 			litellmInstanceResolver := litellm.NewInstanceResolver(logger, db)
 			litellmTraceProcessor.SetInstanceResolver(litellmInstanceResolver)
 			litellmMetricProcessor.SetInstanceResolver(litellmInstanceResolver)
-			litellmTraceProcessor.Start(ctx)
-			litellmMetricProcessor.Start(ctx)
-			litellmHealthProcessor.Start(ctx)
+			if !privateOnly {
+				litellmTraceProcessor.Start(ctx)
+				litellmMetricProcessor.Start(ctx)
+				litellmHealthProcessor.Start(ctx)
+			}
 
 			svixClient, shutdown, err := newSvixClient(c, logger, guardianPolicy)
 			if shutdown != nil {
@@ -1618,7 +1694,9 @@ func newStartCommand() *cli.Command {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler)
+			distributionAdmission := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
+				WithDistributionAdmission(distributionAdmission)
 			plugins.Attach(mux, pluginsSvc)
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
@@ -1667,21 +1745,24 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			// AIS-611 replaces these explicit unavailable values with the Temporal
-			// reconciler. Until then, non-public mode writes and health checks fail closed.
-			var networkIngressSignaler networkingress.ReconcileSignaler
-			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkIngressSignaler)
+
+			networkIngressQueue := c.String(networkIngressQueueFlag)
+			networkIngressClient := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: networkIngressQueue}
+			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
-			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission)
+			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
+				WithDistributionAdmission(distributionAdmission)
 			mcpservers.Attach(mux, mcpServersService)
-			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).
+				WithDistributionAdmission(distributionAdmission))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier)), productFeatures)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
-			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService))
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService).
+				WithDistributionAdmission(distributionAdmission))
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, guardianPolicy, auditLogger))
 			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
 			xmcpService := xmcp.NewService(logger, db, encryptionClient, mcpService)
@@ -1738,6 +1819,7 @@ func newStartCommand() *cli.Command {
 				JWTSigningKey:           c.String(usersessions.JWTSigningKeyFlag),
 				ProductFeatures:         productFeatures,
 				FeatureFlags:            featureFlags,
+				DistributionAdmission:   distributionAdmission,
 				Authz:                   authzEngine,
 				Encryption:              encryptionClient,
 				Identity:                identityResolver,
@@ -1770,7 +1852,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			mcp.Attach(mux, mcpService, mcpMetadataService)
+			if !privateOnly {
+				mcp.Attach(mux, mcpService, mcpMetadataService)
+			}
 
 			var (
 				privateIngressServer   *http.Server
@@ -1989,7 +2073,7 @@ func newStartCommand() *cli.Command {
 
 			group := pool.New()
 
-			if privateIngressServer != nil {
+			if privateIngressServer != nil && !privateOnly {
 				group.Go(func() {
 					logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
 					if err := privateIngressServer.ServeTLS(privateIngressListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -2043,6 +2127,7 @@ func newStartCommand() *cli.Command {
 						TelemetryRepo:             telemetryrepo.New(chDB),
 						TriggersApp:               triggerApp,
 						CacheAdapter:              cache.NewRedisCacheAdapter(redisClient),
+						IssuerMetadataRefresher:   issuerMetadataRefresher,
 						EmailService:              emailService,
 						AssistantsCore:            assistantsCore,
 						TemporalEnv:               temporalEnv,
@@ -2060,6 +2145,12 @@ func newStartCommand() *cli.Command {
 						RiskFingerprinter:         riskFingerprinter,
 						DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
 					})
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
+					if err != nil {
+						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
+						return
+					}
+					temporalWorker.RegisterNetworkIngress(executor, networkIngressConfig.ReconcileTaskQueue)
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}
@@ -2079,14 +2170,16 @@ func newStartCommand() *cli.Command {
 				defer graceCancel()
 
 				shutdownGroup := pool.New()
-				shutdownGroup.Go(func() {
-					if err := srv.Shutdown(graceCtx); err != nil {
-						if gerr := context.Cause(graceCtx); gerr != nil {
-							err = errors.Join(err, gerr)
+				if !privateOnly {
+					shutdownGroup.Go(func() {
+						if err := srv.Shutdown(graceCtx); err != nil {
+							if gerr := context.Cause(graceCtx); gerr != nil {
+								err = errors.Join(err, gerr)
+							}
+							logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
 						}
-						logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
-					}
-				})
+					})
+				}
 				if privateIngressServer != nil {
 					shutdownGroup.Go(func() {
 						if err := privateIngressServer.Shutdown(graceCtx); err != nil {
@@ -2096,8 +2189,8 @@ func newStartCommand() *cli.Command {
 				}
 				shutdownGroup.Wait()
 
-				// A successful Shutdown has quiesced the HTTP handlers that produce
-				// realtime recordings. Closing scanner admission here also makes the
+				// HTTP shutdown has quiesced handlers that produce realtime
+				// recordings. Closing scanner admission here also makes the
 				// timeout path safe, then drains recordings before runShutdown stops
 				// the shared meter publisher.
 				if err := riskScanner.Shutdown(graceCtx); err != nil {
@@ -2122,6 +2215,17 @@ func newStartCommand() *cli.Command {
 				if err := identityMapRefreshSignaler.Shutdown(graceCtx); err != nil {
 					logger.ErrorContext(ctx, "flush pending identity map refresh triggers", attr.SlogError(err))
 				}
+
+				// The callbacks that start automatic remote-session verifications are
+				// drained; the probes they detached still write verdicts and close
+				// upstream sessions, so drain them before runShutdown closes the pool.
+				// Keep their separate budget after graceCtx users so probe waiting
+				// cannot consume time reserved for realtime recording flushes.
+				drainCtx, cancelDrain := context.WithTimeout(context.WithoutCancel(ctx), probeDrainTimeout)
+				if err := mcpService.Shutdown(drainCtx); err != nil {
+					logger.ErrorContext(ctx, "drain automatic remote session verifications", attr.SlogError(err))
+				}
+				cancelDrain()
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
@@ -2133,31 +2237,35 @@ func newStartCommand() *cli.Command {
 					DisableProfiling: false,
 				}
 
-				listenAddr := srv.Addr
-				if listenAddr == "" {
-					listenAddr = ":8080"
-				}
-				host, port, _ := net.SplitHostPort(listenAddr)
-				if host == "" {
-					host = "localhost"
-				}
-				healthzEndpoint := &o11y.HTTPEndpoint{
-					URL: &url.URL{
-						Scheme: conv.Ternary(tlsEnabled, "https", "http"),
-						Host:   net.JoinHostPort(host, port),
-						Path:   "/healthz",
-					},
-					TLSCertificate: nil,
-				}
-				if tlsEnabled {
-					cert, err := os.ReadFile(c.String("ssl-cert-file"))
-					if err != nil {
-						return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+				httpEndpoints := []*o11y.NamedResource[*o11y.HTTPEndpoint]{}
+				if !privateOnly {
+					listenAddr := srv.Addr
+					if listenAddr == "" {
+						listenAddr = ":8080"
 					}
-					healthzEndpoint.TLSCertificate = cert
+					host, port, _ := net.SplitHostPort(listenAddr)
+					if host == "" {
+						host = "localhost"
+					}
+					healthzEndpoint := &o11y.HTTPEndpoint{
+						URL: &url.URL{
+							Scheme: conv.Ternary(tlsEnabled, "https", "http"),
+							Host:   net.JoinHostPort(host, port),
+							Path:   "/healthz",
+						},
+						TLSCertificate: nil,
+					}
+					if tlsEnabled {
+						cert, err := os.ReadFile(c.String("ssl-cert-file"))
+						if err != nil {
+							return fmt.Errorf("failed to read TLS certificate for health check: %w", err)
+						}
+						healthzEndpoint.TLSCertificate = cert
+					}
+					httpEndpoints = append(httpEndpoints, &o11y.NamedResource[*o11y.HTTPEndpoint]{Name: "api", Resource: healthzEndpoint})
 				}
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
-					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
+					httpEndpoints,
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
 					temporalHealth,
@@ -2169,12 +2277,23 @@ func newStartCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			if tlsEnabled {
+			var serveErr error
+			switch {
+			case privateOnly:
+				if privateIngressServer == nil || privateIngressListener == nil {
+					return errors.New("private network ingress listener was not configured")
+				}
+				logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
+				if err := privateIngressServer.ServeTLS(privateIngressListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					serveErr = fmt.Errorf("serve private network ingress: %w", err)
+				}
+				sigcancel()
+			case tlsEnabled:
 				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
 				}
-			} else {
+			default:
 				logger.InfoContext(ctx, "server started", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
@@ -2187,9 +2306,13 @@ func newStartCommand() *cli.Command {
 			// so cancelling it here would cancel every in-flight request mid-drain
 			// and they would abort with context.Canceled instead of completing.
 			group.Wait()
+			// Both HTTP and Temporal share this detached refresher. A producer the
+			// drain timed out on may still reach NoteUse, so close admission and
+			// drain the work in flight before the DB closes.
+			issuerMetadataRefresher.Shutdown()
 			cancel()
 
-			return nil
+			return serveErr
 		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)

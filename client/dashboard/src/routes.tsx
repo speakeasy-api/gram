@@ -107,11 +107,6 @@ import {
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
-import {
-  PlatformRemoteIdentityProvidersPage,
-  PlatformRemoteIdentityProvidersRoot,
-} from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders";
-import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
 import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
 import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
@@ -1339,34 +1334,6 @@ const ORG_ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
-        },
-      },
-    },
-  },
-  // The platform catalog gets its own base path rather than a static segment
-  // under remote-identity-providers, where it would be a sibling of the
-  // `:issuerId` route and rely on the router ranking static above dynamic to
-  // not be swallowed by it. Platform-admin only; see PlatformAdminOnly.
-  platformRemoteIdentityProviders: {
-    // Kept distinct from the tenant route's title: nav items register by title
-    // (see CollapsibleNavItem), and Recents and the command palette show it
-    // without a group header to disambiguate. The sidebar renders the shorter
-    // "Remote Identity Providers" under the Platform Admin header, and this
-    // also matches the URL-derived breadcrumb.
-    title: "Platform Remote Identity Providers",
-    url: "platform-remote-identity-providers",
-    icon: "key-round",
-    component: PlatformRemoteIdentityProvidersRoot,
-    indexComponent: PlatformRemoteIdentityProvidersPage,
-    subPages: {
-      issuerDetail: {
-        title: "Platform Remote Identity Provider",
-        url: ":issuerId",
-        component: PlatformRemoteIdentityProviderDetail,
-        subPages: {
-          overview: { title: "Overview", url: "overview" },
-          convergence: { title: "Convergence", url: "convergence" },
           settings: { title: "Settings", url: "settings" },
         },
       },

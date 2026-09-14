@@ -67,7 +67,8 @@ type Service interface {
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists activity belonging to an organization for admin operators.
 	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
-	// Lists organizations for admin operations with optional search and filters.
+	// Lists organizations for platform admin operations with optional search and
+	// filters. Defaults to created_at descending, with id ascending to break ties.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 	// Extends a running enterprise trial by adding days to its current end date.
 	// Only a running trial can be extended: one that has converted, has been
@@ -968,19 +969,21 @@ type ListOrganizationsPayload struct {
 	// Include organizations with disabled_at set. Defaults to false. Superseded by
 	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page. Ignored when
-	// sort or page is supplied.
+	// Pagination cursor: id of the last item from the previous page in created_at
+	// descending, id ascending order. The anchor is resolved regardless of
+	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
+	// page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
 	// Column to sort by: name, slug, account_type, member_count, created_at,
-	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
-	// selects offset paging.
+	// disabled_at or trial_ends_at. Omitted or unknown values use created_at
+	// descending. Ties always sort by id ascending. Supplying it selects offset
+	// paging.
 	Sort *string
 	// Sort direction, asc or desc, applied to the column named by sort. Any other
-	// value sorts ascending. On its own it does nothing: without sort there is no
-	// column to reverse, so it neither reorders the results nor selects offset
-	// paging.
+	// value sorts ascending. Ignored when sort is omitted or unknown, preserving
+	// the newest-first default. On its own it does not select offset paging.
 	Direction *string
 	// 1-based page number for offset paging (default 1). Supplying it selects
 	// offset paging.

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  NetworkIngress,
-  NetworkIngress$inboundSchema,
-} from "../models/components/networkingress.js";
+  NetworkIngressResult,
+  NetworkIngressResult$inboundSchema,
+} from "../models/components/networkingressresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getIngress networkIngress
  *
  * @remarks
- * Get the active network ingress for the current organization.
+ * Get the active network ingress for the current organization, when configured.
  */
 export function networkIngressGetIngress(
   client: GramCore,
@@ -51,7 +51,7 @@ export function networkIngressGetIngress(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    NetworkIngress,
+    NetworkIngressResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -79,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      NetworkIngress,
+      NetworkIngressResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -172,7 +172,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    NetworkIngress,
+    NetworkIngressResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +183,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, NetworkIngress$inboundSchema),
+    M.json(200, NetworkIngressResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -631,6 +631,41 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	return i, err
 }
 
+const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND (is_default IS TRUE OR slug = 'default')
+  AND deleted IS FALSE
+ORDER BY (is_default IS TRUE) DESC
+LIMIT 1
+`
+
+type GetProspectiveDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspectiveDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getProspectiveDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id

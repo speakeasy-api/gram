@@ -16,8 +16,8 @@ import (
 
 // Manage an organization's private network ingress desired state.
 type Service interface {
-	// Get the active network ingress for the current organization.
-	GetIngress(context.Context, *GetIngressPayload) (res *NetworkIngress, err error)
+	// Get the active network ingress for the current organization, when configured.
+	GetIngress(context.Context, *GetIngressPayload) (res *NetworkIngressResult, err error)
 	// Create the organization's Tailscale ingress. Provider credentials are
 	// encrypted and never returned.
 	CreateIngress(context.Context, *CreateIngressPayload) (res *NetworkIngress, err error)
@@ -94,8 +94,8 @@ type GetIngressPayload struct {
 	SessionToken *string
 }
 
-// NetworkIngress is the result type of the networkIngress service getIngress
-// method.
+// NetworkIngress is the result type of the networkIngress service
+// createIngress method.
 type NetworkIngress struct {
 	// Network ingress ID
 	ID string
@@ -134,6 +134,12 @@ type NetworkIngressDeleteImpact struct {
 	McpServersPrivateOnly     int64
 	MetaMcpServersDual        int64
 	MetaMcpServersPrivateOnly int64
+}
+
+// NetworkIngressResult is the result type of the networkIngress service
+// getIngress method.
+type NetworkIngressResult struct {
+	Ingress *NetworkIngress
 }
 
 // RotateCredentialsPayload is the payload type of the networkIngress service

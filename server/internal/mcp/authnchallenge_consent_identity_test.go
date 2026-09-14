@@ -16,7 +16,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-const consentIdentityCopy = "Reconnect to enable identity"
+const consentIdentityCopy = "Reconnect to add account details"
 
 // grantScoped writes a live session for the fixture subject on clientID that
 // carries the given scopes.

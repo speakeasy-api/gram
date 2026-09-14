@@ -559,7 +559,7 @@ export class Admin extends ClientSDK {
    * listOrganizations admin
    *
    * @remarks
-   * Lists organizations for admin operations with optional search and filters.
+   * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
    */
   async listOrganizations(
     request?: AdminListOrganizationsRequest | undefined,

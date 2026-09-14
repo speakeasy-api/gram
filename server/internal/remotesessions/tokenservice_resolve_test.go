@@ -97,6 +97,21 @@ func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	return client.ID, issuer.ID
 }
 
+func tokenCredentials(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
+	result := make(map[uuid.UUID]remotesessions.UpstreamToken, len(tokens))
+	for issuerID, token := range tokens {
+		result[issuerID] = tokenCredential(token)
+	}
+	return result
+}
+
+func tokenCredential(token remotesessions.UpstreamToken) remotesessions.UpstreamToken {
+	token.RemoteSessionID = uuid.Nil
+	token.RemoteSessionUpdatedAt = time.Time{}
+	token.RemoteSessionResolvedFromUpdatedAt = time.Time{}
+	return token
+}
+
 func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	t.Parallel()
 
@@ -114,7 +129,7 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-happy-subject")
 	accessEnc, err := enc.Encrypt([]byte("upstream-access-token"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
@@ -126,7 +141,9 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientID}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientID}}, tokenCredentials(tokens))
+	require.Equal(t, session.ID, tokens[remoteIssuerID].RemoteSessionID)
+	require.Equal(t, session.UpdatedAt.Time, tokens[remoteIssuerID].RemoteSessionUpdatedAt)
 }
 
 func TestResolveAuthorization_InvalidRequestIsNotReportedAsMissingAuthorization(t *testing.T) {
@@ -299,7 +316,7 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", RemoteSessionClientID: uuid.MustParse(clientID)}}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", RemoteSessionClientID: uuid.MustParse(clientID)}}, tokenCredentials(tokens))
 }
 
 // Two clients on distinct remote issuers bound to one user_session_issuer —
@@ -349,7 +366,7 @@ func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
 		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
 		remoteIssuerB: {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: clientB},
-	}, tokens)
+	}, tokenCredentials(tokens))
 }
 
 // The partial variant the meta MCP gate calls: a bound client the subject
@@ -388,7 +405,7 @@ func TestResolveAvailableAccessTokens_SkipsUnlinkedClients(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
 		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
-	}, tokens)
+	}, tokenCredentials(tokens))
 
 	// The strict variant still refuses the same shape, pinning that partial
 	// resolution changed nothing for direct-endpoint callers.

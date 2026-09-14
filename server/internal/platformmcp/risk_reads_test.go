@@ -190,7 +190,7 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	policy := policycore.Policy{
 		ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "legacy", PolicyType: "prompt_based",
 		Sources: []string{"gitleaks", "unknown"}, PresidioEntities: []string{"EMAIL_ADDRESS"}, DisabledRules: []string{"secret.aws_secret_access_key"}, CustomRuleIDs: []string{"custom.rule"},
-		MessageTypes: []string{"user_message"}, ScopeInclude: &scope, Enabled: true, Action: "quarantine", AudienceType: "targeted", AudiencePrincipalURNs: []string{"user:<USER_ID>"},
+		Enabled: true, Action: "quarantine", AudienceType: "targeted", AudiencePrincipalURNs: []string{"user:<USER_ID>"},
 		Prompt: &prompt, ModelConfig: &policycore.ModelConfig{Temperature: &judgeTemperature}, Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
@@ -201,7 +201,7 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.NotNil(t, output.Policy.ApprovedEmailDomains)
 	require.Equal(t, "opaque-version", output.Policy.Version)
 	require.Empty(t, output.Policy.Action)
-	require.ElementsMatch(t, []string{"custom_rules", "model_config", "raw_scope", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
+	require.ElementsMatch(t, []string{"custom_rules", "model_config", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -290,43 +290,6 @@ func TestRiskPolicyProjectionRecognizesOnlyCanonicalD3ScopesAndActions(t *testin
 	require.NoError(t, err)
 	require.Empty(t, output.Policy.DetectionScopes)
 	require.Contains(t, output.Policy.Compatibility.UnsupportedFields, "raw_scope")
-}
-
-func TestRiskPolicyLegacyMessageTypesAreHiddenScope(t *testing.T) {
-	t.Parallel()
-
-	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
-	base := policycore.Policy{
-		ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", Name: "legacy", PolicyType: "standard",
-		Sources: []string{"gitleaks"}, Enabled: true, Action: "flag", AudienceType: "everyone", Score: 5, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	}
-	cases := map[string]struct {
-		messageTypes []string
-		rawScope     bool
-	}{
-		"null":         {messageTypes: nil, rawScope: false},
-		"full catalog": {messageTypes: []string{"user_message", "tool_response", "assistant_message", "tool_request"}, rawScope: false},
-		"narrowed":     {messageTypes: []string{"user_message"}, rawScope: true},
-		"unknown kind": {messageTypes: []string{"assistant_message", "tool_request", "tool_response", "user_message", "prompt_attachment"}, rawScope: true},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			policy := base
-			policy.MessageTypes = tc.messageTypes
-			service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectSlug: "project"}}}, &stubRiskPolicies{policy: policy}, &stubRiskExclusions{})
-			output, err := service.GetPolicy(t.Context(), testRiskPrincipal("user"), GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
-			require.NoError(t, err)
-			encoded, err := json.Marshal(output)
-			require.NoError(t, err)
-			require.NotContains(t, string(encoded), `"message_types"`)
-			if tc.rawScope {
-				require.Contains(t, output.Policy.Compatibility.UnsupportedFields, "raw_scope")
-			} else {
-				require.Equal(t, "fully_supported", output.Policy.Compatibility.State)
-			}
-		})
-	}
 }
 
 func TestRiskPolicyGetDistinguishesNotFoundFromInfrastructureFailure(t *testing.T) {
