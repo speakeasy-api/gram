@@ -326,6 +326,28 @@ type Client struct {
 	// store, invalid when the issuer has no logo.
 	IssuerLogoAssetID uuid.NullUUID
 
+	// IssuerDocumentationURL is the issuer's stored service_documentation
+	// link, empty when unset.
+	IssuerDocumentationURL string
+
+	// IssuerPolicyURL is the issuer's stored op_policy_uri link, empty when
+	// unset.
+	IssuerPolicyURL string
+
+	// IssuerTosURL is the issuer's stored op_tos_uri link, empty when unset.
+	IssuerTosURL string
+
+	// ResourceIdentifier is the RFC 9728 resource the fields below were read for; empty when never captured.
+	ResourceIdentifier string
+
+	// ResourceName is the resource's own display name (RFC 9728 resource_name); empty when unset.
+	ResourceName string
+
+	// ResourceDocumentationURL, ResourcePolicyURL, and ResourceTosURL are the resource's own links; empty when unset.
+	ResourceDocumentationURL string
+	ResourcePolicyURL        string
+	ResourceTosURL           string
+
 	IssuerURL string
 
 	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
@@ -431,6 +453,14 @@ func (m *ChallengeManager) ListClients(
 			IssuerSlug:                       r.IssuerSlug,
 			IssuerName:                       conv.FromPGText[string](r.IssuerName),
 			IssuerLogoAssetID:                r.IssuerLogoAssetID,
+			IssuerDocumentationURL:           conv.FromPGTextOrEmpty[string](r.IssuerServiceDocumentation),
+			IssuerPolicyURL:                  conv.FromPGTextOrEmpty[string](r.IssuerOpPolicyUri),
+			IssuerTosURL:                     conv.FromPGTextOrEmpty[string](r.IssuerOpTosUri),
+			ResourceIdentifier:               conv.FromPGTextOrEmpty[string](r.ResourceIdentifier),
+			ResourceName:                     conv.FromPGTextOrEmpty[string](r.ResourceName),
+			ResourceDocumentationURL:         conv.FromPGTextOrEmpty[string](r.ResourceDocumentation),
+			ResourcePolicyURL:                conv.FromPGTextOrEmpty[string](r.ResourcePolicyUri),
+			ResourceTosURL:                   conv.FromPGTextOrEmpty[string](r.ResourceTosUri),
 			IssuerURL:                        r.IssuerUrl,
 			IssuerIdentifier:                 issuerIdentifier(r.IssuerMetadata, r.IssuerUrl),
 			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),

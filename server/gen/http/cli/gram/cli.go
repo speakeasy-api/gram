@@ -17351,7 +17351,7 @@ func networkIngressUsage() {
 	fmt.Fprintln(os.Stderr, `Manage an organization's private network ingress desired state.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] network-ingress COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-ingress: Get the active network ingress for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-ingress: Get the active network ingress for the current organization, when configured.`)
 	fmt.Fprintln(os.Stderr, `    create-ingress: Create the organization's Tailscale ingress. Provider credentials are encrypted and never returned.`)
 	fmt.Fprintln(os.Stderr, `    update-ingress: Update desired ingress settings. Enabling is expansion-gated; disabling remains available after gate removal.`)
 	fmt.Fprintln(os.Stderr, `    rotate-credentials: Replace the provider OAuth client credentials without returning either value.`)
@@ -17370,7 +17370,7 @@ func networkIngressGetIngressUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the active network ingress for the current organization.`)
+	fmt.Fprintln(os.Stderr, `Get the active network ingress for the current organization, when configured.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -27601,7 +27601,7 @@ func organizationUserSessionIssuersCreateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers create-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers create-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersListIssuersUsage() {
@@ -27663,7 +27663,7 @@ func organizationUserSessionIssuersUpdateIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers update-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers update-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_issuer_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetIssuerDeletePreflightUsage() {
