@@ -1,0 +1,20 @@
+server/internal/redisinbox/inbox_test.go
+  s_27ad27e67e992e::t_ed90e81c49b7f4 209-214
+  s_27ad27e67e992e::t_43588d0ca36720 238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6db0558157330e36f7bdc733192a976a6b1b887d",
+  "prompts": {},
+  "sessions": {
+    "s_27ad27e67e992e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a072-f71f-7a73-90c9-388b469a6a59",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
