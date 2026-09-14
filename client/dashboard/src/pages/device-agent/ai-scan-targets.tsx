@@ -162,7 +162,9 @@ function OriginSection({
             // An empty kind on this side is not worth a header.
             if (rows.length === 0) return null;
             const key = `${title}:${category.value}`;
-            const isExpanded = expanded[key] ?? defaultExpanded;
+            // A search opens every kind that has a match: hiding results inside a
+            // collapsed heading defeats the search. An explicit collapse still wins.
+            const isExpanded = expanded[key] ?? (searching || defaultExpanded);
             return (
               <div key={category.value}>
                 <CategoryHeader
@@ -170,7 +172,9 @@ function OriginSection({
                   description={category.description}
                   count={rows.length}
                   expanded={isExpanded}
-                  onToggle={() => onToggle(key, defaultExpanded)}
+                  // The fallback is the state the person sees, so a heading a
+                  // search opened collapses on the first click.
+                  onToggle={() => onToggle(key, searching || defaultExpanded)}
                 />
                 {isExpanded ? (
                   <div className="border-border border-t">

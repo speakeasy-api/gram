@@ -19,6 +19,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { accessOf } from "./access";
 
+// Mirrors MaxLength on the rationale attribute of setAIToolDecision in the
+// Goa design (server/design/access/design.go).
+const RATIONALE_MAX_LENGTH = 1024;
+
 type Decision = "unreviewed" | "approved" | "blocked";
 
 const OPTIONS: ReadonlyArray<{
@@ -82,6 +86,9 @@ function DecisionForm({
   const [rationale, setRationale] = useState(
     accessOf(detection).rationale ?? "",
   );
+  // Refusing here gives inline feedback instead of the generic failure toast
+  // the endpoint's rejection would otherwise turn into.
+  const rationaleTooLong = rationale.length > RATIONALE_MAX_LENGTH;
   const mutation = useSetAIToolDecisionMutation({
     onSuccess: () => {
       void invalidateAllAiDetections(queryClient);
@@ -185,6 +192,12 @@ function DecisionForm({
             placeholder="Why this decision was made. Shown beside it and kept in the audit trail."
             rows={4}
           />
+          {rationaleTooLong ? (
+            <Text variant="small" className="text-destructive">
+              Rationale must be {RATIONALE_MAX_LENGTH} characters or fewer
+              (currently {rationale.length}).
+            </Text>
+          ) : null}
         </div>
       </div>
 
@@ -194,7 +207,11 @@ function DecisionForm({
         </Button>
         <Button
           type="submit"
-          disabled={mutation.isPending || !accessOf(detection).enforceable}
+          disabled={
+            mutation.isPending ||
+            rationaleTooLong ||
+            !accessOf(detection).enforceable
+          }
         >
           Save decision
         </Button>

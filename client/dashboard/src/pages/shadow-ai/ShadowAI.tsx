@@ -20,7 +20,7 @@ export function ShadowAIIndexRedirect(): JSX.Element {
   const location = useLocation();
   return (
     <Navigate
-      to={`${routes.shadowAI.harnesses.href()}${location.search}`}
+      to={`${routes.shadowAI.harnesses.href()}${location.search}${location.hash}`}
       replace
     />
   );
@@ -32,7 +32,10 @@ export function ShadowMCPLegacyRedirect(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
   return (
-    <Navigate to={`${routes.shadowAI.mcps.href()}${location.search}`} replace />
+    <Navigate
+      to={`${routes.shadowAI.mcps.href()}${location.search}${location.hash}`}
+      replace
+    />
   );
 }
 
@@ -42,15 +45,15 @@ export function ShadowMCPServerLegacyRedirect(): JSX.Element {
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   return (
     <Navigate
-      to={`${routes.shadowAI.mcps.detail.href(serverSlug)}${location.search}`}
+      to={`${routes.shadowAI.mcps.detail.href(serverSlug)}${location.search}${location.hash}`}
       replace
     />
   );
 }
 
-// ShadowAISection is the shell both tabs render inside. A server detail page
-// lives under the MCP tab and renders its own page chrome, so the shell is
-// only used by the two tab index routes.
+// ShadowAISection is the shell all four tab pages render inside. A server
+// detail page lives under the MCP tab and renders its own page chrome, so the
+// shell is used by the tab index routes and not by that page.
 export function ShadowAISection({
   activeTab,
   children,
@@ -68,13 +71,14 @@ export function ShadowAISection({
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">
-        {/* Project read to view, organization admin to act. The reads behind
-            both tabs are organization-scoped, but a project is how an
-            organization segments the people it manages and the answer is the
-            same whichever project you arrive from — the same reasoning the
-            Identities routes are placed under. The server withholds every
-            attribution field from this scope; see inventoryProjection. */}
-        <RequireScope scope={["project:read", "project:write"]} level="page">
+        {/* Organization admin to view. Every read behind these tabs (the AI
+            detections inventory and the Shadow MCP inventory) requires
+            org:admin on the server, so a narrower gate would only ever show
+            an error state. The section still lives under a project because
+            a project is how an organization segments the people it manages;
+            the answer is the same whichever project you arrive from — the
+            same reasoning the Identities routes are placed under. */}
+        <RequireScope scope="org:admin" level="page">
           <Tabs value={activeTab}>
             <div className="border-border -mx-8 border-b px-8">
               <PageTabsList>

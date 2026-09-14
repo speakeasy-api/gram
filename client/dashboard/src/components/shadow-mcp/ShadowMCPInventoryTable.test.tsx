@@ -1211,9 +1211,11 @@ describe("ShadowMCPInventoryTable", () => {
     await waitFor(() => {
       expect(screen.getByText("Scoped MCP")).toBeTruthy();
     });
-    // The badge carries the verdict; the description under it is gone.
+    // The badge carries the verdict; the description that used to sit under it
+    // is gone. Matched as a substring, since the exact-text query never matched
+    // the old sentence and would let it come back unnoticed.
     expect(screen.getByText("Restricted")).toBeTruthy();
-    expect(screen.queryByText("Allowed")).toBeNull();
+    expect(screen.queryByText(/Allowed for selected users/)).toBeNull();
   });
 
   it("renders observed status when blocking is inactive", async () => {

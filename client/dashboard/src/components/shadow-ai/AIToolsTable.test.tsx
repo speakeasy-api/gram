@@ -40,9 +40,9 @@ function detection(overrides: Partial<AIDetection> = {}): AIDetection {
 
 // The toolbar keeps its filters in the URL, so the table needs a router, and
 // the status cell's tooltip needs the provider App mounts around the tree.
-function renderTable(element: React.ReactElement) {
+function renderTable(element: React.ReactElement, url = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <TooltipProvider>{element}</TooltipProvider>
     </MemoryRouter>,
   );
@@ -62,12 +62,14 @@ describe("AIToolsTable", () => {
     vi.clearAllMocks();
   });
 
-  it("hides the attribution columns from a viewer who cannot decide", () => {
-    renderTable(<AIToolsTable category="harness" canDecide={false} />);
+  // The Models tab passes canDecide={false} because nothing about a local
+  // model can be enforced, not because the admin reading it may see less.
+  it("keeps the attribution columns on a tab where nothing can be decided", () => {
+    renderTable(<AIToolsTable category="local_model" canDecide={false} />);
 
     expect(screen.getByText("Cursor")).toBeTruthy();
-    expect(screen.queryByText("Users")).toBeNull();
-    expect(screen.queryByText("Devices")).toBeNull();
+    expect(screen.getByText("Users")).toBeTruthy();
+    expect(screen.getByText("Devices")).toBeTruthy();
   });
 
   it("shows the attribution columns to an organization admin", () => {
@@ -75,6 +77,18 @@ describe("AIToolsTable", () => {
 
     expect(screen.getByText("Users")).toBeTruthy();
     expect(screen.getByText("Devices")).toBeTruthy();
+  });
+
+  // The filter lives in the URL. With nothing under the chosen status the
+  // body would otherwise be an unlabeled blank row.
+  it("names the status when a filter leaves nothing to show", () => {
+    renderTable(
+      <AIToolsTable category="harness" canDecide />,
+      "/?status=blocked",
+    );
+
+    expect(screen.getByText("No blocked harnesses")).toBeTruthy();
+    expect(screen.queryByText("Cursor")).toBeNull();
   });
 
   it("renders a tool Gram cannot recognise as plain unreviewed", () => {

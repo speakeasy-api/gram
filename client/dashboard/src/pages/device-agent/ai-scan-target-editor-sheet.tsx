@@ -29,7 +29,7 @@ import { Text } from "@/components/ui/Text";
 import type { VerifyCimdURLResult } from "@gram/client/models/components/verifycimdurlresult.js";
 import { useVerifyUserSessionIssuerCimdClientURLMutation } from "@gram/client/react-query/verifyUserSessionIssuerCimdClientURL.js";
 import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   callsGateway,
   categoryLabel,
@@ -39,6 +39,7 @@ import {
   slugFromName,
   TARGET_CATEGORIES,
   validateDraft,
+  withCategory,
   type Draft,
   type DraftErrors,
   type TargetCategory,
@@ -172,6 +173,10 @@ function CimdDocumentsField({
   const [problem, setProblem] = useState<string | null>(null);
   const [probed, setProbed] = useState<VerifyCimdURLResult | null>(null);
   const verify = useVerifyUserSessionIssuerCimdClientURLMutation();
+  // The URL as it is now, read when a probe lands: a response to an earlier
+  // URL must not fill the box under the one the operator has since typed.
+  const latestUrl = useRef(url);
+  latestUrl.current = url;
 
   const fetchFromURL = (): void => {
     const trimmed = url.trim();
@@ -185,14 +190,17 @@ function CimdDocumentsField({
       { request: { verifyURLRequestBody: { clientIdMetadataUri: trimmed } } },
       {
         onSuccess: (result) => {
+          if (latestUrl.current.trim() !== trimmed) return;
           setProbed(result);
           // Only a verified probe carries a document. An unreachable or
           // rejected one leaves whatever is in the box alone rather than
           // clearing work the operator may have pasted.
           if (result.document) setDocument(result.document);
         },
-        onError: () =>
-          setProblem("The document could not be fetched. Try again."),
+        onError: () => {
+          if (latestUrl.current.trim() !== trimmed) return;
+          setProblem("The document could not be fetched. Try again.");
+        },
       },
     );
   };
@@ -227,7 +235,11 @@ function CimdDocumentsField({
                 key={clientId}
                 className="bg-muted/40 flex items-center justify-between gap-2 rounded px-2 py-1"
               >
-                <Text small className="truncate font-mono text-xs">
+                <Text
+                  small
+                  className="truncate font-mono text-xs"
+                  title={clientId}
+                >
                   {clientId}
                 </Text>
                 <Button
@@ -247,6 +259,7 @@ function CimdDocumentsField({
         <div className="flex items-start gap-2">
           <Input
             id="ai-scan-target-cimd-url"
+            aria-label="Client ID metadata document URL"
             value={url}
             onChange={(next: string) => {
               setUrl(next);
@@ -383,7 +396,7 @@ function EditorForm({
         </SheetTitle>
         <SheetDescription>
           {readOnly
-            ? "A built-in target, supplied and kept current by Speakeasy. It cannot be edited — switch it off from the row menu if this organization should not probe for it."
+            ? "A built-in target, supplied and kept current by Speakeasy. Its definition cannot be edited, and it stays in the library for as long as Speakeasy serves it."
             : "Every enrolled device agent receives this library on its next policy poll and probes for the target on its next scan. Signatures are matched locally; nothing but the match is reported."}
         </SheetDescription>
       </SheetHeader>
@@ -422,8 +435,14 @@ function EditorForm({
                 </FieldLabel>
                 <Select
                   value={draft.category}
+                  // Through withCategory rather than update: a category that
+                  // never calls the gateway drops the matchers with it, so the
+                  // save is not refused over an error the sheet has no field to
+                  // show.
                   onValueChange={(value) =>
-                    update("category", value as TargetCategory)
+                    setDraft((current) =>
+                      withCategory(current, value as TargetCategory),
+                    )
                   }
                 >
                   <SelectTrigger
@@ -471,7 +490,7 @@ function EditorForm({
               {callsGateway(draft.category) ? (
                 <ReadOnlyList
                   label="Client ID metadata documents"
-                  description="The documents this tool publishes. A block reaches the gateway only through one of these; a tool with none is recorded as blocked and not enforced."
+                  description="The documents this tool publishes. A block reaches the gateway only through one of these. A tool that publishes none cannot be blocked, and any decision recorded about it reads as unreviewed."
                   value={draft.oauthClientIds}
                   empty="None — a block on this tool cannot be enforced at the gateway."
                 />

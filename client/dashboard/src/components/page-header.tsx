@@ -151,7 +151,7 @@ type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
 // roster). Those pages sit two and three levels deep with no way back up but
 // browser back. Listed by first path segment; every caller still mounts
 // <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
-const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities"]);
+const BREADCRUMB_PAGE_SLUGS = new Set(["mcp", "identities", "shadow-ai"]);
 
 // Whether the current page shows a breadcrumb trail. Shared by the header (to
 // give the trail its own bar) and by the breadcrumbs themselves (to render

@@ -2,7 +2,7 @@
 // server is reached by some AI tool, and the same admin answers "what are
 // people running?" and "what is it talking to?" in one sitting.
 //
-// Three routed tabs rather than one page with a toggle, so a link to any of
+// Four routed tabs rather than one page with a toggle, so a link to any of
 // them survives being pasted into a ticket. The order is deliberate:
 // harnesses and assistants are what people run and the only things blocking
 // applies to; models are local runtimes that never speak MCP to Gram, so they

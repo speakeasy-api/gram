@@ -258,6 +258,21 @@ describe("AiScanTargetsSection", () => {
     expect(screen.getByText(/Library version 11/)).toBeDefined();
   });
 
+  // A match hidden under a collapsed heading is a search that found nothing
+  // as far as the person can see. Their own collapse still wins.
+  it("opens a collapsed kind while a search matches inside it", () => {
+    renderPage();
+    expect(screen.queryByTestId("aider")).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText("Filter by name…"), {
+      target: { value: "aid" },
+    });
+    expect(screen.getByTestId("aider")).toBeDefined();
+
+    fireEvent.click(within(originSection("Built-in")).getByText("Harnesses"));
+    expect(screen.queryByTestId("aider")).toBeNull();
+  });
+
   // A kind nobody has a target for on one side is not worth a header there.
   it("omits a kind that has nothing in it on that side", () => {
     renderPage();

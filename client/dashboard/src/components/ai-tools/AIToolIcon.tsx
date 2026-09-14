@@ -33,6 +33,12 @@ const ICON_SOURCE_BY_TARGET_ID: Record<string, string> = {
   devin: "devin",
 };
 
+// Every target id this component has a mark for, so the test can walk the
+// map instead of trusting a hand-kept list to stay in step with it.
+export const ICON_TARGET_IDS: readonly string[] = Object.keys(
+  ICON_SOURCE_BY_TARGET_ID,
+);
+
 /**
  * AIToolMonogram is what a tool with no vendor mark gets: the first character
  * of its name in a neutral tile.
@@ -71,7 +77,11 @@ export function AIToolIcon({
   displayName: string;
   className?: string;
 }): JSX.Element {
-  const source = ICON_SOURCE_BY_TARGET_ID[targetId];
+  // Own keys only: a custom target id such as "constructor" would otherwise
+  // hit an inherited Object property and hand a function to the icon.
+  const source = Object.hasOwn(ICON_SOURCE_BY_TARGET_ID, targetId)
+    ? ICON_SOURCE_BY_TARGET_ID[targetId]
+    : undefined;
   if (source === undefined) {
     return <AIToolMonogram displayName={displayName} className={className} />;
   }

@@ -698,10 +698,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">
-        {/* Project read to view, under the same split as the section's
-            tables: the server withholds attribution from this scope, and
-            every action on the page stays behind its own org:admin gate. */}
-        <RequireScope scope={["project:read", "project:write"]} level="page">
+        {/* Organization admin to view: the server and users reads behind
+            this page both require org:admin, so a narrower gate would show
+            the chrome and rename control over a detail that never loads. */}
+        <RequireScope scope="org:admin" level="page">
           <Page.Section>
             {/* No area eyebrow: "SECURE" over a server under review reads as
                 a verdict about the server, not as the app section. */}

@@ -102,9 +102,10 @@ export function AIToolsTable({
   // Which tab this is. Pushed to the server so the read is narrowed there
   // rather than fetching the whole inventory and hiding half of it.
   category: "harness" | "assistant" | "local_model";
-  // True for organization admins. A project viewer reads the inventory and
-  // cannot change a decision, because a block reaches every project's
-  // gateway and gives that tool's users an unrecoverable OAuth error.
+  // False on the Models tab: a local model never connects to the gateway,
+  // so a decision about it would have nothing behind it. Everyone who reaches
+  // this table is an organization admin (the section is gated on org:admin,
+  // as the read behind it requires), so this is about the tab, not the viewer.
   canDecide: boolean;
 }): JSX.Element {
   const detectionsQuery = useAiDetections({ category });
@@ -148,33 +149,31 @@ export function AIToolsTable({
       },
     ];
 
-    // The counts are attribution and the server omits them for project
-    // viewers. Dropping the columns rather than rendering empty cells keeps
-    // the table honest about what this scope can answer.
-    if (canDecide) {
-      base.push(
-        {
-          key: "users",
-          header: "Users",
-          sortable: true,
-          sortValue: (detection) => detection.userCount ?? 0,
-          width: "0.4fr",
-          render: (detection) => (
-            <Text variant="small">{detection.userCount ?? "—"}</Text>
-          ),
-        },
-        {
-          key: "devices",
-          header: "Devices",
-          sortable: true,
-          sortValue: (detection) => detection.deviceCount ?? 0,
-          width: "0.4fr",
-          render: (detection) => (
-            <Text variant="small">{detection.deviceCount ?? "—"}</Text>
-          ),
-        },
-      );
-    }
+    // Attribution is independent of whether a decision can be made here:
+    // an admin reading the Models tab still wants to know how many people
+    // and devices run each model.
+    base.push(
+      {
+        key: "users",
+        header: "Users",
+        sortable: true,
+        sortValue: (detection) => detection.userCount ?? 0,
+        width: "0.4fr",
+        render: (detection) => (
+          <Text variant="small">{detection.userCount ?? "—"}</Text>
+        ),
+      },
+      {
+        key: "devices",
+        header: "Devices",
+        sortable: true,
+        sortValue: (detection) => detection.deviceCount ?? 0,
+        width: "0.4fr",
+        render: (detection) => (
+          <Text variant="small">{detection.deviceCount ?? "—"}</Text>
+        ),
+      },
+    );
 
     base.push(
       {
@@ -199,7 +198,7 @@ export function AIToolsTable({
     );
 
     return base;
-  }, [canDecide]);
+  }, []);
 
   const detections = useMemo(
     () => detectionsQuery.data?.detections ?? [],
@@ -241,10 +240,17 @@ export function AIToolsTable({
     return <AIToolsEmptyState noun={noun} />;
   }
 
+  // A status filter with nothing under it would otherwise leave a blank
+  // body with no word on why; name the status the way the filter does.
+  const statusLabel = STATUS_FILTER_OPTIONS.find(
+    (option) => option.value === statusFilter,
+  )?.label;
   const noResultsMessage =
     normalizedSearch.length > 0
       ? `No ${noun} matching “${search.trim()}”`
-      : undefined;
+      : statusLabel
+        ? `No ${statusLabel.toLowerCase()} ${noun}`
+        : undefined;
 
   return (
     <div className="flex min-h-0 shrink flex-col gap-4 overflow-hidden">

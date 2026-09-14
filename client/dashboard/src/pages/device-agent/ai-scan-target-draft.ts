@@ -59,6 +59,7 @@ export type DraftErrors = Partial<Record<keyof Draft, string>>;
 
 const MAX_SIGNATURE_ENTRIES = 16;
 const MAX_GATEWAY_CLIENT_ENTRIES = 16;
+const MAX_CLIENT_ID_LENGTH = 512;
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const BUNDLE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const BINARY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
@@ -174,6 +175,21 @@ export function callsGateway(category: TargetCategory): boolean {
   return category === "harness" || category === "assistant";
 }
 
+// withCategory switches the kind of tool a draft describes. The gateway
+// matchers go with a switch to a kind that never calls the gateway: the form
+// hides those fields for an open model, so anything left in them could be
+// neither seen nor cleared, and the server refuses a target that carries them.
+export function withCategory(draft: Draft, category: TargetCategory): Draft {
+  if (callsGateway(category)) return { ...draft, category };
+  return {
+    ...draft,
+    category,
+    cimdVendorKeys: [],
+    oauthClientIds: [],
+    clientInfoNames: [],
+  };
+}
+
 export function validateDraft(draft: Draft): DraftErrors {
   const errors: DraftErrors = {};
 
@@ -224,33 +240,15 @@ export function validateDraft(draft: Draft): DraftErrors {
   }
 
   // A harness and an assistant both reach Gram's MCP gateway, so both may
-  // carry matchers. The form hides these fields for an open model; this
-  // catches a category switch that would otherwise leave stale ones behind.
-  if (!callsGateway(draft.category)) {
-    if (
-      draft.oauthClientIds.length > 0 ||
-      draft.clientInfoNames.length > 0 ||
-      draft.cimdVendorKeys.length > 0
-    ) {
-      errors.oauthClientIds =
-        "Only a harness or assistant can carry gateway client matchers";
-    }
-  } else {
+  // carry matchers. An open model never does, and its draft never holds any:
+  // withCategory drops them on the switch and draftToUpsertBody sends none.
+  // There is nothing to check for it, and nowhere to show a finding, since
+  // the form hides the matcher fields for that category.
+  if (callsGateway(draft.category)) {
     errors.oauthClientIds = gatewayListProblem(
       draft.oauthClientIds,
       "documents",
-      (id) => {
-        if (codePoints(id) > 512)
-          return `"${id}" is longer than 512 characters`;
-        if (/\s/.test(id) || hasControlCharacter(id))
-          return `"${id}" must not contain spaces`;
-        // Blocking is CIMD-only, and a CIMD client_id is the https URL its
-        // document is served from.
-        if (!id.startsWith("https://")) {
-          return `"${id}" must be an https URL to a client ID metadata document`;
-        }
-        return undefined;
-      },
+      clientIdProblem,
     );
     errors.clientInfoNames = gatewayListProblem(
       draft.clientInfoNames,
@@ -266,6 +264,56 @@ export function validateDraft(draft: Draft): DraftErrors {
     if (errors[key] === undefined) delete errors[key];
   }
   return errors;
+}
+
+// clientIdProblem holds a client id to the shape the server accepts (its
+// validateClientIDURLShape), so an entry the save would refuse is turned away
+// when it is typed. Blocking is CIMD-only, and a CIMD client_id is the https
+// URL its document is served from: a bare origin, a fragment, a userinfo
+// component or a dot segment is a shape no client_id can take.
+//
+// The server stays the final gate. A malformed percent-escape in the path is
+// caught because decoding the segment throws, the way Go's url.Parse rejects
+// it; the host is judged by the URL parser.
+function clientIdProblem(id: string): string | undefined {
+  if (codePoints(id) > MAX_CLIENT_ID_LENGTH) {
+    return `"${id}" is longer than ${MAX_CLIENT_ID_LENGTH} characters`;
+  }
+  if (/\s/.test(id) || hasControlCharacter(id)) {
+    return `"${id}" must not contain spaces`;
+  }
+  if (!id.startsWith("https://")) {
+    return `"${id}" must be an https URL to a client ID metadata document`;
+  }
+  if (id.includes("#")) return `"${id}" must not contain a fragment`;
+  let rest = id.slice("https://".length);
+  const query = rest.indexOf("?");
+  if (query >= 0) rest = rest.slice(0, query);
+  const slash = rest.indexOf("/");
+  if (slash < 0) {
+    return `"${id}" must include a path; a bare origin is not a client id`;
+  }
+  const host = rest.slice(0, slash);
+  if (host === "") return `"${id}" must include a host`;
+  if (host.includes("@")) {
+    return `"${id}" must not contain a userinfo component`;
+  }
+  if (!URL.canParse(id)) return `"${id}" must be a parseable https URL`;
+  // Dot segments are judged on the decoded path, as the server does, so an
+  // encoded "%2e%2e" is caught too. The path is read from the string rather
+  // than from URL.pathname, which resolves dot segments away.
+  for (const segment of rest.slice(slash).split("/")) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return `"${id}" must be a parseable https URL`;
+    }
+    if (decoded === "." || decoded === "..") {
+      return `"${id}" must not contain "." or ".." path segments`;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -285,12 +333,14 @@ export function clientIdFromCimdInput(
   if (trimmed === "") return { error: "Enter a document URL, or paste one" };
 
   if (!trimmed.startsWith("{")) {
-    return trimmed.startsWith("https://")
-      ? { clientId: trimmed }
-      : {
-          error:
-            "Enter an https URL to a client ID metadata document, or paste the document itself",
-        };
+    if (!trimmed.startsWith("https://")) {
+      return {
+        error:
+          "Enter an https URL to a client ID metadata document, or paste the document itself",
+      };
+    }
+    const problem = clientIdProblem(trimmed);
+    return problem === undefined ? { clientId: trimmed } : { error: problem };
   }
 
   let parsed: unknown;
@@ -309,7 +359,8 @@ export function clientIdFromCimdInput(
         "The document has no client_id member, or it is not an https URL. A document's client_id must equal the URL it is served from.",
     };
   }
-  return { clientId };
+  const problem = clientIdProblem(clientId);
+  return problem === undefined ? { clientId } : { error: problem };
 }
 
 export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {

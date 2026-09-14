@@ -1,9 +1,29 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import IdentityConnections from "./IdentityConnections";
 
 vi.mock("@/components/connections/ConnectionsListSection", () => ({
-  ConnectionsListSection: () => null,
+  // Echo the props the page derives from the sessions query, so the test can
+  // tell a list that was rendered with the right sessions from an empty panel.
+  ConnectionsListSection: ({
+    sessions,
+    isPending,
+    isError,
+  }: {
+    sessions: { id: string }[];
+    isPending: boolean;
+    isError: boolean;
+  }) => (
+    <ul
+      data-testid="connections-list"
+      data-pending={String(isPending)}
+      data-error={String(isError)}
+    >
+      {sessions.map((session) => (
+        <li key={session.id}>{session.id}</li>
+      ))}
+    </ul>
+  ),
 }));
 vi.mock("@/components/observe/EmployeeShadowAISection", () => ({
   EmployeeShadowAISection: ({ userEmail }: { userEmail: string | null }) => (
@@ -21,7 +41,7 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@gram/client/react-query/userSessions.js", () => ({
   useUserSessions: () => ({
-    data: { result: { items: [] } },
+    data: { result: { items: [{ id: "session-1" }, { id: "session-2" }] } },
     isError: false,
     isPending: false,
     refetch: vi.fn(),
@@ -79,10 +99,18 @@ vi.mock("./useIdentityQueries", () => ({
 }));
 
 describe("IdentityConnections", () => {
-  it("renders active MCP connections", () => {
+  it("renders the active MCP connections list from the sessions query", () => {
     render(<IdentityConnections />);
 
-    expect(screen.getByTestId("active-connections")).toBeTruthy();
+    const panel = screen.getByTestId("active-connections");
+    const list = within(panel).getByTestId("connections-list");
+    expect(list.getAttribute("data-pending")).toBe("false");
+    expect(list.getAttribute("data-error")).toBe("false");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["session-1", "session-2"]);
   });
 
   // Which AI tools a person runs is a security question about them, not a

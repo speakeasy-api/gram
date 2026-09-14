@@ -14,6 +14,7 @@ import {
 import { identityHandoffs } from "./identityHandoffs";
 import { EmployeeShadowAISection } from "@/components/observe/EmployeeShadowAISection";
 import { useIdentityOutlet } from "./identityRoute";
+import { useRBAC } from "@/hooks/useRBAC";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
@@ -42,6 +43,11 @@ const RISK_UNAVAILABLE =
 
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
+  // Employee detections are a project read on the server (the email pins
+  // the request to one person), so this panel gates on that scope rather
+  // than on the org:admin the risk panels need.
+  const { hasAnyScope } = useRBAC();
+  const canReadDetections = hasAnyScope(["project:read", "project:write"]);
   const { identity } = useIdentityOutlet();
   // Only an enrolled person has device scans behind them; an API key or an
   // external identity has nothing to show.
@@ -260,7 +266,21 @@ export default function IdentitySecurity(): JSX.Element {
         {/* Which AI tools this person runs is a security question about them,
             not a list of things they have connected — it sits here rather than
             on Connections for the same reason the denied challenges do. */}
-        {isEmployee && <EmployeeShadowAISection userEmail={employeeEmail} />}
+        {isEmployee && (
+          // Full width: the detections table is eight columns and 820px at
+          // minimum, so half the grid would scroll it sideways on a laptop.
+          <div className="md:col-span-2">
+            {canReadDetections ? (
+              <EmployeeShadowAISection userEmail={employeeEmail} />
+            ) : (
+              <IdentityPanel title="Shadow AI">
+                <IdentityPanelEmpty>
+                  Device-agent detections need the project:read permission.
+                </IdentityPanelEmpty>
+              </IdentityPanel>
+            )}
+          </div>
+        )}
       </div>
     </IdentitySection>
   );

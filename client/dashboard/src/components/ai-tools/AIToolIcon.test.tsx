@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AIToolIcon } from "./AIToolIcon";
+import { AIToolIcon, ICON_TARGET_IDS } from "./AIToolIcon";
 
 describe("AIToolIcon", () => {
   it("renders the vendor mark for a tool Gram ships a target for", () => {
@@ -28,19 +28,30 @@ describe("AIToolIcon", () => {
   });
 
   it("covers every scan target Gram ships a mark for", () => {
-    for (const [targetId, name] of [
-      ["ollama", "Ollama"],
-      ["lmstudio", "LM Studio"],
-      ["windsurf", "Windsurf"],
-      ["hermes-agent", "Hermes Agent"],
-    ] as const) {
+    // Walk the map itself: a hand-kept list of ids drifts from it, and a
+    // vendor mark that stopped resolving would then go unnoticed.
+    expect(ICON_TARGET_IDS.length).toBeGreaterThanOrEqual(17);
+    for (const targetId of ICON_TARGET_IDS) {
       const { container, unmount } = render(
-        <AIToolIcon targetId={targetId} displayName={name} />,
+        <AIToolIcon targetId={targetId} displayName={targetId} />,
       );
       // An svg or an img, never the monogram tile.
       expect(
         container.querySelector("svg") ?? container.querySelector("img"),
+        `${targetId} fell back to the monogram`,
       ).not.toBeNull();
+      unmount();
+    }
+  });
+
+  // Object.hasOwn guards the lookup: these are inherited Object properties,
+  // and a custom target could be named after one of them.
+  it("treats a target named after an Object property as unknown", () => {
+    for (const targetId of ["constructor", "toString", "__proto__"]) {
+      const { unmount } = render(
+        <AIToolIcon targetId={targetId} displayName="Zed" />,
+      );
+      expect(screen.getByText("Z")).toBeTruthy();
       unmount();
     }
   });

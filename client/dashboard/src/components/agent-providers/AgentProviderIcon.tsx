@@ -156,8 +156,6 @@ function OpenClawIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
-// Devin (Cognition) logo. Geometry from the LobeHub icon set; uses currentColor
-// so it picks up text color like the sibling icons.
 // Ollama, LM Studio and Windsurf marks from simple-icons (CC0 1.0), whose SVG
 // files are public domain; the marks themselves remain each vendor's
 // trademark and are used here only to identify their products. Single-path
@@ -268,6 +266,8 @@ function WindsurfIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
+// Devin (Cognition) logo. Geometry from the LobeHub icon set; uses currentColor
+// so it picks up text color like the sibling icons.
 function DevinIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
