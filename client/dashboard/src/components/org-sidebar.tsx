@@ -6,17 +6,13 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
-import { GramLogo } from "./gram-logo";
-import { HatchRule } from "./hatch-rule";
+import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { Icon } from "@/components/ui/Icon";
-import { Link } from "react-router";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
@@ -24,11 +20,12 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
+import { Wrench } from "lucide-react";
+import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { Wrench } from "lucide-react";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -72,6 +69,7 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
+  const { adminRolloutEnabled: showNetworkAccess } = useNetworkIngressRollout();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -157,20 +155,7 @@ export function OrgSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      {/* Matches AppSidebar: logo + collapse control on one --header-height row,
-          closed by the crosshatch rule so it lines up with the page header. */}
-      <SidebarHeader className="gap-0 p-0">
-        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Link
-            to={orgRoutes.home.href()}
-            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
-          >
-            <GramLogo className="w-28" />
-          </Link>
-          <SidebarTrigger />
-        </div>
-        <HatchRule />
-      </SidebarHeader>
+      <SidebarBrandHeader homeHref={orgRoutes.home.href()} />
       <SidebarContent className="pt-2">
         {rbacLoading ? (
           <SidebarNavSkeleton />
@@ -207,7 +192,11 @@ export function OrgSidebar({
                         },
                       ]
                     : []),
-                  { item: orgRoutes.domains, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.domains,
+                    scope: orgReadOrAdmin,
+                    label: showNetworkAccess ? "Network Access" : undefined,
+                  },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },

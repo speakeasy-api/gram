@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,32 +118,35 @@ func TestWorkloadIssuerAdmission_ConcurrentMissesCollapseToOneLookup(t *testing.
 	t.Parallel()
 
 	const callers = 32
+	const issuerURL = "https://attacker.example.test"
 
 	lookup := &countingLookup{found: false, release: make(chan struct{})}
 	admission := newWorkloadTestAdmission(t, lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
-	// Held inside admit: one caller occupies the lookup, the rest join it.
-	var waiting atomic.Int64
-	var wg sync.WaitGroup
-	for range callers {
-		wg.Go(func() {
-			waiting.Add(1)
-			defer waiting.Add(-1)
-			_, err := admission.admit(t.Context(), endpoint, "https://attacker.example.test")
-			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-		})
-	}
-
-	// Every caller is inside admit before any of them is allowed to finish,
-	// so the burst is genuinely simultaneous rather than accidentally serial.
+	// Hold one leader inside the lookup so every follower deterministically joins
+	// the same flight before it can complete.
+	leaderDone := make(chan error, 1)
+	go func() {
+		_, err := admission.admit(t.Context(), endpoint, issuerURL)
+		leaderDone <- err
+	}()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.EqualValues(c, callers, waiting.Load())
+		assert.EqualValues(c, 1, lookup.running.Load())
 	}, 5*time.Second, time.Millisecond)
 
-	close(lookup.release)
-	wg.Wait()
+	// A cancelled follower still joins the flight before observing its own
+	// cancellation. Returning proves each follower reached DoChan while the
+	// leader remained blocked, without relying on scheduler timing.
+	for range callers - 1 {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := admission.admit(ctx, endpoint, issuerURL)
+		require.ErrorIs(t, err, context.Canceled)
+	}
 
+	close(lookup.release)
+	require.ErrorIs(t, <-leaderDone, errWorkloadIssuerUntrusted)
 	require.EqualValues(t, 1, lookup.calls.Load(), "concurrent rejections of one issuer must share a single lookup")
 }
 

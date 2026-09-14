@@ -12,7 +12,6 @@ CREATE TABLE "ai_scan_targets" (
   "cimd_vendor_keys" text[] NOT NULL DEFAULT '{}',
   "oauth_client_ids" text[] NOT NULL DEFAULT '{}',
   "client_info_names" text[] NOT NULL DEFAULT '{}',
-  "enabled" boolean NOT NULL DEFAULT true,
   "status" text NOT NULL DEFAULT 'unreviewed',
   "rationale" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),

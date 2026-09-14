@@ -16,6 +16,9 @@ export default defineConfig({
     __PLAYGROUND_PROXY_URL__: "undefined",
     __GRAM_GIT_SHA__: JSON.stringify(""),
     __GRAM_API_URL__: JSON.stringify(""),
+    __GRAM_DEV_WORKTREE__: JSON.stringify(""),
+    __GRAM_DEV_BRANCH__: JSON.stringify(""),
+    __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(""),
   },
   resolve: {
     alias: {

@@ -3917,6 +3917,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: rearmTrial
+  /admin/trial.start:
+    post:
+      tags:
+        - admin
+      summary: startTrial admin
+      description: 'Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.'
+      operationId: adminStartTrial
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartTrialRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: startTrial
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:
@@ -4752,11 +4827,16 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
           format: int64
-      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+          format: int64
+      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.'
       required:
         - issuer
         - global_client_count
         - tenant_client_count
+        - trusted_user_session_issuer_count
     IssuerConvergenceCandidate:
       type: object
       properties:
@@ -4820,7 +4900,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -4844,6 +4924,10 @@ components:
           type: integer
           description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
           format: int64
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of user_session_issuers that trust the source. Any non-zero value blocks migration.
+          format: int64
         warnings:
           type: array
           items:
@@ -4856,6 +4940,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuer_count
         - can_migrate
         - target_tenant_client_count
     ListGlobalRemoteSessionIssuersResult:
@@ -5097,6 +5182,14 @@ components:
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
+        jwks_cache_expires_at:
+          type: string
+          description: When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.
+          format: date-time
+        jwks_fetched_at:
+          type: string
+          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          format: date-time
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
@@ -5455,6 +5548,22 @@ components:
       required:
         - organization_id
         - stripe_customer_id
+    StartTrialRequestBody:
+      type: object
+      properties:
+        days:
+          type: integer
+          description: Number of days the trial runs for, counted from now.
+          format: int64
+          minimum: 1
+          maximum: 365
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+        - days
     TriggerOrganizationChatAnalysisRequestBody:
       type: object
       properties:

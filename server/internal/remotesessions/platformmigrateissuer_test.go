@@ -327,6 +327,45 @@ func TestMigrateToGlobalIssuer_DuplicateBindingConflict(t *testing.T) {
 	require.NotEmpty(t, preflight.ConflictingMcpServerNames)
 }
 
+func TestMigrateToGlobalIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "plat-trusted-source")
+	targetID := seedConvergencePlatformIssuer(t, ctx, ti.conn, "plat-trusted-target")
+	createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "plat-trusted-usi", sourceID)
+
+	preflight, err := ti.service.GetGlobalIssuerMigratePreflight(withAdmin(t, ctx), platformPreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.TrustedUserSessionIssuerCount)
+
+	_, err = ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestMigrateToGlobalIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	sourceID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "plat-foreign-trust-source")
+	targetID := seedConvergencePlatformIssuer(t, ctx, ti.conn, "plat-foreign-trust-target")
+	otherOrgID := createOrganization(t, ctx, ti.conn, "plat-foreign-trust-org")
+	createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, otherOrgID, "plat-foreign-trust-usi", sourceID)
+
+	preflight, err := ti.service.GetGlobalIssuerMigratePreflight(withAdmin(t, ctx), platformPreflightPayload(sourceID.String(), targetID.String()))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+	require.Equal(t, 1, preflight.TrustedUserSessionIssuerCount)
+
+	_, err = ti.service.MigrateToGlobalIssuer(withAdmin(t, ctx), platformMigratePayload(sourceID.String(), targetID.String()))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 // TestMigrateToGlobalIssuer_GlobalSourceBadRequest proves a platform issuer named
 // as the source is refused with an explanation rather than a 404 for a row the
 // admin can see in the catalog.

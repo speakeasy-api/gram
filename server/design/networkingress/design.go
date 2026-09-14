@@ -27,6 +27,11 @@ var NetworkIngress = Type("NetworkIngress", func() {
 	Required("id", "organization_id", "provider", "hostname", "endpoint_namespace_kind", "enabled", "identity_required", "credentials_configured", "status", "created_at", "updated_at")
 })
 
+var GetResult = Type("NetworkIngressResult", func() {
+	Description("The organization's active private network ingress, when configured.")
+	Attribute("ingress", NetworkIngress)
+})
+
 var DeleteImpact = Type("NetworkIngressDeleteImpact", func() {
 	Attribute("mcp_servers_dual", Int64)
 	Attribute("mcp_servers_private_only", Int64)
@@ -41,9 +46,9 @@ var _ = Service("networkIngress", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getIngress", func() {
-		Description("Get the active network ingress for the current organization.")
+		Description("Get the active network ingress for the current organization, when configured.")
 		Payload(func() { security.SessionPayload() })
-		Result(NetworkIngress)
+		Result(GetResult)
 		HTTP(func() {
 			GET("/rpc/networkIngress.get")
 			security.SessionHeader()

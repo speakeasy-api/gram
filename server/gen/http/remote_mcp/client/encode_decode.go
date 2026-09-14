@@ -3194,6 +3194,9 @@ func unmarshalProtectedResourceMetadataResponseBodyToRemotemcpProtectedResourceM
 	res := &remotemcp.ProtectedResourceMetadata{
 		Resource:              v.Resource,
 		ResourceDocumentation: v.ResourceDocumentation,
+		ResourceName:          v.ResourceName,
+		ResourcePolicyURI:     v.ResourcePolicyURI,
+		ResourceTosURI:        v.ResourceTosURI,
 	}
 	if v.AuthorizationServers != nil {
 		res.AuthorizationServers = make([]string, len(v.AuthorizationServers))
