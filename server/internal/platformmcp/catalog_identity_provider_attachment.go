@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/http"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -17,11 +17,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -55,19 +57,20 @@ type CatalogIdentityProviderAttachment interface {
 }
 
 type CatalogIdentityProviderAttachmentService struct {
-	db        *pgxpool.Pool
-	enc       *encryption.Client
-	policy    *guardian.Policy
-	audit     *audit.Logger
-	serverURL *url.URL
+	db                    *pgxpool.Pool
+	enc                   *encryption.Client
+	policy                *guardian.Policy
+	audit                 *audit.Logger
+	serverURL             *url.URL
+	registrationTelemetry oauthregistration.Recorder
 }
 
-func NewCatalogIdentityProviderAttachmentService(db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
+func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
 	if serverURL == nil {
 		return &CatalogIdentityProviderAttachmentService{}
 	}
 	serverURLCopy := *serverURL
-	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &serverURLCopy}
+	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider)}
 }
 
 // Attach discovers the exact provider advertised by the lifecycle-owned Remote
@@ -160,11 +163,14 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		RegistrationEndpoint:    metadata.RegistrationEndpoint,
 		Scope:                   optionalString(scope),
 		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
-	})
+	}, s.registrationTelemetry)
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, identityProviderDynamicRegistrationError(err)
 	}
 	if !validBrowserCatalogDynamicClient(registered) {
+		if s.registrationTelemetry != nil {
+			s.registrationTelemetry.RecordFailure(ctx, oauthregistration.MethodDCR, oauthregistration.InvalidSuccessResponse(0))
+		}
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 	issuer, err := s.ensureIssuer(ctx, principal, project, registrationID, metadata)
@@ -397,8 +403,8 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 // It intentionally does not carry an upstream response detail into the MCP tool
 // result or logs.
 func identityProviderDynamicRegistrationError(err error) error {
-	var registrationErr *remotesessions.DynamicClientRegistrationError
-	if errors.As(err, &registrationErr) && registrationErr.StatusCode >= 400 && registrationErr.StatusCode < 500 && registrationErr.StatusCode != http.StatusRequestTimeout && registrationErr.StatusCode != http.StatusTooManyRequests {
+	failure := oauthregistration.ClassifyDCR(err)
+	if failure.Outcome == oauthregistration.OutcomeRefused {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)
 	}
 	return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnavailable)

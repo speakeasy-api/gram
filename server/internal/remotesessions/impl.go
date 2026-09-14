@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
@@ -60,6 +61,8 @@ type Service struct {
 	serverURL    *url.URL
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
+
+	registrationTelemetry registration.Recorder
 	// Only the JSON Web Key Set attach and detach paths consult this. The rest
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
@@ -101,6 +104,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		serverURL:    serverURL,
 		refresher:    refresher,
 		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+
+		registrationTelemetry: registration.NewMetrics(logger, meterProvider),
 
 		productFeatures: productFeatures,
 	}
