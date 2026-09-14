@@ -202,20 +202,44 @@ func TestCommitServerIdentityCreateProviderValidatesURLs(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	targetID, _ := createServerIdentityTarget(t, ctx, ti, "atomic-url-validation")
-	insecure := "http://identity.example.com/token"
 
-	for _, form := range []*sessionsgen.CreateRemoteSessionIssuerForm{
-		serverIdentityProviderForm("atomic-insecure-issuer", nil, false),
-		serverIdentityProviderForm("atomic-insecure-token", nil, false),
+	// Every URL the commit path accepts, not just the two the first version of
+	// this test covered. registration_endpoint matters most: it is the field
+	// automatic registration posts credentials to.
+	fields := []struct {
+		name  string
+		apply func(form *sessionsgen.CreateRemoteSessionIssuerForm, value string)
+	}{
+		{name: "issuer", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.Issuer = v }},
+		{name: "authorization_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.AuthorizationEndpoint = &v }},
+		{name: "token_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.TokenEndpoint = &v }},
+		{name: "revocation_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.RevocationEndpoint = &v }},
+		{name: "registration_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.RegistrationEndpoint = &v }},
+		{name: "jwks_uri", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.JwksURI = &v }},
+		{name: "userinfo_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.UserinfoEndpoint = &v }},
+		{name: "introspection_endpoint", apply: func(f *sessionsgen.CreateRemoteSessionIssuerForm, v string) { f.IntrospectionEndpoint = &v }},
+	}
+
+	// An issuer identifier may carry neither, but RFC 6749 §3.1 forbids only a
+	// fragment on an endpoint, so a query stays valid and is not asserted here.
+	for _, bad := range []struct {
+		kind  string
+		value string
+	}{
+		{kind: "insecure", value: "http://identity.example.com/endpoint"},
+		{kind: "fragment", value: "https://identity.example.com/endpoint#section"},
 	} {
-		if form.Slug == "atomic-insecure-issuer" {
-			form.Issuer = insecure
-		} else {
-			form.TokenEndpoint = &insecure
-		}
+		for _, field := range fields {
+			t.Run(field.name+"/"+bad.kind, func(t *testing.T) {
+				t.Parallel()
 
-		_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
-		requireOopsCode(t, err, oops.CodeBadRequest)
+				form := serverIdentityProviderForm("atomic-"+bad.kind+"-"+field.name, nil, false)
+				field.apply(form, bad.value)
+
+				_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
+				requireOopsCode(t, err, oops.CodeBadRequest)
+			})
+		}
 	}
 }
 
