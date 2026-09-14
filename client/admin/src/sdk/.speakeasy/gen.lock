@@ -303,7 +303,7 @@ examples:
   adminCreateOrganization:
     speakeasy-default-admin-create-organization:
       requestBody:
-        application/json: {"name": "<value>"}
+        application/json: {"ownership_confirmed": false, "url": "https://rusty-lay.name/"}
       responses:
         "200":
           application/json: {"account_type": "<value>", "created_at": "2026-04-25T22:31:08.399Z", "id": "<id>", "member_count": 479220, "name": "<value>", "slug": "<value>", "updated_at": "2026-02-08T04:37:48.396Z", "whitelisted": false}

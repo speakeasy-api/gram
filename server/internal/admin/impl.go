@@ -74,7 +74,7 @@ type Service struct {
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
-	workos orgprovision.WorkOSOrganizationCreator
+	workos orgprovision.WorkOSVerifiedDomainCreator
 
 	openRouter           TrialKeyReviver
 	openRouterSpendCap   OpenRouterSpendCapScheduler
@@ -180,7 +180,7 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
-	workosClient orgprovision.WorkOSOrganizationCreator,
+	workosClient orgprovision.WorkOSVerifiedDomainCreator,
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
@@ -1230,19 +1230,18 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 // single transaction afterwards, so a failure below leaves no organization row,
 // no role grants and no entitlements from this call.
 //
-// That is not the same as leaving nothing. Wherever the WorkOS webhook is
-// configured, organization.created arrives about ten seconds later and the sync
-// activity writes the organization row and its role grants anyway, without the
-// default entitlements this handler would have seeded. AGE-3213 covers that gap.
-// Retrying the create is still the right move: the derived ID makes the retry
-// land on that row rather than beside it.
+// A webhook can still provision the remote organization after a failed request.
+// Repeating the request creates a new WorkOS organization, not an idempotent retry.
 func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
-	name, err := orgprovision.ValidateName(payload.Name)
+	if !payload.OwnershipConfirmed {
+		return nil, oops.E(oops.CodeInvalid, nil, "confirm that the organization owns this domain before creating it")
+	}
+	name, err := organizationHostname(payload.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
 		// CodeInvalid and not CodeInvariantViolation, which reads like the

@@ -3,6 +3,8 @@ package admin
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -13,12 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
@@ -55,12 +59,6 @@ type fakeWorkOSCreator struct {
 	// order, so a test can assert that a rejected request never reached WorkOS.
 	createdNames []string
 
-	// createdGramIDs records the third argument of every CreateOrganization
-	// call. The real client feeds that argument to BOTH external_id and the
-	// idempotency key, so what is passed here is load-bearing rather than
-	// incidental.
-	createdGramIDs []string
-
 	// externalIDs records the last external_id written per WorkOS organization.
 	externalIDs map[string]string
 }
@@ -72,25 +70,23 @@ func newFakeWorkOS(organizationID string) *fakeWorkOSCreator {
 		createErr:      nil,
 		updateErr:      nil,
 		createdNames:   nil,
-		createdGramIDs: nil,
 		externalIDs:    map[string]string{},
 	}
 }
 
-func (f *fakeWorkOSCreator) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+func (f *fakeWorkOSCreator) CreateOrganizationWithVerifiedDomain(_ context.Context, hostname string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	f.createdNames = append(f.createdNames, hostname)
 	if f.createErr != nil {
 		return "", f.createErr
 	}
 
-	f.createdNames = append(f.createdNames, name)
-	f.createdGramIDs = append(f.createdGramIDs, gramOrgID)
 	return f.organizationID, nil
 }
 
-func (f *fakeWorkOSCreator) UpdateOrganizationExternalID(_ context.Context, workosOrgID, externalID string) error {
+func (f *fakeWorkOSCreator) UpdateOrganizationExternalIDWithoutRetry(_ context.Context, workosOrgID, externalID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -107,13 +103,6 @@ func (f *fakeWorkOSCreator) names() []string {
 	defer f.mu.Unlock()
 
 	return append([]string(nil), f.createdNames...)
-}
-
-func (f *fakeWorkOSCreator) gramIDs() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return append([]string(nil), f.createdGramIDs...)
 }
 
 func (f *fakeWorkOSCreator) externalID(workosOrgID string) string {
@@ -190,7 +179,7 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Acme Create Co", AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "https://example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
 	// The whole idempotency story rests on this equality. A generated ID would
@@ -200,22 +189,12 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.NotNil(t, res.WorkosID)
 	require.Equal(t, workosOrgID, *res.WorkosID, "the row must be linked to the WorkOS organization")
 
-	require.Equal(t, []string{"Acme Create Co"}, fake.names(), "WorkOS must be asked for exactly one organization")
+	require.Equal(t, []string{"example.com"}, fake.names(), "WorkOS must be asked for exactly one verified domain")
 	require.Equal(t, res.ID, fake.externalID(workosOrgID),
 		"external_id must be back-filled with the Gram id, or the sync path resolves this organization by a different route")
 
-	// The create must carry no Gram id, because the real client feeds this
-	// argument to the idempotency key as well as to external_id. Anything
-	// derived from the name would make WorkOS answer a second create for a
-	// same-named organization with the first one, and the second Gram insert
-	// would then collide on the unique index over workos_id. The value cannot
-	// be filled in correctly here either: it is derived from the WorkOS id this
-	// call has not returned yet.
-	require.Equal(t, []string{""}, fake.gramIDs(),
-		"the create must send an empty external_id and idempotency key")
-
-	require.Equal(t, "Acme Create Co", res.Name)
-	require.Equal(t, "acme-create-co", res.Slug)
+	require.Equal(t, "example.com", res.Name)
+	require.Equal(t, "example-com", res.Slug)
 	require.Equal(t, 0, res.MemberCount, "an admin-created organization starts empty")
 	require.Nil(t, res.DisabledAt)
 
@@ -277,7 +256,7 @@ func TestCreateOrganization_WebhookAfterwardsDoesNotDuplicate(t *testing.T) {
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Hook After Co", AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "hook.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
 	// Both polarities of external_id. WorkOS emits the event before the
@@ -320,7 +299,7 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	seeded, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, derivedID)
 	require.NoError(t, err, "the sync must have created the row this test is about")
 
-	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Race Co", AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "race.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err, "a create that collides with the sync must not surface a unique violation")
 	require.Equal(t, derivedID, res.ID)
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID),
@@ -328,7 +307,7 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 
 	// The operator typed this name second and it wins, which is the
 	// name = EXCLUDED.name arm of the upsert.
-	require.Equal(t, "Race Co", res.Name, "the operator's name must overwrite the one the sync wrote")
+	require.Equal(t, "race.example.com", res.Name, "the operator's domain must overwrite the name the sync wrote")
 	require.NotEqual(t, seeded.Name, res.Name)
 
 	// The slug is in the organization's URL. Re-deriving one here would find the
@@ -363,7 +342,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 	defer func() { _ = blocker.Rollback(ctx) }()
 
 	blockerQueries := orgrepo.New(blocker)
-	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "lock-race-co"))
+	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "lock-example-com"))
 
 	type outcome struct {
 		res *gen.AdminOrganization
@@ -371,7 +350,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Lock Race Co", AdminSessionToken: nil})
+		res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "lock.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 		done <- outcome{res: res, err: err}
 	}()
 
@@ -419,7 +398,7 @@ func TestCreateOrganization_WorkOSRejectionLeavesNoGramRow(t *testing.T) {
 	fake.createErr = errors.New("workos said no")
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Rejected Co", AdminSessionToken: nil})
+	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rejected.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	requireOopsCode(t, err, oops.CodeGatewayError)
 
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
@@ -441,10 +420,10 @@ func TestCreateOrganization_ExternalIDBackFillFailureLeavesNoGramRow(t *testing.
 	fake.updateErr = errors.New("workos said no")
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Half Made Co", AdminSessionToken: nil})
+	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "half.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	requireOopsCode(t, err, oops.CodeGatewayError)
 
-	require.Equal(t, []string{"Half Made Co"}, fake.names(), "the WorkOS organization really was created")
+	require.Equal(t, []string{"half.example.com"}, fake.names(), "the WorkOS organization really was created")
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 }
 
@@ -468,10 +447,10 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // no generated query can drop a table, and this database is a per-test clone
 	require.NoError(t, err)
 
-	_, err = svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Rolled Back Co", AdminSessionToken: nil})
+	_, err = svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Error(t, err, "a failure seeding default entitlements must fail the request")
 
-	require.Equal(t, []string{"Rolled Back Co"}, fake.names(),
+	require.Equal(t, []string{"rollback.example.com"}, fake.names(),
 		"WorkOS accepted the organization, so the failure really did happen after the upsert")
 
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
@@ -494,7 +473,7 @@ func TestCreateOrganization_WithoutWorkOSConfiguration(t *testing.T) {
 	const workosOrgID = "org_01HZUNCONFIGURED"
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, orgprovision.Unavailable{})
 
-	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "No Idp Co", AdminSessionToken: nil})
+	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "no-idp.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 
 	// Not a gateway error: nothing was asked of WorkOS and retrying will not
 	// help. The organization cannot be logged into, so reporting failure is the
@@ -515,116 +494,44 @@ func TestCreateOrganization_WithoutWorkOSConfiguration(t *testing.T) {
 	require.Empty(t, list.Organizations, "an unconfigured server must not mint a local-only organization")
 }
 
-// TestCreateOrganization_RejectsUnusableNames pins that this endpoint accepts
-// exactly what signup accepts. The cases are the boundaries of
-// orgprovision.ValidateName rather than a sample: one rune under and over each
-// limit, and both polarities of the graphic-character rule.
-func TestCreateOrganization_RejectsUnusableNames(t *testing.T) {
+func TestCreateOrganization_RejectsInvalidURLsBeforeWorkOS(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{name: "empty", input: "", wantErr: true},
-		{name: "spaces only", input: "   ", wantErr: true},
-		{name: "unicode spaces only", input: "\u00a0\u3000", wantErr: true},
-		{name: "one letter", input: "A", wantErr: true},
-		{name: "punctuation only", input: "-- ...", wantErr: true},
-		{name: "one letter and punctuation", input: "A.", wantErr: true},
-		{name: "control character", input: "Acme\u202eCo", wantErr: true},
-		{name: "one rune past the limit", input: strings.Repeat("a", orgprovision.MaxNameLength+1), wantErr: true},
-		{name: "past the raw byte ceiling", input: strings.Repeat("a", orgprovision.MaxRawNameBytes+1), wantErr: true},
-
-		{name: "two letters", input: "Ab"},
-		{name: "at the limit", input: strings.Repeat("a", orgprovision.MaxNameLength)},
-		{name: "letters and punctuation", input: "Bob's Bakery, Inc."},
-		{name: "non-latin", input: "顶尖科技"},
-
-		// The three cases below write their lengths out instead of deriving
-		// them from the constants, which is the only way they can hold the
-		// constants still. Every case above moves with MaxNameLength and
-		// MaxRawNameBytes, so either limit can change by one and the whole
-		// table still passes.
-		//
-		// This one is 100 characters, so it pins MaxNameLength from below.
-		{name: "at the limit, written out", input: "Northwind Traders International Logistics and Freight Forwarding Company Ltd of Great Britain PLC Co"},
-		// 101, which pins it from above.
-		{name: "one rune past the limit, written out", input: "Northwind Traders International Logistics and Freight Forwarding Company Ltd of Great Britain PLC Co.", wantErr: true},
-		// 4000 bytes exactly, which is MaxRawNameBytes today. The padding is
-		// whitespace so the name normalizes to two characters and is accepted:
-		// an input of 4000 letters would be refused for its rune count and
-		// prove nothing about the byte ceiling. Accepting this pins both that
-		// the ceiling is 4000 rather than 3999 and that the comparison is >
-		// rather than >=.
-		{name: "exactly at the raw byte ceiling", input: "Ab" + strings.Repeat(" ", 3998)},
+	fake := newFakeWorkOS("org_invalid_url")
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	for _, input := range invalidOrganizationURLs() {
+		_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: input, OwnershipConfirmed: true, AdminSessionToken: nil})
+		requireOopsCode(t, err, oops.CodeInvalid)
+		require.Empty(t, fake.names(), "invalid URL %q must cause no remote writes", input)
 	}
-
-	for i, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			// Each case owns its own WorkOS organization so the accepted ones
-			// do not collide on workos_id.
-			workosOrgID := "org_01HZNAME" + string(rune('A'+i))
-			fake := newFakeWorkOS(workosOrgID)
-			ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
-
-			_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: tc.input, AdminSessionToken: nil})
-
-			if !tc.wantErr {
-				require.NoError(t, err)
-				require.Len(t, fake.names(), 1)
-				return
-			}
-
-			requireOopsCode(t, err, oops.CodeInvalid)
-			require.Empty(t, fake.names(),
-				"an unusable name must be refused before WorkOS is asked for an organization, or every rejected request leaks one")
-			requireNoOrganizationRow(t, ctx, conn, workosOrgID)
-		})
-	}
+	requireNoOrganizationRow(t, ctx, conn, "org_invalid_url")
 }
 
-// TestCreateOrganization_NormalizesTheNameTheSameWaySignupDoes pins the other
-// half of sharing the validator: the stored name is the normalized one, so two
-// paths that were handed the same name store the same string.
-func TestCreateOrganization_NormalizesTheName(t *testing.T) {
+func TestCreateOrganization_NormalizesTheExactHostname(t *testing.T) {
 	t.Parallel()
 
 	const workosOrgID = "org_01HZNORMALIZE"
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
 
-	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "  Spaced\u00a0\u00a0Out  ", AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "  https://WWW.Example.COM./about?x=1#team  ", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
-	require.Equal(t, "Spaced Out", res.Name, "the stored name must be the normalized one")
-	require.Equal(t, []string{"Spaced Out"}, fake.names(), "WorkOS must be given the normalized name too, or the two systems disagree")
-	require.Equal(t, "spaced-out", res.Slug)
+	require.Equal(t, "www.example.com", res.Name)
+	require.Equal(t, []string{"www.example.com"}, fake.names())
+	require.Equal(t, "www-example-com", res.Slug)
 }
 
-// TestCreateOrganization_NameWithNoLatinSlugFallsBackToTheWorkOSID pins
-// StableBase. A name that slugifies to nothing has to fall back to something,
-// and the fallback is the WorkOS organization id rather than randomness: two
-// attempts at one create then compete for a single advisory-lock key, and a
-// retry heads for the slug the first attempt was heading for.
-func TestCreateOrganization_NameWithNoLatinSlugFallsBackToTheWorkOSID(t *testing.T) {
+func TestCreateOrganization_RequiresOwnershipConfirmation(t *testing.T) {
 	t.Parallel()
 
-	const workosOrgID = "org_01HZNOLATIN"
+	const workosOrgID = "org_unconfirmed"
 	fake := newFakeWorkOS(workosOrgID)
-	ctx, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
-
-	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "顶尖科技", AdminSessionToken: nil})
-	require.NoError(t, err)
-
-	// Written out rather than computed. Deriving the expectation from the same
-	// function under test would accept a random fallback just as happily.
-	require.Equal(t, "org-01hznolatin", res.Slug,
-		"a name with no slug of its own must fall back to the WorkOS organization id")
-	require.Equal(t, "顶尖科技", res.Name, "the fallback slug must not become the name")
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "example.com", OwnershipConfirmed: false, AdminSessionToken: nil})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Empty(t, fake.names())
+	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 }
 
 func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
@@ -633,17 +540,59 @@ func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
 	firstFake := newFakeWorkOS("org_01HZSAMENAME1")
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, firstFake)
 
-	first, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Duplicate Co", AdminSessionToken: nil})
+	first, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "duplicate.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
 	svc.workos = newFakeWorkOS("org_01HZSAMENAME2")
-	second, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{Name: "Duplicate Co", AdminSessionToken: nil})
+	second, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "duplicate.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
 	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Gram id")
 	require.NotEqual(t, first.Slug, second.Slug, "the second organization must get its own slug")
-	require.Equal(t, "duplicate-co", first.Slug)
+	require.Equal(t, "duplicate-example-com", first.Slug)
 
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZSAMENAME1"))
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZSAMENAME2"))
+}
+
+func TestCreateOrganization_HTTPRequiredFields(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS("org_http_contract")
+	ctx, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+	for _, body := range []string{
+		`{}`, `{"name":"Old Name"}`, `{"url":"example.com"}`,
+		`{"ownership_confirmed":true}`, `{"url":null,"ownership_confirmed":true}`,
+		`{"url":"example.com","ownership_confirmed":null}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/admin/organization.create", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code, "%s: %s", body, rec.Body.String())
+	}
+	require.Empty(t, fake.names())
+}
+
+func TestCreateOrganization_HTTPRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkOS("org_http_auth")
+	_, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	for _, token := range []string{"", "invalid-session"} {
+		req := httptest.NewRequest(http.MethodPost, "/admin/organization.create", strings.NewReader(`{"url":"example.com","ownership_confirmed":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: token})
+		}
+		rec := httptest.NewRecorder()
+		SessionMiddleware(mux).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnauthorized, rec.Code)
+	}
+	require.Empty(t, fake.names())
 }

@@ -79,7 +79,7 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 
 // newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider
 // attached, for the handlers that write to one.
-func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrganizationCreator) (context.Context, *Service, *pgxpool.Pool) {
+func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSVerifiedDomainCreator) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
 	ctx, svc, conn := newTestAdminService(t)
