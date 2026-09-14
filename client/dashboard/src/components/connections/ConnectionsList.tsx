@@ -1,3 +1,5 @@
+import { useSessionAgents } from "@/hooks/useSessionAgents";
+import { AgentIcon, AgentLink } from "@/components/agent-link";
 import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -264,6 +266,9 @@ function GroupIcon({
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
 }): JSX.Element {
+  if (grouping === "subject" && group.sessions[0]?.subjectType === "agent") {
+    return <AgentIcon />;
+  }
   if (group.identity) {
     return (
       <PersonIcon label={group.label} photoUrl={group.identity.photoUrl} />
@@ -576,7 +581,14 @@ function ConnectionGroupRow({
           <GroupIcon group={group} grouping={grouping} />
 
           <span className="flex min-w-0 items-center gap-2">
-            {group.identity?.urn ? (
+            {group.identity?.agentId ? (
+              <AgentLink
+                agentId={group.identity.agentId}
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {group.label}
+              </AgentLink>
+            ) : group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}
                 projectSlug={project?.slug}
@@ -745,7 +757,7 @@ function ConnectionGroupRow({
  * is handed, so the three surfaces cannot drift apart in how a connection reads.
  */
 export function ConnectionsList({
-  sessions,
+  sessions: unresolvedSessions,
   grouping,
   canRevoke,
   onRevoked,
@@ -780,6 +792,7 @@ export function ConnectionsList({
   /** Enables user-only Killswitch status/actions on this sessions surface. */
   killswitchContext?: ConnectionKillswitchContext;
 }): JSX.Element {
+  const sessions = useSessionAgents(unresolvedSessions);
   const now = useNow();
   const navigate = useNavigate();
   // The organization page picks its project through a filter, which neither

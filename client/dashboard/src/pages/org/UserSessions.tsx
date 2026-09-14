@@ -1,3 +1,4 @@
+import { useSessionAgents } from "@/hooks/useSessionAgents";
 import { useDeferredValue, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import {
@@ -186,10 +187,12 @@ function UserSessionsInner(): JSX.Element {
     subjectUrn: filters.values.subjectUrn ?? undefined,
     userSessionIssuerId: filters.values.issuerId ?? undefined,
   });
-  const sessions = useMemo(
+  const unresolvedSessions = useMemo(
     () => data?.pages.flatMap((p) => p.result.items) ?? [],
     [data],
   );
+
+  const sessions = useSessionAgents(unresolvedSessions);
 
   // Search filters the loaded rows client-side (subject / client / server /
   // upstream provider), matching the loaded-count semantics shown in the

@@ -62,18 +62,54 @@ Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key
 management. PG `agents` ×4 includes Release assistant, Support triage, Retired
-documentation bot, and the active Release notes assistant. The roster covers
-active, suspended, and revoked identities with three existing fictional owners (display names and
+documentation bot, and the active Release notes assistant, covering active,
+suspended, and revoked identities with three existing fictional owners (display names and
 avatar initials fallback). One inert agent-subject `user_sessions` row shows the
 credential relationship and approving human; its refresh hash is invalid and its
 delegation is empty. Release notes assistant adds an attachment-backed session
-and a scoped connect policy, reusing an existing fictional owner account. API keys deliberately remain empty in the shared demo: the
+and a scoped connect policy. On MCP sessions, readable agents resolve to their name and
+link to `agent-management?id=<AGENT_ID>` with a dotted underline and a muted bot
+icon in the avatar slot (users retain solid underlines and initials/photos). If agent reads
+are denied (including shared demo impersonation), keep the session visible with
+its raw subject URN and no profile link. API keys deliberately remain empty in the shared demo: the
 seed deletes visitor-created keys and asserts none survive. Local-only usable
 keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
-grants only in the target organization, without removing human grants — so
-delegable-grant discovery retains only the scoped seeded policies and its editor is exercised by adding
-synthetic grants to the agent, its owner and the calling user locally. Follow
+grants only in the target organization, without removing human grants, then
+recreates two `mcp:connect` grants for the active release agents, narrowed to
+the demo project and Linear MCP server. The wizard intersects these with
+owner/caller permissions; seeded policy does not prove fresh UI creation. Follow
 check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
+
+### Audit session target resolution
+
+Project Activity Timeline, organization Recent activity, and View all / Audit
+logs must distinguish the human revoker from the affected session owner. The
+current local audit history includes user- and agent-owned session revocations.
+For these rows, `subject_id` is the session ID, not a user or agent ID; resolve
+`metadata.subject_urn` when present, otherwise the raw `subject_display_name`
+URN. Users link to their identity page. Readable agents show their authorized
+name, muted bot icon, and dotted link to agent management. Deleted, unreadable,
+or failed-to-load agents remain raw `agent:<AGENT_ID>` text without a link or
+cached name. Direct agent subjects and agent actors follow the same rule.
+
+These are expectations for existing local history, not additional deterministic
+seed rows. No reseed is required to inspect that history; reseeding may remove
+locally generated revoke events. Keep raw metadata and snapshot diffs available
+in the audit feed. Shared-demo agent access remains restricted as above.
+
+### Exact remote-session attachments
+
+PG `remote_sessions` ×1 and `principal_remote_session_bindings` ×2 show one
+fictional user-owned upstream account shared by **Release assistant** and
+**Release notes assistant** (both active, same human owner). Linear MCP session
+6 is the requesting human session; its issuer is explicitly linked to the
+upstream client. Both bindings retain the same exact session ID, not a copy of
+its credential. The original three agent lifecycle fixtures remain unchanged.
+The account has invalid ciphertext, no refresh token, auto-refresh disabled,
+and reserved `.invalid` issuer metadata. It is display-only, not a live OAuth
+integration. All IDs reuse `Spec.NameSeed` and retarget with the tenant.
+Reseeding deletes bindings before sessions, issuers, agents and projects.
+Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 
 ## Local only (RunLocalFixtures, never the demo org)
 
