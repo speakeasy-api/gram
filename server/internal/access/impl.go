@@ -691,6 +691,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
 }
 
