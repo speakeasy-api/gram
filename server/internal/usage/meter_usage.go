@@ -51,6 +51,9 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 
 	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
 	if err != nil {
+		if boundaryErr, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return nil, boundaryErr.LogWarn(ctx, s.logger)
+		}
 		return nil, err
 	}
 

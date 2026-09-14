@@ -1,8 +1,10 @@
 package usage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -145,6 +147,8 @@ func TestGetMeterUsageWindowErrorsIdentifyInvalidBoundsWithoutLeakingInput(t *te
 	t.Parallel()
 	organizationID := "org-" + uuid.NewString()
 	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	var logs bytes.Buffer
+	service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
 	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
 	valid := "2026-04-01T00:00:00Z"
 	invalid := "private-invalid-timestamp"
@@ -165,6 +169,11 @@ func TestGetMeterUsageWindowErrorsIdentifyInvalidBoundsWithoutLeakingInput(t *te
 		require.NotContains(t, err.Error(), invalid)
 		var parseError *time.ParseError
 		require.ErrorAs(t, err, &parseError)
+		var entry struct {
+			Level string `json:"level"`
+		}
+		require.NoError(t, json.NewDecoder(&logs).Decode(&entry))
+		require.Equal(t, "WARN", entry.Level)
 	}
 }
 
