@@ -1849,3 +1849,20 @@ SELECT throwIf(
      AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
    ) > 0,
   'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');
+
+-- The Shadow AI inventory is pinned exactly, not bounded. Its size is what
+-- seed/demo/PAGES.md documents and what the per-device receipt counts above
+-- must add up to, and both drifted once already when detections were added
+-- without either being updated. An exact count fails the seed the moment the
+-- three stop agreeing, and the category check guards that every kind of tool
+-- the catalog distinguishes is represented on the page, since a category with
+-- no rows renders as an empty filter.
+SELECT throwIf(
+  (SELECT count() FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 52,
+  'demo seed postflight: expected exactly 52 demo AI detection rows, so update PAGES.md and the receipt match counts alongside any change');
+
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 3,
+  'demo seed postflight: demo AI detections must cover harness, assistant and local_model');
