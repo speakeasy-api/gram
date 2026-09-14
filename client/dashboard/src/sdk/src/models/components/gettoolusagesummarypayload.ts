@@ -36,6 +36,10 @@ export type GetToolUsageSummaryPayload = {
    */
   accountType?: string | undefined;
   /**
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+   */
+  clientKeys?: Array<string> | undefined;
+  /**
    * Start time in ISO 8601 format
    */
   from: Date;
@@ -76,6 +80,7 @@ export const TargetTypes$outboundSchema: z.ZodMiniEnum<typeof TargetTypes> = z
 /** @internal */
 export type GetToolUsageSummaryPayload$Outbound = {
   account_type?: string | undefined;
+  client_keys?: Array<string> | undefined;
   from: string;
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
@@ -93,6 +98,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    clientKeys: z.optional(z.array(z.string())),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
@@ -105,6 +111,7 @@ export const GetToolUsageSummaryPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
       metaMcpServerIds: "meta_mcp_server_ids",
