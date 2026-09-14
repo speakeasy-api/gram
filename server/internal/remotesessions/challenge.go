@@ -318,7 +318,7 @@ func NewChallengeManager(
 		option(manager)
 	}
 	if manager.enricher == nil {
-		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
+		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher))
@@ -1438,7 +1438,7 @@ const exchangeIssuerReadBudget = 2 * time.Second
 func (m *ChallengeManager) noteExchangeTokenEndpointMissing(ctx context.Context, logger *slog.Logger, clientRowID uuid.UUID, err error) {
 	var endpointErr *tokenEndpointError
 	var oauthErr oautherr.RFC6749Error
-	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !tokenEndpointMissing(endpointErr.statusCode, errors.As(err, &oauthErr)) {
+	if m.issuerMetadata == nil || !errors.As(err, &endpointErr) || !upstreamEndpointMissing(endpointErr.statusCode, errors.As(err, &oauthErr)) {
 		return
 	}
 	statusCode := endpointErr.statusCode
