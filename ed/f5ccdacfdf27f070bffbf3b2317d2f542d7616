@@ -1,0 +1,129 @@
+server/internal/risk/mediated_findings_prototype_test.go
+  s_858a2308f33ce3::t_4ce546f9a6e7a2 162,188-191,209
+  s_858a2308f33ce3::t_010b6def9a0e1d 8,68
+  s_858a2308f33ce3::t_8f1e95e1bf2837 214-219
+  s_858a2308f33ce3::t_e138d841d9949c 232-244
+  s_858a2308f33ce3::t_4defb4348223b4 57-66,71-72,137-141,173,206-208,210-213,230
+  s_858a2308f33ce3::t_f60eb15e91adc4 1-7,9-56,73-89,92-136,142-161,163-172,174-187,192-205,220-229,231,245-289
+  s_858a2308f33ce3::t_cd5f384ba4a2a6 67,69-70,90-91
+server/cmd/gram/start.go
+  s_858a2308f33ce3::t_07e0bfe177dfbb 1166-1167,1172-1174,1177
+  s_858a2308f33ce3::t_011343b8692da2 1168-1171,1175-1176,1178-1197,1246,1722
+server/internal/background/activities/risk_analysis/batch_finding_publish.go
+  s_858a2308f33ce3::t_47e81c55fef9da 87-91
+server/internal/scanners/publish_test.go
+  s_858a2308f33ce3::t_47e81c55fef9da 255-259
+server/internal/scanners/publish.go
+  s_858a2308f33ce3::t_1b56aa36afbcc8 29-44,100-112,135-139,180-182
+server/internal/risk/chrepo/queries.go
+  s_858a2308f33ce3::t_694565e574211a 146-149,219-222,313-316
+  s_858a2308f33ce3::t_8047151e96fafd 84-86,102-103
+infra/gen_py/gram/risk/v1/finding_pb2.pyi
+  s_858a2308f33ce3::t_c3a2c3aa1759a9 5-6,11-30,58-62,91-94
+  s_858a2308f33ce3::t_5088279b78af56 90,95
+server/internal/risk/finding_ch.go
+  s_858a2308f33ce3::t_8047151e96fafd 57-58,266-267
+  s_858a2308f33ce3::t_6bf8ef2cb679a0 292-322
+  s_858a2308f33ce3::t_e2de1cb8465ca3 34-35
+  s_858a2308f33ce3::t_694565e574211a 114-115,118,122,273-287,289,291,396-399,421-428
+  s_858a2308f33ce3::t_fce7a3fd8e54ed 323
+  s_858a2308f33ce3::t_898141496957b8 429-430
+server/internal/gateway/async_findings_prototype.go
+  s_858a2308f33ce3::t_3915ae2d6e29ef 58
+  s_858a2308f33ce3::t_6bf8ef2cb679a0 36-41
+  s_858a2308f33ce3::t_a7b62ea800f90f 1-17,19-29,31,35,42-43,45-48,50-51,53-57,59-104
+  s_858a2308f33ce3::t_d32c65539f18e3 18,30,32-34,44,49,52
+server/internal/instances/impl.go
+  s_858a2308f33ce3::t_011343b8692da2 101,106-109,131
+  s_858a2308f33ce3::t_0c375d9d978d93 379
+server/internal/risk/mediated_findings_prototype.go
+  s_858a2308f33ce3::t_cd5f384ba4a2a6 82
+  s_858a2308f33ce3::t_d32c65539f18e3 30
+  s_858a2308f33ce3::t_6bf8ef2cb679a0 15
+  s_858a2308f33ce3::t_38933753c2a8c6 1-14,16-22,24-29,31-81,83-162
+  s_858a2308f33ce3::t_1bb3778f8e8a31 23
+infra/proto/gram/risk/v1/finding.proto
+  s_858a2308f33ce3::t_422ce1ca6d6473 91-92,94-100
+  s_858a2308f33ce3::t_35a087e3c275fe 14-24,93
+server/internal/gateway/proxy.go
+  s_858a2308f33ce3::t_a7b62ea800f90f 34,132,145,150,161,163-166,207-215,217-219,222,224,226,228,230,232,234-236,238-244,247-248,258,260-261,266-313
+  s_858a2308f33ce3::t_443c80e3b9245b 237,245-246,253-257,259
+  s_858a2308f33ce3::t_ebf60d22cec2e4 249-252
+  s_858a2308f33ce3::t_3915ae2d6e29ef 125,154
+  s_858a2308f33ce3::t_cd5f384ba4a2a6 216,262-265
+server/internal/scanners/customruleanalyzer/handler.go
+  s_858a2308f33ce3::t_47e81c55fef9da 103-107
+server/internal/mcp/rpc_tools_call.go
+  s_858a2308f33ce3::t_0c375d9d978d93 441
+server/internal/scanners/gitleaks/handler.go
+  s_858a2308f33ce3::t_47e81c55fef9da 68-72
+server/internal/mcp/serve_platform.go
+  s_858a2308f33ce3::t_0c375d9d978d93 479
+server/clickhouse/schema.sql
+  s_858a2308f33ce3::t_675327d131d217 1407-1408,1448-1449,1465
+  s_858a2308f33ce3::t_4dc24f975a80f1 1490
+  s_858a2308f33ce3::t_694565e574211a 1491-1497
+server/internal/risk/scanner.go
+  s_858a2308f33ce3::t_38933753c2a8c6 159,787,845,881,902,981
+server/internal/scanners/promptinjection/handler.go
+  s_858a2308f33ce3::t_47e81c55fef9da 102-106
+server/internal/mcp/impl.go
+  s_858a2308f33ce3::t_011343b8692da2 375,396-399,435
+server/internal/risk/ASYNC_FINDINGS_PROTOTYPE.md
+  s_858a2308f33ce3::t_675327d131d217 1-13,17-53
+  s_858a2308f33ce3::t_e2de1cb8465ca3 14-16
+server/internal/risk/finding_ch_test.go
+  s_858a2308f33ce3::t_52df7cf5d0adfd 210-250
+server/internal/gateway/async_findings_prototype_test.go
+  s_858a2308f33ce3::t_443c80e3b9245b 1-79
+server/internal/scanners/promptpolicy/handler.go
+  s_858a2308f33ce3::t_47e81c55fef9da 87-91
+infra/gen/gram/risk/v1/finding.pb.go
+  s_858a2308f33ce3::t_e8f5c5f91975c5 57-61,348-394,397,402,407,412,417,422,427,432,437,442,447,452,457,466,471,476,481,486,491,496,501,506,511,516,521,526-550,735-769,900-923,987-994,1002,1006,1010,1014,1018,1022,1026,1030,1034,1038,1042,1046,1050,1055,1059,1063,1067,1071,1075,1079,1083,1087,1091,1095,1099,1103,1106-1431,1439-1440,1477-1493,1496,1498-1499,1502-1507,1521
+infra/gen/kcc.yaml
+  s_858a2308f33ce3::t_b318f18b2e2859 880-889,917-921
+infra/gen_py/gram/risk/v1/finding_pb2.py
+  s_858a2308f33ce3::t_ee39630512bd3b 28,39-41
+server/clickhouse/local/golang_migrate/20260914095056_proto-async-findings-dimensions.down.sql
+  s_7e03f0f75b771f::t_11716c1c666574 1-5
+server/clickhouse/local/golang_migrate/20260914095056_proto-async-findings-dimensions.up.sql
+  s_7e03f0f75b771f::t_89681caf94cb71 1-5
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_7e03f0f75b771f::t_4ed2139a949a9e 1,109
+server/clickhouse/migrations/20260914095038_proto-async-findings-dimensions.sql
+  s_b2fbf10079c9c3::t_021b509744e7b0 1-5
+server/clickhouse/migrations/atlas.sum
+  s_b2fbf10079c9c3::t_9d0bc8b83e1357 1,114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "edf5ccdacfdf27f070bffbf3b2317d2f542d7616",
+  "prompts": {},
+  "sessions": {
+    "s_7e03f0f75b771f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-da54-7902-9dfd-7309263448a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_858a2308f33ce3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f46-0013-71c1-ab0f-116fb13f07d0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_b2fbf10079c9c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-f276-75e1-a2cc-1a287f91110f",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
