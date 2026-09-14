@@ -1,5 +1,5 @@
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import { Operator } from "@gram/client/models/components/logfilter";
+import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
 import type { useOrgRoutes, useRoutes } from "@/routes";
 import { USER_EMAIL_FILTER_PATH } from "@/components/observe/observeTargetFilters";
 import { serializeFilters } from "@/pages/logs/log-filter-url";
