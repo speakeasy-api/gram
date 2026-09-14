@@ -124,6 +124,15 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 	}
 }
 
+// AttachAgentPrincipal sets an agent-key poll's principal and folds it into the
+// ETag so a rename invalidates cached polls. Human polls never call this.
+func AttachAgentPrincipal(result *gen.GetPluginsResult, principal *gen.AgentPollingPrincipal) {
+	result.Principal = principal
+	hash := sha256.New()
+	writeAgentPluginsETag(hash, "plugins=%s\nprincipal=%s\x00%s\n", result.Etag, principal.Urn, principal.DisplayName)
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
+}
+
 // writeAgentPluginsETag hashes only the contributions emitted into the result:
 // the first marketplace for each rendered marketplace name, its observability
 // plugin when enabled, and each rendered assigned plugin. Deployment config
