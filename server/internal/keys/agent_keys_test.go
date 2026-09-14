@@ -432,7 +432,7 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 		code   oops.Code
 	}{
 		{name: "project binding", mutate: func(p *gen.CreateKeyPayload) { p.ProjectID = new(projectID.String()) }, code: oops.CodeBadRequest},
-		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(2) }, code: oops.CodeBadRequest},
+		{name: "unsupported policy version", mutate: func(p *gen.CreateKeyPayload) { p.DelegatedGrantsVersion = new(3) }, code: oops.CodeBadRequest},
 		{name: "deny effect", mutate: func(p *gen.CreateKeyPayload) { p.RequestedGrants[0].Effect = "deny" }, code: oops.CodeBadRequest},
 		{name: "duplicate grant", mutate: func(p *gen.CreateKeyPayload) {
 			p.RequestedGrants = append(p.RequestedGrants, cloneGrant(p.RequestedGrants[0]))
