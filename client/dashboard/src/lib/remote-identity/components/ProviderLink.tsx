@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { Link } from "react-router";
-import { issuerDisplayName } from "./issuerDisplay";
+import { issuerDisplayName } from "@/pages/remote-identity-providers/issuerDisplay";
 
 // The subset of a remote identity provider needed to name it and route to it.
 // Structural, so the org-scoped and project-scoped issuer models both satisfy it.

@@ -17,9 +17,9 @@ import {
   RemoteSessionIssuer$inboundSchema,
 } from "./remotesessionissuer.js";
 import {
-  ServerUserIdentityRegistrationFailure,
-  ServerUserIdentityRegistrationFailure$inboundSchema,
-} from "./serveruseridentityregistrationfailure.js";
+  ServerIdentityRegistrationFailure,
+  ServerIdentityRegistrationFailure$inboundSchema,
+} from "./serveridentityregistrationfailure.js";
 
 /**
  * The client ownership tier.
@@ -63,21 +63,21 @@ export type RegistrationMethod = ClosedEnum<typeof RegistrationMethod>;
 /**
  * Successful commit status. Present only after local commit.
  */
-export const CommitServerUserIdentityConfigurationResultStatus = {
+export const CommitServerIdentityConfigurationResultStatus = {
   Registered: "registered",
   Linked: "linked",
 } as const;
 /**
  * Successful commit status. Present only after local commit.
  */
-export type CommitServerUserIdentityConfigurationResultStatus = ClosedEnum<
-  typeof CommitServerUserIdentityConfigurationResultStatus
+export type CommitServerIdentityConfigurationResultStatus = ClosedEnum<
+  typeof CommitServerIdentityConfigurationResultStatus
 >;
 
 /**
  * The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
  */
-export type CommitServerUserIdentityConfigurationResult = {
+export type CommitServerIdentityConfigurationResult = {
   /**
    * A remote_session_client record. client_secret_encrypted is never returned.
    */
@@ -93,7 +93,7 @@ export type CommitServerUserIdentityConfigurationResult = {
   /**
    * A completed automatic registration failure using the bounded OAuth registration taxonomy.
    */
-  failure?: ServerUserIdentityRegistrationFailure | undefined;
+  failure?: ServerIdentityRegistrationFailure | undefined;
   /**
    * True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.
    */
@@ -117,7 +117,7 @@ export type CommitServerUserIdentityConfigurationResult = {
   /**
    * Successful commit status. Present only after local commit.
    */
-  status?: CommitServerUserIdentityConfigurationResultStatus | undefined;
+  status?: CommitServerIdentityConfigurationResultStatus | undefined;
 };
 
 /** @internal */
@@ -134,25 +134,26 @@ export const RegistrationMethod$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RegistrationMethod);
 
 /** @internal */
-export const CommitServerUserIdentityConfigurationResultStatus$inboundSchema:
-  z.ZodMiniEnum<typeof CommitServerUserIdentityConfigurationResultStatus> = z
-    .enum(CommitServerUserIdentityConfigurationResultStatus);
+export const CommitServerIdentityConfigurationResultStatus$inboundSchema:
+  z.ZodMiniEnum<typeof CommitServerIdentityConfigurationResultStatus> = z.enum(
+    CommitServerIdentityConfigurationResultStatus,
+  );
 
 /** @internal */
-export const CommitServerUserIdentityConfigurationResult$inboundSchema:
-  z.ZodMiniType<CommitServerUserIdentityConfigurationResult, unknown> = z.pipe(
+export const CommitServerIdentityConfigurationResult$inboundSchema:
+  z.ZodMiniType<CommitServerIdentityConfigurationResult, unknown> = z.pipe(
     z.object({
       client: z.optional(RemoteSessionClient$inboundSchema),
       client_path: z.optional(z.string()),
       client_tier: z.optional(ClientTier$inboundSchema),
-      failure: z.optional(ServerUserIdentityRegistrationFailure$inboundSchema),
+      failure: z.optional(ServerIdentityRegistrationFailure$inboundSchema),
       manual_setup_required: z.boolean(),
       provider: z.optional(RemoteSessionIssuer$inboundSchema),
       provider_path: z.optional(z.string()),
       provider_tier: z.optional(ProviderTier$inboundSchema),
       registration_method: z.optional(RegistrationMethod$inboundSchema),
       status: z.optional(
-        CommitServerUserIdentityConfigurationResultStatus$inboundSchema,
+        CommitServerIdentityConfigurationResultStatus$inboundSchema,
       ),
     }),
     z.transform((v) => {
@@ -167,18 +168,18 @@ export const CommitServerUserIdentityConfigurationResult$inboundSchema:
     }),
   );
 
-export function commitServerUserIdentityConfigurationResultFromJSON(
+export function commitServerIdentityConfigurationResultFromJSON(
   jsonString: string,
 ): SafeParseResult<
-  CommitServerUserIdentityConfigurationResult,
+  CommitServerIdentityConfigurationResult,
   SDKValidationError
 > {
   return safeParse(
     jsonString,
     (x) =>
-      CommitServerUserIdentityConfigurationResult$inboundSchema.parse(
+      CommitServerIdentityConfigurationResult$inboundSchema.parse(
         JSON.parse(x),
       ),
-    `Failed to parse 'CommitServerUserIdentityConfigurationResult' from JSON`,
+    `Failed to parse 'CommitServerIdentityConfigurationResult' from JSON`,
   );
 }

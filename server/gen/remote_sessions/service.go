@@ -18,16 +18,19 @@ import (
 // Operator visibility into remote_sessions Gram is holding on a principal's
 // behalf. Read + revoke; sessions are written by
 // /mcp/{slug}/remote_login_callback and the silent-refresh path.
-// access_token_encrypted and refresh_token_encrypted are never returned.
+// access_token_encrypted and refresh_token_encrypted are never returned. Also
+// hosts composite dashboard operations that configure a single MCP server's
+// identity in one atomic call.
 type Service interface {
-	// Atomically configure user identity for a Remote MCP-backed MCP server. The
+	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
 	// links an existing client, creates a manual client, or automatically prefers
-	// CIMD over DCR. Existing-client linking requires mcp:write on the target;
-	// creating a provider or client additionally requires project:write.
-	// Unsupported automatic registration returns manual_setup_required without
-	// changing local state.
-	CommitServerUserIdentityConfiguration(context.Context, *CommitServerUserIdentityConfigurationPayload) (res *CommitServerUserIdentityConfigurationResult, err error)
+	// CIMD over DCR. Existing-client linking requires mcp:write on the target and
+	// on every other MCP server sharing its user session issuer, because the
+	// client binding is keyed by issuer; creating a provider or client
+	// additionally requires project:write. Unsupported automatic registration
+	// returns manual_setup_required without changing local state.
+	CommitServerIdentityConfiguration(context.Context, *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error)
 	// List remote_sessions in the caller's project. access_token_encrypted and
 	// refresh_token_encrypted are never returned — only metadata
 	// (access_expires_at, refresh_expires_at, scopes).
@@ -57,11 +60,11 @@ const ServiceName = "remoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"commitServerUserIdentityConfiguration", "listRemoteSessions", "revokeRemoteSession"}
+var MethodNames = [3]string{"commitServerIdentityConfiguration", "listRemoteSessions", "revokeRemoteSession"}
 
-// CommitServerUserIdentityConfigurationPayload is the payload type of the
-// remoteSessions service commitServerUserIdentityConfiguration method.
-type CommitServerUserIdentityConfigurationPayload struct {
+// CommitServerIdentityConfigurationPayload is the payload type of the
+// remoteSessions service commitServerIdentityConfiguration method.
+type CommitServerIdentityConfigurationPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -77,12 +80,12 @@ type CommitServerUserIdentityConfigurationPayload struct {
 	// existing mode.
 	ExistingClientID *string
 	// Client settings for auto or manual mode. Forbidden for existing mode.
-	ClientConfiguration *ServerUserIdentityClientConfiguration
+	ClientConfiguration *ServerIdentityClientConfiguration
 }
 
-// CommitServerUserIdentityConfigurationResult is the result type of the
-// remoteSessions service commitServerUserIdentityConfiguration method.
-type CommitServerUserIdentityConfigurationResult struct {
+// CommitServerIdentityConfigurationResult is the result type of the
+// remoteSessions service commitServerIdentityConfiguration method.
+type CommitServerIdentityConfigurationResult struct {
 	// Successful commit status. Present only after local commit.
 	Status *string
 	// How the client was obtained. Present on success and registration failure.
@@ -106,7 +109,7 @@ type CommitServerUserIdentityConfigurationResult struct {
 	ClientPath *string
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
-	Failure *ServerUserIdentityRegistrationFailure
+	Failure *ServerIdentityRegistrationFailure
 }
 
 // Form for creating a remote_session_issuer.
@@ -237,7 +240,7 @@ type RevokeRemoteSessionPayload struct {
 // Configuration for a newly-created project remote-session client. Manual mode
 // requires client_id. Auto mode forbids client_id and client_secret and uses
 // scope, audience, and token_endpoint_auth_method as registration preferences.
-type ServerUserIdentityClientConfiguration struct {
+type ServerIdentityClientConfiguration struct {
 	// The out-of-band OAuth client identifier. Manual mode only.
 	ClientID *string
 	// The out-of-band OAuth client secret. Manual mode only; encrypted before
@@ -254,7 +257,7 @@ type ServerUserIdentityClientConfiguration struct {
 
 // A completed automatic registration failure using the bounded OAuth
 // registration taxonomy.
-type ServerUserIdentityRegistrationFailure struct {
+type ServerIdentityRegistrationFailure struct {
 	Outcome   string
 	Reason    string
 	Retryable bool

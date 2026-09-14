@@ -14,32 +14,264 @@ import { Text } from "@/components/ui/Text";
 import { getMcpServerArgs } from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
-import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
+import {
+  MCPServerAvailabilityToggle,
+  MCPServerStatusDropdown,
+} from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
   mcpServerTabHref,
 } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections/authentication/useAllRemoteSessionClients";
+import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import {
+  deriveIdentityMode,
+  findPassThroughAuthorizationHeader,
+  type IdentityMode,
+} from "@/lib/remote-identity";
+import { IdentityExplainerDialog } from "@/lib/remote-identity";
+import { useUpstreamProbe } from "@/lib/remote-identity";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import {
   ArrowRight,
   ExternalLink,
+  Info,
   LayoutDashboard,
   Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
 } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
+import { cn } from "@/lib/utils";
 import * as React from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
+
+// The dot colours carry the state at a glance, matching the identity symbols
+// AIM-230 settled on: blue for per-user, green for the shared agent, grey for
+// none, amber when none is configured but the upstream demands a credential.
+const IDENTITY_DOT: Record<IdentityMode, string> = {
+  user: "bg-information-default",
+  agent: "bg-success-default",
+  none: "bg-muted-foreground/50",
+};
+
+function remoteIdentityLabel(mode: IdentityMode): string {
+  switch (mode) {
+    case "user":
+      return "User";
+    case "agent":
+      return "Agent";
+    case "none":
+      return "None";
+  }
+}
+
+export function RemoteIdentitySummary({
+  mode,
+  passThroughAuthorization,
+  authenticationRequired,
+  unavailable,
+  loading,
+  settingsHref,
+}: {
+  mode: IdentityMode;
+  passThroughAuthorization: boolean;
+  /** None is configured but the upstream answered the probe with a challenge. */
+  authenticationRequired: boolean;
+  unavailable: boolean;
+  loading: boolean;
+  settingsHref: string;
+}): React.JSX.Element {
+  const [explainerOpen, setExplainerOpen] = React.useState(false);
+  const warn = passThroughAuthorization || authenticationRequired;
+  const label = passThroughAuthorization
+    ? "Needs cleanup"
+    : remoteIdentityLabel(mode);
+
+  // Only the warning states have something to reveal; a healthy identity is
+  // fully described by the pill itself.
+  let problem: string | null = null;
+  if (passThroughAuthorization) {
+    problem =
+      "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
+  } else if (authenticationRequired) {
+    problem =
+      "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User or Agent Identity is set up.";
+  }
+
+  let status: React.JSX.Element;
+  if (unavailable) {
+    status = (
+      <Text small className="text-destructive">
+        Identity unavailable
+      </Text>
+    );
+  } else if (loading) {
+    status = (
+      <Text muted small>
+        Loading…
+      </Text>
+    );
+  } else {
+    // The pill is the way into the setting it reports, so it is the link.
+    const pill = (
+      <Link
+        to={settingsHref}
+        aria-label={`Identity: ${label}. Open identity settings`}
+        className={cn(
+          "bg-card hover:border-input hover:bg-muted/40 flex w-fit shrink-0 items-center gap-2 border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          warn && "border-warning-default",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            warn ? "bg-warning-default" : IDENTITY_DOT[mode],
+          )}
+        />
+        {label}
+      </Link>
+    );
+
+    status = problem ? (
+      <HoverCard openDelay={150}>
+        <HoverCardTrigger asChild>{pill}</HoverCardTrigger>
+        <HoverCardContent align="start" className="w-72">
+          <Text small className="block">
+            {problem}
+          </Text>
+        </HoverCardContent>
+      </HoverCard>
+    ) : (
+      pill
+    );
+  }
+
+  return (
+    // One row: what the setting is on the left, what it currently is on the
+    // right. The pill is small enough that a second line spent nothing.
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <DetailSidebarInfoLabel>Identity</DetailSidebarInfoLabel>
+        {/* The question the label raises — what these modes mean — rather than
+            something about the value beside it. */}
+        <button
+          type="button"
+          onClick={() => setExplainerOpen(true)}
+          aria-label="What do these identity modes mean?"
+          className="text-muted-foreground hover:text-foreground shrink-0"
+        >
+          <Info aria-hidden="true" className="size-3" />
+        </button>
+      </div>
+      {status}
+      <IdentityExplainerDialog
+        open={explainerOpen}
+        onOpenChange={setExplainerOpen}
+      />
+    </div>
+  );
+}
+
+/**
+ * A labelled URL in the rail. The value is long and the rail is narrow, so it
+ * sits on one clipped line and the whole thing appears on hover.
+ *
+ * The reveal is a hover card rather than an absolutely-positioned child:
+ * SidebarContent scrolls (overflow-auto), which clips any descendant that
+ * tries to escape the rail no matter what z-index it carries. Radix portals
+ * the content to the body, so it floats over the page as intended.
+ */
+export function SidebarUrlRow({
+  label,
+  url,
+  copyTooltip,
+}: {
+  label: string;
+  url: string;
+  copyTooltip: string;
+}): React.JSX.Element {
+  const display = url.replace(/^https?:\/\//, "");
+  return (
+    <div className="flex flex-col gap-1">
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+      <div className="flex items-start gap-1">
+        <div className="min-w-0 flex-1">
+          {/* No delay: this is a reveal of text already on screen, not a
+            disclosure of extra information. */}
+          <HoverCard openDelay={0}>
+            <HoverCardTrigger asChild>
+              {/* The padding belongs to the trigger, not the text inside it:
+                the card aligns to the trigger's box, and matching insets are
+                what land the two texts on each other. The negative margin
+                cancels the indent so the URL stays flush with its label. */}
+              <span className="-mx-2 block px-2 py-1">
+                <Text
+                  variant="small"
+                  muted
+                  data-slot="sidebar-url-line"
+                  className="block truncate font-mono text-xs"
+                >
+                  {display}
+                </Text>
+              </span>
+            </HoverCardTrigger>
+            {/* The card carries the same insets as the line, so aligning their
+              boxes aligns their text: pull up by exactly the trigger's height
+              and the two land on each other. */}
+            <HoverCardContent
+              align="start"
+              side="bottom"
+              sideOffset={-24}
+              data-slot="sidebar-url-full"
+              className="w-auto max-w-none px-2 py-1 font-mono text-xs whitespace-nowrap duration-75"
+            >
+              {display}
+            </HoverCardContent>
+          </HoverCard>
+        </div>
+        <CopyButton
+          text={url}
+          size="xs"
+          tooltip={copyTooltip}
+          className="mt-[-2px] shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
+
+export function McpServerCardStatus({
+  server,
+}: {
+  server: McpServer;
+}): React.JSX.Element {
+  if (server.remoteMcpServerId) {
+    return <MCPServerAvailabilityToggle server={server} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
+      <MCPServerStatusDropdown server={server} />
+    </div>
+  );
+}
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
@@ -81,11 +313,41 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
   // A remote identity provider is attached when this server's issuer has at
   // least one remote session client pairing.
-  const { items: remoteSessionClients } = useAllRemoteSessionClients(
+  const {
+    items: remoteSessionClients,
+    isLoading: isLoadingRemoteSessionClients,
+    isError: isRemoteSessionClientsError,
+  } = useAllRemoteSessionClients(
     { userSessionIssuerId },
     { enabled: !!userSessionIssuerId },
   );
   const hasRemoteIdentityProvider = remoteSessionClients.length > 0;
+  const {
+    data: remoteHeadersResult,
+    isLoading: isLoadingRemoteHeaders,
+    isError: isRemoteHeadersError,
+  } = useRemoteMcpServerHeaders({ remoteMcpServerId }, undefined, {
+    enabled: remoteMcpServerId !== "",
+  });
+  const remoteHeaders = remoteHeadersResult?.headers ?? [];
+  const remoteIdentityMode = deriveIdentityMode(
+    remoteSessionClients.length,
+    remoteHeaders,
+  );
+  const passThroughAuthorization =
+    findPassThroughAuthorizationHeader(remoteHeaders);
+  const identityUnavailable =
+    isRemoteSessionClientsError || isRemoteHeadersError;
+  // Only worth probing when nothing is configured: that is the one state where
+  // the upstream's answer changes what the pill should say.
+  const identityProbeStatus = useUpstreamProbe(
+    remoteMcpServerId,
+    !identityUnavailable &&
+      remoteIdentityMode === "none" &&
+      !passThroughAuthorization &&
+      !isLoadingRemoteSessionClients &&
+      !isLoadingRemoteHeaders,
+  );
 
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
@@ -239,73 +501,56 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const cardContent = mcpServer && (
     <>
-      <div className="flex items-center gap-2.5">
-        <SourceMcpIcon
-          mcpServerId={mcpServer.id}
-          className="h-6 w-6 shrink-0 object-contain"
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <SourceMcpIcon
+            mcpServerId={mcpServer.id}
+            className="h-6 w-6 shrink-0 object-contain"
+          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Text className="truncate font-semibold">
+              {mcpServer.name || "MCP Server"}
+            </Text>
+            {isRemoteBacked && (
+              <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
+            )}
+            {isTunneledBacked && (
+              <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
+            )}
+            {isUnproxied && (
+              <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
+            )}
+          </div>
+        </div>
+        {isRemoteBacked ? <McpServerCardStatus server={mcpServer} /> : null}
+      </div>
+
+      {isRemoteBacked ? null : <McpServerCardStatus server={mcpServer} />}
+
+      {isRemoteBacked ? (
+        <RemoteIdentitySummary
+          mode={remoteIdentityMode}
+          passThroughAuthorization={!!passThroughAuthorization}
+          authenticationRequired={
+            identityProbeStatus === "authentication-required"
+          }
+          unavailable={identityUnavailable}
+          loading={isLoadingRemoteSessionClients || isLoadingRemoteHeaders}
+          settingsHref={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
         />
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Text className="truncate font-semibold">
-            {mcpServer.name || "MCP Server"}
-          </Text>
-          {isRemoteBacked && (
-            <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
-          )}
-          {isTunneledBacked && (
-            <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
-          )}
-          {isUnproxied && (
-            <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
-          )}
-        </div>
-      </div>
+      ) : null}
 
-      <div className="flex flex-col gap-1.5">
-        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
-        <MCPServerStatusDropdown server={mcpServer} />
-      </div>
+      {mcpUrl ? (
+        <SidebarUrlRow label="URL" url={mcpUrl} copyTooltip="Copy URL" />
+      ) : null}
 
-      {mcpUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="xs"
-              tooltip="Copy URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
-      )}
-
-      {upstreamUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={upstreamUrl}
-              size="xs"
-              tooltip="Copy upstream URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
-      )}
+      {upstreamUrl ? (
+        <SidebarUrlRow
+          label="Upstream URL"
+          url={upstreamUrl}
+          copyTooltip="Copy upstream URL"
+        />
+      ) : null}
 
       {/* Content-sized halves with one gutter either side of the rule: at
           flex-1 the rule sat at the container's midpoint, which the longer

@@ -253,6 +253,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
+18. **Remote MCP identity settings** — open the settings page for each seeded
+    Remote MCP server. Linear shows the **User** identity pill, the Example
+    Workspace Identity provider, and the Session length / Client access controls
+    in Sessions. Slack shows **Agent** with the inert demo Authorization
+    credential managed under Identity. GitHub shows **None** with no provider or
+    static Authorization header. All three use the Display, Identity, Server URL,
+    Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
+    after the Identity controls.
 
 ## On failure
 

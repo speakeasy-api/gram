@@ -3,4 +3,4 @@
 "dashboard": patch
 ---
 
-Configure Remote MCP user identity through one atomic provider and client setup operation.
+Configure Remote MCP server identity through one atomic provider and client setup operation.

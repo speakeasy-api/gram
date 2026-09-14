@@ -8,12 +8,12 @@ import {
 } from "./sections/authentication/AuthenticationSection";
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
-import { HeadersSection } from "./sections/HeadersSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
+import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
 
 function useScrollToSettingsHash() {
@@ -50,6 +50,30 @@ export function SettingsTab({
   useScrollToSettingsHash();
 
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  const remoteMcpServerId = mcpServer.remoteMcpServerId;
+
+  if (remoteMcpServerId) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BrandingSection
+          mcpServer={mcpServer}
+          title="Display"
+          description="Customize how this Remote MCP server appears in the dashboard and on its installation page."
+        />
+        {/* Upstream headers live inside Identity's Custom Headers disclosure
+            they are governed by the identity choice, not a peer of it. */}
+        <AuthenticationSection mcpServer={mcpServer} />
+        <ServerUrlSection
+          backend={{ mcpServerId: mcpServer.id }}
+          endpoints={endpoints}
+          isLoadingEndpoints={isLoadingEndpoints}
+        />
+        <RemoteMcpSessionsSection mcpServer={mcpServer} />
+        <ToolFilteringSection mcpServer={mcpServer} />
+        <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
@@ -62,12 +86,6 @@ export function SettingsTab({
         />
       )}
       <AuthenticationSection mcpServer={mcpServer} />
-      {mcpServer.remoteMcpServerId ? (
-        <HeadersSection
-          remoteMcpServerId={mcpServer.remoteMcpServerId}
-          context={{ kind: "mcp-server" }}
-        />
-      ) : null}
       {mcpServer.tunneledMcpServerId ? (
         <PublicRateLimitsSection
           tunneledMcpServerId={mcpServer.tunneledMcpServerId}

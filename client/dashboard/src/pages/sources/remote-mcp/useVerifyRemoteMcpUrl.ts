@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 type VerifyResult = {
   verified: boolean;
   message: string;
+  outcome?: "mcp_available" | "authentication_required";
 };
 
 function unreachableMessage(reason: string | undefined): string {
@@ -71,12 +72,17 @@ export function useVerifyRemoteMcpUrl(url: string): VerifyRemoteMcpUrlState {
       if (latestUrlRef.current.trim() !== trimmed) return;
       switch (response.outcome) {
         case "mcp_available":
-          setResult({ verified: true, message: "MCP server is available" });
+          setResult({
+            verified: true,
+            message: "MCP server is available",
+            outcome: response.outcome,
+          });
           break;
         case "authentication_required":
           setResult({
             verified: true,
             message: "MCP server is available and requires authentication",
+            outcome: response.outcome,
           });
           break;
         case "invalid_mcp_response": {

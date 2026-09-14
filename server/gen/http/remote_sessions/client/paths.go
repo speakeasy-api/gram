@@ -7,9 +7,9 @@
 
 package client
 
-// CommitServerUserIdentityConfigurationRemoteSessionsPath returns the URL path to the remoteSessions service commitServerUserIdentityConfiguration HTTP endpoint.
-func CommitServerUserIdentityConfigurationRemoteSessionsPath() string {
-	return "/rpc/remoteSessions.commitServerUserIdentityConfiguration"
+// CommitServerIdentityConfigurationRemoteSessionsPath returns the URL path to the remoteSessions service commitServerIdentityConfiguration HTTP endpoint.
+func CommitServerIdentityConfigurationRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.commitServerIdentityConfiguration"
 }
 
 // ListRemoteSessionsRemoteSessionsPath returns the URL path to the remoteSessions service listRemoteSessions HTTP endpoint.

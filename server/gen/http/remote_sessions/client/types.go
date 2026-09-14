@@ -15,10 +15,10 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CommitServerUserIdentityConfigurationRequestBody is the type of the
-// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
-// HTTP request body.
-type CommitServerUserIdentityConfigurationRequestBody struct {
+// CommitServerIdentityConfigurationRequestBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// request body.
+type CommitServerIdentityConfigurationRequestBody struct {
 	// The target MCP server. It must be backed directly by a Remote MCP source.
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// An existing Remote Identity Provider visible to the target project.
@@ -31,13 +31,13 @@ type CommitServerUserIdentityConfigurationRequestBody struct {
 	// existing mode.
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
-	ClientConfiguration *ServerUserIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
+	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationResponseBody is the type of the
-// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
-// HTTP response body.
-type CommitServerUserIdentityConfigurationResponseBody struct {
+// CommitServerIdentityConfigurationResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body.
+type CommitServerIdentityConfigurationResponseBody struct {
 	// Successful commit status. Present only after local commit.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// How the client was obtained. Present on success and registration failure.
@@ -61,7 +61,7 @@ type CommitServerUserIdentityConfigurationResponseBody struct {
 	ClientPath *string `form:"client_path,omitempty" json:"client_path,omitempty" xml:"client_path,omitempty"`
 	// Completed DCR failure. Mutually exclusive with status and
 	// manual_setup_required=true.
-	Failure *ServerUserIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
+	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -72,10 +72,10 @@ type ListRemoteSessionsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationUnauthorizedResponseBody is the type of
-// the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "unauthorized" error.
-type CommitServerUserIdentityConfigurationUnauthorizedResponseBody struct {
+// CommitServerIdentityConfigurationUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "unauthorized" error.
+type CommitServerIdentityConfigurationUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -91,10 +91,10 @@ type CommitServerUserIdentityConfigurationUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationForbiddenResponseBody is the type of
-// the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "forbidden" error.
-type CommitServerUserIdentityConfigurationForbiddenResponseBody struct {
+// CommitServerIdentityConfigurationForbiddenResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "forbidden" error.
+type CommitServerIdentityConfigurationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -110,10 +110,10 @@ type CommitServerUserIdentityConfigurationForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationBadRequestResponseBody is the type of
-// the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "bad_request" error.
-type CommitServerUserIdentityConfigurationBadRequestResponseBody struct {
+// CommitServerIdentityConfigurationBadRequestResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "bad_request" error.
+type CommitServerIdentityConfigurationBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -129,10 +129,10 @@ type CommitServerUserIdentityConfigurationBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationNotFoundResponseBody is the type of the
-// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
-// HTTP response body for the "not_found" error.
-type CommitServerUserIdentityConfigurationNotFoundResponseBody struct {
+// CommitServerIdentityConfigurationNotFoundResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "not_found" error.
+type CommitServerIdentityConfigurationNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -148,10 +148,10 @@ type CommitServerUserIdentityConfigurationNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationConflictResponseBody is the type of the
-// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
-// HTTP response body for the "conflict" error.
-type CommitServerUserIdentityConfigurationConflictResponseBody struct {
+// CommitServerIdentityConfigurationConflictResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "conflict" error.
+type CommitServerIdentityConfigurationConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -167,10 +167,10 @@ type CommitServerUserIdentityConfigurationConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody is the
-// type of the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "unsupported_media" error.
-type CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody struct {
+// CommitServerIdentityConfigurationUnsupportedMediaResponseBody is the type of
+// the "remoteSessions" service "commitServerIdentityConfiguration" endpoint
+// HTTP response body for the "unsupported_media" error.
+type CommitServerIdentityConfigurationUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -186,10 +186,10 @@ type CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationInvalidResponseBody is the type of the
-// "remoteSessions" service "commitServerUserIdentityConfiguration" endpoint
-// HTTP response body for the "invalid" error.
-type CommitServerUserIdentityConfigurationInvalidResponseBody struct {
+// CommitServerIdentityConfigurationInvalidResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "invalid" error.
+type CommitServerIdentityConfigurationInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -205,10 +205,10 @@ type CommitServerUserIdentityConfigurationInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationInvariantViolationResponseBody is the
-// type of the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "invariant_violation" error.
-type CommitServerUserIdentityConfigurationInvariantViolationResponseBody struct {
+// CommitServerIdentityConfigurationInvariantViolationResponseBody is the type
+// of the "remoteSessions" service "commitServerIdentityConfiguration" endpoint
+// HTTP response body for the "invariant_violation" error.
+type CommitServerIdentityConfigurationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -224,10 +224,10 @@ type CommitServerUserIdentityConfigurationInvariantViolationResponseBody struct 
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationUnexpectedResponseBody is the type of
-// the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "unexpected" error.
-type CommitServerUserIdentityConfigurationUnexpectedResponseBody struct {
+// CommitServerIdentityConfigurationUnexpectedResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "unexpected" error.
+type CommitServerIdentityConfigurationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -243,10 +243,10 @@ type CommitServerUserIdentityConfigurationUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CommitServerUserIdentityConfigurationGatewayErrorResponseBody is the type of
-// the "remoteSessions" service "commitServerUserIdentityConfiguration"
-// endpoint HTTP response body for the "gateway_error" error.
-type CommitServerUserIdentityConfigurationGatewayErrorResponseBody struct {
+// CommitServerIdentityConfigurationGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
+// response body for the "gateway_error" error.
+type CommitServerIdentityConfigurationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -734,9 +734,9 @@ type CreateRemoteSessionIssuerFormRequestBody struct {
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
 }
 
-// ServerUserIdentityClientConfigurationRequestBody is used to define fields on
+// ServerIdentityClientConfigurationRequestBody is used to define fields on
 // request body types.
-type ServerUserIdentityClientConfigurationRequestBody struct {
+type ServerIdentityClientConfigurationRequestBody struct {
 	// The out-of-band OAuth client identifier. Manual mode only.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// The out-of-band OAuth client secret. Manual mode only; encrypted before
@@ -880,9 +880,9 @@ type RemoteSessionClientResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// ServerUserIdentityRegistrationFailureResponseBody is used to define fields
-// on response body types.
-type ServerUserIdentityRegistrationFailureResponseBody struct {
+// ServerIdentityRegistrationFailureResponseBody is used to define fields on
+// response body types.
+type ServerIdentityRegistrationFailureResponseBody struct {
 	Outcome   *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 	Reason    *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	Retryable *bool   `form:"retryable,omitempty" json:"retryable,omitempty" xml:"retryable,omitempty"`
@@ -923,11 +923,11 @@ type RemoteSessionResponseBody struct {
 	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewCommitServerUserIdentityConfigurationRequestBody builds the HTTP request
-// body from the payload of the "commitServerUserIdentityConfiguration"
-// endpoint of the "remoteSessions" service.
-func NewCommitServerUserIdentityConfigurationRequestBody(p *remotesessions.CommitServerUserIdentityConfigurationPayload) *CommitServerUserIdentityConfigurationRequestBody {
-	body := &CommitServerUserIdentityConfigurationRequestBody{
+// NewCommitServerIdentityConfigurationRequestBody builds the HTTP request body
+// from the payload of the "commitServerIdentityConfiguration" endpoint of the
+// "remoteSessions" service.
+func NewCommitServerIdentityConfigurationRequestBody(p *remotesessions.CommitServerIdentityConfigurationPayload) *CommitServerIdentityConfigurationRequestBody {
+	body := &CommitServerIdentityConfigurationRequestBody{
 		McpServerID:      p.McpServerID,
 		ProviderID:       p.ProviderID,
 		ClientMode:       p.ClientMode,
@@ -937,16 +937,16 @@ func NewCommitServerUserIdentityConfigurationRequestBody(p *remotesessions.Commi
 		body.CreateProvider = marshalRemotesessionsCreateRemoteSessionIssuerFormToCreateRemoteSessionIssuerFormRequestBody(p.CreateProvider)
 	}
 	if p.ClientConfiguration != nil {
-		body.ClientConfiguration = marshalRemotesessionsServerUserIdentityClientConfigurationToServerUserIdentityClientConfigurationRequestBody(p.ClientConfiguration)
+		body.ClientConfiguration = marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClientConfigurationRequestBody(p.ClientConfiguration)
 	}
 	return body
 }
 
-// NewCommitServerUserIdentityConfigurationResultOK builds a "remoteSessions"
-// service "commitServerUserIdentityConfiguration" endpoint result from a HTTP
-// "OK" response.
-func NewCommitServerUserIdentityConfigurationResultOK(body *CommitServerUserIdentityConfigurationResponseBody) *remotesessions.CommitServerUserIdentityConfigurationResult {
-	v := &remotesessions.CommitServerUserIdentityConfigurationResult{
+// NewCommitServerIdentityConfigurationResultOK builds a "remoteSessions"
+// service "commitServerIdentityConfiguration" endpoint result from a HTTP "OK"
+// response.
+func NewCommitServerIdentityConfigurationResultOK(body *CommitServerIdentityConfigurationResponseBody) *remotesessions.CommitServerIdentityConfigurationResult {
+	v := &remotesessions.CommitServerIdentityConfigurationResult{
 		Status:              body.Status,
 		RegistrationMethod:  body.RegistrationMethod,
 		ManualSetupRequired: *body.ManualSetupRequired,
@@ -962,15 +962,15 @@ func NewCommitServerUserIdentityConfigurationResultOK(body *CommitServerUserIden
 		v.Client = unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(body.Client)
 	}
 	if body.Failure != nil {
-		v.Failure = unmarshalServerUserIdentityRegistrationFailureResponseBodyToRemotesessionsServerUserIdentityRegistrationFailure(body.Failure)
+		v.Failure = unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServerIdentityRegistrationFailure(body.Failure)
 	}
 
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationUnauthorized builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint unauthorized error.
-func NewCommitServerUserIdentityConfigurationUnauthorized(body *CommitServerUserIdentityConfigurationUnauthorizedResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationUnauthorized builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint unauthorized error.
+func NewCommitServerIdentityConfigurationUnauthorized(body *CommitServerIdentityConfigurationUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -983,9 +983,9 @@ func NewCommitServerUserIdentityConfigurationUnauthorized(body *CommitServerUser
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationForbidden builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint forbidden error.
-func NewCommitServerUserIdentityConfigurationForbidden(body *CommitServerUserIdentityConfigurationForbiddenResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationForbidden builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint forbidden error.
+func NewCommitServerIdentityConfigurationForbidden(body *CommitServerIdentityConfigurationForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -998,9 +998,9 @@ func NewCommitServerUserIdentityConfigurationForbidden(body *CommitServerUserIde
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationBadRequest builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint bad_request error.
-func NewCommitServerUserIdentityConfigurationBadRequest(body *CommitServerUserIdentityConfigurationBadRequestResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationBadRequest builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint bad_request error.
+func NewCommitServerIdentityConfigurationBadRequest(body *CommitServerIdentityConfigurationBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1013,9 +1013,9 @@ func NewCommitServerUserIdentityConfigurationBadRequest(body *CommitServerUserId
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationNotFound builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint not_found error.
-func NewCommitServerUserIdentityConfigurationNotFound(body *CommitServerUserIdentityConfigurationNotFoundResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationNotFound builds a remoteSessions service
+// commitServerIdentityConfiguration endpoint not_found error.
+func NewCommitServerIdentityConfigurationNotFound(body *CommitServerIdentityConfigurationNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1028,9 +1028,9 @@ func NewCommitServerUserIdentityConfigurationNotFound(body *CommitServerUserIden
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationConflict builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint conflict error.
-func NewCommitServerUserIdentityConfigurationConflict(body *CommitServerUserIdentityConfigurationConflictResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationConflict builds a remoteSessions service
+// commitServerIdentityConfiguration endpoint conflict error.
+func NewCommitServerIdentityConfigurationConflict(body *CommitServerIdentityConfigurationConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1043,10 +1043,9 @@ func NewCommitServerUserIdentityConfigurationConflict(body *CommitServerUserIden
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationUnsupportedMedia builds a
-// remoteSessions service commitServerUserIdentityConfiguration endpoint
-// unsupported_media error.
-func NewCommitServerUserIdentityConfigurationUnsupportedMedia(body *CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationUnsupportedMedia builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint unsupported_media error.
+func NewCommitServerIdentityConfigurationUnsupportedMedia(body *CommitServerIdentityConfigurationUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1059,9 +1058,9 @@ func NewCommitServerUserIdentityConfigurationUnsupportedMedia(body *CommitServer
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationInvalid builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint invalid error.
-func NewCommitServerUserIdentityConfigurationInvalid(body *CommitServerUserIdentityConfigurationInvalidResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationInvalid builds a remoteSessions service
+// commitServerIdentityConfiguration endpoint invalid error.
+func NewCommitServerIdentityConfigurationInvalid(body *CommitServerIdentityConfigurationInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1074,10 +1073,10 @@ func NewCommitServerUserIdentityConfigurationInvalid(body *CommitServerUserIdent
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationInvariantViolation builds a
-// remoteSessions service commitServerUserIdentityConfiguration endpoint
+// NewCommitServerIdentityConfigurationInvariantViolation builds a
+// remoteSessions service commitServerIdentityConfiguration endpoint
 // invariant_violation error.
-func NewCommitServerUserIdentityConfigurationInvariantViolation(body *CommitServerUserIdentityConfigurationInvariantViolationResponseBody) *goa.ServiceError {
+func NewCommitServerIdentityConfigurationInvariantViolation(body *CommitServerIdentityConfigurationInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1090,9 +1089,9 @@ func NewCommitServerUserIdentityConfigurationInvariantViolation(body *CommitServ
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationUnexpected builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint unexpected error.
-func NewCommitServerUserIdentityConfigurationUnexpected(body *CommitServerUserIdentityConfigurationUnexpectedResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationUnexpected builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint unexpected error.
+func NewCommitServerIdentityConfigurationUnexpected(body *CommitServerIdentityConfigurationUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1105,9 +1104,9 @@ func NewCommitServerUserIdentityConfigurationUnexpected(body *CommitServerUserId
 	return v
 }
 
-// NewCommitServerUserIdentityConfigurationGatewayError builds a remoteSessions
-// service commitServerUserIdentityConfiguration endpoint gateway_error error.
-func NewCommitServerUserIdentityConfigurationGatewayError(body *CommitServerUserIdentityConfigurationGatewayErrorResponseBody) *goa.ServiceError {
+// NewCommitServerIdentityConfigurationGatewayError builds a remoteSessions
+// service commitServerIdentityConfiguration endpoint gateway_error error.
+func NewCommitServerIdentityConfigurationGatewayError(body *CommitServerIdentityConfigurationGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1438,9 +1437,9 @@ func NewRevokeRemoteSessionGatewayError(body *RevokeRemoteSessionGatewayErrorRes
 	return v
 }
 
-// ValidateCommitServerUserIdentityConfigurationResponseBody runs the
-// validations defined on CommitServerUserIdentityConfigurationResponseBody
-func ValidateCommitServerUserIdentityConfigurationResponseBody(body *CommitServerUserIdentityConfigurationResponseBody) (err error) {
+// ValidateCommitServerIdentityConfigurationResponseBody runs the validations
+// defined on CommitServerIdentityConfigurationResponseBody
+func ValidateCommitServerIdentityConfigurationResponseBody(body *CommitServerIdentityConfigurationResponseBody) (err error) {
 	if body.ManualSetupRequired == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("manual_setup_required", "body"))
 	}
@@ -1475,7 +1474,7 @@ func ValidateCommitServerUserIdentityConfigurationResponseBody(body *CommitServe
 		}
 	}
 	if body.Failure != nil {
-		if err2 := ValidateServerUserIdentityRegistrationFailureResponseBody(body.Failure); err2 != nil {
+		if err2 := ValidateServerIdentityRegistrationFailureResponseBody(body.Failure); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -1498,10 +1497,135 @@ func ValidateListRemoteSessionsResponseBody(body *ListRemoteSessionsResponseBody
 	return
 }
 
-// ValidateCommitServerUserIdentityConfigurationUnauthorizedResponseBody runs
+// ValidateCommitServerIdentityConfigurationUnauthorizedResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_unauthorized_response_body
+func ValidateCommitServerIdentityConfigurationUnauthorizedResponseBody(body *CommitServerIdentityConfigurationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationForbiddenResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_forbidden_response_body
+func ValidateCommitServerIdentityConfigurationForbiddenResponseBody(body *CommitServerIdentityConfigurationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationBadRequestResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_bad_request_response_body
+func ValidateCommitServerIdentityConfigurationBadRequestResponseBody(body *CommitServerIdentityConfigurationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationNotFoundResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_not_found_response_body
+func ValidateCommitServerIdentityConfigurationNotFoundResponseBody(body *CommitServerIdentityConfigurationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationConflictResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_conflict_response_body
+func ValidateCommitServerIdentityConfigurationConflictResponseBody(body *CommitServerIdentityConfigurationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationUnsupportedMediaResponseBody runs
 // the validations defined on
-// commitServerUserIdentityConfiguration_unauthorized_response_body
-func ValidateCommitServerUserIdentityConfigurationUnauthorizedResponseBody(body *CommitServerUserIdentityConfigurationUnauthorizedResponseBody) (err error) {
+// commitServerIdentityConfiguration_unsupported_media_response_body
+func ValidateCommitServerIdentityConfigurationUnsupportedMediaResponseBody(body *CommitServerIdentityConfigurationUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1523,10 +1647,10 @@ func ValidateCommitServerUserIdentityConfigurationUnauthorizedResponseBody(body 
 	return
 }
 
-// ValidateCommitServerUserIdentityConfigurationForbiddenResponseBody runs the
+// ValidateCommitServerIdentityConfigurationInvalidResponseBody runs the
 // validations defined on
-// commitServerUserIdentityConfiguration_forbidden_response_body
-func ValidateCommitServerUserIdentityConfigurationForbiddenResponseBody(body *CommitServerUserIdentityConfigurationForbiddenResponseBody) (err error) {
+// commitServerIdentityConfiguration_invalid_response_body
+func ValidateCommitServerIdentityConfigurationInvalidResponseBody(body *CommitServerIdentityConfigurationInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -1548,185 +1672,60 @@ func ValidateCommitServerUserIdentityConfigurationForbiddenResponseBody(body *Co
 	return
 }
 
-// ValidateCommitServerUserIdentityConfigurationBadRequestResponseBody runs the
-// validations defined on
-// commitServerUserIdentityConfiguration_bad_request_response_body
-func ValidateCommitServerUserIdentityConfigurationBadRequestResponseBody(body *CommitServerUserIdentityConfigurationBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationNotFoundResponseBody runs the
-// validations defined on
-// commitServerUserIdentityConfiguration_not_found_response_body
-func ValidateCommitServerUserIdentityConfigurationNotFoundResponseBody(body *CommitServerUserIdentityConfigurationNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationConflictResponseBody runs the
-// validations defined on
-// commitServerUserIdentityConfiguration_conflict_response_body
-func ValidateCommitServerUserIdentityConfigurationConflictResponseBody(body *CommitServerUserIdentityConfigurationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody
-// runs the validations defined on
-// commitServerUserIdentityConfiguration_unsupported_media_response_body
-func ValidateCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody(body *CommitServerUserIdentityConfigurationUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationInvalidResponseBody runs the
-// validations defined on
-// commitServerUserIdentityConfiguration_invalid_response_body
-func ValidateCommitServerUserIdentityConfigurationInvalidResponseBody(body *CommitServerUserIdentityConfigurationInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationInvariantViolationResponseBody
-// runs the validations defined on
-// commitServerUserIdentityConfiguration_invariant_violation_response_body
-func ValidateCommitServerUserIdentityConfigurationInvariantViolationResponseBody(body *CommitServerUserIdentityConfigurationInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationUnexpectedResponseBody runs the
-// validations defined on
-// commitServerUserIdentityConfiguration_unexpected_response_body
-func ValidateCommitServerUserIdentityConfigurationUnexpectedResponseBody(body *CommitServerUserIdentityConfigurationUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCommitServerUserIdentityConfigurationGatewayErrorResponseBody runs
+// ValidateCommitServerIdentityConfigurationInvariantViolationResponseBody runs
 // the validations defined on
-// commitServerUserIdentityConfiguration_gateway_error_response_body
-func ValidateCommitServerUserIdentityConfigurationGatewayErrorResponseBody(body *CommitServerUserIdentityConfigurationGatewayErrorResponseBody) (err error) {
+// commitServerIdentityConfiguration_invariant_violation_response_body
+func ValidateCommitServerIdentityConfigurationInvariantViolationResponseBody(body *CommitServerIdentityConfigurationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationUnexpectedResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_unexpected_response_body
+func ValidateCommitServerIdentityConfigurationUnexpectedResponseBody(body *CommitServerIdentityConfigurationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCommitServerIdentityConfigurationGatewayErrorResponseBody runs the
+// validations defined on
+// commitServerIdentityConfiguration_gateway_error_response_body
+func ValidateCommitServerIdentityConfigurationGatewayErrorResponseBody(body *CommitServerIdentityConfigurationGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2237,9 +2236,9 @@ func ValidateCreateRemoteSessionIssuerFormRequestBody(body *CreateRemoteSessionI
 	return
 }
 
-// ValidateServerUserIdentityClientConfigurationRequestBody runs the
-// validations defined on ServerUserIdentityClientConfigurationRequestBody
-func ValidateServerUserIdentityClientConfigurationRequestBody(body *ServerUserIdentityClientConfigurationRequestBody) (err error) {
+// ValidateServerIdentityClientConfigurationRequestBody runs the validations
+// defined on ServerIdentityClientConfigurationRequestBody
+func ValidateServerIdentityClientConfigurationRequestBody(body *ServerIdentityClientConfigurationRequestBody) (err error) {
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
@@ -2372,9 +2371,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	return
 }
 
-// ValidateServerUserIdentityRegistrationFailureResponseBody runs the
-// validations defined on ServerUserIdentityRegistrationFailureResponseBody
-func ValidateServerUserIdentityRegistrationFailureResponseBody(body *ServerUserIdentityRegistrationFailureResponseBody) (err error) {
+// ValidateServerIdentityRegistrationFailureResponseBody runs the validations
+// defined on ServerIdentityRegistrationFailureResponseBody
+func ValidateServerIdentityRegistrationFailureResponseBody(body *ServerIdentityRegistrationFailureResponseBody) (err error) {
 	if body.Outcome == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
 	}

@@ -34,6 +34,16 @@ export interface InputProps extends Omit<
    * former standalone PrivateInput wrapper.
    */
   reveal?: boolean;
+  /**
+   * Keeps password managers out of the field. A credential you paste into a
+   * service — an upstream token, an OAuth client secret — is not the user's
+   * own login, so a manager offering to fill or save one is noise.
+   *
+   * Sends `autocomplete="new-password"` on secret fields, because browsers
+   * ignore `off` on password inputs, plus the vendor opt-outs for 1Password,
+   * LastPass, Bitwarden and Dashlane.
+   */
+  noAutofill?: boolean;
   className?: string;
 }
 
@@ -50,6 +60,7 @@ export function Input({
   error,
   requiredPrefix,
   reveal,
+  noAutofill,
   className,
   children,
   disabled,
@@ -59,6 +70,21 @@ export function Input({
 }: InputProps): React.JSX.Element {
   const [isRevealed, setIsRevealed] = useState(false);
   const effectiveType = reveal ? (isRevealed ? "text" : "password") : type;
+  const isSecret = reveal || type === "password";
+  const autofillProps = noAutofill
+    ? {
+        // `off` is honored on ordinary fields but widely ignored on password
+        // inputs, where `new-password` is what actually suppresses a fill.
+        autoComplete: isSecret ? "new-password" : "off",
+        autoCorrect: "off",
+        autoCapitalize: "off",
+        spellCheck: false,
+        "data-1p-ignore": "true",
+        "data-lpignore": "true",
+        "data-bwignore": "true",
+        "data-form-type": "other",
+      }
+    : {};
   const runValidation = (val: string) => {
     if (val === "") return null;
 
@@ -147,6 +173,7 @@ export function Input({
   const field = asTextarea ? (
     <textarea
       {...(props as React.ComponentProps<"textarea">)}
+      {...autofillProps}
       value={displayValue}
       placeholder={placeholder}
       disabled={disabled}
@@ -161,6 +188,7 @@ export function Input({
   ) : (
     <input
       {...props}
+      {...autofillProps}
       type={effectiveType}
       value={displayValue}
       placeholder={placeholder}
