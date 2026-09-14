@@ -414,6 +414,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
+		stripAgentIdentity(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -490,8 +491,6 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
 				}
 				if isAgentActor(ctx) {
-					// Self-reported identity never rides an agent's rows.
-					delete(logAttrs, attr.UserEmailKey)
 					userInfo = telemetry.UserInfoByEmail("")
 				}
 

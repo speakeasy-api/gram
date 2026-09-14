@@ -304,7 +304,26 @@ func TestCodexOTELUserInfo_AgentDropsSelfReportedEmail(t *testing.T) {
 	_, email, userID := ti.service.codexOTELUserInfo(agentKeyContext(t, ctx, ti), attrs, map[string]string{}, authCtx.ActiveOrganizationID)
 	require.Empty(t, email)
 	require.Empty(t, userID)
-	require.NotContains(t, attrs, attr.UserEmailKey, "the persisted row must not carry the payload email")
+}
+
+func TestWithAgentActor_StripsSelfReportedIdentityForAgentsOnly(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	identity := func() map[attr.Key]any {
+		attrs := make(map[attr.Key]any, len(selfReportedIdentityKeys))
+		for _, key := range selfReportedIdentityKeys {
+			attrs[key] = "payload-" + string(key)
+		}
+		return attrs
+	}
+
+	agentAttrs := withAgentActor(agentKeyContext(t, ctx, ti), identity())
+	humanAttrs := withAgentActor(ctx, identity())
+	for _, key := range selfReportedIdentityKeys {
+		require.NotContains(t, agentAttrs, key, "agent rows drop %s", key)
+		require.Equal(t, "payload-"+string(key), humanAttrs[key], "human rows keep %s", key)
+	}
+	require.Equal(t, "agent", agentAttrs[attr.AuthorizationActorTypeKey])
 }
 
 // stubAuthorizer returns the same result for every scheme.

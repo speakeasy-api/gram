@@ -173,6 +173,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
+		stripAgentIdentity(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -281,6 +282,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceMetric.Resource)
+		stripAgentIdentity(ctx, resourceAttrs)
 
 		for _, scopeMetric := range resourceMetric.ScopeMetrics {
 			if scopeMetric == nil {
@@ -373,9 +375,8 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 // The resolved email and user id are returned alongside the UserInfo so the
 // session-attribution path can reuse them without a second resolution.
 func (s *Service) codexOTELUserInfo(ctx context.Context, attrs map[attr.Key]any, emailToUserID map[string]string, orgID string) (telemetry.UserInfo, string, string) {
+	// withAgentActor strips the payload identity from agent rows at the sink.
 	if isAgentActor(ctx) {
-		// Self-reported identity never rides an agent's rows.
-		delete(attrs, attr.UserEmailKey)
 		return telemetry.UserInfoByEmail(""), "", ""
 	}
 	email := strings.TrimSpace(stringAttr(attrs, attr.UserEmailKey))

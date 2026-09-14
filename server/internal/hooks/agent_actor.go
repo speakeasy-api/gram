@@ -86,11 +86,44 @@ func agentSessionView(cached SessionMetadata, orgID, projectID string) SessionMe
 	return view
 }
 
-// withAgentActor strips client-supplied actor attributes from a telemetry row,
-// then stamps the trusted agent actor when one authenticated the request.
+// selfReportedIdentityKeys are the user and AI-account identity attributes a
+// client can report. telemetry_logs materializes user_id, user_email and
+// external_user_id from the first three, so agent rows never persist any.
+var selfReportedIdentityKeys = []attr.Key{
+	attr.UserIDKey,
+	attr.UserEmailKey,
+	attr.ExternalUserIDKey,
+	attr.Key("user.name"),
+	attr.Key("user.full_name"),
+	attr.Key("user.account_uuid"),
+	attr.Key("user.account_id"),
+	attr.Key("organization.id"),
+	attr.Key("enduser.id"),
+	attr.AuthUserIDKey,
+	attr.AuthUserEmailKey,
+	attr.AccountEmailKey,
+	attr.ExternalOrgIDKey,
+	attr.DeviceIDKey,
+}
+
+// stripAgentIdentity removes self-reported identity from attrs when an agent
+// actor authenticated the request.
+func stripAgentIdentity(ctx context.Context, attrs map[attr.Key]any) {
+	if !isAgentActor(ctx) {
+		return
+	}
+	for _, key := range selfReportedIdentityKeys {
+		delete(attrs, key)
+	}
+}
+
+// withAgentActor strips client-supplied actor attributes (and, for agents,
+// self-reported identity) from a telemetry row, then stamps the trusted agent
+// actor when one authenticated the request.
 func withAgentActor(ctx context.Context, attrs map[attr.Key]any) map[attr.Key]any {
 	delete(attrs, attr.AuthorizationActorTypeKey)
 	delete(attrs, attr.AuthorizationActorIDKey)
+	stripAgentIdentity(ctx, attrs)
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
 		attrs[attr.AuthorizationActorTypeKey] = string(actor.Type)
 		attrs[attr.AuthorizationActorIDKey] = actor.ID
