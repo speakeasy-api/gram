@@ -1,0 +1,47 @@
+server/internal/gateway/proxy_calleridentity_test.go
+  s_adb2b010d42744::t_ba939b6a7e4b5b 62
+server/internal/xmcp/setup_test.go
+  s_adb2b010d42744::t_80675ca1de02e8 162
+server/internal/instances/impl.go
+  s_adb2b010d42744::t_0f579127984d6c 96,127
+server/internal/risk/scanner_test.go
+  s_adb2b010d42744::t_d75f6a4ec85163 6,10-11,32-33,42,44,320-397
+  s_adb2b010d42744::t_321b56331a09e7 398-399
+server/internal/mcp/setup_test.go
+  s_adb2b010d42744::t_80675ca1de02e8 448
+server/internal/risk/scanner.go
+  s_adb2b010d42744::t_00a995b269df29 424
+  s_adb2b010d42744::t_8e0c6e60402175 384-423,425-444,500-506,544-545
+  s_adb2b010d42744::t_1088d6ee40bbe9 383
+server/cmd/gram/start.go
+  s_adb2b010d42744::t_80675ca1de02e8 1204,1716
+  s_adb2b010d42744::t_3be607b5c7b762 1059-1080
+server/internal/gateway/proxy.go
+  s_adb2b010d42744::t_a1986a09b3c970 38,114-118,136,149,164,206-210,229-273
+  s_adb2b010d42744::t_3c04e885d8e899 127-135,155-163
+  s_adb2b010d42744::t_9c84caf27e2b95 274
+server/internal/gateway/toolcall_metrics_test.go
+  s_adb2b010d42744::t_ba939b6a7e4b5b 94
+server/internal/gateway/proxy_risk_test.go
+  s_adb2b010d42744::t_aea397d9ed8db3 1-125
+server/internal/gateway/proxy_test.go
+  s_adb2b010d42744::t_ba939b6a7e4b5b 286,417,769,991,1333,1436,1572,1663,1731,1781,1867,1954,2052,2165,2250,2347,2462,2561,2680,2793,2906,3025,3139
+server/internal/mcp/impl.go
+  s_adb2b010d42744::t_0f579127984d6c 351,431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b2bc5e137589df558779284a730fe1e16a413251",
+  "prompts": {},
+  "sessions": {
+    "s_adb2b010d42744": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f2a-dd5a-74d2-b6a9-54e929406b9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
