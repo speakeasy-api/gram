@@ -178,6 +178,69 @@ var PaygBillingSummary = Type("PaygBillingSummary", func() {
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
+// MeterUsageWindow is one inclusive/exclusive UTC-day reporting window.
+var MeterUsageWindow = Type("MeterUsageWindow", func() {
+	Attribute("from", String, "Inclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive UTC midnight window boundary", func() { Format(FormatDateTime) })
+	Required("from", "to")
+})
+
+// MeterUsageBucket is one dense UTC day in a usage response.
+var MeterUsageBucket = Type("MeterUsageBucket", func() {
+	Attribute("from", String, "Inclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("to", String, "Exclusive bucket boundary", func() { Format(FormatDateTime) })
+	Attribute("total", String, "Exact integer ordinary usage quantity as a decimal string")
+	Required("from", "to", "total")
+})
+
+// MeterUsageSeries is one selected facet value or the unset/remainder marker.
+var MeterUsageSeries = Type("MeterUsageSeries", func() {
+	Attribute("kind", String, "Identity kind for this series", func() {
+		Enum("value", "unset", "remainder")
+	})
+	Attribute("key", String, "Canonical identity for value series; null for unset and remainder", func() {
+		// Goa has no required-nullable scalar. Keep the generated Go field
+		// pointer-shaped and force nil to serialize as JSON null; the OpenAPI
+		// overlay marks the field nullable and required for SDK generation.
+		Meta("struct:tag:json", "key")
+	})
+	Attribute("label", String, "Display label, never chart identity")
+	Attribute("total", String, "Exact integer ordinary usage series total as a decimal string")
+	Attribute("values", ArrayOf(String), "Exact integer ordinary usage values aligned one-for-one with buckets")
+	Required("kind", "label", "total", "values")
+})
+
+// MeterUsageBreakdown contains the selected facet and its bounded series.
+var MeterUsageBreakdown = Type("MeterUsageBreakdown", func() {
+	Attribute("dimension", String, "Selected family-compatible breakdown dimension", func() {
+		Enum(
+			"total", "project",
+			"model", "provider", "billing_mode", "assistant",
+			"billing_user", "division", "department", "job_title", "employee_type", "cost_center", "directory_group_set",
+			"direction", "mcp_server", "server_type",
+			"scanner", "policy", "judge_model", "judge_provider", "tool_name",
+		)
+	})
+	Attribute("series", ArrayOf(MeterUsageSeries), "At most six selected facet series plus a remainder")
+	Required("dimension", "series")
+})
+
+// MeterUsageResponse is an exact, bounded ordinary meter usage report.
+var MeterUsageResponse = Type("MeterUsageResponse", func() {
+	Attribute("family", String, func() {
+		Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+	})
+	Attribute("window", MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("unit", String, func() { Enum("stokens", "bytes") })
+	Attribute("measurement_method", String)
+	Attribute("total", String, "Exact integer ordinary usage period total as a decimal string")
+	Attribute("buckets", ArrayOf(MeterUsageBucket), "Dense UTC daily ordinary usage buckets, including in-progress days")
+	Attribute("breakdown", MeterUsageBreakdown)
+	Attribute("queried_at", String, "Retrieval timestamp, not an ingestion watermark", func() { Format(FormatDateTime) })
+	Required("family", "window", "billing_cycles", "unit", "measurement_method", "total", "buckets", "breakdown", "queried_at")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -201,6 +264,41 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
+	})
+
+	Method("getMeterUsage", func() {
+		Description("Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("family", String, func() {
+				Enum("agent_session_storage", "mcp_bandwidth", "risk_content_scans")
+			})
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("breakdown", String, "Family-compatible reporting facet")
+			Required("family")
+		})
+
+		Result(MeterUsageResponse)
+
+		HTTP(func() {
+			GET("/rpc/usage.getMeterUsage")
+			Param("family")
+			Param("from")
+			Param("to")
+			Param("breakdown")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMeterUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMeterUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getMeterUsage"}`)
 	})
 
 	Method("getTokensUnderManagement", func() {

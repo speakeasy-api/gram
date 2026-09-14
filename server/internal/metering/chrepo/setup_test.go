@@ -2,8 +2,6 @@ package chrepo_test
 
 import (
 	"context"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -12,26 +10,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-var infra *testenv.Environment
-
-func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{ClickHouse: true})
-	if err != nil {
-		log.Fatalf("launch metering ClickHouse infrastructure: %v", err)
-	}
-	infra = res
-	code := m.Run()
-	if err := cleanup(); err != nil {
-		log.Fatalf("cleanup metering ClickHouse infrastructure: %v", err)
-	}
-	os.Exit(code)
-}
-
 func newTestClickhouse(t *testing.T) clickhouse.Conn {
 	t.Helper()
-	conn, err := infra.NewClickhouseClient(t)
+	container, factory, err := testenv.NewTestClickhouse(t.Context())
 	require.NoError(t, err)
-	// Keep redeliveries unmerged so reads exercise FINAL, not background convergence.
-	require.NoError(t, conn.Exec(t.Context(), "SYSTEM STOP MERGES billing_meter_readings_by_time"))
+	t.Cleanup(func() {
+		require.NoError(t, container.Terminate(context.Background()))
+	})
+	conn, err := factory(t)
+	require.NoError(t, err)
+	// Keep summary parts unmerged so reads must aggregate their increments.
+	require.NoError(t, conn.Exec(t.Context(), "SYSTEM STOP MERGES billing_meter_daily_summaries"))
 	return conn
 }
