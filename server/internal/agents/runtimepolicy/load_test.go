@@ -2,6 +2,7 @@ package runtimepolicy
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -156,4 +157,33 @@ func scopeSet(grants []authz.Grant) []authz.Scope {
 		scopes = append(scopes, grant.Scope)
 	}
 	return scopes
+}
+
+func TestLoadAgentPolicyPreservesServerRestrictions(t *testing.T) {
+	t.Parallel()
+	for _, restrictedByRole := range []bool{false, true} {
+		t.Run(fmt.Sprint(restrictedByRole), func(t *testing.T) {
+			t.Parallel()
+			fixture := newAgentRoleFixture(t, t.Context())
+			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, fixture.rolePrincipal, authz.ScopeMCPWrite, "*")
+			principal := fixture.agentPrincipal
+			if restrictedByRole {
+				principal = fixture.rolePrincipal
+			}
+			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, principal, authz.ScopeMCPBlockedConnect, fixture.resourceID)
+			grants, err := LoadAgentPolicy(t.Context(), fixture.db, fixture.organizationID, fixture.agentPrincipal)
+			require.NoError(t, err)
+			allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: fixture.resourceID})
+			require.NoError(t, err)
+			require.False(t, allowed)
+			allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: "other-server"})
+			require.NoError(t, err)
+			require.True(t, allowed)
+			batched, err := LoadKnownAgentPolicies(t.Context(), fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
+			require.NoError(t, err)
+			require.ElementsMatch(t, grants, batched[fixture.agentID])
+			_, err = NewDelegatedPolicyV1([]authz.Grant{authz.NewGrant(authz.ScopeMCPBlockedConnect, fixture.resourceID)})
+			require.Error(t, err, "live restrictions must not become delegated allow grants")
+		})
+	}
 }
