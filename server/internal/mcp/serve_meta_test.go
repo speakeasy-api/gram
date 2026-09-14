@@ -194,7 +194,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	const custom = "Always call list_servers first. Ticketing lives in the support member."
-	setInstructions := func(mode pgtype.Text) {
+	setInstructions := func(instructions pgtype.Text) {
 		_, err := metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{
 			Name:                 meta.Name,
 			UserSessionIssuerID:  meta.UserSessionIssuerID,
@@ -202,8 +202,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 			NetworkAccessModeSet: false,
 			NetworkAccessMode:    pgtype.Text{String: "", Valid: false},
 			InstructionsSet:      true,
-			Instructions:         conv.ToPGText(custom),
-			InstructionsMode:     mode,
+			Instructions:         instructions,
 			ID:                   meta.ID,
 			OrganizationID:       meta.OrganizationID,
 			ProjectID:            meta.ProjectID,
@@ -227,19 +226,20 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		return result.Instructions
 	}
 
-	// NULL mode appends: the built-in drill-down guidance survives, custom
-	// text follows it.
-	setInstructions(pgtype.Text{String: "", Valid: false})
-	for _, method := range []string{"initialize", "server/discover"} {
-		got := served(method)
-		require.Equal(t, metamcp.Instructions+"\n\n"+custom, got, "method=%s", method)
-	}
-
-	setInstructions(conv.ToPGText(metamcp.ModeReplace))
-	for _, method := range []string{"initialize", "server/discover"} {
-		got := served(method)
-		require.Equal(t, custom, got, "method=%s", method)
-		require.NotContains(t, got, "Work from the outside in")
+	for _, tc := range []struct {
+		name   string
+		stored pgtype.Text
+		want   string
+	}{
+		{name: "custom replaces default", stored: conv.ToPGText(custom), want: custom},
+		{name: "reset restores default", stored: pgtype.Text{}, want: metamcp.Instructions},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setInstructions(tc.stored)
+			for _, method := range []string{"initialize", "server/discover"} {
+				require.Equal(t, tc.want, served(method), "method=%s", method)
+			}
+		})
 	}
 }
 

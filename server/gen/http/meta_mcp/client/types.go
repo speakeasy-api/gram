@@ -42,14 +42,12 @@ type UpdateMetaMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// Server instructions returned in the gateway's MCP initialize response. Omit
-	// to leave them unchanged; send an empty string to restore Gram's built-in
-	// gateway instructions. Limited to 10000 Unicode characters after removing NUL
-	// characters and trimming whitespace.
+	// Custom server instructions replace Gram's built-in gateway instructions in
+	// MCP initialize and server/discover responses. Omit to leave them unchanged;
+	// send an empty string to restore Gram's built-in gateway instructions.
+	// Limited to 10000 Unicode characters after removing NUL characters and
+	// trimming whitespace.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Omit to leave it
-	// unchanged.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -94,8 +92,6 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -126,8 +122,6 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -164,8 +158,6 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1906,8 +1898,6 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the meta MCP server was last updated
@@ -1965,10 +1955,6 @@ func NewUpdateMetaMcpServerRequestBody(p *metamcp.UpdateMetaMcpServerPayload) *U
 		networkAccessMode := string(*p.NetworkAccessMode)
 		body.NetworkAccessMode = &networkAccessMode
 	}
-	if p.InstructionsMode != nil {
-		instructionsMode := string(*p.InstructionsMode)
-		body.InstructionsMode = &instructionsMode
-	}
 	return body
 }
 
@@ -2005,7 +1991,6 @@ func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
-		InstructionsMode:    types.MetaMcpInstructionsMode(*body.InstructionsMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2176,7 +2161,6 @@ func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *typ
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
-		InstructionsMode:    types.MetaMcpInstructionsMode(*body.InstructionsMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -2513,7 +2497,6 @@ func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody
 		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:        body.Instructions,
-		InstructionsMode:    types.MetaMcpInstructionsMode(*body.InstructionsMode),
 		CreatedAt:           *body.CreatedAt,
 		UpdatedAt:           *body.UpdatedAt,
 		MemberCount:         body.MemberCount,
@@ -3487,9 +3470,6 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
-	if body.InstructionsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instructions_mode", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3513,11 +3493,6 @@ func ValidateCreateMetaMcpServerResponseBody(body *CreateMetaMcpServerResponseBo
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.InstructionsMode != nil {
-		if !(*body.InstructionsMode == "append" || *body.InstructionsMode == "replace") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instructions_mode", *body.InstructionsMode, []any{"append", "replace"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3550,9 +3525,6 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
-	if body.InstructionsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instructions_mode", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3576,11 +3548,6 @@ func ValidateGetMetaMcpServerResponseBody(body *GetMetaMcpServerResponseBody) (e
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.InstructionsMode != nil {
-		if !(*body.InstructionsMode == "append" || *body.InstructionsMode == "replace") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instructions_mode", *body.InstructionsMode, []any{"append", "replace"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3629,9 +3596,6 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
-	if body.InstructionsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instructions_mode", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3655,11 +3619,6 @@ func ValidateUpdateMetaMcpServerResponseBody(body *UpdateMetaMcpServerResponseBo
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.InstructionsMode != nil {
-		if !(*body.InstructionsMode == "append" || *body.InstructionsMode == "replace") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instructions_mode", *body.InstructionsMode, []any{"append", "replace"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5910,9 +5869,6 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.NetworkAccessMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
 	}
-	if body.InstructionsMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("instructions_mode", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -5936,11 +5892,6 @@ func ValidateMetaMcpServerResponseBody(body *MetaMcpServerResponseBody) (err err
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.InstructionsMode != nil {
-		if !(*body.InstructionsMode == "append" || *body.InstructionsMode == "replace") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instructions_mode", *body.InstructionsMode, []any{"append", "replace"}))
 		}
 	}
 	if body.CreatedAt != nil {

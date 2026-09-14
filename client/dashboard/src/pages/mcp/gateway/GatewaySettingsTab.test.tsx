@@ -1,7 +1,14 @@
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GatewayInstructionsSection } from "./GatewaySettingsTab";
+import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 
 const state = vi.hoisted(() => ({
   hasScope: vi.fn(),
@@ -132,33 +139,93 @@ describe("Gateway instructions", () => {
           name: server.name,
           userSessionIssuerId: undefined,
           instructions: "",
-          instructionsMode: "append",
         },
       },
     });
   });
 
-  it("switching the mode alone makes the section dirty and is sent on save", () => {
-    renderSection();
-    expect(save().disabled).toBe(true);
-    fireEvent.click(
-      screen.getAllByRole("radio", {
-        name: /Replace the built-in instructions/i,
-      })[0]!,
-    );
-    expect(save().disabled).toBe(false);
-    fireEvent.click(save());
-    expect(state.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          updateMetaMcpServerForm: expect.objectContaining({
-            instructions: "Original",
-            instructionsMode: "replace",
-          }),
-        }),
-      }),
-    );
-  });
+  it.each([undefined, "", "Original"])(
+    "edits the actual instructions and saves without a mode (saved: %s)",
+    (instructions) => {
+      render(
+        <GatewayInstructionsSection
+          metaMcpServer={{ ...server, instructions }}
+        />,
+      );
+      const initial = instructions || builtInInstructions;
+      expect(textarea().value).toBe(initial);
+      expect(save().disabled).toBe(true);
+      expect(screen.queryByRole("radiogroup")).toBeNull();
+      expect(screen.queryByRole("radio")).toBeNull();
+      const edited = `${initial.trim()}\nUse the approved workflow.`;
+      fireEvent.change(textarea(), { target: { value: edited } });
+      expect(save().disabled).toBe(false);
+      fireEvent.click(save());
+      expect(state.mutate).toHaveBeenCalledWith({
+        request: {
+          updateMetaMcpServerForm: {
+            id: server.id,
+            name: server.name,
+            userSessionIssuerId: undefined,
+            instructions: edited,
+          },
+        },
+      });
+    },
+  );
+
+  it.each([undefined, "", "Original"])(
+    "restores the actual default after clearing and refetching (saved: %s)",
+    async (instructions) => {
+      const view = render(
+        <GatewayInstructionsSection
+          metaMcpServer={{ ...server, instructions }}
+        />,
+      );
+      fireEvent.change(textarea(), { target: { value: " \n " } });
+      expect(save().disabled).toBe(false);
+      fireEvent.click(save());
+      expect(
+        state.mutate.mock.calls[0]![0].request.updateMetaMcpServerForm
+          .instructions,
+      ).toBe("");
+      await act(async () => {
+        await state.onSuccess!();
+      });
+      view.rerender(
+        <GatewayInstructionsSection
+          metaMcpServer={{ ...server, instructions: undefined }}
+        />,
+      );
+      expect(textarea().value).toBe(builtInInstructions);
+      expect(save().disabled).toBe(true);
+    },
+  );
+
+  it.each(["\0", " \0\n "])(
+    "restores the actual default for a normalized-empty draft %j when already unset",
+    async (draft) => {
+      const view = render(
+        <GatewayInstructionsSection
+          metaMcpServer={{ ...server, instructions: undefined }}
+        />,
+      );
+      fireEvent.change(textarea(), { target: { value: draft } });
+      expect(save().disabled).toBe(false);
+      fireEvent.click(save());
+      expect(state.mutate).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await state.onSuccess!();
+      });
+      view.rerender(
+        <GatewayInstructionsSection
+          metaMcpServer={{ ...server, instructions: undefined }}
+        />,
+      );
+      expect(textarea().value).toBe(builtInInstructions);
+      expect(save().disabled).toBe(true);
+    },
+  );
 
   describe("copy default instructions", () => {
     const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -226,7 +293,7 @@ describe("Gateway instructions", () => {
         metaMcpServer={{ ...server, instructions: undefined }}
       />,
     );
-    expect(textarea().value).toBe("");
+    expect(textarea().value).toBe(builtInInstructions);
     expect(save().disabled).toBe(true);
     fireEvent.change(textarea(), { target: { value: "Unsaved" } });
     view.rerender(

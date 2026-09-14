@@ -87,7 +87,6 @@ SET name = @name,
         WHEN @instructions_set::boolean THEN sqlc.narg('instructions')
         ELSE instructions
     END,
-    instructions_mode = COALESCE(sqlc.narg('instructions_mode'), instructions_mode),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id

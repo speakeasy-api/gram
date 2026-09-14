@@ -10,18 +10,6 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
- */
-export const InstructionsMode = {
-  Append: "append",
-  Replace: "replace",
-} as const;
-/**
- * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
- */
-export type InstructionsMode = ClosedEnum<typeof InstructionsMode>;
-
-/**
  * The network surfaces through which a Gram-hosted MCP server may be reached.
  */
 export const MetaMcpServerNetworkAccessMode = {
@@ -67,10 +55,6 @@ export type MetaMcpServer = {
    */
   instructions?: string | undefined;
   /**
-   * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
-   */
-  instructionsMode: InstructionsMode;
-  /**
    * The number of live members. Only populated by listMetaMcpServers.
    */
   memberCount?: number | undefined;
@@ -105,11 +89,6 @@ export type MetaMcpServer = {
 };
 
 /** @internal */
-export const InstructionsMode$inboundSchema: z.ZodMiniEnum<
-  typeof InstructionsMode
-> = z.enum(InstructionsMode);
-
-/** @internal */
 export const MetaMcpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
   typeof MetaMcpServerNetworkAccessMode
 > = z.enum(MetaMcpServerNetworkAccessMode);
@@ -131,7 +110,6 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     instructions: z.optional(z.string()),
-    instructions_mode: InstructionsMode$inboundSchema,
     member_count: z.optional(z.int()),
     name: z.string(),
     network_access_mode: MetaMcpServerNetworkAccessMode$inboundSchema,
@@ -147,7 +125,6 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
-      "instructions_mode": "instructionsMode",
       "member_count": "memberCount",
       "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",

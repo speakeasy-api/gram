@@ -2182,7 +2182,6 @@ func unmarshalMetaMcpServerResponseBodyToTypesMetaMcpServer(v *MetaMcpServerResp
 		Visibility:          types.MetaMcpServerVisibility(*v.Visibility),
 		NetworkAccessMode:   types.NetworkAccessMode(*v.NetworkAccessMode),
 		Instructions:        v.Instructions,
-		InstructionsMode:    types.MetaMcpInstructionsMode(*v.InstructionsMode),
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
 		MemberCount:         v.MemberCount,

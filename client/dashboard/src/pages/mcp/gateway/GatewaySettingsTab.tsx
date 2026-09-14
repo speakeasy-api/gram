@@ -10,7 +10,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/moon/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { cn } from "@/lib/utils";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
@@ -39,25 +38,6 @@ const NAME_MAX_LENGTH = 40;
 
 // Mirrors the normalized rune limit in the metaMcp update handler.
 const INSTRUCTIONS_MAX_LENGTH = 10000;
-
-type InstructionsMode = "append" | "replace";
-
-const INSTRUCTIONS_MODES: {
-  value: InstructionsMode;
-  title: string;
-  hint: string;
-}[] = [
-  {
-    value: "append",
-    title: "Add to the built-in instructions",
-    hint: "Clients receive Gram's drill-down guidance first, then your text.",
-  },
-  {
-    value: "replace",
-    title: "Replace the built-in instructions",
-    hint: "Clients receive only your text. Describe the four tools yourself.",
-  },
-];
 
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
 export const GATEWAY_INSTRUCTIONS_SECTION_ID = "instructions";
@@ -212,16 +192,12 @@ export function GatewayInstructionsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
-  const stored = metaMcpServer.instructions ?? "";
-  const storedMode: InstructionsMode =
-    metaMcpServer.instructionsMode ?? "append";
+  const stored = metaMcpServer.instructions || builtInInstructions;
   const [draft, setDraft] = useState(stored);
-  const [mode, setMode] = useState<InstructionsMode>(storedMode);
 
   useEffect(() => {
     setDraft(stored);
-    setMode(storedMode);
-  }, [metaMcpServer.id, stored, storedMode]);
+  }, [metaMcpServer.id, stored]);
 
   const queryClient = useQueryClient();
   const update = useUpdateMetaMcpServerMutation({
@@ -231,12 +207,18 @@ export function GatewayInstructionsSection({
         invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
         queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
       ]);
+      // Refetching an already-empty saved value does not change `stored`.
+      setDraft((current) =>
+        current.replaceAll("\0", "").trim() === ""
+          ? builtInInstructions
+          : current,
+      );
       toast.success("Gateway instructions updated");
     },
   });
 
   const trimmedDraft = draft.trim();
-  const dirty = trimmedDraft !== stored.trim() || mode !== storedMode;
+  const dirty = trimmedDraft !== stored.trim();
   // Mirror the server's normalization (NUL strip + trim) so the counter and
   // the limit agree with what will be stored.
   const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;
@@ -250,10 +232,9 @@ export function GatewayInstructionsSection({
         <SettingsSection.Description>
           Sent to every client on connect. Gram&apos;s built-in instructions
           teach agents to list servers and describe tools before executing; your
-          text can extend or replace them. Leave it blank to send only the
-          built-in text. Anyone who can connect to this gateway can read the
-          text, and clients already connected keep the old text until they
-          reconnect.
+          text replaces them. Save it blank to restore the built-in text. Anyone
+          who can connect to this gateway can read the text, and clients already
+          connected keep the old text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -269,7 +250,6 @@ export function GatewayInstructionsSection({
               id="gateway-instructions"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={`Which member to use for which task, required workflows,\nand any constraints.\n\nKeep it concise — members are already listed by list_servers.`}
               className="min-h-[160px]"
               aria-invalid={update.isError || overLimit}
               disabled={!canWrite || update.isPending}
@@ -281,35 +261,6 @@ export function GatewayInstructionsSection({
             )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}
           </Field>
-          <RadioGroup
-            value={mode}
-            onValueChange={(value) => {
-              setMode(value as InstructionsMode);
-            }}
-            disabled={!canWrite || update.isPending}
-            aria-label="How custom instructions combine with the built-in text"
-            className="gap-2"
-          >
-            {INSTRUCTIONS_MODES.map((option) => (
-              <label
-                key={option.value}
-                htmlFor={`gateway-instructions-mode-${option.value}`}
-                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 border px-3 py-2.5"
-              >
-                <RadioGroupItem
-                  id={`gateway-instructions-mode-${option.value}`}
-                  value={option.value}
-                  className="mt-0.5"
-                />
-                <div className="min-w-0">
-                  <div className="text-sm">{option.title}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {option.hint}
-                  </div>
-                </div>
-              </label>
-            ))}
-          </RadioGroup>
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint
@@ -336,7 +287,6 @@ export function GatewayInstructionsSection({
                           metaMcpServer.userSessionIssuerId ?? undefined,
                         // An empty string clears back to the built-in text.
                         instructions: trimmedDraft,
-                        instructionsMode: mode,
                       },
                     },
                   })
@@ -350,8 +300,7 @@ export function GatewayInstructionsSection({
   );
 }
 
-// Puts the built-in text on the clipboard so an operator replacing it can
-// start from what clients receive today instead of a blank box.
+// Keeps the default text available when editing saved custom instructions.
 function CopyBuiltInInstructionsButton(): JSX.Element {
   const [copied, setCopied] = useState(false);
 

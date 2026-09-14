@@ -7,20 +7,6 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
- */
-export const UpdateMetaMcpServerFormInstructionsMode = {
-  Append: "append",
-  Replace: "replace",
-} as const;
-/**
- * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
- */
-export type UpdateMetaMcpServerFormInstructionsMode = ClosedEnum<
-  typeof UpdateMetaMcpServerFormInstructionsMode
->;
-
-/**
  * The network surfaces through which a Gram-hosted MCP server may be reached.
  */
 export const UpdateMetaMcpServerFormNetworkAccessMode = {
@@ -58,13 +44,9 @@ export type UpdateMetaMcpServerForm = {
    */
   id: string;
   /**
-   * Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+   * Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
    */
   instructions?: string | undefined;
-  /**
-   * How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
-   */
-  instructionsMode?: UpdateMetaMcpServerFormInstructionsMode | undefined;
   /**
    * The display name of the meta MCP server
    */
@@ -84,12 +66,6 @@ export type UpdateMetaMcpServerForm = {
 };
 
 /** @internal */
-export const UpdateMetaMcpServerFormInstructionsMode$outboundSchema:
-  z.ZodMiniEnum<typeof UpdateMetaMcpServerFormInstructionsMode> = z.enum(
-    UpdateMetaMcpServerFormInstructionsMode,
-  );
-
-/** @internal */
 export const UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema:
   z.ZodMiniEnum<typeof UpdateMetaMcpServerFormNetworkAccessMode> = z.enum(
     UpdateMetaMcpServerFormNetworkAccessMode,
@@ -104,7 +80,6 @@ export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 export type UpdateMetaMcpServerForm$Outbound = {
   id: string;
   instructions?: string | undefined;
-  instructions_mode?: string | undefined;
   name: string;
   network_access_mode?: string | undefined;
   user_session_issuer_id?: string | undefined;
@@ -119,9 +94,6 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     instructions: z.optional(z.string()),
-    instructionsMode: z.optional(
-      UpdateMetaMcpServerFormInstructionsMode$outboundSchema,
-    ),
     name: z.string(),
     networkAccessMode: z.optional(
       UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema,
@@ -131,7 +103,6 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
-      instructionsMode: "instructions_mode",
       networkAccessMode: "network_access_mode",
       userSessionIssuerId: "user_session_issuer_id",
     });

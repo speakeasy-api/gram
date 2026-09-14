@@ -44,14 +44,12 @@ type UpdateMetaMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// Server instructions returned in the gateway's MCP initialize response. Omit
-	// to leave them unchanged; send an empty string to restore Gram's built-in
-	// gateway instructions. Limited to 10000 Unicode characters after removing NUL
-	// characters and trimming whitespace.
+	// Custom server instructions replace Gram's built-in gateway instructions in
+	// MCP initialize and server/discover responses. Omit to leave them unchanged;
+	// send an empty string to restore Gram's built-in gateway instructions.
+	// Limited to 10000 Unicode characters after removing NUL characters and
+	// trimming whitespace.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Omit to leave it
-	// unchanged.
-	InstructionsMode *string `form:"instructions_mode,omitempty" json:"instructions_mode,omitempty" xml:"instructions_mode,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -96,8 +94,6 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode string `form:"instructions_mode" json:"instructions_mode" xml:"instructions_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -128,8 +124,6 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode string `form:"instructions_mode" json:"instructions_mode" xml:"instructions_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -166,8 +160,6 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode string `form:"instructions_mode" json:"instructions_mode" xml:"instructions_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1908,8 +1900,6 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// How custom instructions combine with the built-in text. Defaults to append.
-	InstructionsMode string `form:"instructions_mode" json:"instructions_mode" xml:"instructions_mode"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1944,7 +1934,6 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
-		InstructionsMode:    string(res.InstructionsMode),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -1964,7 +1953,6 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
-		InstructionsMode:    string(res.InstructionsMode),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -2003,7 +1991,6 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
-		InstructionsMode:    string(res.InstructionsMode),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -3441,10 +3428,6 @@ func NewUpdateMetaMcpServerPayload(body *UpdateMetaMcpServerRequestBody, session
 		networkAccessMode := types.NetworkAccessMode(*body.NetworkAccessMode)
 		v.NetworkAccessMode = &networkAccessMode
 	}
-	if body.InstructionsMode != nil {
-		instructionsMode := types.MetaMcpInstructionsMode(*body.InstructionsMode)
-		v.InstructionsMode = &instructionsMode
-	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3582,11 +3565,6 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.InstructionsMode != nil {
-		if !(*body.InstructionsMode == "append" || *body.InstructionsMode == "replace") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.instructions_mode", *body.InstructionsMode, []any{"append", "replace"}))
 		}
 	}
 	return
