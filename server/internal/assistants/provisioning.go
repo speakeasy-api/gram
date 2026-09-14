@@ -32,9 +32,9 @@ import (
 var managedAssistantInstructions string
 
 const (
-	// managedAssistantModel is the default model for the platform-managed
-	// assistant. Kept aligned with the in-app default chat model.
-	managedAssistantModel = "anthropic/claude-opus-5"
+	// managedAssistantModel is the model stored on the platform-managed
+	// assistant. All assistants run the pinned AssistantModel.
+	managedAssistantModel = AssistantModel
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.

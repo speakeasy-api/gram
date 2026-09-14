@@ -16,7 +16,7 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
-import { DEFAULT_MODEL } from "@/lib/models";
+import { PLAYGROUND_MODEL } from "@/lib/models";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
@@ -204,7 +204,6 @@ function PlaygroundInner() {
   );
   const [showLogs, setShowLogs] = useState(false);
   const [temperature, setTemperature] = useState(0.5);
-  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [playgroundEnvironmentSlug, setPlaygroundEnvironmentSlug] = useState<
     string | undefined
@@ -306,8 +305,6 @@ function PlaygroundInner() {
                 setSelectedEnvironment={setSelectedEnvironment}
                 temperature={temperature}
                 setTemperature={setTemperature}
-                model={model}
-                setModel={setModel}
                 maxTokens={maxTokens}
                 setMaxTokens={setMaxTokens}
                 onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
@@ -321,8 +318,6 @@ function PlaygroundInner() {
                 serverSelector={serverSelector}
                 temperature={temperature}
                 setTemperature={setTemperature}
-                model={model}
-                setModel={setModel}
                 maxTokens={maxTokens}
                 setMaxTokens={setMaxTokens}
               />
@@ -339,7 +334,7 @@ function PlaygroundInner() {
                 <PlaygroundElements
                   toolsetSlug={selectedServer.toolsetSlug}
                   environmentSlug={selectedEnvironment}
-                  model={model}
+                  model={PLAYGROUND_MODEL}
                   playgroundEnvironmentSlug={playgroundEnvironmentSlug}
                   additionalActions={additionalActions}
                 />
@@ -350,7 +345,7 @@ function PlaygroundInner() {
                   mcpServerId={selectedServer.mcpServerId}
                   userSessionIssuerId={selectedServer.userSessionIssuerId}
                   environmentSlug={selectedEnvironment}
-                  model={model}
+                  model={PLAYGROUND_MODEL}
                   additionalActions={additionalActions}
                 />
               )}
@@ -379,8 +374,6 @@ interface PanelConfigProps {
   serverSelector: React.ReactNode;
   temperature: number;
   setTemperature: (temp: number) => void;
-  model: string;
-  setModel: (model: string) => void;
   maxTokens: number;
   setMaxTokens: (tokens: number) => void;
 }
@@ -391,8 +384,6 @@ function ToolsetPanel({
   setSelectedEnvironment,
   temperature,
   setTemperature,
-  model,
-  setModel,
   maxTokens,
   setMaxTokens,
   onPlaygroundEnvironmentSlug,
@@ -547,8 +538,6 @@ function ToolsetPanel({
         }}
         temperature={temperature}
         onTemperatureChange={setTemperature}
-        model={model}
-        onModelChange={setModel}
         maxTokens={maxTokens}
         onMaxTokensChange={setMaxTokens}
         toolsetSelector={serverSelector}
@@ -644,8 +633,6 @@ function ProxiedServerPanel({
   serverSelector,
   temperature,
   setTemperature,
-  model,
-  setModel,
   maxTokens,
   setMaxTokens,
 }: PanelConfigProps & {
@@ -668,8 +655,6 @@ function ProxiedServerPanel({
       remoteTools={remoteTools}
       temperature={temperature}
       onTemperatureChange={setTemperature}
-      model={model}
-      onModelChange={setModel}
       maxTokens={maxTokens}
       onMaxTokensChange={setMaxTokens}
       toolsetSelector={serverSelector}

@@ -73,12 +73,14 @@ export const AVAILABLE_MODELS: AvailableModel[] = [
   { value: "mistralai/mistral-medium-3.1", label: "Mistral Medium 3.1" },
 ];
 
-// Default model used across in-app chat surfaces (playground, MCP test chat,
-// chat window) when the user has not picked one explicitly. Kept next to
-// AVAILABLE_MODELS so the default is easy to discover and adjust.
+// Default model used across in-app chat surfaces (MCP test chat, chat window)
+// when the user has not picked one explicitly. Kept next to AVAILABLE_MODELS
+// so the default is easy to discover and adjust.
 export const DEFAULT_MODEL: Model = "anthropic/claude-opus-5";
 
-// Default model assigned to newly created assistants (onboarding flow). Tracked
-// separately from DEFAULT_MODEL so the assistant default can move independently
-// of the general in-app chat default.
-export const DEFAULT_ASSISTANT_MODEL: Model = "anthropic/claude-opus-5";
+// The playground has no model picker; every playground chat runs on this model.
+export const PLAYGROUND_MODEL: Model = "google/gemini-3.5-flash";
+
+// Model assigned to all assistants. Assistants have no model picker, so this is
+// not just a default for new ones — the settings panel shows it read-only.
+export const DEFAULT_ASSISTANT_MODEL: Model = "google/gemini-3.5-flash";

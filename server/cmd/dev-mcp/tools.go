@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	defaultAssistantModel = "anthropic/claude-opus-5"
+	// defaultAssistantModel satisfies the create form's required model field.
+	// The server pins every assistant's model regardless of this value.
+	defaultAssistantModel = "google/gemini-3.5-flash"
 	defaultTurnTimeout    = 300 * time.Second
 	maxTurnTimeout        = 900 * time.Second
 	turnPollInterval      = 2 * time.Second
@@ -46,7 +48,6 @@ type idInput struct {
 type createAssistantInput struct {
 	projectInput
 	Name           string         `json:"name" jsonschema:"The assistant name."`
-	Model          string         `json:"model,omitempty" jsonschema:"OpenRouter model identifier. Defaults to anthropic/claude-opus-5."`
 	Instructions   string         `json:"instructions" jsonschema:"System instructions for the assistant."`
 	Toolsets       []toolsetRef   `json:"toolsets,omitempty" jsonschema:"Toolsets available to the assistant. Defaults to none."`
 	MCPServers     []mcpServerRef `json:"mcp_servers,omitempty" jsonschema:"MCP servers attached directly to the assistant."`
@@ -59,7 +60,6 @@ type updateAssistantInput struct {
 	projectInput
 	ID             string         `json:"id" jsonschema:"The assistant ID."`
 	Name           string         `json:"name,omitempty" jsonschema:"New assistant name."`
-	Model          string         `json:"model,omitempty" jsonschema:"New OpenRouter model identifier."`
 	Instructions   string         `json:"instructions,omitempty" jsonschema:"New system instructions."`
 	Toolsets       []toolsetRef   `json:"toolsets,omitempty" jsonschema:"Replacement toolset list."`
 	MCPServers     []mcpServerRef `json:"mcp_servers,omitempty" jsonschema:"Replacement MCP server list."`
@@ -179,12 +179,9 @@ func registerTools(server *mcp.Server, api *apiClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in createAssistantInput) (*mcp.CallToolResult, any, error) {
 		body := map[string]any{
 			"name":         in.Name,
-			"model":        in.Model,
+			"model":        defaultAssistantModel,
 			"instructions": in.Instructions,
 			"toolsets":     in.Toolsets,
-		}
-		if in.Model == "" {
-			body["model"] = defaultAssistantModel
 		}
 		if in.Toolsets == nil {
 			body["toolsets"] = []toolsetRef{}
@@ -215,9 +212,6 @@ func registerTools(server *mcp.Server, api *apiClient) {
 		body := map[string]any{"id": in.ID}
 		if in.Name != "" {
 			body["name"] = in.Name
-		}
-		if in.Model != "" {
-			body["model"] = in.Model
 		}
 		if in.Instructions != "" {
 			body["instructions"] = in.Instructions
