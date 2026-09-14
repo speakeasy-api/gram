@@ -203,14 +203,16 @@ func randomDuration(limit time.Duration) time.Duration {
 }
 
 // SweepRemoteSessionRechecks runs one pass: claim due grants in batches and
-// probe each under the slot cap, until a batch comes back short, a probe is
-// rate limited, the pass budget runs out, or the loop is stopped. Returns how
+// probe each under the slot cap, until a batch comes back short, the pass
+// budget runs out, or the loop is stopped. A rate-limited issuer host is left
+// for the next tick while the pass goes on with every other host. Returns how
 // many grants were actually probed.
 func (s *Service) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
 	r := s.remoteSessionRecheck
 	logger := s.logger.With(attr.SlogComponent("remote_session_recheck"))
 	startedAt := time.Now()
-	var probed, rateLimited atomic.Int32
+	var probed atomic.Int32
+	limited := &limitedIssuerHosts{mu: sync.Mutex{}, hosts: map[string]struct{}{}}
 	for {
 		now := time.Now()
 		rows, err := remotesessions_repo.New(s.db).ClaimDueRemoteSessionRecheckCandidates(ctx, remotesessions_repo.ClaimDueRemoteSessionRecheckCandidatesParams{
@@ -218,6 +220,7 @@ func (s *Service) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
 			RecheckCutoff: conv.ToPGTimestamptz(now.Add(-r.interval)),
 			// A claimed row that was skipped or left inconclusive comes back well before it is due again.
 			AttemptCutoff: conv.ToPGTimestamptz(now.Add(-remotesessions.RecheckLease(r.interval))),
+			ExcludedHosts: limited.list(),
 			LimitValue:    r.batch,
 		})
 		if err != nil {
@@ -230,23 +233,58 @@ func (s *Service) SweepRemoteSessionRechecks(ctx context.Context) (int, error) {
 				s.releaseRemoteSessionRecheckLeases(ctx, logger, rows[i:])
 				return int(probed.Load()), nil
 			}
+			// Claimed beside a row that just exhausted its host: give the lease back rather than burn it on a refusal.
+			if limited.has(issuerHost(row.IssuerUrl)) {
+				<-r.slots
+				s.releaseRemoteSessionRecheckLeases(ctx, logger, rows[i:i+1])
+				continue
+			}
 			wg.Go(func() {
 				defer func() { <-r.slots }()
 				switch s.recheckRemoteSession(ctx, logger, row) {
 				case recheckProbed:
 					probed.Add(1)
 				case recheckRateLimited:
-					rateLimited.Add(1)
+					limited.add(issuerHost(row.IssuerUrl))
 				case recheckSkipped:
 				}
 			})
 		}
 		wg.Wait()
-		// A rate-limited host means the rest of its rows would only burn their leases; leave them for the next tick.
-		if len(rows) < int(r.batch) || rateLimited.Load() > 0 || time.Since(startedAt) >= remoteSessionRecheckPassBudget || ctx.Err() != nil {
+		if len(rows) < int(r.batch) || time.Since(startedAt) >= remoteSessionRecheckPassBudget || ctx.Err() != nil {
 			return int(probed.Load()), nil
 		}
 	}
+}
+
+// limitedIssuerHosts is the set of issuer hosts one pass found rate limited; later claims skip their rows.
+type limitedIssuerHosts struct {
+	mu    sync.Mutex
+	hosts map[string]struct{}
+}
+
+func (l *limitedIssuerHosts) add(host string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.hosts[host] = struct{}{}
+}
+
+func (l *limitedIssuerHosts) has(host string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.hosts[host]
+	return ok
+}
+
+// list is never nil: a NULL array would exclude every row.
+func (l *limitedIssuerHosts) list() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, 0, len(l.hosts))
+	for host := range l.hosts {
+		out = append(out, host)
+	}
+	return out
 }
 
 // acquireSlot never starts a detached probe if cancellation won while waiting.
@@ -272,8 +310,8 @@ func (s *Service) releaseRemoteSessionRecheckLeases(ctx context.Context, logger 
 	defer cancel()
 	for _, row := range rows {
 		if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(detached, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
-			ID:             row.ID,
-			OrganizationID: row.OrganizationID,
+			ID:              row.ID,
+			OrganizationIds: row.OrganizationIds,
 		}); err != nil {
 			logger.WarnContext(detached, "release unprobed remote session re-check lease", attr.SlogRemoteSessionID(row.ID.String()), attr.SlogError(err))
 			return
@@ -285,7 +323,7 @@ func (s *Service) releaseRemoteSessionRecheckLeases(ctx context.Context, logger 
 // still serves, and runs the probe. Every refusal is logged and leaves the
 // row for the next attempt window; nothing here writes a rejection.
 func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger, row remotesessions_repo.ClaimDueRemoteSessionRecheckCandidatesRow) (outcome recheckOutcome) {
-	logger = logger.With(attr.SlogRemoteSessionID(row.ID.String()), attr.SlogOrganizationID(row.OrganizationID), attr.SlogOAuthIssuer(row.IssuerUrl))
+	logger = logger.With(attr.SlogRemoteSessionID(row.ID.String()), attr.SlogOAuthIssuer(row.IssuerUrl))
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
 	ctx, cancel := context.WithTimeout(detached, s.remoteSessionRecheck.probeBudget(s.metaRuntime.ValidationTimeout))
 	defer cancel()
@@ -298,10 +336,10 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 
 	now := time.Now()
 	candidate, err := remotesessions_repo.New(s.db).GetDueRemoteSessionRecheckCandidate(ctx, remotesessions_repo.GetDueRemoteSessionRecheckCandidateParams{
-		ID:             row.ID,
-		NowTs:          conv.ToPGTimestamptz(now),
-		RecheckCutoff:  conv.ToPGTimestamptz(now.Add(-s.remoteSessionRecheck.interval)),
-		OrganizationID: row.OrganizationID,
+		ID:              row.ID,
+		NowTs:           conv.ToPGTimestamptz(now),
+		RecheckCutoff:   conv.ToPGTimestamptz(now.Add(-s.remoteSessionRecheck.interval)),
+		OrganizationIds: row.OrganizationIds,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -317,7 +355,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 	placements, err := remotesessions_repo.New(s.db).GetRemoteSessionRecheckEndpoints(ctx, remotesessions_repo.GetRemoteSessionRecheckEndpointsParams{
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
-		OrganizationID:        row.OrganizationID,
+		OrganizationIds:       row.OrganizationIds,
 		SubjectUrn:            sess.SubjectUrn,
 		NowTs:                 conv.ToPGTimestamptz(now),
 	})
@@ -326,7 +364,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		return recheckSkipped
 	}
 	for _, placement := range placements {
-		ref, endpoint := s.placeRemoteSessionRecheck(ctx, logger, row.OrganizationID, placement)
+		logger := logger.With(attr.SlogOrganizationID(placement.OrganizationID))
+		ref, endpoint := s.placeRemoteSessionRecheck(ctx, logger, placement.OrganizationID, placement)
 		if endpoint == nil {
 			logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
 			continue
@@ -362,24 +401,25 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			FirstParty:               true,
 			AutoConnectDone:          false,
 		}
-		// The probe logs its own refusals; this only says the verdict did not land.
+		// The probe logs its own refusals; only a dialled probe ends the search.
 		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
-		case errors.Is(err, errRemoteSessionUnroutable), errors.Is(err, errRemoteSessionMemberOffline):
-			// Nothing was dialled or written; the claim lease paces the retry so a long-offline tunnel is not re-read every tick.
-			logger.InfoContext(ctx, "remote session re-check endpoint cannot route this grant", attr.SlogError(err))
-			continue
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
 			if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(ctx, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
-				ID:             row.ID,
-				OrganizationID: row.OrganizationID,
+				ID:              row.ID,
+				OrganizationIds: row.OrganizationIds,
 			}); err != nil {
 				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
 			}
 			return recheckRateLimited
-		case err != nil:
+		case errors.Is(err, errRemoteSessionVerdictNotRecorded):
 			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(err))
+			return recheckProbed
+		case err != nil:
+			// Nothing was dialled or written: this endpoint cannot route, reach, or authorize the grant; a sibling may. The claim lease paces the retry.
+			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
+			continue
 		}
 		return recheckProbed
 	}

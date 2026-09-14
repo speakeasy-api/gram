@@ -194,7 +194,8 @@ func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.
 
 // A rate-limited issuer host stops the pass: the refused row gives its lease back and is not counted, and rows
 // that were never claimed wait for the next tick instead of being leased unprobed.
-func TestRemoteSessionRecheck_RateLimitedHostStopsThePass(t *testing.T) {
+// A rate-limited issuer host gives its rows back for the next tick while the pass goes on with every other host.
+func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	t.Parallel()
 
 	const prefix = "aim261-pace"
@@ -216,8 +217,15 @@ func TestRemoteSessionRecheck_RateLimitedHostStopsThePass(t *testing.T) {
 	fx.member.set(memberAccepts)
 	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, checked, "only the probed grant is counted")
-	requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+	require.Equal(t, 2, checked, "the refused host does not stop the pass; only probed grants are counted")
+	probes := fx.member.drain()
+	byBearer := map[string][]validationMemberRequest{}
+	for _, req := range probes {
+		byBearer[req.auth] = append(byBearer[req.auth], req)
+	}
+	require.Len(t, byBearer, 2, "one probe per host: %+v", probes)
+	requireProbe(t, byBearer["Bearer token-"+prefix], "token-"+prefix, true, true)
+	requireProbe(t, byBearer["Bearer token-"+prefix+"-c"], "token-"+prefix+"-c", true, true)
 
 	q := remotesessions_repo.New(fx.ti.conn)
 	sessA := storedSession(t, ctx, fx)
@@ -231,9 +239,9 @@ func TestRemoteSessionRecheck_RateLimitedHostStopsThePass(t *testing.T) {
 
 	sessC, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subjectC, RemoteSessionClientID: otherClient})
 	require.NoError(t, err)
-	require.False(t, sessC.ValidationStatus.Valid)
-	require.False(t, sessC.LastRefreshAttemptAt.Valid, "the pass stopped claiming after the refusal")
-	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+	require.Equal(t, string(remotesessions.ValidationOutcomeValid), sessC.ValidationStatus.String, "another host's row is still probed after the refusal")
+	require.True(t, sessC.LastRefreshAttemptAt.Valid)
+	require.Equal(t, map[string]int64{"keepalive": 2}, validationTriggers(t, fx.reader))
 }
 
 // A resolvable endpoint is not necessarily one that can route the grant.

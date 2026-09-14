@@ -30,6 +30,9 @@ import (
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
 
+// errRemoteSessionVerdictNotRecorded: the upstream was dialled but the verdict could not be written.
+var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not recorded")
+
 // errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
 var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
 
@@ -166,7 +169,7 @@ func (s *Service) probeRemoteSession(
 		At:     probedAt,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record remote session validation").LogError(ctx, logger)
+		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "record remote session validation").LogError(ctx, logger))
 	}
 	if !written {
 		logger.InfoContext(ctx, "remote session validation dropped; grant changed or verdict superseded during the probe")

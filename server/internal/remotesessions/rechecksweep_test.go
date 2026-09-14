@@ -12,8 +12,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -36,16 +40,17 @@ func (w recheckWindow) claimParams() repo.ClaimDueRemoteSessionRecheckCandidates
 		NowTs:         conv.ToPGTimestamptz(w.now),
 		RecheckCutoff: conv.ToPGTimestamptz(w.recheckCutoff),
 		AttemptCutoff: conv.ToPGTimestamptz(w.attemptCutoff),
+		ExcludedHosts: []string{},
 		LimitValue:    1000,
 	}
 }
 
 func (w recheckWindow) candidateParams(id uuid.UUID, org string) repo.GetDueRemoteSessionRecheckCandidateParams {
 	return repo.GetDueRemoteSessionRecheckCandidateParams{
-		ID:             id,
-		NowTs:          conv.ToPGTimestamptz(w.now),
-		RecheckCutoff:  conv.ToPGTimestamptz(w.recheckCutoff),
-		OrganizationID: org,
+		ID:              id,
+		NowTs:           conv.ToPGTimestamptz(w.now),
+		RecheckCutoff:   conv.ToPGTimestamptz(w.recheckCutoff),
+		OrganizationIds: []string{org},
 	}
 }
 
@@ -147,7 +152,7 @@ func TestRecheckSweep_ClaimAndRecheckAgree(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, sessionID, rows[0].ID)
-	require.Equal(t, org, rows[0].OrganizationID)
+	require.Equal(t, []string{org}, rows[0].OrganizationIds)
 	require.NotEmpty(t, rows[0].IssuerUrl)
 
 	candidate, err := q.GetDueRemoteSessionRecheckCandidate(ctx, window.candidateParams(sessionID, org))
@@ -269,4 +274,92 @@ func TestRecheckSweep_ClaimsUnexpiredAccessWithoutRefreshGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, sessionID, rows[0].ID)
+}
+
+// A platform-wide client is claimed under every organization that binds it, so an organization without a route never hides a sibling organization's endpoint.
+func TestRecheckSweep_PlatformClientSpansEligibleOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	q := repo.New(ti.conn)
+	const slug = "recheck-anyorg"
+
+	issuerID := seedGlobalRemoteIssuer(t, ctx, ti.conn, slug+"-issuer")
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID: issuerID,
+		ClientID:              slug + "-client",
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+
+	// Two eligible organizations: one binds the client with no endpoint behind it, the other serves it.
+	routelessOrg := createOrganization(t, ctx, ti.conn, slug+"-routeless")
+	routeless, err := testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(routelessOrg),
+		Slug:               slug + "-routeless-usi",
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	routable := createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi")
+	for _, usi := range []uuid.UUID{routeless, routable} {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: usi}))
+	}
+	remoteServer, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: *authCtx.ProjectID, TransportType: "streamable-http", Url: "https://" + slug + ".example.com/mcp"})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
+		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID), Visibility: "private", UserSessionIssuerID: conv.ToNullUUID(routable),
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID: conv.ToNullUUID(server.ID), MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: slug + "-endpoint",
+	})
+	require.NoError(t, err)
+
+	subject := urn.NewUserSubject("subject-" + slug)
+	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn: subject, UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, AccessTokenEncrypted: "access-ciphertext",
+		AccessExpiresAt: pgtype.Timestamptz{}, RefreshTokenEncrypted: pgtype.Text{}, RefreshExpiresAt: pgtype.Timestamptz{}, Scopes: []string{}, Resource: pgtype.Text{}, AutoRefresh: false,
+	})
+	require.NoError(t, err)
+	seedGramSession(t, ctx, ti, subject, routeless, slug+"-a", 24*time.Hour)
+	seedGramSession(t, ctx, ti, subject, routable, slug+"-b", 24*time.Hour)
+
+	// Due now: the window's cutoff is ahead of the grant's creation.
+	window := newRecheckWindow()
+	window.recheckCutoff = time.Now().Add(time.Hour)
+	rows, err := q.ClaimDueRemoteSessionRecheckCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	var claimed *repo.ClaimDueRemoteSessionRecheckCandidatesRow
+	for i := range rows {
+		if rows[i].ID == session.ID {
+			claimed = &rows[i]
+		}
+	}
+	require.NotNil(t, claimed, "the platform client's grant is claimed")
+	require.ElementsMatch(t, []string{routelessOrg, authCtx.ActiveOrganizationID}, claimed.OrganizationIds)
+
+	_, err = q.GetDueRemoteSessionRecheckCandidate(ctx, repo.GetDueRemoteSessionRecheckCandidateParams{ID: session.ID, NowTs: conv.ToPGTimestamptz(window.now), RecheckCutoff: conv.ToPGTimestamptz(window.recheckCutoff), OrganizationIds: claimed.OrganizationIds})
+	require.NoError(t, err)
+
+	placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: claimed.OrganizationIds, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
+	})
+	require.NoError(t, err)
+	require.Len(t, placements, 1)
+	require.Equal(t, slug+"-endpoint", placements[0].Slug)
+	require.Equal(t, authCtx.ActiveOrganizationID, placements[0].OrganizationID, "the placement names the organization it is served under")
+
+	placements, err = q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+		UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, OrganizationIds: []string{routelessOrg}, SubjectUrn: subject, NowTs: conv.ToPGTimestamptz(window.now),
+	})
+	require.NoError(t, err)
+	require.Empty(t, placements, "the routeless organization alone would have hidden the grant")
 }

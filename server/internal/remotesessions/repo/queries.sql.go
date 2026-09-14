@@ -79,13 +79,13 @@ func (q *Queries) CheckRemoteSessionClientBindingForUserSessionIssuer(ctx contex
 const claimDueRemoteSessionRecheckCandidates = `-- name: ClaimDueRemoteSessionRecheckCandidates :many
 
 WITH due AS (
-  SELECT s.id, s.updated_at, COALESCE(s.last_validated_at, s.created_at) AS due_at, elig.organization_id, i.issuer AS issuer_url
+  SELECT s.id, s.updated_at, COALESCE(s.last_validated_at, s.created_at) AS due_at, elig.organization_ids, i.issuer AS issuer_url
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
-    SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
+    SELECT array_agg(DISTINCT COALESCE(p.organization_id, usi.organization_id))::text[] AS organization_ids
     FROM remote_session_client_user_session_issuers AS link
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
@@ -102,8 +102,7 @@ WITH due AS (
           AND gs.deleted IS FALSE
           AND gs.refresh_expires_at > $1::timestamptz
       )
-    ORDER BY usi.id
-    LIMIT 1
+    HAVING count(*) > 0
   ) AS elig
   WHERE s.deleted IS FALSE
     AND s.refresh_token_encrypted IS NULL
@@ -112,8 +111,9 @@ WITH due AS (
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
     AND COALESCE(s.last_validated_at, s.created_at) <= $2::timestamptz
     AND (s.last_refresh_attempt_at IS NULL OR s.last_refresh_attempt_at <= $3::timestamptz)
+    AND lower(split_part(i.issuer, '/', 3)) <> ALL(COALESCE($4::text[], '{}'::text[]))
   ORDER BY COALESCE(s.last_validated_at, s.created_at), s.id
-  LIMIT $4
+  LIMIT $5
   FOR UPDATE OF s SKIP LOCKED
 ),
 claimed AS (
@@ -121,9 +121,9 @@ claimed AS (
   SET last_refresh_attempt_at = $1::timestamptz
   FROM due
   WHERE s.id = due.id
-  RETURNING s.id, due.due_at, due.organization_id, due.issuer_url
+  RETURNING s.id, due.due_at, due.organization_ids, due.issuer_url
 )
-SELECT id, organization_id, issuer_url
+SELECT id, organization_ids, issuer_url
 FROM claimed
 ORDER BY due_at, id
 `
@@ -132,24 +132,27 @@ type ClaimDueRemoteSessionRecheckCandidatesParams struct {
 	NowTs         pgtype.Timestamptz
 	RecheckCutoff pgtype.Timestamptz
 	AttemptCutoff pgtype.Timestamptz
+	ExcludedHosts []string
 	LimitValue    int32
 }
 
 type ClaimDueRemoteSessionRecheckCandidatesRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	IssuerUrl      string
+	ID              uuid.UUID
+	OrganizationIds []string
+	IssuerUrl       string
 }
 
 // Idle re-check (AIM-261): grants with no refresh token or expiry are presented to their upstream on a slow cadence, since the refresh sweep never touches them.
 // Due once the verdict (or, before any, the grant) is older than the interval and no claim lease is live; last_refresh_attempt_at is the lease.
 // Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Gram session for the subject.
 // Rejected and inactive grants stay in the population and are re-probed each interval until their Gram session lapses.
+// Every organization the grant is eligible under comes back, so the probe can try each one's endpoints; excluded_hosts skips issuer hosts this pass already found rate limited.
 func (q *Queries) ClaimDueRemoteSessionRecheckCandidates(ctx context.Context, arg ClaimDueRemoteSessionRecheckCandidatesParams) ([]ClaimDueRemoteSessionRecheckCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, claimDueRemoteSessionRecheckCandidates,
 		arg.NowTs,
 		arg.RecheckCutoff,
 		arg.AttemptCutoff,
+		arg.ExcludedHosts,
 		arg.LimitValue,
 	)
 	if err != nil {
@@ -159,7 +162,7 @@ func (q *Queries) ClaimDueRemoteSessionRecheckCandidates(ctx context.Context, ar
 	var items []ClaimDueRemoteSessionRecheckCandidatesRow
 	for rows.Next() {
 		var i ClaimDueRemoteSessionRecheckCandidatesRow
-		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.IssuerUrl); err != nil {
+		if err := rows.Scan(&i.ID, &i.OrganizationIds, &i.IssuerUrl); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -339,18 +342,18 @@ WHERE s.id = $1
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND COALESCE(p.organization_id, usi.organization_id) = $2
+      AND COALESCE(p.organization_id, usi.organization_id) = ANY($2::text[])
   )
 `
 
 type ClearRemoteSessionRecheckLeaseParams struct {
-	ID             uuid.UUID
-	OrganizationID string
+	ID              uuid.UUID
+	OrganizationIds []string
 }
 
-// Releases a claim the pass could not use (issuer host rate limited) so the row is due again next tick; scoped to the organization it was claimed under.
+// Releases a claim the pass could not use (issuer host rate limited) so the row is due again next tick; scoped to the organizations it was claimed under.
 func (q *Queries) ClearRemoteSessionRecheckLease(ctx context.Context, arg ClearRemoteSessionRecheckLeaseParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRemoteSessionRecheckLease, arg.ID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, clearRemoteSessionRecheckLease, arg.ID, arg.OrganizationIds)
 	if err != nil {
 		return 0, err
 	}
@@ -1704,7 +1707,7 @@ WHERE s.id = $1
     LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
       AND (usi.project_id IS NULL OR p.id IS NOT NULL)
-      AND COALESCE(p.organization_id, usi.organization_id) = $4
+      AND COALESCE(p.organization_id, usi.organization_id) = ANY($4::text[])
       AND (
         (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
         OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
@@ -1720,10 +1723,10 @@ WHERE s.id = $1
 `
 
 type GetDueRemoteSessionRecheckCandidateParams struct {
-	ID             uuid.UUID
-	NowTs          pgtype.Timestamptz
-	RecheckCutoff  pgtype.Timestamptz
-	OrganizationID string
+	ID              uuid.UUID
+	NowTs           pgtype.Timestamptz
+	RecheckCutoff   pgtype.Timestamptz
+	OrganizationIds []string
 }
 
 type GetDueRemoteSessionRecheckCandidateRow struct {
@@ -1732,14 +1735,14 @@ type GetDueRemoteSessionRecheckCandidateRow struct {
 	IssuerUrl             string
 }
 
-// Authoritative re-read under the claimed organization right before the probe; no row means "no longer due".
+// Authoritative re-read under the claimed organizations right before the probe; no row means "no longer due".
 // Restates ClaimDueRemoteSessionRecheckCandidates' predicate; TestRecheckSweep_ClaimAndRecheckAgree and TestRecheckSweep_OwnsOnlyUnrenewableRoutableGrants fail if they drift.
 func (q *Queries) GetDueRemoteSessionRecheckCandidate(ctx context.Context, arg GetDueRemoteSessionRecheckCandidateParams) (GetDueRemoteSessionRecheckCandidateRow, error) {
 	row := q.db.QueryRow(ctx, getDueRemoteSessionRecheckCandidate,
 		arg.ID,
 		arg.NowTs,
 		arg.RecheckCutoff,
-		arg.OrganizationID,
+		arg.OrganizationIds,
 	)
 	var i GetDueRemoteSessionRecheckCandidateRow
 	err := row.Scan(
@@ -3328,7 +3331,7 @@ func (q *Queries) GetRemoteSessionIssuerForMetadataRefresh(ctx context.Context, 
 
 const getRemoteSessionRecheckEndpoints = `-- name: GetRemoteSessionRecheckEndpoints :many
 WITH bound AS (
-  SELECT usi.id, c.project_id AS client_project_id
+  SELECT usi.id, c.project_id AS client_project_id, COALESCE(p.organization_id, usi.organization_id) AS organization_id
   FROM remote_session_client_user_session_issuers AS link
   JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id AND c.deleted IS FALSE
   LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
@@ -3336,7 +3339,7 @@ WITH bound AS (
   LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
   WHERE link.remote_session_client_id = $2
     AND (usi.project_id IS NULL OR p.id IS NOT NULL)
-    AND COALESCE(p.organization_id, usi.organization_id) = $3
+    AND COALESCE(p.organization_id, usi.organization_id) = ANY($3::text[])
     AND (
       (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
       OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
@@ -3350,17 +3353,17 @@ WITH bound AS (
     )
 ),
 candidates AS (
-  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, ms.user_session_issuer_id
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, ms.user_session_issuer_id, bound.organization_id
   FROM bound
   JOIN mcp_servers AS ms ON ms.user_session_issuer_id = bound.id AND ms.deleted IS FALSE
   JOIN mcp_endpoints AS e ON e.mcp_server_id = ms.id AND e.deleted IS FALSE AND (bound.client_project_id IS NULL OR e.project_id = bound.client_project_id)
   UNION ALL
-  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, mms.user_session_issuer_id
+  SELECT e.id, e.project_id, e.slug, e.custom_domain_id, e.mcp_server_id, e.meta_mcp_server_id, mms.user_session_issuer_id, bound.organization_id
   FROM bound
   JOIN meta_mcp_servers AS mms ON mms.user_session_issuer_id = bound.id AND mms.deleted IS FALSE
   JOIN mcp_endpoints AS e ON e.meta_mcp_server_id = mms.id AND e.deleted IS FALSE AND (bound.client_project_id IS NULL OR e.project_id = bound.client_project_id)
 )
-SELECT project_id, slug, custom_domain_id, mcp_server_id, meta_mcp_server_id
+SELECT project_id, slug, custom_domain_id, mcp_server_id, meta_mcp_server_id, organization_id::text AS organization_id
 FROM candidates
 ORDER BY (user_session_issuer_id = $1::uuid) DESC, custom_domain_id IS NOT NULL, id
 `
@@ -3368,7 +3371,7 @@ ORDER BY (user_session_issuer_id = $1::uuid) DESC, custom_domain_id IS NOT NULL,
 type GetRemoteSessionRecheckEndpointsParams struct {
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
-	OrganizationID        string
+	OrganizationIds       []string
 	SubjectUrn            urn.SessionSubject
 	NowTs                 pgtype.Timestamptz
 }
@@ -3379,15 +3382,16 @@ type GetRemoteSessionRecheckEndpointsRow struct {
 	CustomDomainID  uuid.NullUUID
 	McpServerID     uuid.NullUUID
 	MetaMcpServerID uuid.NullUUID
+	OrganizationID  string
 }
 
-// Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in the claimed organization, with a live Gram session for the subject.
-// Ordered own issuer first, then platform origin over custom domain, then oldest; the caller takes the first the runtime resolver accepts.
+// Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in any claimed organization, with a live Gram session for the subject.
+// Ordered own issuer first, then platform origin over custom domain, then oldest; the caller tries them in turn until one presents the grant.
 func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetRemoteSessionRecheckEndpointsParams) ([]GetRemoteSessionRecheckEndpointsRow, error) {
 	rows, err := q.db.Query(ctx, getRemoteSessionRecheckEndpoints,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
-		arg.OrganizationID,
+		arg.OrganizationIds,
 		arg.SubjectUrn,
 		arg.NowTs,
 	)
@@ -3404,6 +3408,7 @@ func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetR
 			&i.CustomDomainID,
 			&i.McpServerID,
 			&i.MetaMcpServerID,
+			&i.OrganizationID,
 		); err != nil {
 			return nil, err
 		}
