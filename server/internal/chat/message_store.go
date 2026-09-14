@@ -301,6 +301,58 @@ func setReadingAttribute(attributes *map[string]string, key string, value string
 
 // meterMessage measures one durable message and returns its project-scoped
 // storage usage keyed by the message UUID. A zero-token message emits no reading.
+// StorageReadingInput identifies one durably stored chat message to measure.
+type StorageReadingInput struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	MessageID             uuid.UUID
+	ChatID                uuid.UUID
+	Content               string
+	ToolCalls             []byte
+	Model                 pgtype.Text
+	Provider              string
+	Source                pgtype.Text
+	HookHostname          string
+	AccountType           string
+	BillingMode           string
+	BillingUserID         string
+	WorkloadSource        metering.WorkloadSource
+	MessageUserID         pgtype.Text
+	MessageExternalUserID pgtype.Text
+	MessageUserEmail      string
+	OccurredAt            time.Time
+}
+
+// StorageReading measures a row that some other writer already stored, for
+// callers that own their own insert. The synchronous path meters through Write
+// and never needs this; the Pub/Sub consumer inserts rows itself and calls this
+// to enqueue the same reading in the same transaction.
+//
+// Returns no reading for content that measures zero tokens.
+func (w *ChatMessageWriter) StorageReading(ctx context.Context, input StorageReadingInput) ([]metering.Reading, error) {
+	return w.meterMessage(ctx, meterMessageInput{
+		organizationID:        input.OrganizationID,
+		projectID:             input.ProjectID,
+		messageID:             input.MessageID,
+		chatID:                input.ChatID,
+		content:               input.Content,
+		toolCalls:             input.ToolCalls,
+		model:                 input.Model,
+		provider:              input.Provider,
+		source:                input.Source,
+		hookHostname:          input.HookHostname,
+		accountType:           input.AccountType,
+		billingMode:           input.BillingMode,
+		billingUserID:         input.BillingUserID,
+		assistantID:           uuid.Nil,
+		workloadSource:        input.WorkloadSource,
+		messageUserID:         input.MessageUserID,
+		messageExternalUserID: input.MessageExternalUserID,
+		messageUserEmail:      input.MessageUserEmail,
+		occurredAt:            input.OccurredAt,
+	})
+}
+
 func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessageInput) ([]metering.Reading, error) {
 	contentParts, err := extractMeteredContent(input.content, input.toolCalls)
 	if err != nil {

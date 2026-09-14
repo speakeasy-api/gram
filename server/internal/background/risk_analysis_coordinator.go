@@ -31,6 +31,12 @@ const (
 
 	analyzeBatchStartToCloseTimeout = 50 * time.Minute
 
+	// RiskAnalysisSignalCooldown is the per-project window a ThrottledSignaler
+	// coalesces risk analysis wakes into. Exported for the same reason its
+	// siblings are: every process that writes chat messages has to wake this
+	// coordinator, and a second copy of the value in one of them drifts silently
+	// — the symptom is wakes at the wrong rate, which nothing fails on.
+	RiskAnalysisSignalCooldown = 30 * time.Second
 	// riskAnalysisRetryBackoff is how long a run that saw a failed batch waits
 	// before ContinueAsNew retries the withheld units. Without the self-retry
 	// those units would sit unanalyzed until the next organic signal, which is
