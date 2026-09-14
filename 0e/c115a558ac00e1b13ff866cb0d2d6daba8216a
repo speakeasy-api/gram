@@ -1,0 +1,23 @@
+.changeset/identity-map-sync-defer-on-lock.md
+  s_3caededc838c21::t_0e94990671b2f4 1-5
+server/internal/background/activities/sync_identity_map.go
+  s_3caededc838c21::t_2653296a3dfa66 70-72,91-95,101-102,123
+server/internal/background/activities/sync_identity_map_test.go
+  s_3caededc838c21::t_5bc866950d9613 185-186,189-192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0ec115a558ac00e1b13ff866cb0d2d6daba8216a",
+  "prompts": {},
+  "sessions": {
+    "s_3caededc838c21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb59aef5-e16c-4af8-ae00-4263295544f0",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
