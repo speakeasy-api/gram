@@ -199,10 +199,10 @@ func TestDemoSeedSafety(t *testing.T) {
 		require.True(t, ok, "postgres table %s appeared between seed runs", table)
 	}
 
-	// ClickHouse: the seed writes deterministic row counts into plain
-	// MergeTree tables. Summing/Aggregating MV targets collapse rows by
-	// time-bucketed keys that shift with now(), so only their isolation is
-	// asserted (above), not exact demo-scope counts.
+	// Plain MergeTree targets have stable counts. Summary row counts can
+	// change when now()-relative timestamps cross UTC day boundaries.
+	// Meter cleanup is checked by the seed's delivery-total postflight;
+	// all tables retain the tenant-isolation checks above.
 	for table, s1 := range chAfter1 {
 		s2 := chAfter2[table]
 		if isPlainMergeTree(s1.Engine) {
