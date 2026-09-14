@@ -194,21 +194,23 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	const custom = "Always call list_servers first. Ticketing lives in the support member."
-	_, err := metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{
-		Name:                 meta.Name,
-		UserSessionIssuerID:  meta.UserSessionIssuerID,
-		Visibility:           pgtype.Text{String: "", Valid: false},
-		NetworkAccessModeSet: false,
-		NetworkAccessMode:    pgtype.Text{String: "", Valid: false},
-		InstructionsSet:      true,
-		Instructions:         conv.ToPGText(custom),
-		ID:                   meta.ID,
-		OrganizationID:       meta.OrganizationID,
-		ProjectID:            meta.ProjectID,
-	})
-	require.NoError(t, err)
-
-	for _, method := range []string{"initialize", "server/discover"} {
+	setInstructions := func(mode pgtype.Text) {
+		_, err := metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{
+			Name:                 meta.Name,
+			UserSessionIssuerID:  meta.UserSessionIssuerID,
+			Visibility:           pgtype.Text{String: "", Valid: false},
+			NetworkAccessModeSet: false,
+			NetworkAccessMode:    pgtype.Text{String: "", Valid: false},
+			InstructionsSet:      true,
+			Instructions:         conv.ToPGText(custom),
+			InstructionsMode:     mode,
+			ID:                   meta.ID,
+			OrganizationID:       meta.OrganizationID,
+			ProjectID:            meta.ProjectID,
+		})
+		require.NoError(t, err)
+	}
+	served := func(method string) string {
 		params := map[string]any{}
 		if method == "initialize" {
 			params = map[string]any{"protocolVersion": mcpversions.Version20250326}
@@ -222,8 +224,22 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 			Instructions string `json:"instructions"`
 		}
 		require.NoError(t, json.Unmarshal(envelope["result"], &result))
-		require.Equal(t, custom, result.Instructions, "method=%s", method)
-		require.NotContains(t, result.Instructions, "Work from the outside in")
+		return result.Instructions
+	}
+
+	// NULL mode appends: the built-in drill-down guidance survives, custom
+	// text follows it.
+	setInstructions(pgtype.Text{String: "", Valid: false})
+	for _, method := range []string{"initialize", "server/discover"} {
+		got := served(method)
+		require.Equal(t, metamcp.Instructions+"\n\n"+custom, got, "method=%s", method)
+	}
+
+	setInstructions(conv.ToPGText(metamcp.ModeReplace))
+	for _, method := range []string{"initialize", "server/discover"} {
+		got := served(method)
+		require.Equal(t, custom, got, "method=%s", method)
+		require.NotContains(t, got, "Work from the outside in")
 	}
 }
 

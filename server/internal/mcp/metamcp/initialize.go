@@ -21,11 +21,21 @@ Never execute a name you have not described: arguments guessed from a tool name 
 
 If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.`
 
-// ResolveInstructions returns the operator-authored instructions when a
-// gateway has them and the built-in block otherwise.
-func ResolveInstructions(custom *string) string {
-	if custom != nil && *custom != "" {
+// Instruction modes. NULL in storage means ModeAppend.
+const (
+	ModeAppend  = "append"
+	ModeReplace = "replace"
+)
+
+// ResolveInstructions composes what a gateway serves on connect: the built-in
+// block alone when there is no custom text, only the custom text in replace
+// mode, and the built-in block followed by the custom text otherwise.
+func ResolveInstructions(custom *string, mode string) string {
+	if custom == nil || *custom == "" {
+		return Instructions
+	}
+	if mode == ModeReplace {
 		return *custom
 	}
-	return Instructions
+	return Instructions + "\n\n" + *custom
 }

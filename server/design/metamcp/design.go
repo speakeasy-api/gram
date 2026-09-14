@@ -252,6 +252,12 @@ var _ = Service("metaMcp", func() {
 	})
 })
 
+var MetaMcpInstructionsMode = Type("MetaMcpInstructionsMode", String, func() {
+	Description("How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.")
+	Enum("append", "replace")
+	Meta("struct:pkg:path", "types")
+})
+
 var MetaMcpServerVisibility = Type("MetaMcpServerVisibility", String, func() {
 	Description("The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.")
 	Enum("disabled", "private")
@@ -290,6 +296,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 	Attribute("instructions", String, "Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.")
+	Attribute("instructions_mode", MetaMcpInstructionsMode, "How custom instructions combine with the built-in text. Omit to leave it unchanged.")
 
 	Required("id", "name")
 })
@@ -313,6 +320,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
+	Attribute("instructions_mode", MetaMcpInstructionsMode, "How custom instructions combine with the built-in text. Defaults to append.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)
@@ -323,7 +331,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
-	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "instructions_mode", "created_at", "updated_at")
 })
 
 var AddMetaMcpMemberForm = Type("AddMetaMcpMemberForm", func() {

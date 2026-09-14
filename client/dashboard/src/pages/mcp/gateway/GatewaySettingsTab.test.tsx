@@ -132,9 +132,32 @@ describe("Gateway instructions", () => {
           name: server.name,
           userSessionIssuerId: undefined,
           instructions: "",
+          instructionsMode: "append",
         },
       },
     });
+  });
+
+  it("switching the mode alone makes the section dirty and is sent on save", () => {
+    renderSection();
+    expect(save().disabled).toBe(true);
+    fireEvent.click(
+      screen.getAllByRole("radio", {
+        name: /Replace the built-in instructions/i,
+      })[0]!,
+    );
+    expect(save().disabled).toBe(false);
+    fireEvent.click(save());
+    expect(state.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          updateMetaMcpServerForm: expect.objectContaining({
+            instructions: "Original",
+            instructionsMode: "replace",
+          }),
+        }),
+      }),
+    );
   });
 
   it("does not permit edits that would be overwritten by an in-flight save", () => {

@@ -84764,6 +84764,12 @@ components:
                 instructions:
                     type: string
                     description: Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
+                instructions_mode:
+                    type: string
+                    description: How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
+                    enum:
+                        - append
+                        - replace
                 member_count:
                     type: integer
                     description: The number of live members. Only populated by listMetaMcpServers.
@@ -84807,6 +84813,7 @@ components:
                 - name
                 - visibility
                 - network_access_mode
+                - instructions_mode
                 - created_at
                 - updated_at
         MigrateIssuerRequestBody:
@@ -96993,6 +97000,12 @@ components:
                 instructions:
                     type: string
                     description: Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+                instructions_mode:
+                    type: string
+                    description: How a gateway's custom instructions combine with Gram's built-in gateway instructions. Append serves the built-in text followed by the custom text; replace serves only the custom text.
+                    enum:
+                        - append
+                        - replace
                 name:
                     type: string
                     description: The display name of the meta MCP server

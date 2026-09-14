@@ -1276,10 +1276,11 @@ SET name = $1,
         WHEN $6::boolean THEN $7
         ELSE instructions
     END,
+    instructions_mode = COALESCE($8, instructions_mode),
     updated_at = clock_timestamp()
-WHERE id = $8
-  AND organization_id = $9
-  AND project_id = $10
+WHERE id = $9
+  AND organization_id = $10
+  AND project_id = $11
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, instructions, instructions_mode, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
@@ -1292,6 +1293,7 @@ type UpdateMetaMCPServerParams struct {
 	NetworkAccessMode    pgtype.Text
 	InstructionsSet      bool
 	Instructions         pgtype.Text
+	InstructionsMode     pgtype.Text
 	ID                   uuid.UUID
 	OrganizationID       string
 	ProjectID            uuid.UUID
@@ -1313,6 +1315,7 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		arg.NetworkAccessMode,
 		arg.InstructionsSet,
 		arg.Instructions,
+		arg.InstructionsMode,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,

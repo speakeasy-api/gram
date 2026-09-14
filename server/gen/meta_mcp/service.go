@@ -192,6 +192,9 @@ type UpdateMetaMcpServerPayload struct {
 	// gateway instructions. Limited to 10000 Unicode characters after removing NUL
 	// characters and trimming whitespace.
 	Instructions *string
+	// How custom instructions combine with the built-in text. Omit to leave it
+	// unchanged.
+	InstructionsMode *types.MetaMcpInstructionsMode
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

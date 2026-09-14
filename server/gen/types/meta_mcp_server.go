@@ -29,6 +29,8 @@ type MetaMcpServer struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string
+	// How custom instructions combine with the built-in text. Defaults to append.
+	InstructionsMode MetaMcpInstructionsMode
 	// When the meta MCP server was created
 	CreatedAt string
 	// When the meta MCP server was last updated

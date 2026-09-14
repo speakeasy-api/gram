@@ -339,10 +339,11 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		NetworkAccessMode:    storedMode,
 		InstructionsSet:      payload.Instructions != nil,
 		// A blank submission restores the built-in instructions (NULL).
-		Instructions:   instructions,
-		ID:             serverID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
+		Instructions:     instructions,
+		InstructionsMode: conv.PtrToPGText((*string)(payload.InstructionsMode)),
+		ID:               serverID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
