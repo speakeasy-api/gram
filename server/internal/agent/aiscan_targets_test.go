@@ -453,3 +453,65 @@ func TestStoredAIScanKeyIsNeverServedAndDoesNotShapeTheEtag(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, clean.Etag, stored.Etag, "the etag must hash the served document, not the stored one")
 }
+
+// TestUpsertAiScanTargetClearsTheDecisionWhenEnforceabilityIsLost: the upsert
+// replaces the definition and never touches status, so an edit that clears a
+// target's last gateway matcher would leave a block recorded that nothing can
+// enforce, and adding a matcher back later would revive it with nobody having
+// decided again. Losing enforceability clears the decision instead, and that
+// clearing is logged as the decision change it is.
+func TestUpsertAiScanTargetClearsTheDecisionWhenEnforceabilityIsLost(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	linked := chatgptDesktopPayload()
+	linked.GatewayClient = &gen.AiScanTargetGatewayClient{
+		CimdVendorKeys:  []string{},
+		OauthClientIds:  []string{"https://client.example/desktop/client.json"},
+		ClientInfoNames: []string{},
+	}
+	_, err := ti.service.UpsertAiScanTarget(ctx, linked)
+	require.NoError(t, err)
+
+	// Block it the way the decision endpoint does.
+	_, err = repo.New(ti.conn).SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+		OrganizationID: ti.orgID,
+		ID:             linked.ID,
+		Status:         "blocked",
+		Rationale:      conv.ToPGTextEmpty("not approved"),
+	})
+	require.NoError(t, err)
+	decisions, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAIToolDecisionSet)
+	require.NoError(t, err)
+
+	statusOf := func() string {
+		rows, err := repo.New(ti.conn).ListAIScanTargets(ctx, ti.orgID)
+		require.NoError(t, err)
+		for _, row := range rows {
+			if row.ID == linked.ID {
+				return row.Status
+			}
+		}
+		require.FailNow(t, "target row missing")
+		return ""
+	}
+	require.Equal(t, "blocked", statusOf())
+
+	// The edit that removes the last matcher.
+	unlinked := chatgptDesktopPayload()
+	unlinked.GatewayClient = &gen.AiScanTargetGatewayClient{CimdVendorKeys: []string{}, OauthClientIds: []string{}, ClientInfoNames: []string{}}
+	_, err = ti.service.UpsertAiScanTarget(ctx, unlinked)
+	require.NoError(t, err)
+	require.Equal(t, "unreviewed", statusOf(), "a block nothing can enforce must not outlive the edit that made it unenforceable")
+
+	decisionsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAIToolDecisionSet)
+	require.NoError(t, err)
+	require.Equal(t, decisions+1, decisionsAfter, "clearing the decision is a decision change and is logged as one")
+
+	// Restoring the matcher does not restore the block: the organization
+	// decides again once the target can be recognized at the gateway.
+	_, err = ti.service.UpsertAiScanTarget(ctx, linked)
+	require.NoError(t, err)
+	require.Equal(t, "unreviewed", statusOf(), "re-adding a matcher must not silently reactivate the old block")
+}

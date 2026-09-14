@@ -107,9 +107,11 @@ func SummarizeAccess(target Target, decision DecisionRecord) AccessSummary {
 // target carries a verifiable matcher, which in practice means it publishes a
 // client ID metadata document.
 //
-// Nothing else gates it. A target is in the organization's inventory or it is
-// not, and everything in the inventory is both probed for and enforceable;
-// there is no separate switch that can leave a decision recorded but inert.
+// Nothing else gates it. Inventory membership decides whether a target is
+// probed for; matcher presence decides whether a decision about it can be
+// enforced. A target with no verifiable matcher stays in the inventory and is
+// still probed for, it simply cannot be blocked at the gateway. There is no
+// separate switch that can leave a decision recorded but inert.
 func Enforceable(target Target) bool {
 	return len(target.GatewayClient.CIMDVendorKeys)+len(target.GatewayClient.OAuthClientIDs) > 0
 }

@@ -68,6 +68,35 @@ func (e *AIToolBlockedError) Description() string {
 	)
 }
 
+// aiToolBlockReads are the two database reads behind checkAIToolGatewayBlock.
+// They are function values rather than direct calls so a test can fail one
+// read while the other succeeds, which is the only way to reach the fail-open
+// and fail-closed branches against a real database. NewService installs
+// defaultAIToolBlockReads; nothing at runtime replaces them.
+type aiToolBlockReads struct {
+	// blockedTargetIDs lists the scan-target ids the organization has
+	// blocked: the cheap "is anything blocked at all?" read.
+	blockedTargetIDs func(ctx context.Context, queries *agentrepo.Queries, organizationID string) ([]string, error)
+
+	// catalog loads the organization's scan-target catalog, which is what
+	// matches the caller to a target.
+	catalog func(ctx context.Context, queries *agentrepo.Queries, organizationID string) (*aitargets.OrganizationList, error)
+}
+
+// defaultAIToolBlockReads returns the production reads.
+func defaultAIToolBlockReads() aiToolBlockReads {
+	return aiToolBlockReads{
+		blockedTargetIDs: func(ctx context.Context, queries *agentrepo.Queries, organizationID string) ([]string, error) {
+			ids, err := queries.ListBlockedAITargetIDs(ctx, organizationID)
+			if err != nil {
+				return nil, fmt.Errorf("list blocked ai targets: %w", err)
+			}
+			return ids, nil
+		},
+		catalog: aitargets.LoadOrganizationList,
+	}
+}
+
 // checkAIToolGatewayBlock refuses clientID when the organization has blocked
 // the AI tool it belongs to. Nil means not blocked, the usual answer.
 //
@@ -87,7 +116,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	}
 
 	queries := agentrepo.New(s.db)
-	blocked, err := queries.ListBlockedAITargetIDs(ctx, organizationID)
+	blocked, err := s.aiToolBlockReads.blockedTargetIDs(ctx, queries, organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "ai tool gateway block unavailable; allowing the connection", attr.SlogError(err))
 		return nil
@@ -96,7 +125,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 		return nil
 	}
 
-	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
+	list, err := s.aiToolBlockReads.catalog(ctx, queries, organizationID)
 	if err != nil {
 		logger.ErrorContext(ctx, "ai scan targets unavailable while a block is in force", attr.SlogError(err))
 		return fmt.Errorf("%w: %w", ErrAIToolBlockCheckUnavailable, err)
@@ -122,7 +151,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	for _, id := range blocked {
 		blockedIDs[id] = struct{}{}
 	}
-	if _, isBlocked := blockedIDs[target.ID]; !isBlocked {
+	if _, isBlocked := blockedIDs[target.ID]; isBlocked {
 		return nil
 	}
 

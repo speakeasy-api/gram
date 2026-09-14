@@ -239,6 +239,13 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "ai_tool_blocked")
+			// This refusal ends an authorization-code exchange before the grant
+			// handler that records token-stage failures is reached, so the
+			// failure is recorded here. Refresh grants stay excluded, as they
+			// are from the handler's own failure accounting.
+			if grantType == "authorization_code" {
+				s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageToken)
+			}
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {

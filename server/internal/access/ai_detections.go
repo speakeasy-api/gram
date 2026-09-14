@@ -37,9 +37,9 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 		return nil, err
 	}
 
-	var categories []string
+	var category string
 	if payload.Category != nil {
-		categories = []string{*payload.Category}
+		category = *payload.Category
 	}
 
 	// The team filter resolves a SCIM directory group to its active members'
@@ -64,7 +64,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 
 	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
-		Categories:           categories,
+		Categories:           nil,
 		UserEmails:           userEmails,
 		ExactUserEmail:       "",
 		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
@@ -72,7 +72,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return keepDetectionCategory(result, category), nil
 }
 
 // ListEmployeeAIDetections returns one employee's organization-scoped device
@@ -171,6 +171,32 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 	return &gen.ListAIDetectionsResult{Detections: detections}, nil
 }
 
+// keepDetectionCategory narrows a decorated result to one category, or leaves
+// it whole when category is empty.
+//
+// Filtered here, after decoration, rather than pushed down to ClickHouse on
+// purpose. A detection row stores the category the catalog gave its target at
+// the time it was written, while the response reports the catalog's current
+// category, so the two diverge whenever a target is reclassified: a stored
+// "harness" row now reads "assistant". Filtering on the stored value would
+// then omit that tool from the category it now belongs to and return it under
+// the one it left. The effective category is the one the caller sees, so it
+// is the one filtered on. The summaries query aggregates the whole
+// organization with no paging, so nothing is lost by filtering afterwards.
+func keepDetectionCategory(result *gen.ListAIDetectionsResult, category string) *gen.ListAIDetectionsResult {
+	if category == "" || result == nil {
+		return result
+	}
+	kept := make([]*gen.AIDetection, 0, len(result.Detections))
+	for _, detection := range result.Detections {
+		if detection != nil && detection.Category == category {
+			kept = append(kept, detection)
+		}
+	}
+	result.Detections = kept
+	return result
+}
+
 // AIDetectionsReadInput is an organization-scoped Shadow AI inventory read for
 // a trusted internal caller that has established its own principal.
 type AIDetectionsReadInput struct {
@@ -191,17 +217,14 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
 	}
 
-	var categories []string
-	if category := strings.TrimSpace(input.Category); category != "" {
-		if !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "unknown detection category %q", category).LogError(ctx, s.logger)
-		}
-		categories = []string{category}
+	category := strings.TrimSpace(input.Category)
+	if category != "" && !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unknown detection category %q", category).LogError(ctx, s.logger)
 	}
 
 	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       input.OrganizationID,
-		Categories:           categories,
+		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       "",
 		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, input.OrganizationID),
@@ -209,5 +232,5 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 	if err != nil {
 		return nil, err
 	}
-	return result, nil
+	return keepDetectionCategory(result, category), nil
 }

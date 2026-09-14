@@ -1313,12 +1313,16 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
   -- blocked. Who set it and when is the audit log's job, not a column here.
   --
-  -- The only state a row carries. Being in the organization's inventory is
-  -- what makes a target probed for, and a row exists only to record a
-  -- decision about one: there is no separate on/off switch that could leave a
-  -- recorded decision inert, or disagree with this column mid-write. A
-  -- built-in leaves the inventory by being deleted from the registry, an
-  -- organization's own target by having this row deleted.
+  -- The only per-organization state there is. Two kinds of row share this
+  -- table and the id alone tells them apart, by whether it names a compiled-in
+  -- default. A built-in's row records only this decision: its definition
+  -- columns stay null because the definition is compiled in and stays there.
+  -- An organization's own target's row carries the full definition as well.
+  -- Being in the organization's inventory is what makes a target probed for;
+  -- there is no separate on/off switch that could leave a recorded decision
+  -- inert or disagree with this column mid-write. A built-in leaves the
+  -- inventory by being deleted from the registry, an organization's own
+  -- target by having this row deleted.
   status TEXT NOT NULL DEFAULT 'unreviewed',
   rationale TEXT,
 

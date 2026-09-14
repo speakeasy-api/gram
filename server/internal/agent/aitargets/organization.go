@@ -97,11 +97,25 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 		})
 	}
 	for _, row := range rows {
-		if _, remaining := byID[row.ID]; remaining {
-			row.Source = SourceOrganization
-			row.Customized = false
-			entries = append(entries, row)
+		if _, remaining := byID[row.ID]; !remaining {
+			continue
 		}
+		// A row matching no default is an organization's own target, and its
+		// row carries the full definition. Except when it does not: a built-in
+		// that has since been removed from the registry leaves behind the
+		// decision-only row an organization wrote about it, whose definition
+		// columns were always empty. Promoting that to an organization target
+		// would serve agents a target with no name, no category and no
+		// signatures, and keep them probing for a product the registry no
+		// longer ships. Skip it: the row records a decision about something
+		// that no longer exists, and purging it is part of removing the
+		// built-in.
+		if strings.TrimSpace(row.DisplayName) == "" {
+			continue
+		}
+		row.Source = SourceOrganization
+		row.Customized = false
+		entries = append(entries, row)
 	}
 	slices.SortFunc(entries, func(a, b Entry) int {
 		return strings.Compare(a.ID, b.ID)

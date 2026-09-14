@@ -195,3 +195,46 @@ func TestSameDefinitionFoldsTheDefaultVersionPlistKey(t *testing.T) {
 	require.False(t, aitargets.SameDefinition(omitted, other),
 		"a different key is a real change and must still be rejected")
 }
+
+// TestOverlayDropsTheDecisionRowOfARemovedBuiltIn: when a built-in leaves the
+// registry, an organization that had decided about it keeps a row whose
+// definition columns were always empty. Read back with no default to match,
+// that row must not be promoted to an organization target, or agents would be
+// served a nameless target and keep probing for a product that no longer
+// ships.
+func TestOverlayDropsTheDecisionRowOfARemovedBuiltIn(t *testing.T) {
+	t.Parallel()
+
+	orphan := aitargets.Entry{
+		Target: aitargets.Target{
+			ID:            "product-that-left-the-registry",
+			DisplayName:   "",
+			Category:      "",
+			Signatures:    aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}},
+			VersionHint:   nil,
+			GatewayClient: aitargets.GatewayClient{CIMDVendorKeys: nil, OAuthClientIDs: nil, ClientInfoNames: nil},
+		},
+		Source:     aitargets.SourceOrganization,
+		Customized: false,
+		Decision:   aitargets.DecisionRecord{TargetID: "product-that-left-the-registry", Decision: aitargets.DecisionBlocked, Rationale: "not approved"},
+		CreatedAt:  time.Time{},
+		UpdatedAt:  time.Time{},
+	}
+	own := aitargets.Entry{
+		Target:     target("an-organization-target"),
+		Source:     aitargets.SourceOrganization,
+		Customized: false,
+		Decision:   aitargets.UnreviewedDecisionRecord("an-organization-target"),
+		CreatedAt:  time.Time{},
+		UpdatedAt:  time.Time{},
+	}
+
+	entries := aitargets.Overlay(aitargets.Defaults(), []aitargets.Entry{orphan, own})
+
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+	require.NotContains(t, ids, orphan.ID, "a decision-only row with no default behind it must not be served")
+	require.Contains(t, ids, own.ID, "an organization's own target carries its definition and stays")
+}

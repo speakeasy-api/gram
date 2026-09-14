@@ -55,8 +55,11 @@ type Service interface {
 	// unchanged. Every field is a full replacement except gateway_client, which an
 	// existing target keeps when the field is omitted, so a write need not restate
 	// the target's matchers; sending gateway_client with empty lists still clears
-	// them. Agents pick the change up on their next policy poll. Requires a
-	// session with the org:admin scope.
+	// them. Clearing a target's last verifiable matcher also clears any access
+	// decision recorded about it, since nothing could enforce it any more; the
+	// organization decides again once the target can be recognized at the gateway.
+	// Agents pick the change up on their next policy poll. Requires a session with
+	// the org:admin scope.
 	UpsertAiScanTarget(context.Context, *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error)
 	// Remove a target the organization added, or clear the row a built-in carries
 	// so it returns to having no recorded decision. A built-in itself cannot be

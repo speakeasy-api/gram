@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,11 +28,11 @@ const cimdLoopbackRedirect = "http://127.0.0.1:9876/callback"
 
 // seedCIMDClient persists a CIMD-resolved client row with a fresh cache
 // window, so resolveUserSessionClient serves it from the row and never
-// reaches out for the document.
-func seedCIMDClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, clientID string) {
+// reaches out for the document. Returns the row.
+func seedCIMDClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, clientID string) usersessions_repo.UserSessionClient {
 	t.Helper()
 
-	_, err := usersessions_repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
+	client, err := usersessions_repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
 		UserSessionIssuerID:     issuerID,
 		ClientID:                clientID,
 		ClientName:              "Claude Code",
@@ -43,6 +44,7 @@ func seedCIMDClient(t *testing.T, ctx context.Context, ti *testInstance, issuerI
 		ClientJwksUri:           conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
+	return client
 }
 
 // blockTarget records a block for one catalog target id.
@@ -155,4 +157,124 @@ func TestHandleAuthorize_BlockedToolDoesNotReachDynamicallyRegisteredClients(t *
 	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, client.ClientID, client.RedirectUris[0])))
 
 	require.Equal(t, http.StatusFound, w.Code)
+}
+
+// errAIToolReadUnavailable stands in for a database the block check cannot
+// reach.
+var errAIToolReadUnavailable = errors.New("ai scan targets unreachable")
+
+// TestHandleAuthorize_BlockedIDsReadFails_AllowsTheCaller pins fail-open.
+// The first read asks only whether the organization blocks anything; when it
+// fails there is no evidence a block exists, and refusing every MCP client in
+// an organization that may never have used the feature is a worse outage than
+// the one it would prevent. The block recorded here is real, so the caller
+// gets through only because the read failed.
+func TestHandleAuthorize_BlockedIDsReadFails_AllowsTheCaller(t *testing.T) {
+	t.Parallel()
+
+	idpURL, err := url.Parse("https://idp.example.com/authorize?state=challenge123")
+	require.NoError(t, err)
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: idpURL})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+	ti.service.FailAIToolBlockedIDsRead(errAIToolReadUnavailable)
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, claudeCodeCIMDClientID, cimdLoopbackRedirect)))
+
+	require.Equal(t, http.StatusFound, w.Code, w.Body.String())
+	require.Contains(t, w.Header().Get("Location"), "idp.example.com/authorize")
+}
+
+// TestHandleAuthorize_CatalogReadFailsWhileBlocked_RefusedAsRetryable pins
+// fail-closed. Once the organization is known to block something, a catalog
+// that cannot be read leaves the answer unknown rather than absent, so the
+// request is refused as retryable instead of quietly bypassing the control.
+// The block is for an unrelated tool on purpose: the refusal is about not
+// knowing, not about this caller being blocked.
+func TestHandleAuthorize_CatalogReadFailsWhileBlocked_RefusedAsRetryable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "cursor")
+	ti.service.FailAIToolCatalogRead(errAIToolReadUnavailable)
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, authorizeRequest(t, toolset.McpSlug.String, claudeCodeCIMDClientID, cimdLoopbackRedirect)))
+
+	requireAuthorizeOAuthError(t, w, http.StatusServiceUnavailable, "temporarily_unavailable")
+}
+
+// TestHandleToken_BlockedAITool_RefusedOnItsNextUse is why the token endpoint
+// re-runs the check: the grant below was minted before the block and is
+// otherwise valid, and an administrator who blocks a tool expects it to stop
+// working now rather than when its credentials happen to expire.
+func TestHandleToken_BlockedAITool_RefusedOnItsNextUse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "claude-code")
+
+	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	requireTokenOAuthError(t, w, "invalid_client")
+	requireAuthorizeErrorDescription(t, w, "administrator must approve")
+}
+
+// TestHandleToken_UnblockedAITool_ExchangesNormally: a block recorded for one
+// tool must not touch another tool's token exchange.
+func TestHandleToken_UnblockedAITool_ExchangesNormally(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "cursor")
+
+	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), "access_token")
+}
+
+// TestHandleToken_CatalogReadFailsWhileBlocked_RefusedAsRetryable: the token
+// endpoint renders the unknown answer the same way authorize does, as a
+// retryable failure rather than a bypass.
+func TestHandleToken_CatalogReadFailsWhileBlocked_RefusedAsRetryable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, claudeCodeCIMDClientID)
+	code, verifier := seedAuthorizationCode(t, ctx, ti, toolset, client)
+	blockTarget(t, ctx, ti, authCtx.ActiveOrganizationID, "cursor")
+	ti.service.FailAIToolCatalogRead(errAIToolReadUnavailable)
+
+	w := postForm(t, ti, toolset.McpSlug.String, "token", codeGrantForm(client, code, verifier))
+
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+	requireTokenOAuthError(t, w, "temporarily_unavailable")
 }

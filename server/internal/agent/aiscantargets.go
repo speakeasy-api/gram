@@ -134,6 +134,42 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	// A decision outlives the matchers it was enforced through. The upsert
+	// replaces the definition and never touches status, so an edit that clears
+	// a target's last gateway matcher leaves a block recorded that nothing can
+	// enforce, and adding a matcher back months later would bring that block
+	// back to life with nobody having decided again. So losing enforceability
+	// clears the decision: the organization decides afresh once the target can
+	// be recognized at the gateway again. Logged as a decision change, since
+	// that is what it is, on top of the target update below.
+	if !aitargets.Enforceable(entry.Target) && entry.Decision.Decision != aitargets.DecisionUnreviewed {
+		decisionBefore := entry.Decision
+		saved, err := queries.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+			OrganizationID: organizationID,
+			ID:             target.ID,
+			Status:         string(aitargets.DecisionUnreviewed),
+			Rationale:      conv.ToPGTextEmpty(""),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear ai tool decision on an unenforceable target").LogError(ctx, s.logger)
+		}
+		decisionAfter := aitargets.EntryFromRow(saved).Decision
+		if err := s.audit.LogAIToolDecisionSet(ctx, dbtx, audit.LogAIToolDecisionSetEvent{
+			OrganizationID:         organizationID,
+			Actor:                  actor,
+			ActorDisplayName:       authCtx.Email,
+			ActorSlug:              nil,
+			DecisionURN:            urn.NewAIToolDecision(organizationID, target.ID),
+			TargetDisplayName:      entry.DisplayName,
+			DecisionSnapshotBefore: &decisionBefore,
+			DecisionSnapshotAfter:  &decisionAfter,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log cleared ai tool decision").LogError(ctx, s.logger)
+		}
+		entry.Decision = decisionAfter
+	}
+
 	after := entry.Target
 	if before == nil {
 		err = s.audit.LogAiScanTargetCreate(ctx, dbtx, audit.LogAiScanTargetCreateEvent{
