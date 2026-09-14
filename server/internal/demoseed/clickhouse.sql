@@ -473,9 +473,21 @@ FROM (
     arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
-                  'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
+    -- Odd chats ran in Claude Code, so the client is the Claude pair.
+    arrayElement([1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16) AS cidx,
+    -- Same client-aware draw as the hosted tool call this row is correlated
+    -- with by call_demo_<i>_<k>. Drawing independently would give one call two
+    -- different tool names depending on which row you read it from.
+    arrayElement(
+      ['search_logs', 'get_metrics', 'query_db', 'get_customer',
+       'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
+      arrayElement(multiIf(
+        cidx = 1, [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 7, 8],
+        cidx = 2, [4, 4, 4, 6, 6, 6, 2, 2, 4, 6, 4, 6, 4, 6, 2, 4],
+        cidx = 3, [1, 1, 1, 2, 2, 3, 3, 3, 7, 7, 8, 1, 2, 3, 7, 8],
+        [2, 2, 4, 4, 5, 5, 5, 8, 8, 2, 4, 5, 8, 2, 5, 8]),
+        1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],
@@ -750,9 +762,21 @@ FROM (
     arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx) AS team,
     arrayElement(['["developer","viewer"]', '["developer"]', '["admin","developer"]', '["developer"]', '["analyst","viewer"]', '["admin","viewer"]'], uidx) AS rolesjson,
     arrayElement(['amara-mbp.local', 'jonas-mbp.local', 'priya-mbp.local', 'mateo-mbp.local', 'hana-mbp.local', 'lucas-mbp.local'], uidx) AS hostname,
-    arrayElement(['search_logs', 'get_metrics', 'query_db', 'get_customer',
-                  'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
-                 1 + (cityHash64('tool', number, k) % 8)) AS tool_name,
+    -- Even chats ran in Cursor, so the client is the Cursor pair.
+    arrayElement([3, 3, 3, 3, 3, 4, 3, 3, 4, 3, 3, 3, 4, 3, 3, 4],
+                 1 + reinterpretAsUInt8(unhex(substring(h, 15, 2))) % 16) AS cidx,
+    -- Same client-aware draw as the hosted tool call this row is correlated
+    -- with by call_demo_<i>_<k>. Drawing independently would give one call two
+    -- different tool names depending on which row you read it from.
+    arrayElement(
+      ['search_logs', 'get_metrics', 'query_db', 'get_customer',
+       'list_deploys', 'process_refund', 'fetch_traces', 'check_health'],
+      arrayElement(multiIf(
+        cidx = 1, [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 7, 8],
+        cidx = 2, [4, 4, 4, 6, 6, 6, 2, 2, 4, 6, 4, 6, 4, 6, 2, 4],
+        cidx = 3, [1, 1, 1, 2, 2, 3, 3, 3, 7, 7, 8, 1, 2, 3, 7, 8],
+        [2, 2, 4, 4, 5, 5, 5, 8, 8, 2, 4, 5, 8, 2, 5, 8]),
+        1 + toUInt32(cityHash64('toolslot', number, k) % 16))) AS tool_name,
     arrayElement([0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 5, 7, 8, 11],
                  1 + reinterpretAsUInt8(unhex(substring(h, 1, 2))) % 16) AS day_off,
     arrayElement([8, 9, 9, 10, 10, 11, 11, 13, 14, 14, 15, 16, 16, 17, 18, 20],

@@ -652,7 +652,7 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
-	// The seven getToolUsage* methods below expose the individual aggregates of
+	// The getToolUsage* methods below expose the individual aggregates of
 	// getToolUsageSummary as standalone endpoints so the MCP & Tools dashboard can
 	// fetch and render each panel independently as its data arrives, rather than
 	// blocking on the slowest aggregate. They share GetToolUsageSummaryPayload.

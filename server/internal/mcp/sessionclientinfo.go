@@ -34,6 +34,11 @@ type sessionClientInfoStore interface {
 // generation for the rest of its session, which is the more useful of the two
 // for diagnosing version-specific behaviour. Admitting those records does not
 // affect how much can be stored: the per-server record cap is what bounds that.
+// internalClientInfoScope is the scope for callers that never handshake —
+// agent workflows dispatching through the hosted path. Nothing is ever stored
+// under it, so resolution always misses and those calls stay unattributed.
+const internalClientInfoScope = "internal:"
+
 // metaClientInfoScope keys a gateway session's client-info record. The ":"
 // prefix cannot collide with a toolset slug, which never contains one.
 func metaClientInfoScope(metaServerID uuid.UUID) string {

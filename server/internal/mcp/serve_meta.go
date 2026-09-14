@@ -184,6 +184,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
+	// Hand back the session the handshake was recorded under, as the hosted
+	// surface does. Without it a client that sent no Mcp-Session-Id gets a
+	// freshly minted id on every request, and nothing it does later can be
+	// tied back to the identity it reported at initialize.
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", gate.sessionID)
+	}
+
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 
 	switch {
