@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -46,6 +47,13 @@ func sameRemoteMCPOrigin(a *url.URL, b *url.URL) bool {
 
 func remoteMCPOriginPort(u *url.URL) string {
 	if port := u.Port(); port != "" {
+		// url.Parse only accepts an all-digit port, so compare the number the
+		// dialer will use rather than its spelling: :0443 and :443 are one
+		// origin, and treating them as two would strip credentials from a
+		// same-origin redirect.
+		if parsed, err := strconv.Atoi(port); err == nil {
+			return strconv.Itoa(parsed)
+		}
 		return port
 	}
 	switch strings.ToLower(u.Scheme) {

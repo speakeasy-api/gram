@@ -24,6 +24,12 @@ func TestSameRemoteMCPOrigin_IgnoresCase(t *testing.T) {
 	require.True(t, sameRemoteMCPOrigin(mustParseURL(t, "https://MCP.Example.com/mcp"), mustParseURL(t, "HTTPS://mcp.example.com/mcp")))
 }
 
+func TestSameRemoteMCPOrigin_MatchesZeroPaddedPort(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameRemoteMCPOrigin(mustParseURL(t, "https://mcp.example.com/mcp"), mustParseURL(t, "https://mcp.example.com:0443/mcp")))
+	require.True(t, sameRemoteMCPOrigin(mustParseURL(t, "https://mcp.example.com:8443/mcp"), mustParseURL(t, "https://mcp.example.com:08443/mcp")))
+}
+
 func TestSameRemoteMCPOrigin_RejectsPortChange(t *testing.T) {
 	t.Parallel()
 	require.False(t, sameRemoteMCPOrigin(mustParseURL(t, "https://mcp.example.com/mcp"), mustParseURL(t, "https://mcp.example.com:8443/mcp")))
