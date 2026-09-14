@@ -49,14 +49,32 @@ import type { ToolUsageUserSummary } from "@gram/client/models/components/toolus
 import type { ToolUsageUserTimeSeriesPoint } from "@gram/client/models/components/toolusageusertimeseriespoint.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { ACCENT_RED, TOOLTIP } from "@/components/chart/palette";
+import { ACCENT_RED } from "@/components/chart/palette";
+import { ChartNoData } from "@/components/chart/ChartNoData";
+import {
+  StackedBarChart,
+  hideZeroBarSegments,
+} from "@/components/chart/StackedBarChart";
+import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
+import {
+  BAR_BORDER_RADIUS,
+  BAR_ROW_HEIGHT,
+  BAR_ROW_SPACER,
+  BAR_THICKNESS,
+  COLLAPSED_BAR_CHART_MAX_ROWS,
+  EXPANDED_LEGEND,
+  LINE_CHART_HEIGHT,
+  SHARED_BAR_SCALES,
+  SHARED_LEGEND,
+  SHARED_RESIZE_TRANSITION,
+  SHARED_TOOLTIP,
+  failureColors,
+} from "@/components/chart/chartTheme";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
-import { useChartZoom } from "@/components/chart/useChartZoom";
 import { useExpandedChart } from "@/hooks/useExpandedChart";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -72,7 +90,6 @@ import {
   Chart as ChartJS,
   type TooltipItem,
   type ChartOptions,
-  type Scale,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { Bar } from "react-chartjs-2";
@@ -86,7 +103,6 @@ import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 import {
   bucketStartNsToMs,
   buildToolUsageTimeSeries,
-  type TimeSeriesDataset,
 } from "./toolUsageTimeSeriesChartData";
 
 ChartJS.register(
@@ -102,26 +118,6 @@ ChartJS.register(
   ZoomPlugin,
 );
 
-const CHART_COLORS = {
-  label: "#737373",
-  labelFaded: "#A3A3A3",
-  gridLine: "#e5e5e5",
-} as const;
-
-// Failure stacks: the one brand-red accent leads, the neutral series steps
-// recede behind it so severity reads at a glance. Slice off the palette's
-// trailing entry — green has no place in a failure ramp.
-function failureColors(seriesColors: string[]): string[] {
-  return [ACCENT_RED, ...seriesColors.slice(0, -1)];
-}
-
-const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
-const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
-const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
-const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
-const BAR_BORDER_RADIUS = 0;
-const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
-
 function displayTargetLabel(
   targetLabel: string,
   targetType: string,
@@ -133,91 +129,6 @@ function displayTargetLabel(
   }
   return targetLabel;
 }
-
-type _BarLegend = Exclude<
-  NonNullable<ChartOptions<"bar">["plugins"]>["legend"],
-  false
->;
-type _BarTooltip = NonNullable<ChartOptions<"bar">["plugins"]>["tooltip"];
-type _BarScales = NonNullable<ChartOptions<"bar">["scales"]>;
-
-const SHARED_RESIZE_TRANSITION = {
-  resize: { animation: { duration: 0 } },
-} as const;
-
-const SHARED_LEGEND = {
-  display: false,
-} satisfies NonNullable<_BarLegend>;
-
-// Expanded charts have room for a legend: mono uppercase micro-labels with
-// square swatches (the eyebrow idiom, rendered on canvas).
-const EXPANDED_LEGEND = {
-  display: true,
-  position: "bottom",
-  align: "start",
-  labels: {
-    boxWidth: 8,
-    boxHeight: 8,
-    usePointStyle: false,
-    padding: 16,
-    color: CHART_COLORS.label,
-    font: { family: "monospace", size: 11 },
-    generateLabels: (chart: ChartJS) =>
-      ChartJS.defaults.plugins.legend.labels
-        .generateLabels(chart)
-        .map((item) => ({ ...item, text: item.text.toUpperCase() })),
-  },
-} satisfies NonNullable<_BarLegend>;
-
-const SHARED_TOOLTIP = {
-  ...TOOLTIP,
-  cornerRadius: 0,
-  boxWidth: 8,
-  boxHeight: 8,
-} satisfies _BarTooltip;
-
-// Category-axis labels are mostly emails. Keep the domain — it's how you tell
-// internal from external users — and spend the character budget on the local
-// part instead. Full label is still available in the tooltip title.
-const MAX_AXIS_LABEL_CHARS = 26;
-
-function truncateAxisLabel(label: string): string {
-  if (label.length <= MAX_AXIS_LABEL_CHARS) return label;
-
-  const at = label.lastIndexOf("@");
-  if (at > 0) {
-    const domain = label.slice(at);
-    if (domain.length <= MAX_AXIS_LABEL_CHARS - 4) {
-      return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1 - domain.length)}…${domain}`;
-    }
-  }
-
-  return `${label.slice(0, MAX_AXIS_LABEL_CHARS - 1)}…`;
-}
-
-const SHARED_BAR_SCALES = {
-  x: {
-    stacked: true,
-    grid: { color: CHART_COLORS.gridLine },
-    ticks: { color: CHART_COLORS.labelFaded, precision: 0 },
-    afterFit(scale: Scale) {
-      scale.paddingRight = 30;
-    },
-  },
-  y: {
-    stacked: true,
-    grid: { display: false },
-    ticks: {
-      color: CHART_COLORS.labelFaded,
-      crossAlign: "far" as const,
-      padding: 2,
-      font: { size: 12 },
-      callback(value) {
-        return truncateAxisLabel(this.getLabelForValue(value as number));
-      },
-    },
-  },
-} satisfies _BarScales;
 
 type ToolUsageSectionState = { pending: boolean; error: boolean };
 
@@ -869,171 +780,6 @@ function HooksInnerContent({
   );
 }
 
-type StackedBarDataset = {
-  label: string;
-  data: Array<number | null>;
-  backgroundColor: string;
-  borderColor?: string;
-  borderWidth?: number;
-  barThickness: number;
-  borderRadius?: number;
-  borderSkipped?: string | boolean;
-  hoverBackgroundColor?: string;
-  hoverBorderColor?: string;
-};
-
-function hideZeroBarSegments(data: Array<number | null>) {
-  return data.map((value) => (value === 0 ? null : value));
-}
-
-const stackTotalPlugin = {
-  id: "stackTotal",
-  afterDatasetsDraw(chart: ChartJS) {
-    const { ctx, data } = chart;
-    ctx.save();
-    ctx.font = "12px sans-serif";
-    ctx.fillStyle = CHART_COLORS.label;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < (data.labels?.length ?? 0); i++) {
-      let total = 0;
-      let labelX: number | null = null;
-      let labelY: number | null = null;
-
-      data.datasets.forEach((dataset, datasetIndex) => {
-        const value = dataset.data[i];
-        if (typeof value !== "number" || value === 0) return;
-
-        total += value;
-        const bar = chart.getDatasetMeta(datasetIndex).data[i];
-        if (!bar) return;
-
-        if (labelX === null || bar.x > labelX) {
-          labelX = bar.x;
-          labelY = bar.y;
-        }
-      });
-
-      if (total > 0 && labelX !== null && labelY !== null) {
-        ctx.fillText(String(total), labelX + 4, labelY);
-      }
-    }
-    ctx.restore();
-  },
-};
-
-const STACKED_BAR_PLUGINS = [stackTotalPlugin];
-
-function StackedBarChart({
-  labels,
-  datasets,
-  handleFilter,
-  tooltipLabelFn,
-  expanded = false,
-  maxRows,
-  onShowAll,
-}: {
-  labels: string[];
-  datasets: StackedBarDataset[];
-  handleFilter?: (datasetLabel: string, rowLabel: string) => void;
-  tooltipLabelFn?: (item: TooltipItem<"bar">) => string | string[] | undefined;
-  expanded?: boolean;
-  maxRows?: number;
-  onShowAll?: () => void;
-}) {
-  const thickness = expanded ? BAR_THICKNESS.expanded : BAR_THICKNESS.collapsed;
-  const hiddenCount =
-    !expanded && maxRows && labels.length > maxRows
-      ? labels.length - maxRows
-      : 0;
-  const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
-  const visibleDatasets = (
-    hiddenCount > 0
-      ? datasets.map((ds) => ({
-          ...ds,
-          data: ds.data.slice(0, maxRows),
-        }))
-      : datasets
-  ).map((ds) => ({
-    ...ds,
-    data: hideZeroBarSegments(ds.data),
-    barThickness: thickness,
-    borderRadius: BAR_BORDER_RADIUS,
-    borderSkipped: false,
-  }));
-
-  const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
-  const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
-  const containerHeight = Math.max(
-    120,
-    visibleLabels.length * (rowH + rowS) + 60,
-  );
-
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
-      indexAxis: "y",
-      responsive: true,
-      maintainAspectRatio: false,
-      onClick(_, elements) {
-        if (!elements.length || !handleFilter) return;
-        const { datasetIndex, index } = elements[0]!;
-        const datasetLabel = datasets[datasetIndex]?.label;
-        const rowLabel = visibleLabels[index];
-        if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
-      },
-      onHover(event, elements) {
-        const el = event.native?.target as HTMLElement | null;
-        if (el) el.style.cursor = elements.length ? "pointer" : "default";
-      },
-      scales: SHARED_BAR_SCALES,
-      transitions: SHARED_RESIZE_TRANSITION,
-      plugins: {
-        legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
-        tooltip: {
-          ...SHARED_TOOLTIP,
-          callbacks: {
-            label:
-              tooltipLabelFn ??
-              ((item: TooltipItem<"bar">) =>
-                ` ${item.dataset.label}: ${item.parsed.x}`),
-          },
-        },
-      },
-    }),
-    [datasets, visibleLabels, handleFilter, tooltipLabelFn, expanded],
-  );
-
-  if (visibleLabels.length === 0) return null;
-
-  return (
-    <>
-      <div
-        className="transition-all duration-200 ease-in-out"
-        style={{ height: containerHeight }}
-      >
-        <Bar
-          plugins={STACKED_BAR_PLUGINS}
-          data={{ labels: visibleLabels, datasets: visibleDatasets }}
-          options={options}
-        />
-      </div>
-      {hiddenCount > 0 && onShowAll && (
-        <div className="mt-2 flex w-full">
-          <Button
-            variant="tertiary"
-            size="sm"
-            icon="chevron-down"
-            iconAfter={true}
-            onClick={onShowAll}
-          >
-            Show {hiddenCount} more
-          </Button>
-        </div>
-      )}
-    </>
-  );
-}
-
 function UsersPerServerChart({
   title,
   breakdown,
@@ -1342,123 +1088,6 @@ function ServerErrorRateChart({
         </>
       )}
     </ChartCard>
-  );
-}
-
-function ChartNoData({
-  message = "No data in this period",
-}: {
-  message?: string;
-}) {
-  return (
-    <div className="flex h-24 items-center justify-center">
-      <Badge variant="neutral">
-        <Badge.LeftIcon>
-          <Icon name="chart-no-axes-column" size="small" />
-        </Badge.LeftIcon>
-        <Badge.Text>{message}</Badge.Text>
-      </Badge>
-    </div>
-  );
-}
-
-function StackedTimeBarChart({
-  labels,
-  timestamps,
-  bucketMs,
-  tooltipLabels,
-  datasets,
-  tooltipAfterBody,
-  onRangeSelect,
-  height = 200,
-  expanded = false,
-}: {
-  labels: string[];
-  timestamps: number[];
-  bucketMs: number;
-  tooltipLabels: string[];
-  datasets: TimeSeriesDataset[];
-  tooltipAfterBody?: (dataIndex: number) => string[];
-  onRangeSelect?: (from: Date, to: Date) => void;
-  height?: number;
-  expanded?: boolean;
-}) {
-  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<"bar">({
-    onRangeSelect,
-    resolveRange: (min, max) => {
-      if (timestamps.length === 0) return null;
-      const fromIndex = Math.max(0, Math.floor(min));
-      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
-      const from = timestamps[fromIndex];
-      const to = timestamps[toIndex];
-      if (from == null || to == null) return null;
-      // `to` is a bucket start; extend by the bucket width so the selection
-      // covers the last bucket's events.
-      return { from: new Date(from), to: new Date(to + bucketMs) };
-    },
-  });
-
-  useEffect(() => {
-    resetZoom();
-  }, [datasets, resetZoom]);
-
-  if (labels.length === 0) {
-    return <ChartNoData />;
-  }
-
-  const options: ChartOptions<"bar"> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: "index", intersect: false },
-    plugins: {
-      legend: expanded ? EXPANDED_LEGEND : SHARED_LEGEND,
-      tooltip: {
-        ...SHARED_TOOLTIP,
-        // Index-mode hover activates every series at that x. Drop zeros so a
-        // sparse multi-series chart doesn't build a tooltip listing every
-        // inactive source (which balloons until it covers the chart). Returning
-        // `undefined` from `label` is not enough — Chart.js treats that as
-        // "use the default callback" and still renders the line.
-        filter: (item) => (item.parsed.y ?? 0) !== 0,
-        callbacks: {
-          title: (items) => tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
-          label: (item) =>
-            item.formattedValue
-              ? `${item.dataset.label}: ${item.formattedValue}`
-              : "",
-          ...(tooltipAfterBody
-            ? {
-                afterBody: (items) =>
-                  tooltipAfterBody(items[0]?.dataIndex ?? 0),
-              }
-            : {}),
-        },
-      },
-      zoom: zoomPluginOptions,
-    },
-    scales: {
-      x: {
-        stacked: true,
-        grid: { display: false },
-        ticks: { maxTicksLimit: 8, color: CHART_COLORS.labelFaded },
-      },
-      y: {
-        stacked: true,
-        beginAtZero: true,
-        grid: { color: "rgba(128, 128, 128, 0.2)" },
-        ticks: { precision: 0, color: CHART_COLORS.labelFaded },
-      },
-    },
-    transitions: SHARED_RESIZE_TRANSITION,
-  };
-
-  return (
-    <div
-      className="relative transition-all duration-200 ease-in-out"
-      style={{ height }}
-    >
-      <Bar ref={chartRef} data={{ labels, datasets }} options={options} />
-    </div>
   );
 }
 

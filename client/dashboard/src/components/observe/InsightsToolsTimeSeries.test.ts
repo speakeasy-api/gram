@@ -171,7 +171,7 @@ describe("InsightsTools chart zoom wiring", () => {
 
   it("filters zero-value series out of the stacked bar tooltip", () => {
     const source = readFileSync(
-      "src/components/observe/InsightsTools.tsx",
+      "src/components/chart/StackedTimeBarChart.tsx",
       "utf8",
     );
 
