@@ -37,25 +37,18 @@ type Preset struct {
 	// to this compile-time catalog and can never widen the host.
 	URL string
 
-	// DisplayOnly marks an entry that NAMES a client for the management API
-	// but is not itself an admission rule, because another entry — in
-	// practice a wildcard covering the same vendor — already admits its URL.
-	//
-	// It exists so the two states stay honest. Without it, an operator could
-	// set Enabled=false on such a row, see it reported as disabled by
-	// listPresets, and still have the URL admitted by the overlapping
-	// pattern. A DisplayOnly row is excluded from matching entirely, so the
-	// wildcard is unambiguously the rule and Enabled means what it says on
-	// every row that participates.
-	DisplayOnly bool
-
 	// Enabled gates the entry without deleting it. A disabled entry is
 	// inert for admission but still listed by the management API, so an
 	// operator can see that Gram knows about the vendor and has chosen not
 	// to admit it. Disabling an entry immediately de-admits it on every
 	// presets-mode issuer at deploy, so it is only for pulling an entry
-	// that turns out to be wrong. Meaningless on a DisplayOnly row, which
-	// never participates in matching.
+	// that turns out to be wrong.
+	//
+	// Admission is an OR over the entries, so disabling one does NOT
+	// de-admit a URL that another enabled entry still matches. Where a
+	// literal and a wildcard overlap, both have to be pulled.
+	// TestCatalog_DisabledEntriesAreNotAdmitted fails the build rather than
+	// let that difference pass unnoticed.
 	Enabled bool
 }
 
@@ -63,9 +56,6 @@ type Preset struct {
 // than a literal client_id. Surfaced through the management API so the
 // dashboard can render a glob as such instead of offering it as a URL a
 // client would present verbatim.
-//
-// A DisplayOnly entry is never a pattern: it names one concrete URL that
-// some other entry admits.
 func (p Preset) IsPattern() bool {
 	return isPattern(p.URL)
 }
@@ -104,7 +94,6 @@ func buildCatalog() []Preset {
 			VendorKey:   entry.Product.VendorKey,
 			DisplayName: entry.Document.DisplayName,
 			URL:         entry.Document.URL,
-			DisplayOnly: entry.Document.DisplayOnly,
 			Enabled:     entry.Document.Enabled,
 		})
 	}
@@ -125,7 +114,7 @@ func buildCatalogIndex() (map[string]struct{}, []string) {
 	index := make(map[string]struct{}, len(catalog))
 	var patterns []string
 	for _, preset := range catalog {
-		if !preset.Enabled || preset.DisplayOnly {
+		if !preset.Enabled {
 			continue
 		}
 		if preset.IsPattern() {
@@ -149,6 +138,11 @@ func buildCatalogIndex() (map[string]struct{}, []string) {
 // The two are reported separately rather than collapsed to a single
 // "catalog" answer because the split is the only signal showing whether a
 // wildcard entry is doing any work — see AdmitReason.
+//
+// Entries are allowed to overlap: a client_id is admitted when AT LEAST ONE
+// enabled entry matches it, and nothing marks a row as redundant. Exact
+// entries are consulted first, so an overlapped literal reports as exact
+// and the wildcard's share counts only the traffic it alone carries.
 func CatalogMatch(clientID string) (AdmitReason, bool) {
 	if _, ok := catalogURLs[clientID]; ok {
 		return AdmitCatalogExact, true
@@ -166,11 +160,19 @@ func CatalogMatch(clientID string) (AdmitReason, bool) {
 // outside admission name a client by vendor rather than by the id it
 // presented — a vendor minting one document per MCP server has no literal id
 // to write a policy about.
+//
+// Exact-before-pattern is load-bearing for attribution rather than a mere
+// optimisation. One vendor's wildcard can cover another product's literal
+// document: OpenAI's connector pattern admits the stable Codex document,
+// because "codex" sits in the single wildcard segment. The literal entry is
+// the only thing that names the specific product, so resolving it ahead of
+// the wildcard is what keeps a Codex caller from being judged under a
+// ChatGPT access decision.
 func CatalogPreset(clientID string) (Preset, bool) {
 	var pattern *Preset
 	for i := range catalog {
 		preset := catalog[i]
-		if !preset.Enabled || preset.DisplayOnly {
+		if !preset.Enabled {
 			continue
 		}
 		if preset.IsPattern() {
@@ -186,7 +188,7 @@ func CatalogPreset(clientID string) (Preset, bool) {
 	if pattern != nil {
 		return *pattern, true
 	}
-	return Preset{VendorKey: "", DisplayName: "", URL: "", DisplayOnly: false, Enabled: false}, false
+	return Preset{VendorKey: "", DisplayName: "", URL: "", Enabled: false}, false
 }
 
 // Catalog returns a copy of the full preset list, enabled and disabled

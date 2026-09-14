@@ -272,3 +272,79 @@ func TestEveryBlockableDefaultIsAdmissible(t *testing.T) {
 		}
 	}
 }
+
+// TestOverlappingVendorDocumentsDoNotCrossAttribute is the regression guard
+// for a cross-product misattribution at the gateway.
+//
+// OpenAI publishes two products under one host. The ChatGPT connector
+// wildcard admits any single path segment under /oauth/, which includes the
+// stable Codex document at /oauth/codex/client.json. Both catalog entries
+// therefore match that URL, and only the literal one names Codex.
+//
+// The catalog resolves the literal first, so the caller carries Codex's
+// identity into matching. Resolving the wildcard instead would let a block on
+// ChatGPT reject Codex, which is the failure this pins. The disabled case is
+// the one that actually regressed: with Codex out of the candidate list, a
+// caller that resolved to the wildcard fell through to the enabled ChatGPT
+// target instead of resolving to nothing.
+func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
+	t.Parallel()
+
+	const (
+		codexStable    = "https://chatgpt.com/oauth/codex/client.json"
+		codexPerServer = "https://chatgpt.com/oauth/codex/AbCdEfGhI/client.json"
+		chatGPTStable  = "https://chatgpt.com/oauth/client.json"
+		chatGPTConn    = "https://chatgpt.com/oauth/connector-abc123/client.json"
+	)
+
+	// callerFor builds the caller exactly as the MCP gateway does, so this
+	// exercises the real resolution path rather than a hand-made caller.
+	callerFor := func(clientID string) aitargets.GatewayCaller {
+		caller := aitargets.GatewayCaller{OAuthClientID: clientID, CIMDVendorKey: "", CIMDCatalogURL: ""}
+		if preset, known := admission.CatalogPreset(clientID); known {
+			caller.CIMDVendorKey = preset.VendorKey
+			caller.CIMDCatalogURL = preset.URL
+		}
+		return caller
+	}
+
+	defaultsWithout := func(disabled string) []aitargets.Target {
+		targets := aitargets.Defaults()
+		for i := range targets {
+			if targets[i].ID == disabled {
+				targets[i].Enabled = false
+			}
+		}
+		return targets
+	}
+
+	for _, tt := range []struct {
+		name     string
+		disabled string
+		clientID string
+		want     string
+	}{
+		{name: "codex stable document", disabled: "", clientID: codexStable, want: "codex"},
+		{name: "codex per-server document", disabled: "", clientID: codexPerServer, want: "codex"},
+		{name: "chatgpt stable document", disabled: "", clientID: chatGPTStable, want: "chatgpt-classic"},
+		{name: "chatgpt connector document", disabled: "", clientID: chatGPTConn, want: "chatgpt-classic"},
+
+		// Disabling one product must not hand its callers to the other.
+		{name: "codex disabled, stable document", disabled: "codex", clientID: codexStable, want: ""},
+		{name: "codex disabled, per-server document", disabled: "codex", clientID: codexPerServer, want: ""},
+		{name: "chatgpt disabled, stable document", disabled: "chatgpt-classic", clientID: chatGPTStable, want: ""},
+		{name: "chatgpt disabled, codex still resolves", disabled: "chatgpt-classic", clientID: codexStable, want: "codex"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			target, matched := aitargets.MatchGatewayCaller(defaultsWithout(tt.disabled), callerFor(tt.clientID))
+			if tt.want == "" {
+				require.Falsef(t, matched, "%q must resolve to no target, got %q", tt.clientID, target.ID)
+				return
+			}
+			require.Truef(t, matched, "%q must resolve to a target", tt.clientID)
+			require.Equal(t, tt.want, target.ID)
+		})
+	}
+}

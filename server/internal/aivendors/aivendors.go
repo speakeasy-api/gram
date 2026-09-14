@@ -39,11 +39,6 @@ type Document struct {
 	// per-document, since a vendor's connector and shared documents differ.
 	DisplayName string
 
-	// DisplayOnly marks a document that NAMES a client for the management
-	// API but is not itself an admission rule, because another entry — in
-	// practice a wildcard covering the same vendor — already admits its URL.
-	DisplayOnly bool
-
 	// Enabled gates the document without deleting it.
 	Enabled bool
 }
@@ -182,11 +177,9 @@ func GatewayMatchersFor(product Product) GatewayMatchers {
 		matchers.VendorKeys = []string{product.VendorKey}
 	}
 	for _, document := range product.Documents {
-		if !document.Enabled && !document.DisplayOnly {
+		if !document.Enabled {
 			continue
 		}
-		// DisplayOnly URLs are included: naming one literally is what lets
-		// the specific product beat the wildcard that also admits it.
 		matchers.ClientIDs = append(matchers.ClientIDs, document.URL)
 	}
 	return matchers

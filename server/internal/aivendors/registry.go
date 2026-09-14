@@ -37,7 +37,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/claude-code-client-metadata",
 			DisplayName: "Anthropic (Claude Code)",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -52,7 +51,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://claude.ai/oauth/mcp-oauth-client-metadata",
 			DisplayName: "Anthropic (Claude)",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -72,13 +70,11 @@ var registry = []Product{
 			{
 				URL:         "https://vscode.dev/oauth/client-metadata.json",
 				DisplayName: "Visual Studio Code",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 			{
 				URL:         "https://insiders.vscode.dev/oauth/client-metadata.json",
 				DisplayName: "Visual Studio Code (Insiders)",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 		},
@@ -105,7 +101,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://zed.dev/oauth/client-metadata.json",
 			DisplayName: "Zed",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -135,7 +130,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://goose-docs.ai/oauth/client-metadata.json",
 			DisplayName: "Goose",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -174,17 +168,15 @@ var registry = []Product{
 				// server, unbounded across servers.
 				URL:         "https://chatgpt.com/oauth/*/client.json",
 				DisplayName: "ChatGPT (connectors)",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 			{
-				// The connector platform's stable shared document. NOT
-				// DisplayOnly: the connector wildcard requires exactly one
-				// path segment between /oauth/ and /client.json, and this URL
-				// has none, so nothing else admits it.
+				// The connector platform's stable shared document. The
+				// connector wildcard requires exactly one path segment
+				// between /oauth/ and /client.json, and this URL has none,
+				// so this entry is the only thing that admits it.
 				URL:         "https://chatgpt.com/oauth/client.json",
 				DisplayName: "ChatGPT",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 		},
@@ -212,20 +204,20 @@ var registry = []Product{
 				// is unbounded, so only a pattern can admit it.
 				URL:         "https://chatgpt.com/oauth/codex/*/client.json",
 				DisplayName: "Codex CLI",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 			{
 				// The stable shared Codex document. No released Codex version
 				// has presented it, but OpenAI's docs say Codex will switch to
 				// it for authorization servers advertising RFC 9207.
-				// DisplayOnly because the connector wildcard already admits
-				// it — which is exactly why naming it here matters: a literal
-				// match wins over that wildcard, so a caller presenting it is
-				// attributed to Codex rather than to ChatGPT.
+				//
+				// The ChatGPT connector wildcard also admits this URL. That
+				// overlap is fine and is why this entry has to exist: a
+				// literal entry is resolved ahead of a wildcard, so naming it
+				// here is what attributes a caller presenting it to Codex
+				// rather than to ChatGPT.
 				URL:         "https://chatgpt.com/oauth/codex/client.json",
 				DisplayName: "Codex CLI (stable document)",
-				DisplayOnly: true,
 				Enabled:     true,
 			},
 		},
@@ -248,13 +240,11 @@ var registry = []Product{
 			{
 				URL:         "https://www.notion.so/oauth/mcp-client-metadata.json",
 				DisplayName: "Notion",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 			{
 				URL:         "https://app.notion.com/oauth/mcp-client-metadata.json",
 				DisplayName: "Notion (app.notion.com)",
-				DisplayOnly: false,
 				Enabled:     true,
 			},
 		},
@@ -272,7 +262,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
 			DisplayName: "MCPJam Inspector",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -289,7 +278,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://api.factory.ai/mcp/oauth-client",
 			DisplayName: "Factory Droid",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -306,7 +294,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://toolhive.dev/oauth/client-metadata.json",
 			DisplayName: "ToolHive",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -336,7 +323,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
 			DisplayName: "Hermes Agent",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -355,7 +341,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
 			DisplayName: "Skydive",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
@@ -380,7 +365,6 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://opencode.ai/oauth/opencode/client.json",
 			DisplayName: "opencode",
-			DisplayOnly: false,
 			Enabled:     true,
 		}},
 	},
