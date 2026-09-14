@@ -25,10 +25,41 @@ func TestRemoteSessionShutdownDoesNotAdmitCancelledProbe(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	for range 100 {
-		require.False(t, r.acquireSlot(ctx), "cancellation must win even when a slot is available")
-	}
+	require.False(t, r.acquireSlot(ctx), "an already cancelled context must not acquire a slot")
 	require.Empty(t, r.slots)
+}
+
+func TestRemoteSessionShutdownReleasesSlotCancelledAfterAcquisition(t *testing.T) {
+	t.Parallel()
+	r := newRemoteSessionRecheck(time.Hour, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	checks := 0
+	// Inject cancellation at the post-send Err check. The context stays live
+	// through the entry check and select, so the slot-send branch must run.
+	controlled := remoteSessionErrHookContext{Context: ctx, beforeErr: func() {
+		checks++
+		if checks == 2 {
+			require.Len(t, r.slots, 1, "cancellation must happen after acquiring the slot")
+			cancel()
+		}
+	}}
+	require.False(t, r.acquireSlot(controlled), "cancellation after acquisition must refuse admission")
+	require.Equal(t, 2, checks, "must reach the post-send cancellation check")
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.Empty(t, r.slots, "refused admission must release the acquired slot")
+}
+
+// remoteSessionErrHookContext injects a cancellation at a deterministic checkpoint.
+type remoteSessionErrHookContext struct {
+	context.Context
+	beforeErr func()
+}
+
+func (c remoteSessionErrHookContext) Err() error {
+	c.beforeErr()
+	return c.Context.Err()
 }
 
 func TestRemoteSessionShutdownClosesBothAdmissionGatesBeforeDraining(t *testing.T) {
