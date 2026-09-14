@@ -80151,6 +80151,9 @@ components:
           type: string
           description: The ID of the meta MCP server
           format: uuid
+        instructions:
+          type: string
+          description: Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
         member_count:
           type: integer
           description: The number of live members. Only populated by listMetaMcpServers.
@@ -91812,6 +91815,10 @@ components:
           type: string
           description: The ID of the meta MCP server to update
           format: uuid
+        instructions:
+          type: string
+          description: Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions.
+          maxLength: 10000
         name:
           type: string
           description: The display name of the meta MCP server

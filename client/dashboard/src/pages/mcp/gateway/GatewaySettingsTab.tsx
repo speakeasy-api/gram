@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
   DangerSettingsSection,
   FooterSaveButton,
@@ -8,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/moon/textarea";
+import { cn } from "@/lib/utils";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
@@ -32,7 +35,11 @@ import {
 // Shares mcp_servers' 40-char display-name convention.
 const NAME_MAX_LENGTH = 40;
 
+// Mirrors InstructionsMaxLength in the metaMcp Goa design.
+const INSTRUCTIONS_MAX_LENGTH = 10000;
+
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
+export const GATEWAY_INSTRUCTIONS_SECTION_ID = "instructions";
 
 function useScrollToSettingsHash() {
   const location = useLocation();
@@ -41,7 +48,8 @@ function useScrollToSettingsHash() {
     const targetId = location.hash.replace("#", "");
     if (
       targetId !== MCP_SERVER_URL_SECTION_ID &&
-      targetId !== GATEWAY_AUTHENTICATION_SECTION_ID
+      targetId !== GATEWAY_AUTHENTICATION_SECTION_ID &&
+      targetId !== GATEWAY_INSTRUCTIONS_SECTION_ID
     ) {
       return;
     }
@@ -70,6 +78,7 @@ export function GatewaySettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <GatewayNameSection metaMcpServer={metaMcpServer} />
+      <GatewayInstructionsSection metaMcpServer={metaMcpServer} />
       <ServerUrlSection
         backend={{ metaMcpServerId: metaMcpServer.id }}
         endpoints={endpoints}
@@ -162,6 +171,105 @@ function GatewayNameSection({
                         // Full-record replace: keep the issuer link intact.
                         userSessionIssuerId:
                           metaMcpServer.userSessionIssuerId ?? undefined,
+                      },
+                    },
+                  })
+                }
+              />
+            </RequireScope>
+          </SettingsSection.FooterActions>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+function GatewayInstructionsSection({
+  metaMcpServer,
+}: {
+  metaMcpServer: MetaMcpServer;
+}): JSX.Element {
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("mcp:write");
+  const stored = metaMcpServer.instructions ?? "";
+  const [draft, setDraft] = useState(stored);
+
+  useEffect(() => {
+    setDraft(stored);
+  }, [metaMcpServer.id, stored]);
+
+  const queryClient = useQueryClient();
+  const update = useUpdateMetaMcpServerMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success("Gateway instructions updated");
+    },
+  });
+
+  const trimmedDraft = draft.trim();
+  const dirty = trimmedDraft !== stored.trim();
+  const overLimit = trimmedDraft.length > INSTRUCTIONS_MAX_LENGTH;
+  const saveDisabled = !dirty || overLimit || update.isPending;
+
+  return (
+    <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Instructions</SettingsSection.Title>
+        <SettingsSection.Description>
+          Sent to every client on connect. Leave blank to use Gram&apos;s
+          built-in instructions, which teach agents to list servers and
+          describe tools before executing. Anyone who can connect to this
+          gateway can read the text, and clients already connected keep the old
+          text until they reconnect.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <Field data-invalid={update.isError || overLimit ? true : undefined}>
+            <FieldLabel htmlFor="gateway-instructions">
+              Custom instructions
+            </FieldLabel>
+            <Textarea
+              id="gateway-instructions"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={`Which member to use for which task, required workflows,\nand any constraints.\n\nKeep it concise — members are already listed by list_servers.`}
+              className="min-h-[160px]"
+              aria-invalid={update.isError || overLimit}
+              disabled={!canWrite}
+            />
+            {overLimit && (
+              <FieldError>
+                {`Instructions must be ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters or fewer.`}
+              </FieldError>
+            )}
+            {update.isError && <FieldError>{update.error.message}</FieldError>}
+          </Field>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint
+            className={cn(overLimit && "text-destructive")}
+          >
+            {`${trimmedDraft.length.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+          </SettingsSection.FooterHint>
+          <SettingsSection.FooterActions>
+            <RequireScope scope="mcp:write" level="component">
+              <FooterSaveButton
+                pending={update.isPending}
+                disabled={saveDisabled}
+                onClick={() =>
+                  update.mutate({
+                    request: {
+                      updateMetaMcpServerForm: {
+                        id: metaMcpServer.id,
+                        name: metaMcpServer.name,
+                        userSessionIssuerId:
+                          metaMcpServer.userSessionIssuerId ?? undefined,
+                        // An empty string clears back to the built-in text.
+                        instructions: trimmedDraft,
                       },
                     },
                   })

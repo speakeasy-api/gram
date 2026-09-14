@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
+import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 import {
   useGatewayDescribeServer,
@@ -224,18 +225,22 @@ function InspectBody({
 
       {/* Right column: what the agent is told, and the state it can see. */}
       <div className="flex flex-col gap-6">
-        <InspectCard title="server instructions" meta="sent on connect">
-          {data.instructions ? (
-            // Prose, not code: a plain pre keeps the paragraph breaks that a
-            // syntax highlighter collapses.
-            <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-              {data.instructions}
-            </pre>
-          ) : (
-            <Text muted small>
-              This gateway sends no instructions.
-            </Text>
-          )}
+        <InspectCard
+          title="server instructions"
+          action={
+            <Link
+              to={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
+              className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
+            >
+              Edit
+            </Link>
+          }
+        >
+          {/* Prose, not code: a plain pre keeps the paragraph breaks that a
+              syntax highlighter collapses. */}
+          <pre className="font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+            {data.instructions}
+          </pre>
         </InspectCard>
 
         <InspectCard title="list_servers" meta="bundle state">

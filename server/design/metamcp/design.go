@@ -252,6 +252,11 @@ var _ = Service("metaMcp", func() {
 	})
 })
 
+// InstructionsMaxLength bounds operator-authored gateway instructions. Clients
+// cache instructions from the handshake and prepend them to every turn, so the
+// cap keeps a gateway from bloating its callers' context.
+const InstructionsMaxLength = 10000
+
 var MetaMcpServerVisibility = Type("MetaMcpServerVisibility", String, func() {
 	Description("The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.")
 	Enum("disabled", "private")
@@ -289,6 +294,9 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
+	Attribute("instructions", String, "Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions.", func() {
+		MaxLength(InstructionsMaxLength)
+	})
 
 	Required("id", "name")
 })
@@ -311,6 +319,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
+	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)

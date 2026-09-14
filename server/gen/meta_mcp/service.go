@@ -187,6 +187,10 @@ type UpdateMetaMcpServerPayload struct {
 	Visibility *types.MetaMcpServerVisibility
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *types.NetworkAccessMode
+	// Server instructions returned in the gateway's MCP initialize response. Omit
+	// to leave them unchanged; send an empty string to restore Gram's built-in
+	// gateway instructions.
+	Instructions *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

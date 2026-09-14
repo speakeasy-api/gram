@@ -330,9 +330,12 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		Visibility:           conv.PtrToPGText((*string)(payload.Visibility)),
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
-		ID:                   serverID,
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		ProjectID:            *authCtx.ProjectID,
+		InstructionsSet:      payload.Instructions != nil,
+		// A blank submission restores the built-in instructions (NULL).
+		Instructions:   conv.PtrToPGTextTrimmed(stripNUL(payload.Instructions)),
+		ID:             serverID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
@@ -1091,4 +1094,13 @@ func sortOrderValue(v *int) (int32, error) {
 		return 0, errors.New("sort_order out of range")
 	}
 	return int32(value), nil
+}
+
+// stripNUL drops NUL bytes, which Goa accepts but Postgres text rejects.
+func stripNUL(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	stripped := conv.StripNUL(*s)
+	return &stripped
 }
