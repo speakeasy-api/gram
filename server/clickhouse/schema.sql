@@ -1278,22 +1278,6 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions frozen at acceptance.',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
-    assistant_id String MATERIALIZED attributes['assistant_id'] COMMENT 'Frozen reporting attribute for assistant identity.',
-    billing_mode LowCardinality(String) MATERIALIZED attributes['billing_mode'] COMMENT 'Frozen reporting attribute for billing mode.',
-    billing_user_cost_center_name LowCardinality(String) MATERIALIZED attributes['billing_user_cost_center_name'] COMMENT 'Frozen reporting attribute for billing-user cost center.',
-    billing_user_department_name LowCardinality(String) MATERIALIZED attributes['billing_user_department_name'] COMMENT 'Frozen reporting attribute for billing-user department.',
-    billing_user_directory_groups LowCardinality(String) MATERIALIZED attributes['billing_user_directory_groups'] COMMENT 'Frozen JSON directory-group set for reporting.',
-    billing_user_division_name LowCardinality(String) MATERIALIZED attributes['billing_user_division_name'] COMMENT 'Frozen reporting attribute for billing-user division.',
-    billing_user_employee_type LowCardinality(String) MATERIALIZED attributes['billing_user_employee_type'] COMMENT 'Frozen reporting attribute for billing-user employee type.',
-    billing_user_id String MATERIALIZED attributes['billing_user_id'] COMMENT 'Frozen reporting identity of the billing user.',
-    billing_user_job_title LowCardinality(String) MATERIALIZED attributes['billing_user_job_title'] COMMENT 'Frozen reporting attribute for billing-user job title.',
-    mcp_server_id String MATERIALIZED attributes['mcp_server_id'] COMMENT 'Frozen reporting identity of the MCP server.',
-    mcp_server_slug String MATERIALIZED attributes['mcp_server_slug'] COMMENT 'Frozen reporting label for the MCP server.',
-    mcp_server_type LowCardinality(String) MATERIALIZED attributes['mcp_server_type'] COMMENT 'Frozen reporting namespace for the MCP server.',
-    model LowCardinality(String) MATERIALIZED attributes['model'] COMMENT 'Frozen reporting attribute for the model.',
-    provider LowCardinality(String) MATERIALIZED attributes['provider'] COMMENT 'Frozen reporting attribute for the provider.',
-    risk_policy_id String MATERIALIZED attributes['risk_policy_id'] COMMENT 'Frozen reporting attribute for risk-policy identity.',
-    tool_name LowCardinality(String) MATERIALIZED attributes['tool_name'] COMMENT 'Frozen reporting attribute for tool name.',
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
     CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
     CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id)
@@ -1393,21 +1377,9 @@ FROM
                     tuple('cost_center', if(billing_user_cost_center_name = '', 'unset', 'value'), billing_user_cost_center_name, if(billing_user_cost_center_name = '', '(unset)', billing_user_cost_center_name)),
                     tuple(
                         'directory_group_set',
-                        if(
-                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
-                            'unset',
-                            'value'
-                        ),
-                        if(
-                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
-                            '',
-                            toJSONString(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)'))))
-                        ),
-                        if(
-                            empty(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)')))),
-                            '(unset)',
-                            arrayStringConcat(arraySort(arrayDistinct(JSONExtract(if(billing_user_directory_groups = '', '[]', billing_user_directory_groups), 'Array(String)'))), ', ')
-                        )
+                        if(empty(normalized_directory_groups), 'unset', 'value'),
+                        if(empty(normalized_directory_groups), '', toJSONString(normalized_directory_groups)),
+                        if(empty(normalized_directory_groups), '(unset)', arrayStringConcat(normalized_directory_groups, ', '))
                     )
                 ],
                 meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'),
@@ -1456,7 +1428,35 @@ FROM
             )
         ) AS facet_identity,
         facet_identity.4 AS facet_label
-    FROM billing_meter_readings_by_time
+    FROM
+    (
+        SELECT
+            organization_id,
+            project_id,
+            meter_id,
+            reading_kind,
+            occurred_at,
+            unit,
+            measurement_method,
+            value,
+            attributes['assistant_id'] AS assistant_id,
+            attributes['billing_mode'] AS billing_mode,
+            attributes['billing_user_cost_center_name'] AS billing_user_cost_center_name,
+            attributes['billing_user_department_name'] AS billing_user_department_name,
+            arraySort(arrayDistinct(JSONExtract(if(attributes['billing_user_directory_groups'] = '', '[]', attributes['billing_user_directory_groups']), 'Array(String)'))) AS normalized_directory_groups,
+            attributes['billing_user_division_name'] AS billing_user_division_name,
+            attributes['billing_user_employee_type'] AS billing_user_employee_type,
+            attributes['billing_user_id'] AS billing_user_id,
+            attributes['billing_user_job_title'] AS billing_user_job_title,
+            attributes['mcp_server_id'] AS mcp_server_id,
+            attributes['mcp_server_slug'] AS mcp_server_slug,
+            attributes['mcp_server_type'] AS mcp_server_type,
+            attributes['model'] AS model,
+            attributes['provider'] AS provider,
+            attributes['risk_policy_id'] AS risk_policy_id,
+            attributes['tool_name'] AS tool_name
+        FROM billing_meter_readings_by_time
+    )
     WHERE meter_id IN (
         'gram.agent_session.storage',
         'gram.mcp.bandwidth.ingress',
