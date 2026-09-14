@@ -211,7 +211,11 @@ func TestDrainerAliveMetricIsAHeartbeat(t *testing.T) {
 		close(drainerStarted)
 		<-ctx.Done()
 	})
-	<-drainerStarted
+	select {
+	case <-drainerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for drainer to start")
+	}
 
 	value, ok := collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
 	require.True(t, ok)
