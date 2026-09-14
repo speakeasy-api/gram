@@ -19,20 +19,17 @@ import {
 import {
   buildServerOptionGroups,
   isDefaultToolUsageTypeSelection,
-  parseTargetFilter,
-  selectedHookSources,
-  selectedTargetValues,
   selectedUserEmails,
   TOOL_USAGE_DEFAULT_TYPES,
   TOOL_USAGE_STATUS_OPTIONS,
   TOOL_USAGE_TYPE_OPTIONS,
   TOOL_USAGE_VALID_TYPES,
   toStatuses,
-  toTargetTypes,
 } from "@/components/observe/observeTargetFilters";
 import { perPage } from "@/components/observe/observeFilterUtils";
 import { formatToolName } from "@/components/observe/toolNameDisplay";
 import { useObserveFilters } from "@/components/observe/useObserveFilters";
+import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -60,7 +57,6 @@ import type { TelemetryLogRecord } from "@gram/client/models/components/telemetr
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
-import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListAttributeKeys } from "@gram/client/react-query/listAttributeKeys.js";
 import { unwrapAsync } from "@gram/client/types/fp";
@@ -228,6 +224,8 @@ export function LogsTools(): JSX.Element {
     roleEmails,
     handleRoleSelectionChange,
     roleFilterPending,
+    accountType,
+    handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
     defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
     validTypes: TOOL_USAGE_VALID_TYPES,
@@ -242,54 +240,14 @@ export function LogsTools(): JSX.Element {
     updateAttributeSearchQuery,
   } = useAttributeSearchParams();
 
-  const selectedTargets = useMemo(
-    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
-    [activeFilters],
-  );
-
-  const hostedToolsetSlugs = useMemo(
-    () =>
-      selectedTargets
-        .filter((target) => target.type === "hosted")
-        .map((target) => target.id),
-    [selectedTargets],
-  );
-
-  const shadowServerNames = useMemo(
-    () =>
-      selectedTargets
-        .filter((target) => target.type === "shadow")
-        .map((target) => target.id),
-    [selectedTargets],
-  );
-
-  const metaMcpServerIds = useMemo(
-    () =>
-      selectedTargets
-        .filter((target) => target.type === "gateway")
-        .map((target) => target.id),
-    [selectedTargets],
-  );
-
-  const userFilters = useMemo<ToolUsageUserFilter[]>(() => {
-    const emails = [
-      ...new Set([...selectedUserEmails(activeFilters), ...roleEmails]),
-    ];
-    return emails.map((email) => ({ kind: "email", key: email }));
-  }, [activeFilters, roleEmails]);
-
-  const hookSources = useMemo(
-    () => selectedHookSources(activeFilters),
-    [activeFilters],
-  );
-
-  const targetTypes = useMemo(
-    () =>
-      toTargetTypes(selectedHookTypes) as
-        | ListToolUsageTracesPayloadTargetTypes[]
-        | undefined,
-    [selectedHookTypes],
-  );
+  const { summaryPayload, sharedQueryKey } = useToolUsagePayload({
+    activeFilters,
+    roleEmails,
+    selectedHookTypes,
+    accountType,
+    from,
+    to,
+  });
 
   const statuses = useMemo(
     () => toStatuses(selectedStatuses),
@@ -359,32 +317,6 @@ export function LogsTools(): JSX.Element {
     [attributeFilters],
   );
 
-  // Account-type scope ("team" | "personal" | ""), persisted in the URL. It
-  // filters on the materialized gram.account_type column via the raw-logs path.
-  // "team" is expressed as "not personal" so unclassified rows count as team
-  // (matching the badge semantics elsewhere).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const accountType = ((): string => {
-    const v = searchParams.get("account_type");
-    return v === "team" || v === "personal" ? v : "";
-  })();
-  const setAccountType = useCallback(
-    (value: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (value) {
-            next.set("account_type", value);
-          } else {
-            next.delete("account_type");
-          }
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
-  );
   // account_type is sent as a first-class payload filter (below), not an
   // attribute filter, so it stays on the fast trace_summaries path rather than
   // forcing the raw-logs scan.
@@ -403,36 +335,20 @@ export function LogsTools(): JSX.Element {
     useInfiniteQuery({
       queryKey: [
         "tool-usage-traces",
-        from.toISOString(),
-        to.toISOString(),
-        hostedToolsetSlugs,
-        shadowServerNames,
-        metaMcpServerIds,
-        targetTypes,
+        ...sharedQueryKey,
         statuses,
-        userFilters,
-        hookSources,
         attributeSearchQuery,
         queryFilters,
-        accountType,
       ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListToolUsageTraces(client, {
             listToolUsageTracesPayload: {
-              from,
-              to,
-              hostedToolsetSlugs:
-                hostedToolsetSlugs.length > 0 ? hostedToolsetSlugs : undefined,
-              shadowServerNames:
-                shadowServerNames.length > 0 ? shadowServerNames : undefined,
-              metaMcpServerIds:
-                metaMcpServerIds.length > 0 ? metaMcpServerIds : undefined,
-              targetTypes,
+              ...summaryPayload,
+              targetTypes: summaryPayload.targetTypes as
+                | ListToolUsageTracesPayloadTargetTypes[]
+                | undefined,
               statuses,
-              userFilters: userFilters.length > 0 ? userFilters : undefined,
-              hookSources: hookSources.length > 0 ? hookSources : undefined,
-              accountType: accountType || undefined,
               query: attributeSearchQuery ?? undefined,
               filters: queryFilters.length > 0 ? queryFilters : undefined,
               cursor: pageParam,
@@ -610,7 +526,7 @@ export function LogsTools(): JSX.Element {
             onAttributeFiltersChange={updateAttributeFilters}
             onAddFilterFromLog={handleAddFilterFromLog}
             accountType={accountType}
-            onAccountTypeChange={setAccountType}
+            onAccountTypeChange={handleAccountTypeChange}
             from={from}
             to={to}
           />
