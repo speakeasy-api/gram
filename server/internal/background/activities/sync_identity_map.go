@@ -67,6 +67,9 @@ func NewSyncIdentityMap(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse
 
 type SyncIdentityMapResult struct {
 	Entries int
+	// Deferred reports that another replacement held the lock, so this
+	// attempt did nothing and the holder or the next tick delivers the refresh.
+	Deferred bool
 }
 
 func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error) {
@@ -85,16 +88,18 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		})
 	}
 
-	// Single-writer claim across the whole replacement. Losing the race defers
-	// to the holder (the retry or the next tick picks up after the claim
-	// clears); a claim leaked by a crashed attempt lapses at the TTL, after
-	// which no statement from that attempt can still be in flight.
+	// Single-writer claim across the whole replacement. Losing the race is
+	// not a failure: the holder or the next tick delivers the refresh, and
+	// retrying here only adds activity failures. A claim leaked by a crashed
+	// attempt lapses at the TTL, after which no statement from that attempt
+	// can still be in flight.
 	claimed, err := s.cache.Add(ctx, identityMapReplaceLockKey, identityMapReplaceLockTTL)
 	if err != nil {
 		return nil, fmt.Errorf("claim identity map replacement lock: %w", err)
 	}
 	if !claimed {
-		return nil, fmt.Errorf("identity map replacement already in progress")
+		s.logger.InfoContext(ctx, "identity map sync deferred: replacement already in progress")
+		return &SyncIdentityMapResult{Entries: 0, Deferred: true}, nil
 	}
 
 	if err := s.telemetry.ReplaceIdentityMap(ctx, entries); err != nil {
@@ -115,5 +120,5 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 	// map is drifting from Postgres until the next successful pass.
 	s.logger.InfoContext(ctx, "identity map synced", attr.SlogIdentityMapEntryCount(len(entries)))
 
-	return &SyncIdentityMapResult{Entries: len(entries)}, nil
+	return &SyncIdentityMapResult{Entries: len(entries), Deferred: false}, nil
 }
