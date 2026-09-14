@@ -24,6 +24,10 @@ type Client struct {
 	// endpoint.
 	DescribeDoer goahttp.Doer
 
+	// DimensionValues Doer is the HTTP client used to make requests to the
+	// dimensionValues endpoint.
+	DimensionValuesDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -46,6 +50,7 @@ func NewClient(
 	return &Client{
 		QueryDoer:           doer,
 		DescribeDoer:        doer,
+		DimensionValuesDoer: doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -97,6 +102,30 @@ func (c *Client) Describe() goa.Endpoint {
 		resp, err := c.DescribeDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("analytics", "describe", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DimensionValues returns an endpoint that makes HTTP requests to the
+// analytics service dimensionValues server.
+func (c *Client) DimensionValues() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDimensionValuesRequest(c.encoder)
+		decodeResponse = DecodeDimensionValuesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDimensionValuesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DimensionValuesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("analytics", "dimensionValues", err)
 		}
 		return decodeResponse(resp)
 	}

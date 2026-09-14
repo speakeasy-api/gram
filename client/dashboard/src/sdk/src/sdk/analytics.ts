@@ -3,14 +3,20 @@
  */
 
 import { analyticsDescribe } from "../funcs/analyticsDescribe.js";
+import { analyticsDimensionValues } from "../funcs/analyticsDimensionValues.js";
 import { analyticsQuery } from "../funcs/analyticsQuery.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AnalyticsDescribeResult } from "../models/components/analyticsdescriberesult.js";
+import { AnalyticsDimensionValuesResult } from "../models/components/analyticsdimensionvaluesresult.js";
 import { AnalyticsQueryResult } from "../models/components/analyticsqueryresult.js";
 import {
   AnalyticsDescribeRequest,
   AnalyticsDescribeSecurity,
 } from "../models/operations/analyticsdescribe.js";
+import {
+  AnalyticsDimensionValuesRequest,
+  AnalyticsDimensionValuesSecurity,
+} from "../models/operations/analyticsdimensionvalues.js";
 import {
   AnalyticsQueryRequest,
   AnalyticsQuerySecurity,
@@ -30,6 +36,25 @@ export class Analytics extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AnalyticsDescribeResult> {
     return unwrapAsync(analyticsDescribe(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * dimensionValues analytics
+   *
+   * @remarks
+   * List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.
+   */
+  async dimensionValues(
+    request: AnalyticsDimensionValuesRequest,
+    security?: AnalyticsDimensionValuesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AnalyticsDimensionValuesResult> {
+    return unwrapAsync(analyticsDimensionValues(
       this,
       request,
       security,
