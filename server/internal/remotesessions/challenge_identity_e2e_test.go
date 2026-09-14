@@ -39,8 +39,10 @@ type idTokenIssuer struct {
 	issuerURL string
 	jwksURI   string
 	pool      *x509.CertPool
-	signer    jose.Signer
-	key       *ecdsa.PrivateKey
+	// cert is the key-set server's certificate, for a pool that trusts several fixtures.
+	cert   *x509.Certificate
+	signer jose.Signer
+	key    *ecdsa.PrivateKey
 	// rsaKey signs RS256 tokens; newSharedKidIDTokenIssuer publishes it under the ES256 key's kid.
 	rsaKey *rsa.PrivateKey
 	// keySet is the published JWK Set document.
@@ -93,6 +95,7 @@ func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
 		issuerURL: "https://" + uuid.NewString() + ".idp.example.com",
 		jwksURI:   "",
 		pool:      nil,
+		cert:      nil,
 		signer:    nil,
 		key:       key,
 		rsaKey:    rsaKey,
@@ -116,6 +119,7 @@ func newIDTokenIssuerWithKeys(t *testing.T, sharedKid bool) *idTokenIssuer {
 
 	issuer.jwksURI = server.URL + "/jwks.json"
 	issuer.pool = pool
+	issuer.cert = server.Certificate()
 	issuer.signer = signer
 	return issuer
 }
@@ -214,6 +218,13 @@ func (f verifierFunc) Verify(ctx context.Context, raw string, expect remotesessi
 type enrichmentDoc struct {
 	IDToken       map[string]json.RawMessage `json:"id_token"`
 	TokenResponse map[string]json.RawMessage `json:"token_response"`
+	Userinfo      map[string]json.RawMessage `json:"userinfo"`
+	Introspection map[string]json.RawMessage `json:"introspection"`
+	Interfaces    map[string]struct {
+		Status     string `json:"status"`
+		HTTPStatus int    `json:"http_status"`
+		Reason     string `json:"reason"`
+	} `json:"interfaces"`
 }
 
 func decodeEnrichment(t *testing.T, raw []byte) enrichmentDoc {
@@ -322,7 +333,7 @@ func TestRemoteLoginCapturesIDTokenIdentity(t *testing.T) {
 	states, err := env.mgr.RemoteSessionStatuses(ctx, env.subject, env.projectID, env.organizationID, sess.UserSessionIssuerID)
 	require.NoError(t, err)
 	state := states[env.clientID]
-	require.Equal(t, "grant-owner@example.com", state.ConnectedAs)
+	require.Equal(t, "Grant Owner · grant-owner@example.com", state.ConnectedAs)
 	require.Equal(t, remotesessions.IdentitySourceIDToken, state.IdentitySource)
 
 	// The tombstone keeps its credentials for upstream revocation but none

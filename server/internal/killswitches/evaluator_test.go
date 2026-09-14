@@ -176,6 +176,7 @@ func TestEvaluatorDistinguishesFailuresAndAppliesCandidatePolicies(t *testing.T)
 		definitions []DefinitionKey
 		query       evaluationQueryFunc
 		wantKind    InfrastructureFailureKind
+		timeout     time.Duration
 		wantPolicy  FailurePolicy
 		wantError   error
 	}{
@@ -199,14 +200,18 @@ func TestEvaluatorDistinguishesFailuresAndAppliesCandidatePolicies(t *testing.T)
 				<-ctx.Done()
 				return repo.EvaluateCurrentPrescriptionsRow{}, ctx.Err()
 			},
-			wantKind: InfrastructureFailureTimeout, wantPolicy: FailurePolicyFailOpen, wantError: ErrEvaluatorTimeout,
+			timeout: time.Millisecond, wantKind: InfrastructureFailureTimeout, wantPolicy: FailurePolicyFailOpen, wantError: ErrEvaluatorTimeout,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			evaluator, err := newEvaluator(test.query, registry, time.Millisecond, nil)
+			timeout := test.timeout
+			if timeout == 0 {
+				timeout = time.Second
+			}
+			evaluator, err := newEvaluator(test.query, registry, timeout, nil)
 			require.NoError(t, err)
 			request := evaluationRequest(test.definitions...)
 			result := evaluator.Evaluate(t.Context(), request)

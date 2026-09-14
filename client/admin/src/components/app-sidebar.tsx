@@ -1,6 +1,5 @@
 import type { ComponentProps, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BuildingIcon, CalculatorIcon, FolderIcon } from "lucide-react";
 import { Link, useLocation, useMatchRoute } from "@tanstack/react-router";
 
 import { NavUser } from "@/components/nav-user";
@@ -12,24 +11,14 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { ADMIN_NAV_GROUPS } from "@/lib/adminNav";
 import { organizationQuery } from "@/lib/adminQueries";
-
-// `as const` keeps each `to` a literal, which is what the router types check
-// the link against.
-const navItems = [
-  { to: "/organizations", label: "Organizations", icon: BuildingIcon },
-  { to: "/projects", label: "Projects", icon: FolderIcon },
-  {
-    to: "/stoken-calculator",
-    label: "S-token calculator",
-    icon: CalculatorIcon,
-  },
-] as const;
 
 export function AppSidebar({
   ...props
@@ -73,26 +62,29 @@ export function AppSidebar({
         {org ? (
           <RecordNav idOrSlug={idOrSlug} org={org} />
         ) : (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {navItems.map(({ to, label, icon: Icon }) => (
-                  <SidebarMenuItem key={to}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(to)}
-                      tooltip={label}
-                    >
-                      <Link to={to}>
-                        <Icon />
-                        <span>{label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          ADMIN_NAV_GROUPS.map(({ label: groupLabel, items }) => (
+            <SidebarGroup key={groupLabel}>
+              <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {items.map(({ to, label, icon: Icon }) => (
+                    <SidebarMenuItem key={to}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname.startsWith(to)}
+                        tooltip={label}
+                      >
+                        <Link to={to}>
+                          <Icon />
+                          <span>{label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
         )}
       </SidebarContent>
 

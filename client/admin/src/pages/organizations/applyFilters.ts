@@ -18,7 +18,7 @@ export type ApplyOptions = {
 };
 
 // What applying leaves for the page to do itself. Two things it cannot read
-// off the URL: the cursor is component state, so applying the set already
+// off the URL: the page is component state, so applying the set already
 // applied moves nothing it watches, and a search term the box has not
 // committed yet is in no URL at all.
 export const FiltersApplied = createContext<(options: ApplyOptions) => void>(
@@ -38,7 +38,7 @@ export function useApplyFilters(): (
 
   return useCallback(
     (next: FilterSelection, options: ApplyOptions = {}): void => {
-      // Page 1. The rows a page-two cursor points at were counted under the
+      // Page 1. The rows on a later page were counted under the
       // filters that minted it.
       onApplied(options);
       void navigate({

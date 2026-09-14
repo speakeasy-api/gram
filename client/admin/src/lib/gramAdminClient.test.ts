@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
 
 const useMutation = vi.hoisted(() => vi.fn());
 
@@ -34,15 +35,30 @@ afterEach(() => {
 
 describe("generated admin boundary", () => {
   it("does not export generated clients or configurable request controls", () => {
-    expect(Object.keys(boundary).sort()).toEqual([
-      "adminSessionQuery",
-      "isRedirectingToLogin",
-      "organizationActivityQuery",
-      "organizationFeaturesQuery",
-      "redirectOnUnauthorized",
-      "setAdminOrganizationFeature",
-      "useSetAdminOrganizationFeatureMutation",
-    ]);
+    expect(Object.keys(boundary).sort()).toEqual(
+      [
+        "adminSessionQuery",
+        "adminGetGlobalIssuerQuery",
+        "adminListGlobalIssuersQuery",
+        "adminListGlobalIssuerConvergenceCandidatesQuery",
+        "adminGetGlobalIssuerDuplicatePreflightQuery",
+        "adminGetGlobalIssuerMigratePreflightQuery",
+        "adminCreateGlobalIssuer",
+        "adminUpdateGlobalIssuer",
+        "adminDeleteGlobalIssuer",
+        "adminFetchGlobalIssuerMetadata",
+        "adminRefreshGlobalIssuerMetadata",
+        "adminMigrateToGlobalIssuer",
+        "adminUploadPlatformImage",
+        "adminIssuerImageQuery",
+        "isRedirectingToLogin",
+        "organizationActivityQuery",
+        "organizationFeaturesQuery",
+        "redirectOnUnauthorized",
+        "setAdminOrganizationFeature",
+        "useSetAdminOrganizationFeatureMutation",
+      ].sort(),
+    );
 
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
@@ -243,4 +259,29 @@ describe("generated admin boundary", () => {
     );
     expect(recordHeader).not.toMatch(/fetch\(|useMutation/);
   });
+});
+
+it("serves issuer logos through the generated same-origin image operation", async () => {
+  const fetch = vi.fn().mockResolvedValue(
+    new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const query = boundary.adminIssuerImageQuery("image-placeholder");
+  const cache = new QueryClient();
+  const blob = await cache.fetchQuery(query);
+  const cached = await cache.ensureQueryData(query);
+  expect(cached).toBe(blob);
+  expect(await cached.arrayBuffer()).toEqual(await blob.arrayBuffer());
+  expect(fetch).toHaveBeenCalledTimes(1);
+  cache.clear();
+  expect(blob).toBeInstanceOf(Blob);
+  expect((blob as Blob).size).toBe(3);
+  expect((blob as Blob).type).toBe("image/png");
+  const request = fetch.mock.calls[0]![0] as Request;
+  expect(new URL(request.url).origin).toBe(window.location.origin);
+  expect(request.headers.has("gram-session")).toBe(false);
+  expect(request.headers.has("Authorization")).toBe(false);
 });

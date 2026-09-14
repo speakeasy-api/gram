@@ -6,6 +6,7 @@ import {
   DistributeServersStep,
   IdentityProviderStep,
   InstrumentAgentsStep,
+  LiteLLMSetupStep,
   PlatformMCPSetupStep,
 } from "./steps";
 import { StepSupportProvider } from "./step-container";
@@ -36,6 +37,9 @@ export function SetupTaskContent({
       break;
     case "instrument-agents":
       step = <InstrumentAgentsStep onComplete={onComplete} />;
+      break;
+    case "litellm":
+      step = <LiteLLMSetupStep onComplete={onComplete} />;
       break;
     case "additional-agent-config":
       step = <AdditionalAgentConfigStep onComplete={onComplete} />;

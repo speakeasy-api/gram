@@ -41,8 +41,9 @@ type Signatures struct {
 	// Binaries are bare command names resolved on the device PATH.
 	Binaries []string `json:"binaries"`
 
-	// ConfigDirs are home-relative directories whose existence marks the
-	// tool as installed.
+	// ConfigDirs are directories whose existence marks the tool as
+	// installed, resolved by the agent relative to the home folder unless
+	// they start with "/".
 	ConfigDirs []string `json:"config_dirs"`
 
 	// ProcessNames are exact process names checked for the running signal.

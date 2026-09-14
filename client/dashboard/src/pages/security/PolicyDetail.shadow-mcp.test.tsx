@@ -207,7 +207,6 @@ function blockingPolicyWithDirtyDraftName(): RiskPolicy {
     createdAt: new Date("2026-01-01T10:00:00Z"),
     enabled: true,
     id: "policy-1",
-    messageTypes: [],
     pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",

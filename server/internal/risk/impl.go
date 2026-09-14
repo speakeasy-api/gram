@@ -65,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -493,10 +494,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 			DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 			CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
-			// Legacy policy-level scope columns stay NULL; detection_scopes carry scope.
-			MessageTypes:         nil,
-			ScopeInclude:         pgtype.Text{String: "", Valid: false},
-			ScopeExempt:          pgtype.Text{String: "", Valid: false},
 			Enabled:              enabled,
 			Action:               action,
 			AudienceType:         audienceType,
@@ -978,19 +975,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			PromptInjectionRules: promptInjectionRules,
 			DisabledRules:        disabledRules,
 			CustomRuleIds:        customRuleIds,
-			// Legacy policy-level scope is carried forward untouched until the
-			// legacy-policy-scope migration folds it into detection_scopes.
-			MessageTypes: current.MessageTypes,
-			ScopeInclude: current.ScopeInclude,
-			ScopeExempt:  current.ScopeExempt,
-			Enabled:      enabled,
-			Action:       action,
-			AudienceType: audienceType,
-			AutoName:     autoName,
-			UserMessage:  userMessage,
-			Prompt:       prompt,
-			ModelConfig:  modelConfig,
-			Score:        conv.PtrToPGFloat8(payload.Score),
+			Enabled:              enabled,
+			Action:               action,
+			AudienceType:         audienceType,
+			AutoName:             autoName,
+			UserMessage:          userMessage,
+			Prompt:               prompt,
+			ModelConfig:          modelConfig,
+			Score:                conv.PtrToPGFloat8(payload.Score),
 		},
 		AudiencePrincipals:   audiencePrincipals,
 		AudienceChanged:      audienceUpdateRequested,
@@ -1043,6 +1035,9 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := shadowadmission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock shadow mcp admission project").LogError(ctx, s.logger)
+	}
 	q := repo.New(dbtx)
 	if err := q.LockRiskExclusionMutations(ctx, authCtx.ProjectID.String()); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock risk exclusion mutations").LogError(ctx, s.logger)

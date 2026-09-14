@@ -31,36 +31,42 @@ export const AGENT_POLICY_SCOPES: ScopeDefinition[] = [
     resourceType: "mcp",
     visibility: "user_visible",
     description: "Connect to MCP servers and call their tools.",
+    agentEligible: true,
   },
   {
     slug: "mcp:read",
     resourceType: "mcp",
     visibility: "user_visible",
     description: "View MCP servers and configuration.",
+    agentEligible: true,
   },
   {
     slug: "mcp:write",
     resourceType: "mcp",
     visibility: "user_visible",
     description: "Create and modify MCP servers and configuration.",
+    agentEligible: true,
   },
   {
     slug: "project:read",
     resourceType: "project",
     visibility: "user_visible",
     description: "View projects and project-related resources.",
+    agentEligible: true,
   },
   {
     slug: "project:write",
     resourceType: "project",
     visibility: "user_visible",
     description: "Create and modify projects and project-related resources.",
+    agentEligible: true,
   },
   {
     slug: "environment:read",
     resourceType: "environment",
     visibility: "user_visible",
     description: "View environments and their entries within the project.",
+    agentEligible: true,
   },
   {
     slug: "environment:write",
@@ -68,24 +74,28 @@ export const AGENT_POLICY_SCOPES: ScopeDefinition[] = [
     visibility: "user_visible",
     description:
       "Add, edit, clone, and remove environments within the project.",
+    agentEligible: true,
   },
   {
     slug: "skill:read",
     resourceType: "skill",
     visibility: "user_visible",
     description: "View skills within the project.",
+    agentEligible: true,
   },
   {
     slug: "skill:write",
     resourceType: "skill",
     visibility: "user_visible",
     description: "Create and modify skills within the project.",
+    agentEligible: true,
   },
   {
     slug: "risk_policy:evaluate",
     resourceType: "risk_policy",
     visibility: "user_visible",
     description: "Evaluate risk policies.",
+    agentEligible: true,
   },
 ];
 

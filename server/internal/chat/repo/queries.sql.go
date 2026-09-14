@@ -3892,7 +3892,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -3933,10 +3933,11 @@ type UpsertCorrelatedChatMessageRow struct {
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	Source         pgtype.Text
+	Inserted       bool
 }
 
-// Returns the persisted metering fields for both inserts and promotions so the
-// reading uses the durable row identity and measured content.
+// Returns persisted metering fields and distinguishes initial inserts from
+// native-hook promotions, which must not emit another storage reading.
 func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
@@ -3976,6 +3977,7 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		&i.UserID,
 		&i.ExternalUserID,
 		&i.Source,
+		&i.Inserted,
 	)
 	return i, err
 }

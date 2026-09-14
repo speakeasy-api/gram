@@ -4,6 +4,27 @@ info:
   title: Admin SDK policy
   version: 0.0.0
 actions:
+  # Public images are raw binary, not the default Goa JSON response.
+  - target: $.paths['/admin/assets.serveImage'].get.responses['200'].content
+    remove: true
+  - target: $.paths['/admin/assets.serveImage'].get.responses['200']
+    update:
+      content:
+        image/*:
+          schema:
+            type: string
+            format: binary
+            description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+  # Raw uploads must expose a binary body to generated browser clients.
+  - target: $.paths['/admin/assets.uploadImage'].post
+    update:
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
   # Retain only operations owned by the standalone Admin service.
   - target: $.paths.*[?count(@.tags[?@=='admin'])==0]
     remove: true

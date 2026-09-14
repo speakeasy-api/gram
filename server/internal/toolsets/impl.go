@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
+	temporalSDK "go.temporal.io/sdk/temporal"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -253,6 +254,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	if err != nil {
 		return nil, err
 	}
+	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
 }
@@ -324,6 +326,54 @@ func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalu
 	}
 
 	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
+}
+
+func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolset) {
+	if s.temporalEnv == nil || toolset == nil || !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
+		return
+	}
+
+	projectID, err := uuid.Parse(toolset.ProjectID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to parse project id for toolset indexing", attr.SlogError(err))
+		return
+	}
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
+		return
+	}
+	deploymentID, err := deploymentsRepo.New(s.db).GetActiveDeploymentID(ctx, projectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return
+	}
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to load active deployment for toolset indexing", attr.SlogError(err))
+		return
+	}
+	hasProxy, err := repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, repo.ToolsetHasExternalMCPProxyParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to check toolset for external MCP proxy before indexing", attr.SlogError(err))
+		return
+	}
+	if hasProxy {
+		return
+	}
+
+	_, err = background.ExecuteIndexToolset(ctx, s.temporalEnv, background.IndexToolsetParams{
+		ProjectID:             projectID,
+		ToolsetID:             toolsetID,
+		ToolsetSlug:           toolset.Slug,
+		ToolsetVersion:        toolset.ToolsetVersion,
+		DeploymentID:          deploymentID,
+		PermanentFailureCount: 0,
+	})
+	if err != nil && !temporalSDK.IsWorkflowExecutionAlreadyStartedError(err) {
+		s.logger.ErrorContext(ctx, "failed to start toolset indexing workflow", attr.SlogError(err))
+	}
 }
 
 func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPayload) (*gen.ListToolsetsResult, error) {
@@ -627,6 +677,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	// disabling MCP drops the entry entirely — so the previous state counts as
 	// much as the new one.
 	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled, pluginCreated)
+	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil
 }

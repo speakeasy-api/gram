@@ -128,6 +128,13 @@ func ValidatePolicyType(policyType string) error {
 	}
 }
 
+// knownCategory reports whether the category is one Gram defines.
+func knownCategory(category categories.Category) bool {
+	return slices.ContainsFunc(categories.All(), func(def categories.Definition) bool {
+		return def.Category == category
+	})
+}
+
 // ValidateDetectionScopes validates and normalizes category-level message
 // scopes into the analyzer-config storage shape.
 func ValidateDetectionScopes(eng *celenv.Engine, specs []*DetectionScopeInput) ([]ra.DetectionScopeConfig, error) {
@@ -138,11 +145,13 @@ func ValidateDetectionScopes(eng *celenv.Engine, specs []*DetectionScopeInput) (
 			return nil, fmt.Errorf("detection scope must not be null")
 		}
 		category := categories.Category(spec.Category)
-		recommendation, ok := recommendedscopes.For(category)
-		if !ok {
+		if !knownCategory(category) {
 			return nil, fmt.Errorf("detection scope category %q is not recognized", spec.Category)
 		}
-		if !recommendation.Applicable {
+		// The registry says whether a category has a recommended scope, not
+		// whether it may carry one: `custom` has no recommendation but a rule
+		// written over `content` still needs an explicit scope to narrow it.
+		if recommendation, ok := recommendedscopes.For(category); ok && !recommendation.Applicable {
 			return nil, fmt.Errorf("category %q is session-scoped; message detection scopes do not apply", spec.Category)
 		}
 		if seen[category] {

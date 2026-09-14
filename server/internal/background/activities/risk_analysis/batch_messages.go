@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -188,19 +187,6 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 		return []recordedToolCall{fallback}
 	}
 	return calls
-}
-
-func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
-	if len(messageTypes) == 0 {
-		return messages
-	}
-	filtered := make([]batchMessage, 0, len(messages))
-	for _, msg := range messages {
-		if slices.Contains(messageTypes, msg.Type) {
-			filtered = append(filtered, msg)
-		}
-	}
-	return filtered
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {

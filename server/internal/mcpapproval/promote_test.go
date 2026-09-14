@@ -48,7 +48,6 @@ func seedBypassRequestForOrg(t *testing.T, ctx context.Context, ti *testInstance
 		Sources:        []string{"shadow_mcp"},
 		AnalyzerConfig: []byte(`{}`),
 		DisabledRules:  nil,
-		ScopeExempt:    pgtype.Text{},
 		Enabled:        true,
 		Action:         "block",
 		AudienceType:   "everyone",

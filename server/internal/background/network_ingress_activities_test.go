@@ -1,13 +1,33 @@
 package background
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 )
+
+func TestRollbackNetworkIngressSweepRestoresBoundedCleanupContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	var rollbackCtx context.Context
+
+	rollbackNetworkIngressSweep(ctx, func(ctx context.Context) error {
+		rollbackCtx = ctx
+		require.NoError(t, ctx.Err())
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.WithinDuration(t, time.Now().Add(5*time.Second), deadline, time.Second)
+		return nil
+	})
+
+	require.NotNil(t, rollbackCtx)
+}
 
 func TestOrphanInventoryActivityErrorPreservesReconcileFailure(t *testing.T) {
 	t.Parallel()

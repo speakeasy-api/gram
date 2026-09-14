@@ -44,6 +44,14 @@ done
 diff -u "$tmpdir/baseline.dashboard.yaml" "$tmpdir/probe.dashboard.yaml"
 
 output="$tmpdir/probe.dashboard.yaml"
+# Native Admin naming must not rename the existing internal SDK operation.
+legacy_operation=$(yq -r '.paths["/rpc/adminRemoteSessions.createGlobalIssuer"].post.operationId' "$output")
+legacy_name=$(yq -r '.paths["/rpc/adminRemoteSessions.createGlobalIssuer"].post.x-speakeasy-name-override' "$output")
+if [ "$legacy_operation" != "createGlobalRemoteSessionIssuer" ] || [ "$legacy_name" != "createGlobalIssuer" ]; then
+  echo "Legacy global issuer SDK operation naming changed" >&2
+  exit 1
+fi
+
 if grep -Eq '^[[:space:]]*/admin/' "$output"; then
   echo "Dashboard input contains an Admin path" >&2
   exit 1

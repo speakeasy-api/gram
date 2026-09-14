@@ -40,6 +40,7 @@ type Endpoints struct {
 	ListChallenges                       goa.Endpoint
 	ListChallengeBuckets                 goa.Endpoint
 	ResolveChallenge                     goa.Endpoint
+	ListIdentityAccess                   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -71,6 +72,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
 		ResolveChallenge:                     NewResolveChallengeEndpoint(s, a.APIKeyAuth),
+		ListIdentityAccess:                   NewListIdentityAccessEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -100,6 +102,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
 	e.ResolveChallenge = m(e.ResolveChallenge)
+	e.ListIdentityAccess = m(e.ListIdentityAccess)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -857,5 +860,28 @@ func NewResolveChallengeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ResolveChallenge(ctx, p)
+	}
+}
+
+// NewListIdentityAccessEndpoint returns an endpoint function that calls the
+// method "listIdentityAccess" of service "access".
+func NewListIdentityAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListIdentityAccessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListIdentityAccess(ctx, p)
 	}
 }
