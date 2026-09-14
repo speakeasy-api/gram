@@ -38,6 +38,21 @@ type QueryRequestBody struct {
 	Ungrouped bool `form:"ungrouped" json:"ungrouped" xml:"ungrouped"`
 }
 
+// DimensionValuesRequestBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP request body.
+type DimensionValuesRequestBody struct {
+	// Dataset to look in
+	Dataset string `form:"dataset" json:"dataset" xml:"dataset"`
+	// Dimension to list values of
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// Start of the half-open window [from, to), ISO 8601
+	From string `form:"from" json:"from" xml:"from"`
+	// End of the half-open window [from, to), ISO 8601
+	To string `form:"to" json:"to" xml:"to"`
+	// Maximum values. Defaults to 50, at most 200.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // QueryResponseBody is the type of the "analytics" service "query" endpoint
 // HTTP response body.
 type QueryResponseBody struct {
@@ -54,6 +69,14 @@ type QueryResponseBody struct {
 // endpoint HTTP response body.
 type DescribeResponseBody struct {
 	Datasets []*AnalyticsDatasetResponseBody `form:"datasets,omitempty" json:"datasets,omitempty" xml:"datasets,omitempty"`
+}
+
+// DimensionValuesResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body.
+type DimensionValuesResponseBody struct {
+	Dataset   *string                                `form:"dataset,omitempty" json:"dataset,omitempty" xml:"dataset,omitempty"`
+	Dimension *string                                `form:"dimension,omitempty" json:"dimension,omitempty" xml:"dimension,omitempty"`
+	Values    []*AnalyticsDimensionValueResponseBody `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
 }
 
 // QueryUnauthorizedResponseBody is the type of the "analytics" service "query"
@@ -417,6 +440,190 @@ type DescribeGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DimensionValuesUnauthorizedResponseBody is the type of the "analytics"
+// service "dimensionValues" endpoint HTTP response body for the "unauthorized"
+// error.
+type DimensionValuesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesForbiddenResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "forbidden" error.
+type DimensionValuesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesBadRequestResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "bad_request" error.
+type DimensionValuesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesNotFoundResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "not_found" error.
+type DimensionValuesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesConflictResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "conflict" error.
+type DimensionValuesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesUnsupportedMediaResponseBody is the type of the "analytics"
+// service "dimensionValues" endpoint HTTP response body for the
+// "unsupported_media" error.
+type DimensionValuesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesInvalidResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "invalid" error.
+type DimensionValuesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesInvariantViolationResponseBody is the type of the "analytics"
+// service "dimensionValues" endpoint HTTP response body for the
+// "invariant_violation" error.
+type DimensionValuesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesUnexpectedResponseBody is the type of the "analytics" service
+// "dimensionValues" endpoint HTTP response body for the "unexpected" error.
+type DimensionValuesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DimensionValuesGatewayErrorResponseBody is the type of the "analytics"
+// service "dimensionValues" endpoint HTTP response body for the
+// "gateway_error" error.
+type DimensionValuesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AnalyticsMeasureRequestBody is used to define fields on request body types.
 type AnalyticsMeasureRequestBody struct {
 	// Aggregation to apply. count takes no field; every other op needs a measure
@@ -466,6 +673,15 @@ type AnalyticsFieldResponseBody struct {
 	Operators []string `form:"operators,omitempty" json:"operators,omitempty" xml:"operators,omitempty"`
 	// Ops a measure admits
 	Aggregations []string `form:"aggregations,omitempty" json:"aggregations,omitempty" xml:"aggregations,omitempty"`
+}
+
+// AnalyticsDimensionValueResponseBody is used to define fields on response
+// body types.
+type AnalyticsDimensionValueResponseBody struct {
+	// A non-empty value of the dimension
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Rows at the dataset's grain carrying this value inside the window
+	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
 // NewQueryRequestBody builds the HTTP request body from the payload of the
@@ -520,6 +736,19 @@ func NewQueryRequestBody(p *analytics.QueryPayload) *QueryRequestBody {
 		if body.Ungrouped == zero {
 			body.Ungrouped = false
 		}
+	}
+	return body
+}
+
+// NewDimensionValuesRequestBody builds the HTTP request body from the payload
+// of the "dimensionValues" endpoint of the "analytics" service.
+func NewDimensionValuesRequestBody(p *analytics.DimensionValuesPayload) *DimensionValuesRequestBody {
+	body := &DimensionValuesRequestBody{
+		Dataset:   p.Dataset,
+		Dimension: p.Dimension,
+		From:      p.From,
+		To:        p.To,
+		Limit:     p.Limit,
 	}
 	return body
 }
@@ -856,6 +1085,175 @@ func NewDescribeGatewayError(body *DescribeGatewayErrorResponseBody) *goa.Servic
 	return v
 }
 
+// NewDimensionValuesAnalyticsDimensionValuesResultOK builds a "analytics"
+// service "dimensionValues" endpoint result from a HTTP "OK" response.
+func NewDimensionValuesAnalyticsDimensionValuesResultOK(body *DimensionValuesResponseBody) *analytics.AnalyticsDimensionValuesResult {
+	v := &analytics.AnalyticsDimensionValuesResult{
+		Dataset:   *body.Dataset,
+		Dimension: *body.Dimension,
+	}
+	v.Values = make([]*analytics.AnalyticsDimensionValue, len(body.Values))
+	for i, val := range body.Values {
+		if val == nil {
+			v.Values[i] = nil
+			continue
+		}
+		v.Values[i] = unmarshalAnalyticsDimensionValueResponseBodyToAnalyticsAnalyticsDimensionValue(val)
+	}
+
+	return v
+}
+
+// NewDimensionValuesUnauthorized builds a analytics service dimensionValues
+// endpoint unauthorized error.
+func NewDimensionValuesUnauthorized(body *DimensionValuesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesForbidden builds a analytics service dimensionValues
+// endpoint forbidden error.
+func NewDimensionValuesForbidden(body *DimensionValuesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesBadRequest builds a analytics service dimensionValues
+// endpoint bad_request error.
+func NewDimensionValuesBadRequest(body *DimensionValuesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesNotFound builds a analytics service dimensionValues
+// endpoint not_found error.
+func NewDimensionValuesNotFound(body *DimensionValuesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesConflict builds a analytics service dimensionValues
+// endpoint conflict error.
+func NewDimensionValuesConflict(body *DimensionValuesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesUnsupportedMedia builds a analytics service
+// dimensionValues endpoint unsupported_media error.
+func NewDimensionValuesUnsupportedMedia(body *DimensionValuesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesInvalid builds a analytics service dimensionValues
+// endpoint invalid error.
+func NewDimensionValuesInvalid(body *DimensionValuesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesInvariantViolation builds a analytics service
+// dimensionValues endpoint invariant_violation error.
+func NewDimensionValuesInvariantViolation(body *DimensionValuesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesUnexpected builds a analytics service dimensionValues
+// endpoint unexpected error.
+func NewDimensionValuesUnexpected(body *DimensionValuesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDimensionValuesGatewayError builds a analytics service dimensionValues
+// endpoint gateway_error error.
+func NewDimensionValuesGatewayError(body *DimensionValuesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateQueryResponseBody runs the validations defined on QueryResponseBody
 func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
 	if body.Dataset == nil {
@@ -879,6 +1277,28 @@ func ValidateDescribeResponseBody(body *DescribeResponseBody) (err error) {
 	for _, e := range body.Datasets {
 		if e != nil {
 			if err2 := ValidateAnalyticsDatasetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDimensionValuesResponseBody runs the validations defined on
+// DimensionValuesResponseBody
+func ValidateDimensionValuesResponseBody(body *DimensionValuesResponseBody) (err error) {
+	if body.Dataset == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dataset", "body"))
+	}
+	if body.Dimension == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension", "body"))
+	}
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	for _, e := range body.Values {
+		if e != nil {
+			if err2 := ValidateAnalyticsDimensionValueResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1366,6 +1786,246 @@ func ValidateDescribeGatewayErrorResponseBody(body *DescribeGatewayErrorResponse
 	return
 }
 
+// ValidateDimensionValuesUnauthorizedResponseBody runs the validations defined
+// on dimensionValues_unauthorized_response_body
+func ValidateDimensionValuesUnauthorizedResponseBody(body *DimensionValuesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesForbiddenResponseBody runs the validations defined on
+// dimensionValues_forbidden_response_body
+func ValidateDimensionValuesForbiddenResponseBody(body *DimensionValuesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesBadRequestResponseBody runs the validations defined
+// on dimensionValues_bad_request_response_body
+func ValidateDimensionValuesBadRequestResponseBody(body *DimensionValuesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesNotFoundResponseBody runs the validations defined on
+// dimensionValues_not_found_response_body
+func ValidateDimensionValuesNotFoundResponseBody(body *DimensionValuesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesConflictResponseBody runs the validations defined on
+// dimensionValues_conflict_response_body
+func ValidateDimensionValuesConflictResponseBody(body *DimensionValuesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesUnsupportedMediaResponseBody runs the validations
+// defined on dimensionValues_unsupported_media_response_body
+func ValidateDimensionValuesUnsupportedMediaResponseBody(body *DimensionValuesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesInvalidResponseBody runs the validations defined on
+// dimensionValues_invalid_response_body
+func ValidateDimensionValuesInvalidResponseBody(body *DimensionValuesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesInvariantViolationResponseBody runs the validations
+// defined on dimensionValues_invariant_violation_response_body
+func ValidateDimensionValuesInvariantViolationResponseBody(body *DimensionValuesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesUnexpectedResponseBody runs the validations defined
+// on dimensionValues_unexpected_response_body
+func ValidateDimensionValuesUnexpectedResponseBody(body *DimensionValuesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDimensionValuesGatewayErrorResponseBody runs the validations defined
+// on dimensionValues_gateway_error_response_body
+func ValidateDimensionValuesGatewayErrorResponseBody(body *DimensionValuesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAnalyticsMeasureRequestBody runs the validations defined on
 // AnalyticsMeasureRequestBody
 func ValidateAnalyticsMeasureRequestBody(body *AnalyticsMeasureRequestBody) (err error) {
@@ -1453,6 +2113,18 @@ func ValidateAnalyticsFieldResponseBody(body *AnalyticsFieldResponseBody) (err e
 		if !(*body.Role == "dimension" || *body.Role == "measure") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"dimension", "measure"}))
 		}
+	}
+	return
+}
+
+// ValidateAnalyticsDimensionValueResponseBody runs the validations defined on
+// AnalyticsDimensionValueResponseBody
+func ValidateAnalyticsDimensionValueResponseBody(body *AnalyticsDimensionValueResponseBody) (err error) {
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
+	}
+	if body.Count == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
 	}
 	return
 }

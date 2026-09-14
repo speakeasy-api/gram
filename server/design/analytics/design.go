@@ -109,6 +109,20 @@ var DescribeResult = Type("AnalyticsDescribeResult", func() {
 	Required("datasets")
 })
 
+var DimensionValuesResult = Type("AnalyticsDimensionValuesResult", func() {
+	Description("The values a dimension actually holds inside the window, most frequent first, after the dataset has collapsed its observations.")
+	Attribute("dataset", String)
+	Attribute("dimension", String)
+	Attribute("values", ArrayOf(DimensionValue))
+	Required("dataset", "dimension", "values")
+})
+
+var DimensionValue = Type("AnalyticsDimensionValue", func() {
+	Attribute("value", String, "A non-empty value of the dimension")
+	Attribute("count", Int64, "Rows at the dataset's grain carrying this value inside the window")
+	Required("value", "count")
+})
+
 var _ = Service("analytics", func() {
 	Description("Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.")
 
@@ -158,5 +172,39 @@ var _ = Service("analytics", func() {
 		Meta("openapi:operationId", "analyticsDescribe")
 		Meta("openapi:extension:x-speakeasy-name-override", "describe")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AnalyticsDescribe"}`)
+	})
+	Method("dimensionValues", func() {
+		Description("List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.")
+
+		Payload(func() {
+			Attribute("dataset", String, "Dataset to look in", func() { Example("sessions") })
+			Attribute("dimension", String, "Dimension to list values of", func() { Example("model") })
+			Attribute("from", String, "Start of the half-open window [from, to), ISO 8601", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "End of the half-open window [from, to), ISO 8601", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("limit", Int, "Maximum values. Defaults to 50, at most 200.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("dataset", "dimension", "from", "to")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(DimensionValuesResult)
+
+		HTTP(func() {
+			POST("/rpc/analytics.dimensionValues")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "analyticsDimensionValues")
+		Meta("openapi:extension:x-speakeasy-name-override", "dimensionValues")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AnalyticsDimensionValues", "type": "query"}`)
 	})
 })

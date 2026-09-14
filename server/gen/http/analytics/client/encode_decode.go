@@ -490,6 +490,244 @@ func DecodeDescribeResponse(decoder func(*http.Response) goahttp.Decoder, restor
 	}
 }
 
+// BuildDimensionValuesRequest instantiates a HTTP request object with method
+// and path set to call the "analytics" service "dimensionValues" endpoint
+func (c *Client) BuildDimensionValuesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DimensionValuesAnalyticsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("analytics", "dimensionValues", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDimensionValuesRequest returns an encoder for requests sent to the
+// analytics dimensionValues server.
+func EncodeDimensionValuesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*analytics.DimensionValuesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("analytics", "dimensionValues", "*analytics.DimensionValuesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDimensionValuesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("analytics", "dimensionValues", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDimensionValuesResponse returns a decoder for responses returned by
+// the analytics dimensionValues endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDimensionValuesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDimensionValuesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DimensionValuesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			res := NewDimensionValuesAnalyticsDimensionValuesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DimensionValuesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DimensionValuesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DimensionValuesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DimensionValuesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DimensionValuesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DimensionValuesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DimensionValuesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DimensionValuesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+				}
+				err = ValidateDimensionValuesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+				}
+				return nil, NewDimensionValuesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DimensionValuesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+				}
+				err = ValidateDimensionValuesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+				}
+				return nil, NewDimensionValuesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("analytics", "dimensionValues", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DimensionValuesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("analytics", "dimensionValues", err)
+			}
+			err = ValidateDimensionValuesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("analytics", "dimensionValues", err)
+			}
+			return nil, NewDimensionValuesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("analytics", "dimensionValues", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // marshalAnalyticsAnalyticsMeasureToAnalyticsMeasureRequestBody builds a value
 // of type *AnalyticsMeasureRequestBody from a value of type
 // *analytics.AnalyticsMeasure.
@@ -653,6 +891,18 @@ func unmarshalAnalyticsFieldResponseBodyToAnalyticsAnalyticsField(v *AnalyticsFi
 		for i, val := range v.Aggregations {
 			res.Aggregations[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsDimensionValueResponseBodyToAnalyticsAnalyticsDimensionValue
+// builds a value of type *analytics.AnalyticsDimensionValue from a value of
+// type *AnalyticsDimensionValueResponseBody.
+func unmarshalAnalyticsDimensionValueResponseBodyToAnalyticsAnalyticsDimensionValue(v *AnalyticsDimensionValueResponseBody) *analytics.AnalyticsDimensionValue {
+	res := &analytics.AnalyticsDimensionValue{
+		Value: *v.Value,
+		Count: *v.Count,
 	}
 
 	return res
