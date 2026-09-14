@@ -1,0 +1,19 @@
+.changeset/enforcement-opaque-operation-id.md
+  s_3caededc838c21::t_6c69c60c7a7374 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "804597d5891cc31ec803b4b7aec7fddb30d742fe",
+  "prompts": {},
+  "sessions": {
+    "s_3caededc838c21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb59aef5-e16c-4af8-ae00-4263295544f0",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
