@@ -69,6 +69,7 @@ vi.mock("../steps", () =>
       "LiteLLMSetupStep",
       "IdentityProviderStep",
       "InstrumentAgentsStep",
+      "LiteLLMSetupStep",
       "PlatformMCPSetupStep",
     ].map((name) => [
       name,
