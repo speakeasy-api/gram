@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
-import { Operator } from "@gram/client/models/components/logfilter";
+import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
 import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
 
 const OP_OPTIONS: { value: Operator; label: string }[] = [

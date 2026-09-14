@@ -58,7 +58,7 @@ import { telemetryListToolUsageTraces } from "@gram/client/funcs/telemetryListTo
 import type { LogFilter } from "@gram/client/models/components/logfilter.js";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
-import { Operator } from "@gram/client/models/components/logfilter";
+import { LogFilterOperator as Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter";
 import { useGramContext } from "@gram/client/react-query/_context.js";
