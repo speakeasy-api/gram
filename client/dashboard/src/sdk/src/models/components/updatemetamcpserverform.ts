@@ -44,6 +44,10 @@ export type UpdateMetaMcpServerForm = {
    */
   id: string;
   /**
+   * Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+   */
+  instructions?: string | undefined;
+  /**
    * The display name of the meta MCP server
    */
   name: string;
@@ -75,6 +79,7 @@ export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type UpdateMetaMcpServerForm$Outbound = {
   id: string;
+  instructions?: string | undefined;
   name: string;
   network_access_mode?: string | undefined;
   user_session_issuer_id?: string | undefined;
@@ -88,6 +93,7 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    instructions: z.optional(z.string()),
     name: z.string(),
     networkAccessMode: z.optional(
       UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema,

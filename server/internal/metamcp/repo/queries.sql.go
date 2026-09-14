@@ -1266,10 +1266,14 @@ SET name = $1,
         WHEN $4::boolean THEN $5
         ELSE network_access_mode
     END,
+    instructions = CASE
+        WHEN $6::boolean THEN $7
+        ELSE instructions
+    END,
     updated_at = clock_timestamp()
-WHERE id = $6
-  AND organization_id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND organization_id = $9
+  AND project_id = $10
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, instructions, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
@@ -1280,6 +1284,8 @@ type UpdateMetaMCPServerParams struct {
 	Visibility           pgtype.Text
 	NetworkAccessModeSet bool
 	NetworkAccessMode    pgtype.Text
+	InstructionsSet      bool
+	Instructions         pgtype.Text
 	ID                   uuid.UUID
 	OrganizationID       string
 	ProjectID            uuid.UUID
@@ -1289,7 +1295,9 @@ type UpdateMetaMCPServerParams struct {
 // issuer resolves to the preserved or freshly minted one), so the narg here
 // never arrives null from production code. A null visibility preserves the
 // stored value so callers that do not manage visibility cannot re-enable a
-// disabled gateway.
+// disabled gateway. Instructions follow the same set-flag shape as
+// network_access_mode because null is a meaningful stored value (serve the
+// built-in instructions), so COALESCE cannot distinguish omit from clear.
 func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServerParams) (MetaMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateMetaMCPServer,
 		arg.Name,
@@ -1297,6 +1305,8 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		arg.Visibility,
 		arg.NetworkAccessModeSet,
 		arg.NetworkAccessMode,
+		arg.InstructionsSet,
+		arg.Instructions,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
