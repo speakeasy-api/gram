@@ -86,7 +86,7 @@ type KeyResolver struct {
 // this constructor exists to catch.
 //
 // The limiter is charged once per forced (unknown-kid) refresh, keyed by the
-// source's CacheKey, and its budget is shared fleet-wide while caches are
+// source's URI, and its budget is shared fleet-wide while caches are
 // per-replica: after a real key rotation, each replica needs one forced
 // refresh to converge, so size the limiter burst at or above the replica
 // count or rotation propagates one replica per refill.
@@ -288,7 +288,7 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			// protecting; fall through to the limiter and refresh.
 		}
 
-		allowed, err := k.refreshLimiter.Allow(ctx, source.CacheKey())
+		allowed, err := k.refreshLimiter.Allow(ctx, source.uri)
 		if err != nil {
 			// A limiter store outage fails closed: rotation waits rather
 			// than the refresh path running unthrottled.
@@ -376,16 +376,10 @@ func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheStat
 // prior is the stored state the resolution started from. The resolve and
 // refresh flights do not coalesce with each other, so a slow fetch can
 // complete after a concurrent flight already stored a fresher (possibly
-// post-rotation) document; re-reading the cache and skipping the write when
-// its RefreshedAt has moved past prior's keeps the newer result. The check
-// is read-then-write rather than atomic — the Cache interface has no
-// compare-and-swap — but it shrinks the overwrite window from a full fetch
-// (up to fetchTimeout) to the gap between these two calls.
+// post-rotation) document. The atomic conditional write keeps that newer
+// result when the state has changed since this resolution began.
 func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState, result *Result) {
 	if result.Outcome != CacheOutcomeRefreshed && result.Outcome != CacheOutcomeNotModified {
-		return
-	}
-	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
 		return
 	}
 	state := CacheState{
@@ -394,7 +388,8 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 		ExpiresAt:   time.Now().Add(result.TTL),
 		RefreshedAt: time.Now(),
 	}
-	if err := k.cache.Put(ctx, source.CacheKey(), state); err != nil {
+	_, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, state)
+	if err != nil {
 		k.logger.WarnContext(ctx, "jwks key set cache write failed",
 			attr.SlogURLFull(source.uri),
 			attr.SlogJWKSOrigin(source.origin),
@@ -410,7 +405,11 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 // document since this resolution began must not have it overwritten with the
 // prior one.
 func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState) {
-	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
+	if marker, ok := k.cache.(ConsultFailureMarker); ok {
+		if err := marker.MarkConsultFailure(ctx, source.CacheKey(), prior, time.Now()); err != nil {
+			k.logger.WarnContext(ctx, "jwks consult failure marker write failed",
+				attr.SlogURLFull(source.uri), attr.SlogJWKSOrigin(source.origin), attr.SlogError(err))
+		}
 		return
 	}
 	marked := CacheState{
@@ -419,7 +418,8 @@ func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, pri
 		ExpiresAt:   prior.ExpiresAt,
 		RefreshedAt: time.Now(),
 	}
-	if err := k.cache.Put(ctx, source.CacheKey(), marked); err != nil {
+	_, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, marked)
+	if err != nil {
 		k.logger.WarnContext(ctx, "jwks consult-failure cooldown write failed",
 			attr.SlogURLFull(source.uri),
 			attr.SlogJWKSOrigin(source.origin),

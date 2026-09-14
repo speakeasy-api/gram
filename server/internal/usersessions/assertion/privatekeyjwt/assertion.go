@@ -1,9 +1,9 @@
-package clientauth
+package privatekeyjwt
 
 import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 )
 
 // AssertionType is the only client_assertion_type this server accepts
@@ -16,11 +16,6 @@ const AssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 // proportional to what a legitimate one could ever be, rather than to
 // whatever body limit the calling endpoint happens to apply.
 const maxAssertionBytes = 8 * 1024
-
-// allowedAlgorithms is the shared assertion algorithm allowlist, taken once
-// at initialization. jwks returns a fresh copy per call so callers cannot edit
-// the policy; holding one copy here spares that allocation on every request.
-var allowedAlgorithms = jwks.AllowedSignatureAlgorithms()
 
 // UnverifiedClientID reads the client identifier an assertion claims, without
 // checking its signature.
@@ -54,10 +49,7 @@ func UnverifiedClientID(assertion string) (string, error) {
 // allowlist, so `none` and every HS* are a parse failure rather than something
 // a later check must catch.
 func parseAssertion(assertion string) (*jwt.JSONWebToken, error) {
-	if len(assertion) > maxAssertionBytes {
-		return nil, reject(ReasonMalformed, "client_assertion exceeds %d bytes", maxAssertionBytes)
-	}
-	token, err := jwt.ParseSigned(assertion, allowedAlgorithms)
+	token, err := assertioncore.ParseSigned(assertion, maxAssertionBytes)
 	if err != nil {
 		return nil, rejectWith(ReasonMalformed, err)
 	}

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"syscall"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -28,6 +30,10 @@ type Resolver struct {
 	logger  *slog.Logger
 	metrics *metrics
 }
+
+// ErrKeySetUnavailable marks a transient upstream failure for consumers that
+// explicitly permit a bounded stale-key fallback.
+var ErrKeySetUnavailable = errors.New("key set endpoint temporarily unavailable")
 
 // NewResolver builds the production resolver from a guardian policy, whose
 // SSRF dialer checks the post-DNS resolved IP on every connection (immune to
@@ -225,6 +231,9 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 			responseBytes: 0,
 			err:           err,
 		})
+		if transientFetchError(ctx, fetched.status, err) {
+			return nil, fmt.Errorf("fetch key set: %w: %w", ErrKeySetUnavailable, err)
+		}
 		return nil, fmt.Errorf("fetch key set: %w", err)
 	}
 
@@ -297,6 +306,27 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 		ETag:     httpcache.SanitizeETag(fetched.header.Get("ETag"), maxETagLength),
 		TTL:      r.cacheTTL(fetched.header),
 	}, nil
+}
+
+// transientFetchError is deliberately narrow: a guardian policy denial or
+// certificate failure must not let callers accept stale issuer keys.
+func transientFetchError(ctx context.Context, status int, err error) bool {
+	if status == http.StatusTooManyRequests || status >= http.StatusInternalServerError {
+		return true
+	}
+	if status != 0 || ctx.Err() != nil || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNABORTED) || errors.Is(err, syscall.EHOSTUNREACH) ||
+		errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.ETIMEDOUT)
 }
 
 func (r *Resolver) cacheTTL(header http.Header) time.Duration {

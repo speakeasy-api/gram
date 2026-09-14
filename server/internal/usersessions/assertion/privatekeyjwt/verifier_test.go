@@ -1,20 +1,18 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"encoding/json"
-	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -389,140 +387,15 @@ func TestVerify_MisconfiguredExpectationRejected(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noReplayIssuer)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 
-	noReplayParty := expectationFor(t, s)
-	noReplayParty.ReplayParty = ""
-	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noReplayParty)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-
-	// An empty Issuer or Subject would otherwise be satisfied by an
-	// assertion that simply omits that claim.
-	noIssuer := expectationFor(t, s)
-	noIssuer.Issuer = ""
-	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noIssuer)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-
-	noSubject := expectationFor(t, s)
-	noSubject.Subject = ""
-	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noSubject)
+	// An empty client_id would otherwise be satisfied by an assertion that
+	// simply omits iss and sub.
+	noClientID := expectationFor(t, s)
+	noClientID.ClientID = ""
+	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noClientID)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 }
 
-// A bound big enough to overflow its replay hold wraps negative, and a
-// negative hold compares below every guard cap — so it would slip past the
-// check in Verify that exists to catch an unservable bound.
-func TestVerify_LifetimeOverflowingReplayHoldRejected(t *testing.T) {
-	t.Parallel()
-
-	s := newSigner(t, testKeyID)
-
-	expect := expectationFor(t, s)
-	expect.MaxLifetime = math.MaxInt64
-
-	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-}
-
-// The client ceiling is fixed by the mainstream profiles, so assembling the
-// struct directly must not be a way around what ClientExpectation sets.
-func TestVerify_ClientProfileCannotWidenItsLifetime(t *testing.T) {
-	t.Parallel()
-
-	s := newSigner(t, testKeyID)
-
-	expect := expectationFor(t, s)
-	expect.MaxLifetime = clientauth.DefaultMaxLifetime + time.Hour
-
-	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-}
-
-// A workload's issuer vouches for many subjects. Leaving the subject out of
-// the replay scope puts them all in one keyspace, where the first to spend a
-// jti makes every other workload's assertion carrying it fail as a replay.
-func TestVerify_WorkloadWithoutReplaySubjectRejected(t *testing.T) {
-	t.Parallel()
-
-	s := newSigner(t, testKeyID)
-
-	expect := expectationFor(t, s)
-	expect.Subject = "workload-one"
-	expect.ReplaySubject = ""
-
-	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-}
-
-// A guard sized for the default bound cannot serve an expectation that lets
-// assertions live longer: the reservation would lapse while the assertion
-// still verifies, and Guard.Reserve clamps the hold silently rather than
-// complaining. Refused per request, since the bound is only known then.
-func TestVerify_LifetimeBeyondGuardHoldRejected(t *testing.T) {
-	t.Parallel()
-
-	const workloadSubject = "workload-one"
-
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-
-	claims := validClaims()
-	claims.Subject = workloadSubject
-
-	// A workload, so the bound is legitimately raisable and this exercises
-	// the guard-hold check rather than the client ceiling.
-	expect := expectationFor(t, s)
-	expect.Subject = workloadSubject
-	expect.ReplaySubject = workloadSubject
-	expect.MaxLifetime = 8 * time.Hour
-
-	_, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, claims)), expect)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-}
-
-// The per-expectation bound is what the exp ceiling is measured against, not
-// the package default. A workload profile that permits a longer lifetime must
-// accept an assertion the client bound would have rejected — this is the
-// Kubernetes case, where expirationSeconds is routinely past an hour.
-func TestVerify_ExpectationLifetimeWidensTheCeiling(t *testing.T) {
-	t.Parallel()
-
-	const workloadSubject = "repo:example/api:environment:prod"
-
-	s := newSigner(t, testKeyID)
-
-	// A workload assertion: iss is the platform, sub is the machine, and the
-	// exp sits past the client ceiling the way a Kubernetes projected token's
-	// does.
-	claims := validClaims()
-	claims.Subject = workloadSubject
-	claims.Expiry = jwt.NewNumericDate(time.Now().Add(3 * time.Hour))
-	assertion := assertionFor(s.sign(t, claims))
-
-	workload := expectationFor(t, s)
-	workload.Subject = workloadSubject
-	workload.ReplaySubject = workloadSubject
-
-	// Under the default bound it is rejected for lifetime, nothing else.
-	_, err := newVerifier(t).Verify(t.Context(), assertion, workload)
-	requireRejected(t, err, clientauth.ReasonLifetimeTooLong)
-
-	// A guard sized for the longer bound, and an expectation carrying it,
-	// accepts the same assertion.
-	client, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	lifetime := 4 * time.Hour
-	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "long")), clientauth.ReplayHoldFor(lifetime))
-	require.NoError(t, err)
-	verifier, err := clientauth.NewVerifier(newKeyResolver(t, client), guard)
-	require.NoError(t, err)
-
-	workload.MaxLifetime = lifetime
-	_, err = verifier.Verify(t.Context(), assertion, workload)
-	require.NoError(t, err)
-}
-
-// iss and sub are matched separately, so an assertion satisfying one and not
-// the other is still rejected. A workload's two values differ, so nothing may
-// collapse them into a single comparison.
+// Matching iss alone cannot authenticate a client whose sub names another.
 func TestVerify_SubjectMustMatchIndependentlyOfIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -552,7 +425,7 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 }
 
 // The hold must cover the whole window in which an accepted assertion still
-// verifies: exp may sit MaxSkew beyond MaxLifetime and is then honoured for
+// verifies: exp may sit MaxSkew beyond the lifetime bound and is then honoured for
 // another MaxSkew. Pinned as an arithmetic fact so the constants cannot drift
 // apart without this failing.
 func TestMaxReplayHold_CoversAcceptanceWindow(t *testing.T) {
@@ -676,24 +549,6 @@ func TestVerify_UnresolvableKeySourceReported(t *testing.T) {
 	requireRejected(t, err, clientauth.ReasonKeyUnresolvable)
 }
 
-// The whole point of the change: Google's metadata server presents no replay
-// identifier at all, so requiring one rejected that platform before any
-// admission logic ran.
-func TestVerify_WorkloadWithoutAnyReplayIdentifierAccepted(t *testing.T) {
-	t.Parallel()
-
-	const subject = "repo:acme/deploy:ref:refs/heads/main"
-	s := newSigner(t, testKeyID)
-
-	result, err := newVerifier(t).Verify(
-		t.Context(),
-		assertionFor(s.sign(t, workloadClaims(subject))),
-		workloadExpectationFor(t, s, subject),
-	)
-	require.NoError(t, err)
-	require.False(t, result.ReusedAssertion)
-}
-
 // The client profile is unchanged, and this is what proves the relaxation is
 // scoped to a profile rather than applied to the package.
 func TestVerify_ClientWithoutJTIStillRejected(t *testing.T) {
@@ -706,103 +561,6 @@ func TestVerify_ClientWithoutJTIStillRejected(t *testing.T) {
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
 	requireRejected(t, err, clientauth.ReasonIDMissing)
-}
-
-// Entra calls the identifier uti. It is a real per-token identifier, so it
-// gets the same single-use treatment a jti does.
-func TestVerify_WorkloadUsesUTIAndRefusesItsReplay(t *testing.T) {
-	t.Parallel()
-
-	const subject = "00000000-0000-0000-0000-000000000001"
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-	expect := workloadExpectationFor(t, s, subject)
-
-	assertion := assertionFor(s.signWith(t, workloadClaims(subject), map[string]any{
-		"uti": "uti-" + uuid.NewString(),
-	}))
-
-	result, err := verifier.Verify(t.Context(), assertion, expect)
-	require.NoError(t, err)
-	require.False(t, result.ReusedAssertion)
-
-	_, err = verifier.Verify(t.Context(), assertion, expect)
-	requireRejected(t, err, clientauth.ReasonReplayed)
-}
-
-// jti wins when a platform sends both, so a platform that adopts the
-// registered claim is not held to a vendor one it also happens to emit.
-func TestVerify_WorkloadPrefersJTIOverUTI(t *testing.T) {
-	t.Parallel()
-
-	const subject = "system:serviceaccount:prod:deployer"
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-	expect := workloadExpectationFor(t, s, subject)
-
-	shared := "jti-" + uuid.NewString()
-
-	claims := workloadClaims(subject)
-	claims.ID = shared
-	first := assertionFor(s.signWith(t, claims, map[string]any{"uti": "uti-one"}))
-
-	_, err := verifier.Verify(t.Context(), first, expect)
-	require.NoError(t, err)
-
-	// Same jti, different uti and different bytes. If uti or the digest were
-	// what got reserved, this would be accepted.
-	claims.IssuedAt = jwt.NewNumericDate(time.Now().Add(time.Second))
-	second := assertionFor(s.signWith(t, claims, map[string]any{"uti": "uti-two"}))
-
-	_, err = verifier.Verify(t.Context(), second, expect)
-	requireRejected(t, err, clientauth.ReasonReplayed)
-}
-
-// A repeated digest means the same bytes arrived twice, not a second token
-// reusing an identifier. Some platforms serve one cached token for most of
-// its lifetime, so refusing this would break the caller rather than an
-// attacker. Accepted, and reported.
-func TestVerify_WorkloadRepeatedAssertionIsAcceptedAndReported(t *testing.T) {
-	t.Parallel()
-
-	const subject = "spiffe://acme.example/ns/prod/sa/deployer"
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-	expect := workloadExpectationFor(t, s, subject)
-
-	assertion := assertionFor(s.sign(t, workloadClaims(subject)))
-
-	first, err := verifier.Verify(t.Context(), assertion, expect)
-	require.NoError(t, err)
-	require.False(t, first.ReusedAssertion)
-
-	second, err := verifier.Verify(t.Context(), assertion, expect)
-	require.NoError(t, err)
-	require.True(t, second.ReusedAssertion, "a re-presented assertion must be reported as reused")
-}
-
-// The tolerance above must not degrade into "identifier-less assertions never
-// collide". Two genuinely different tokens digest differently, so neither is
-// reported as a repeat of the other.
-func TestVerify_WorkloadDistinctAssertionsAreNotReportedAsReuse(t *testing.T) {
-	t.Parallel()
-
-	const subject = "arn:aws:iam::123456789012:role/DeployRole"
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-	expect := workloadExpectationFor(t, s, subject)
-
-	first := workloadClaims(subject)
-	second := workloadClaims(subject)
-	second.IssuedAt = jwt.NewNumericDate(time.Now().Add(time.Second))
-
-	firstResult, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, first)), expect)
-	require.NoError(t, err)
-	require.False(t, firstResult.ReusedAssertion)
-
-	secondResult, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, second)), expect)
-	require.NoError(t, err)
-	require.False(t, secondResult.ReusedAssertion)
 }
 
 // A client assertion carries a jti and never consults uti, so whatever an
@@ -818,45 +576,6 @@ func TestVerify_ClientWithUnreadableUTIStillAccepted(t *testing.T) {
 	_, err := newVerifier(t).Verify(t.Context(), assertion, expectationFor(t, s))
 	require.NoError(t, err, "a non-string uti is not this client's problem")
 }
-
-// The same claim on the profile that does read it: unreadable is absent, so
-// the ladder falls to the digest rather than the request failing.
-func TestVerify_WorkloadWithUnreadableUTIFallsBackToDigest(t *testing.T) {
-	t.Parallel()
-
-	const subject = "repo:acme/build:ref:refs/heads/main"
-	s := newSigner(t, testKeyID)
-	verifier := newVerifier(t)
-	expect := workloadExpectationFor(t, s, subject)
-
-	assertion := assertionFor(s.signWith(t, workloadClaims(subject), map[string]any{"uti": []string{"x"}}))
-
-	result, err := verifier.Verify(t.Context(), assertion, expect)
-	require.NoError(t, err)
-	require.False(t, result.ReusedAssertion)
-
-	// The digest rung, not the uti one: the same bytes re-presented are
-	// reported as reuse rather than refused.
-	repeat, err := verifier.Verify(t.Context(), assertion, expect)
-	require.NoError(t, err)
-	require.True(t, repeat.ReusedAssertion)
-}
-
-// A strategy this package does not define is a wiring fault. It must not
-// land on the derived ladder, which would stop requiring a jti on a profile
-// whose author never asked for that.
-func TestVerify_UnknownReplayIDStrategyIsMisconfiguration(t *testing.T) {
-	t.Parallel()
-
-	s := newSigner(t, testKeyID)
-
-	expect := expectationFor(t, s)
-	expect.ReplayID = clientauth.ReplayID(99)
-
-	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
-}
-
 // keySourceWithOps republishes s's single key with an explicit key_ops member.
 func keySourceWithOps(t *testing.T, s *signer, ops string) jwks.Source {
 	t.Helper()

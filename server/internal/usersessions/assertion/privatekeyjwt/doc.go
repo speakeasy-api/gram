@@ -1,4 +1,4 @@
-// Package clientauth verifies RFC 7523 §2.2 client assertions, the evidence
+// Package privatekeyjwt verifies RFC 7523 §2.2 client assertions, the evidence
 // a private_key_jwt client presents in place of a shared secret.
 //
 // It owns the decision and none of the storage: callers hand it the client's
@@ -49,4 +49,4 @@
 // signature" would tell an attacker which vendors' clients an issuer has
 // seen; callers are expected to use the same description for the lookup
 // that runs before this package too.
-package clientauth
+package privatekeyjwt

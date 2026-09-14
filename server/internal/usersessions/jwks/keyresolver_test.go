@@ -129,6 +129,24 @@ func TestVerificationKey_RefreshRateLimited(t *testing.T) {
 	require.Equal(t, 1, server.Fetches())
 }
 
+func TestVerificationKey_RowCacheKeysShareURIRefreshBudget(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "new")))
+	kr, cache := newTestKeyResolver(t, server, ratelimit.PerMinute(1))
+	base := remoteSourceFor(t, server)
+	first := base.WithCacheKey("issuer-row-1|" + base.CacheKey())
+	second := base.WithCacheKey("issuer-row-2|" + base.CacheKey())
+	primeRotatable(t, cache, first, keySetJSON(t, testKey(t, "old")))
+	primeRotatable(t, cache, second, keySetJSON(t, testKey(t, "old")))
+
+	_, err := kr.VerificationKey(t.Context(), first, "new")
+	require.NoError(t, err)
+	_, err = kr.VerificationKey(t.Context(), second, "missing")
+	require.ErrorIs(t, err, ErrRefreshRateLimited)
+	require.Equal(t, 1, server.Fetches())
+}
+
 // The scope budget bounds fetches across every source a scope names. Two
 // never-seen sources in one scope with a budget of one: the first cold fetch
 // spends it and the second is refused before any request leaves. A different
@@ -467,6 +485,17 @@ func (c *failingCache) Put(ctx context.Context, key string, state CacheState) er
 		return fmt.Errorf("inner cache put: %w", err)
 	}
 	return nil
+}
+
+func (c *failingCache) PutIfUnchanged(ctx context.Context, key string, prior, next CacheState) (bool, error) {
+	if c.putErr != nil {
+		return false, c.putErr
+	}
+	written, err := c.inner.PutIfUnchanged(ctx, key, prior, next)
+	if err != nil {
+		return false, fmt.Errorf("inner cache conditional put: %w", err)
+	}
+	return written, nil
 }
 
 func TestVerificationKey_CacheReadErrorFailsClosed(t *testing.T) {
