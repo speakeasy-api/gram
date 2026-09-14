@@ -147,8 +147,9 @@ export function buildAgentIdentityManagedConfig(
     environment: input.mode === "ephemeral" ? "ephemeral" : "server",
     hide_ui: true,
   };
-  // A short-lived box has no use for update checks.
-  if (input.mode === "ephemeral") config.auto_update = "disabled";
+  // A short-lived box has no use for updates; an unattended host has nobody
+  // to accept a notify prompt.
+  config.auto_update = input.mode === "ephemeral" ? "disabled" : "automatic";
   if (serverURL !== PRODUCTION_SERVER_URL)
     config._control_plane_url = serverURL;
   return JSON.stringify(config, null, 2);
@@ -165,20 +166,30 @@ export function buildAgentIdentitySnippet(
   const config = buildAgentIdentityManagedConfig(input);
   const path = managedConfigPath(input.os);
   const dir = path.slice(0, path.lastIndexOf("/"));
+  const linger =
+    input.os === "linux"
+      ? `# Keep the per-user service running after logout.
+loginctl enable-linger "$USER"
+`
+      : "";
   const run =
     input.mode === "ephemeral"
       ? `# 3) Reconcile once and exit. Rerun at the start of each session.
-speakeasyd sync --once`
+"$BIN_DIR/speakeasyd" sync --once`
       : `# 3) Register and start the background service. Run as the account
 #    the agent should manage, not as root.
-speakeasyd -service install
-speakeasyd -service start`;
+${linger}"$BIN_DIR/speakeasyd" -service install
+"$BIN_DIR/speakeasyd" -service start`;
   return `#!/usr/bin/env sh
 set -eu
-SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO="sudo"
+if [ "$(id -u)" = 0 ]; then
+  SUDO=""; BIN_DIR=/usr/local/bin
+else
+  SUDO="sudo"; BIN_DIR="$HOME/.local/bin"
+fi
 
 # 1) Install the device agent (latest stable, checksum-verified).
-curl -fsSL ${INSTALL_SCRIPT_URL} | sh
+curl -fsSL ${INSTALL_SCRIPT_URL} | sh -s -- --install-dir "$BIN_DIR"
 
 # 2) Agent identity. The key is this machine's only credential.
 $SUDO mkdir -p '${dir}'

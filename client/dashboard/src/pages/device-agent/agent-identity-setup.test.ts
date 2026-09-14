@@ -103,10 +103,11 @@ describe("agent identity snippet", () => {
   it("carries no email, version, or checksum", () => {
     const snippet = buildAgentIdentitySnippet(base);
     expect(snippet).toContain(
-      "curl -fsSL https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh | sh",
+      'curl -fsSL https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh | sh -s -- --install-dir "$BIN_DIR"',
     );
     expect(snippet).toContain("/etc/speakeasy/managed.json");
-    expect(snippet).toContain("speakeasyd sync --once");
+    expect(snippet).toContain('"$BIN_DIR/speakeasyd" sync --once');
+    expect(snippet).not.toContain("loginctl");
     expect(snippet).not.toMatch(/email|sha256|VERSION/i);
   });
 
@@ -130,7 +131,15 @@ describe("agent identity snippet", () => {
     );
     expect(config._control_plane_url).toBe("https://dev.getgram.ai");
     expect(config.environment).toBe("server");
-    expect(config.auto_update).toBeUndefined();
+    expect(config.auto_update).toBe("automatic");
+  });
+
+  it("keeps the Linux service alive after logout", () => {
+    const snippet = buildAgentIdentitySnippet({ ...base, mode: "service" });
+    expect(snippet.indexOf('loginctl enable-linger "$USER"')).toBeLessThan(
+      snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'),
+    );
+    expect(snippet.indexOf("loginctl")).toBeGreaterThan(-1);
   });
 
   it("installs the service on persistent macOS hosts", () => {
@@ -142,8 +151,9 @@ describe("agent identity snippet", () => {
     expect(snippet).toContain(
       "'/Library/Application Support/Speakeasy/managed.json'",
     );
-    expect(snippet).toContain("speakeasyd -service install");
+    expect(snippet).toContain('"$BIN_DIR/speakeasyd" -service install');
     expect(snippet).not.toContain("sync --once");
+    expect(snippet).not.toContain("loginctl");
   });
 
   it("rejects a key that would break the JSON", () => {

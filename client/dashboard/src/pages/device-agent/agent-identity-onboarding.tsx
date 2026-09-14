@@ -163,7 +163,7 @@ function OnboardingSteps() {
         <Step
           n={3 + Number(granted) + Number(issuedKey !== null)}
           title="Check-in status"
-          description="The device agent is seen when it uses one of this agent's keys."
+          description="When any of this agent's keys was last used, by the device agent or anything else holding the key."
         >
           <CheckInStatus agent={agent} awaitingKeyId={issuedKey?.keyId} />
         </Step>
@@ -638,22 +638,22 @@ function CheckInStatus({
     <div className="flex flex-col gap-2">
       {seen?.lastAccessedAt ? (
         <Text>
-          Last seen{" "}
+          Key last used{" "}
           <time
             title={seen.lastAccessedAt.toLocaleString()}
             dateTime={seen.lastAccessedAt.toISOString()}
           >
             {formatRelativeTime(seen.lastAccessedAt)}
           </time>{" "}
-          using <code>{seen.name}</code>.
+          (<code>{seen.name}</code>).
         </Text>
       ) : (
-        <Text muted>Not seen yet.</Text>
+        <Text muted>No key has been used yet.</Text>
       )}
       {awaitingKeyId && !awaitedKey?.lastAccessedAt && (
         <Text muted small>
-          Waiting for the first check-in with the new key. This page checks
-          every {STATUS_POLL_MS / 1000} seconds.
+          Waiting for the new key&apos;s first use. This page checks every{" "}
+          {STATUS_POLL_MS / 1000} seconds.
         </Text>
       )}
       <Text muted small>
