@@ -1,0 +1,38 @@
+server/internal/xmcp/setup_test.go
+  s_7e03f0f75b771f::t_02012c1c5a1095 161
+server/internal/remotemcp/interceptors/risk.go
+  s_7e03f0f75b771f::t_8c66235afecd39 1-65
+server/cmd/gram/start.go
+  s_7e03f0f75b771f::t_276b0f8866be1e 1059-1083,1178
+server/internal/remotemcp/proxymanager_killswitch_test.go
+  s_7e03f0f75b771f::t_02012c1c5a1095 24
+  s_7e03f0f75b771f::t_2839b024bee803 80,83
+server/internal/remotemcp/proxymanager.go
+  s_7e03f0f75b771f::t_fec726c98b7ddf 89,115,141,267
+server/internal/remotemcp/interceptors/risk_test.go
+  s_7e03f0f75b771f::t_2d7898c328e020 1-127
+server/internal/risk/scanner_test.go
+  s_7e03f0f75b771f::t_a4202bd717cee4 313-335
+  s_7e03f0f75b771f::t_df0822bc6a0e4d 336-360
+server/internal/mcp/setup_test.go
+  s_7e03f0f75b771f::t_02012c1c5a1095 419
+server/internal/risk/scanner.go
+  s_7e03f0f75b771f::t_a8f6b1e8a1cffe 384-444,500-506,544-545
+  s_7e03f0f75b771f::t_43ebef75688e96 383
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "982f2173860f5b3c115f2b1013ddb36c5d6f6888",
+  "prompts": {},
+  "sessions": {
+    "s_7e03f0f75b771f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-da54-7902-9dfd-7309263448a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
