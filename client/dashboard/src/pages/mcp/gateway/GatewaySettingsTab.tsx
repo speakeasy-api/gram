@@ -360,13 +360,19 @@ function CopyBuiltInInstructionsButton(): JSX.Element {
       variant="tertiary"
       size="xs"
       onClick={() => {
-        void navigator.clipboard.writeText(builtInInstructions);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        void navigator.clipboard.writeText(builtInInstructions).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => toast.error("Could not copy to the clipboard."),
+        );
       }}
     >
       <Button.LeftIcon>{copied ? <Check /> : <Copy />}</Button.LeftIcon>
-      <Button.Text>{copied ? "Copied" : "Copy built-in text"}</Button.Text>
+      <Button.Text>
+        {copied ? "Copied" : "Copy default instructions"}
+      </Button.Text>
     </Button>
   );
 }

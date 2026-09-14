@@ -160,19 +160,47 @@ describe("Gateway instructions", () => {
     );
   });
 
-  it("copies the built-in instructions to the clipboard", () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText },
-      configurable: true,
+  describe("copy default instructions", () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const stubClipboard = (writeText: (text: string) => Promise<void>) => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText },
+        configurable: true,
+      });
+    };
+    afterEach(() => {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else Reflect.deleteProperty(navigator, "clipboard");
     });
-    renderSection();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Copy built-in text/i }),
-    );
-    expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText.mock.calls[0]![0]).toContain("Work from the outside in");
-    expect(screen.getByRole("button", { name: /Copied/i })).toBeTruthy();
+
+    it("copies the built-in text and confirms", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      stubClipboard(writeText);
+      renderSection();
+      fireEvent.click(
+        screen.getByRole("button", { name: /Copy default instructions/i }),
+      );
+      expect(writeText).toHaveBeenCalledTimes(1);
+      expect(writeText.mock.calls[0]![0]).toContain("Work from the outside in");
+      expect(
+        await screen.findByRole("button", { name: /Copied/i }),
+      ).toBeTruthy();
+    });
+
+    it("does not claim success when the clipboard write fails", async () => {
+      stubClipboard(vi.fn().mockRejectedValue(new Error("denied")));
+      renderSection();
+      fireEvent.click(
+        screen.getByRole("button", { name: /Copy default instructions/i }),
+      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      expect(screen.queryByRole("button", { name: /Copied/i })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: /Copy default instructions/i }),
+      ).toBeTruthy();
+    });
   });
 
   it("does not permit edits that would be overwritten by an in-flight save", () => {
