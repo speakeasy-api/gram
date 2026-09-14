@@ -75,15 +75,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
 -- Onboarding state is organization-scoped, independent of any project.
+-- Unlike retained records, this state has no lifetime beyond its owning organization.
 CREATE TABLE IF NOT EXISTS organization_onboarding (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT,
+  organization_id TEXT NOT NULL,
   preset TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
-  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key

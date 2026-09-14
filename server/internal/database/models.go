@@ -1651,7 +1651,7 @@ type OrganizationMetadatum struct {
 
 type OrganizationOnboarding struct {
 	ID             uuid.UUID
-	OrganizationID pgtype.Text
+	OrganizationID string
 	Preset         pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
