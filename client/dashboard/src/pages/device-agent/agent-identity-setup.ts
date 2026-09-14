@@ -111,6 +111,25 @@ export function selectDeviceAgentKeyGrants(
   return { selections, missingScopes };
 }
 
+/** The issued key, only while it still matches the chosen agent and project. */
+export function issuedKeyFor<T extends { agentId: string; projectId: string }>(
+  issued: T | null,
+  agentId: string | undefined,
+  projectId: string,
+): T | null {
+  return issued && issued.agentId === agentId && issued.projectId === projectId
+    ? issued
+    : null;
+}
+
+/** Why a key cannot be minted, naming org:admin only when an org scope is missing. */
+export function undelegableScopesMessage(missingScopes: string[]): string {
+  const scopes = missingScopes.join(", ");
+  if (missingScopes.some((scope) => scope.startsWith("org:")))
+    return `You cannot delegate ${scopes} to this agent. Organization scopes require org:admin, held by both you and the agent's owner.`;
+  return `You cannot delegate ${scopes} to this agent. Check the agent's policy, and that you and its owner hold these permissions.`;
+}
+
 /** The most recent use of any of the agent's keys: the device agent's check-in. */
 export function lastSeenKey(keys: Key[]): Key | null {
   let latest: Key | null = null;
@@ -167,8 +186,10 @@ export function buildAgentIdentitySnippet(
   const dir = path.slice(0, path.lastIndexOf("/"));
   const linger =
     input.os === "linux"
-      ? `# Keep the per-user service running after logout.
-$SUDO loginctl enable-linger "$USER"
+      ? `# Keep the per-user service running after logout; root needs no linger.
+if [ -n "$SUDO" ]; then
+  sudo loginctl enable-linger "$(id -un)"
+fi
 `
       : "";
   const run =
@@ -187,8 +208,12 @@ else
   SUDO="sudo"; BIN_DIR="$HOME/.local/bin"
 fi
 
-# 1) Install the device agent (latest stable, checksum-verified).
-curl -fsSL ${INSTALL_SCRIPT_URL} | sh -s -- --install-dir "$BIN_DIR"
+# 1) Install the device agent (latest stable, checksum-verified). Download
+#    first so a failed or truncated fetch never runs.
+INSTALLER="$(mktemp)"
+trap 'rm -f "$INSTALLER"' EXIT
+curl -fsSL -o "$INSTALLER" ${INSTALL_SCRIPT_URL}
+sh "$INSTALLER" --install-dir "$BIN_DIR"
 
 # 2) Agent identity. The key is this machine's only credential.
 $SUDO mkdir -p '${dir}'

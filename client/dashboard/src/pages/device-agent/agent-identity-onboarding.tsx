@@ -48,10 +48,12 @@ import { Link } from "react-router";
 import {
   buildAgentIdentitySnippet,
   deviceAgentPolicyGrants,
+  issuedKeyFor,
   lastSeenKey,
   managedConfigPath,
   missingPolicyGrants,
   selectDeviceAgentKeyGrants,
+  undelegableScopesMessage,
   type AgentHostOS,
   type AgentRunMode,
 } from "./agent-identity-setup";
@@ -60,7 +62,12 @@ const security = { sessionHeaderGramSession: "" };
 const LINK_CLASS = "underline underline-offset-2 hover:text-foreground";
 const STATUS_POLL_MS = 15_000;
 
-type IssuedKey = { agentId: string; keyId: string; value: string };
+type IssuedKey = {
+  agentId: string;
+  projectId: string;
+  keyId: string;
+  value: string;
+};
 
 export default function DeviceAgentAgentIdentity(): JSX.Element {
   return (
@@ -110,7 +117,17 @@ function OnboardingSteps() {
   const [issued, setIssued] = useState<IssuedKey | null>(null);
   const grantTarget = agent ? `${agent.id}:${projectId}` : null;
   const granted = grantTarget !== null && grantedFor === grantTarget;
-  const issuedKey = issued && issued.agentId === agent?.id ? issued : null;
+  const issuedKey = issuedKeyFor(issued, agent?.id, projectId);
+  // A key is minted for one agent and project; changing either starts over.
+  const selectAgent = (next: ManagedAgent | null) => {
+    setAgent(next);
+    setGrantedFor(null);
+    setIssued(null);
+  };
+  const changeProject = (id: string) => {
+    setProjectId(id);
+    setIssued(null);
+  };
 
   return (
     <>
@@ -119,7 +136,7 @@ function OnboardingSteps() {
         title="Choose an agent"
         description="The identity the device agent runs as. Its activity is attributed to this agent, not to a person."
       >
-        <AgentPicker agent={agent} onChange={setAgent} />
+        <AgentPicker agent={agent} onChange={selectAgent} />
       </Step>
       {agent && (
         <Step
@@ -130,7 +147,7 @@ function OnboardingSteps() {
           <GrantAccess
             agent={agent}
             projectId={projectId}
-            onProjectChange={setProjectId}
+            onProjectChange={changeProject}
             granted={granted}
             onGranted={() => setGrantedFor(grantTarget)}
           />
@@ -159,13 +176,13 @@ function OnboardingSteps() {
           <SetupSnippet agentKey={issuedKey.value} />
         </Step>
       )}
-      {agent && (
+      {agent && issuedKey && (
         <Step
-          n={3 + Number(granted) + Number(issuedKey !== null)}
+          n={5}
           title="Check-in status"
           description="When any of this agent's keys was last used, by the device agent or anything else holding the key."
         >
-          <CheckInStatus agent={agent} awaitingKeyId={issuedKey?.keyId} />
+          <CheckInStatus agent={agent} awaitingKeyId={issuedKey.keyId} />
         </Step>
       )}
     </>
@@ -232,7 +249,10 @@ function AgentPicker({
     <div className="flex flex-col gap-4">
       <SegmentedControl
         value={mode}
-        onChange={setMode}
+        onChange={(next) => {
+          setMode(next);
+          onChange(null);
+        }}
         options={[
           { value: "existing", label: "Existing agent" },
           { value: "new", label: "New agent" },
@@ -468,9 +488,7 @@ function IssueKey({
         deviceAgentPolicyGrants(projectId),
       );
       if (missingScopes.length)
-        throw new Error(
-          `You cannot delegate ${missingScopes.join(", ")} to this agent. Organization scopes require org:admin, held by both you and the agent's owner.`,
-        );
+        throw new Error(undelegableScopesMessage(missingScopes));
       const { expiresAt, reason } = agentKeyExpiry(
         DEFAULT_AGENT_KEY_EXPIRY_DAYS,
         "",
@@ -491,7 +509,7 @@ function IssueKey({
         },
       });
       if (!key.key) throw new Error("The server returned no key secret.");
-      return { agentId: agent.id, keyId: key.id, value: key.key };
+      return { agentId: agent.id, projectId, keyId: key.id, value: key.key };
     },
     onSuccess: (key) => {
       onIssued(key);

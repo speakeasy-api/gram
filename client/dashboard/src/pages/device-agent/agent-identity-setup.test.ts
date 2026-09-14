@@ -10,9 +10,11 @@ import {
   buildAgentIdentityManagedConfig,
   buildAgentIdentitySnippet,
   deviceAgentPolicyGrants,
+  issuedKeyFor,
   lastSeenKey,
   missingPolicyGrants,
   selectDeviceAgentKeyGrants,
+  undelegableScopesMessage,
 } from "./agent-identity-setup";
 
 const PROJECT = "proj-1";
@@ -129,7 +131,13 @@ describe("agent identity snippet", () => {
   it("carries no email, version, or checksum", () => {
     const snippet = buildAgentIdentitySnippet(base);
     expect(snippet).toContain(
-      'curl -fsSL https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh | sh -s -- --install-dir "$BIN_DIR"',
+      'curl -fsSL -o "$INSTALLER" https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh',
+    );
+    expect(snippet).toContain("trap 'rm -f \"$INSTALLER\"' EXIT");
+    expect(snippet).toContain('sh "$INSTALLER" --install-dir "$BIN_DIR"');
+    expect(snippet).not.toMatch(/\|\s*sh/);
+    expect(snippet.indexOf("curl -fsSL")).toBeLessThan(
+      snippet.indexOf('sh "$INSTALLER"'),
     );
     expect(snippet).toContain("/etc/speakeasy/managed.json");
     expect(snippet).toContain('"$BIN_DIR/speakeasyd" sync --once');
@@ -162,13 +170,14 @@ describe("agent identity snippet", () => {
 
   it("keeps the Linux service alive after logout", () => {
     const snippet = buildAgentIdentitySnippet({ ...base, mode: "service" });
-    expect(
-      snippet.indexOf('$SUDO loginctl enable-linger "$USER"'),
-    ).toBeGreaterThan(-1);
-    expect(
-      snippet.indexOf('$SUDO loginctl enable-linger "$USER"'),
-    ).toBeLessThan(snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'));
-    expect(snippet.indexOf("loginctl")).toBeGreaterThan(-1);
+    const linger =
+      'if [ -n "$SUDO" ]; then\n  sudo loginctl enable-linger "$(id -un)"\nfi';
+    expect(snippet).toContain(linger);
+    expect(snippet.indexOf(linger)).toBeLessThan(
+      snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'),
+    );
+    // Root installs skip linger, and $USER may be unset in containers.
+    expect(snippet).not.toContain("$USER");
   });
 
   it("installs the service on persistent macOS hosts", () => {
@@ -215,6 +224,36 @@ describe("agent identity config permissions", () => {
       expect(snippet).not.toContain("0644");
     },
   );
+});
+
+describe("issued key binding", () => {
+  const issued = { agentId: "a1", projectId: "p1", keyId: "k1", value: "v" };
+
+  it("keeps the key for the agent and project it was minted for", () => {
+    expect(issuedKeyFor(issued, "a1", "p1")).toBe(issued);
+  });
+
+  it("drops the key when the project or agent changes", () => {
+    expect(issuedKeyFor(issued, "a1", "p2")).toBeNull();
+    expect(issuedKeyFor(issued, "a2", "p1")).toBeNull();
+    expect(issuedKeyFor(issued, undefined, "p1")).toBeNull();
+    expect(issuedKeyFor(null, "a1", "p1")).toBeNull();
+  });
+});
+
+describe("undelegable scopes message", () => {
+  it("names org:admin when an org scope is missing", () => {
+    expect(
+      undelegableScopesMessage(["org:device_agent_sync", "project:read"]),
+    ).toContain("org:admin");
+  });
+
+  it("points at policy and permissions when only project:read is missing", () => {
+    const message = undelegableScopesMessage(["project:read"]);
+    expect(message).toContain("project:read");
+    expect(message).not.toContain("org:admin");
+    expect(message).toContain("agent's policy");
+  });
 });
 
 describe("last seen", () => {
