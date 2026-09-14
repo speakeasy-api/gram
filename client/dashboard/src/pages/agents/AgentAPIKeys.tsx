@@ -28,7 +28,7 @@ import {
   delegableGrantKey,
   validateAgentAPIKeyName,
 } from "./agent-api-key-grants";
-import { formatRelativeTime } from "@/lib/dates";
+import { HumanizeDateTime } from "@/lib/dates";
 import { AgentGrantSelector, type GrantNarrowings } from "./AgentGrantSelector";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
@@ -268,7 +268,7 @@ function AgentAPIKeysContent({
             title={key.lastAccessedAt.toLocaleString()}
             dateTime={key.lastAccessedAt.toISOString()}
           >
-            {formatRelativeTime(key.lastAccessedAt)}
+            <HumanizeDateTime date={key.lastAccessedAt} />
           </time>
         ) : (
           "Never"

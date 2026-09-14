@@ -1484,10 +1484,26 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+type RoutePathNode = { url: string; subPages?: Record<string, RoutePathNode> };
+
+function collectRoutePaths(
+  entries: Record<string, RoutePathNode>,
+  parent = "",
+): string[] {
+  return Object.values(entries).flatMap((entry) => {
+    const path = [parent, entry.url].filter(Boolean).join("/");
+    const nested = entry.subPages
+      ? collectRoutePaths(entry.subPages, path)
+      : [];
+    return path ? [path, ...nested] : nested;
+  });
+}
+
+/**
+ * The paths used by org-level routes and their subpages (for redirect logic),
+ * so a project slug matching a route segment cannot capture a nested page.
+ */
+export const orgRoutePaths = collectRoutePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

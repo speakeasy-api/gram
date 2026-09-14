@@ -196,7 +196,13 @@ $SUDO mkdir -p '${dir}'
 $SUDO tee '${path}' >/dev/null <<'JSON'
 ${config}
 JSON
-$SUDO chmod 0644 '${path}'
+# Readable only by root and the account that runs the agent.
+if [ -z "$SUDO" ]; then
+  chmod 0600 '${path}'
+else
+  sudo chown root:"$(id -gn)" '${path}'
+  sudo chmod 0640 '${path}'
+fi
 
 ${run}
 `;

@@ -17,7 +17,7 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { formatRelativeTime } from "@/lib/dates";
+import { HumanizeDateTime } from "@/lib/dates";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -590,8 +590,9 @@ function SetupSnippet({ agentKey }: { agentKey: string }) {
       <Alert variant="warning">
         <AlertTitle>Copy this now</AlertTitle>
         <AlertDescription>
-          The key is shown only once. Anyone who can run commands on the
-          machine, including the AI agent itself, can read it. To rotate, create
+          The key is shown only once. The config is readable only by root and
+          the account that runs the agent, but that account and anything running
+          as it, including AI agents, can still read the key. To rotate, create
           a new key here, redeploy, and revoke the old one.
         </AlertDescription>
       </Alert>
@@ -643,7 +644,7 @@ function CheckInStatus({
             title={seen.lastAccessedAt.toLocaleString()}
             dateTime={seen.lastAccessedAt.toISOString()}
           >
-            {formatRelativeTime(seen.lastAccessedAt)}
+            <HumanizeDateTime date={seen.lastAccessedAt} />
           </time>{" "}
           (<code>{seen.name}</code>).
         </Text>

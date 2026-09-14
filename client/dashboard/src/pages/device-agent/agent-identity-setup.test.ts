@@ -166,6 +166,28 @@ describe("agent identity snippet", () => {
   });
 });
 
+describe("agent identity config permissions", () => {
+  it.each(["ephemeral", "service"] as const)(
+    "limits the %s config to root and the agent's account",
+    (mode) => {
+      const snippet = buildAgentIdentitySnippet({
+        agentKey: "gram_live_abc123",
+        os: "linux",
+        mode,
+        serverURL: "https://app.getgram.ai",
+      });
+      expect(snippet).toContain("chmod 0600 '/etc/speakeasy/managed.json'");
+      expect(snippet).toContain(
+        `sudo chown root:"$(id -gn)" '/etc/speakeasy/managed.json'`,
+      );
+      expect(snippet).toContain(
+        "sudo chmod 0640 '/etc/speakeasy/managed.json'",
+      );
+      expect(snippet).not.toContain("0644");
+    },
+  );
+});
+
 describe("last seen", () => {
   it("picks the most recently used key", () => {
     const keys = [
