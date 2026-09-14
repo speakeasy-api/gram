@@ -254,6 +254,7 @@ func newStreamsCommand() *cli.Command {
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
+	flags = append(flags, agentEventsIngestFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -411,6 +412,7 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
+			enableCHAgentEventWrites := !c.Bool("disable-clickhouse-agent-event-writes")
 			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to create clickhouse client: %w", err)
@@ -652,6 +654,15 @@ func newStreamsCommand() *cli.Command {
 				// otel_logs / otel_traces ClickHouse tables.
 				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
+				// Agent session tee: project the same normalized OTEL topics into
+				// agent_events, in agent vocabulary, for the semantic query layer.
+				// Its own subscriptions, so it fails independently of the event feed,
+				// and behind a kill switch so it can be stopped without a deploy.
+				if enableCHAgentEventWrites {
+					mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+					mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				}
 
 				if enableCHRiskWrites {
 					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
