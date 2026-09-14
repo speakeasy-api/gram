@@ -126,6 +126,8 @@ trackedFiles:
   src/funcs/aiIntegrationsSetScheduleEnabled.ts: {}
   src/funcs/aiIntegrationsUpsertAnthropicInferenceConfig.ts: {}
   src/funcs/aiIntegrationsUpsertConfig.ts: {}
+  src/funcs/analyticsDescribe.ts: {}
+  src/funcs/analyticsQuery.ts: {}
   src/funcs/assetsCreateSignedChatAttachmentURL.ts: {}
   src/funcs/assetsFetchImageFromURL.ts: {}
   src/funcs/assetsFetchOpenAPIv3FromURL.ts: {}
@@ -760,6 +762,14 @@ trackedFiles:
   src/models/components/aiscantargetmutationresult.ts: {}
   src/models/components/aiscantargetsignatures.ts: {}
   src/models/components/allowedorigin.ts: {}
+  src/models/components/analyticsdataset.ts: {}
+  src/models/components/analyticsdescriberesult.ts: {}
+  src/models/components/analyticsfield.ts: {}
+  src/models/components/analyticsfilter.ts: {}
+  src/models/components/analyticsmeasure.ts: {}
+  src/models/components/analyticsorderby.ts: {}
+  src/models/components/analyticsquerypayload.ts: {}
+  src/models/components/analyticsqueryresult.ts: {}
   src/models/components/anthropicinferenceconfig.ts: {}
   src/models/components/approvaldecision.ts: {}
   src/models/components/approvalrequestdetail.ts: {}
@@ -1713,6 +1723,8 @@ trackedFiles:
   src/models/operations/addmetamcpmember.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
+  src/models/operations/analyticsdescribe.ts: {}
+  src/models/operations/analyticsquery.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
   src/models/operations/approveskillsuggestion.ts: {}
@@ -2412,6 +2424,10 @@ trackedFiles:
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
   src/react-query/aiIntegrationSchedules.ts: {}
+  src/react-query/analyticsDescribe.core.ts: {}
+  src/react-query/analyticsDescribe.ts: {}
+  src/react-query/analyticsQuery.core.ts: {}
+  src/react-query/analyticsQuery.ts: {}
   src/react-query/anthropicInferenceConfig.core.ts: {}
   src/react-query/anthropicInferenceConfig.ts: {}
   src/react-query/approveAllSkillSuggestions.ts: {}
@@ -3347,6 +3363,7 @@ trackedFiles:
   src/sdk/agent.ts: {}
   src/sdk/agents.ts: {}
   src/sdk/aiintegrations.ts: {}
+  src/sdk/analytics.ts: {}
   src/sdk/assets.ts: {}
   src/sdk/assistantmemories.ts: {}
   src/sdk/assistants.ts: {}
@@ -3564,6 +3581,26 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsDescribe:
+    speakeasy-default-analytics-describe:
+      responses:
+        "200":
+          application/json: {"datasets": [{"description": "unfurl geez drat helpless anenst because boohoo uh-huh", "fields": [{"name": "user", "role": "dimension", "type": "float64", "unit": "s"}], "grain": "One row per agent session.", "kind": "event", "name": "sessions"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  analyticsQuery:
+    speakeasy-default-analytics-query:
+      requestBody:
+        application/json: {"dataset": "sessions", "filters": [{"field": "surface", "operator": "in", "values": ["<value 1>", "<value 2>"]}], "from": "2026-09-01T00:00:00Z", "measures": [{"alias": "tool_calls", "field": "tool_call_count", "op": "sum"}], "order_by": [{"direction": "desc", "measure": "tool_calls"}], "to": "2026-09-08T00:00:00Z", "ungrouped": false}
+      responses:
+        "200":
+          application/json: {"dataset": "<value>", "plan": "<value>", "rows": [{"key": "<value>", "key1": "<value>", "key2": "<value>"}, {"key": "<value>", "key1": "<value>", "key2": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   approveAllSkillSuggestions:
     speakeasy-default-approve-all-skill-suggestions:
       requestBody:
