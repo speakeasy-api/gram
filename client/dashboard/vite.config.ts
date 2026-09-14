@@ -284,6 +284,12 @@ export default defineConfig(async (env) => {
   //                               proxy can ferry cookies); undefined in
   //                               prod (no proxy needed). Used only by the
   //                               playground.
+  //   __GRAM_GOOGLE_TAG_ID__    — the Google tag id (AW-…/G-…) that ad
+  //                               conversions report to, from
+  //                               GRAM_GOOGLE_TAG_ID. Empty (the default)
+  //                               disables the tag entirely; the
+  //                               production image gets it from CI. See
+  //                               src/lib/google-ads.ts.
 
   const config: UserConfig = {
     experimental: {
@@ -323,6 +329,9 @@ export default defineConfig(async (env) => {
       __GRAM_SERVER_URL__: JSON.stringify(serverUrl),
       __PLAYGROUND_PROXY_URL__: JSON.stringify(isDev ? siteUrl : undefined),
       __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
+      __GRAM_GOOGLE_TAG_ID__: JSON.stringify(
+        process.env["GRAM_GOOGLE_TAG_ID"] || "",
+      ),
       // Default Gram API URL baked into the inlined elements code
       // (src/elements/lib/api.ts); config.api.url overrides it at runtime.
       __GRAM_API_URL__: JSON.stringify(process.env["GRAM_API_URL"] || ""),

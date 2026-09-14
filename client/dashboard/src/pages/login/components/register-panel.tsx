@@ -1,4 +1,6 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { reportSignupConversion } from "@/hooks/useSignupConversion";
+import { googleAds } from "@/lib/google-ads";
 import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
@@ -8,7 +10,7 @@ import {
   RegisterMutationVariables,
 } from "@gram/client/react-query/register.js";
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AUTH_BUTTON_CLASSES } from "./auth-constants";
 import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
 import {
@@ -26,6 +28,12 @@ export function RegisterPanel({
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
   const sdk = useGramContext();
+
+  // Warm the Google tag so the signup conversion below is not waiting on a
+  // script download at the moment the page is about to navigate away.
+  useEffect(() => {
+    googleAds.initialize();
+  }, []);
 
   const registerMutation = useMutation({
     mutationFn: async (vars: RegisterMutationVariables) => {
@@ -53,7 +61,12 @@ export function RegisterPanel({
         is_gram: true,
       });
       const destination = safeSameOriginUrl(redirectTo) ?? "/";
-      window.location.replace(destination);
+      // This is a platform signup: a user with no organization just created
+      // one. The full-page navigation would drop a queued gtag hit, so it
+      // waits for the conversion to be reported (bounded, see google-ads.ts).
+      reportSignupConversion(() => {
+        window.location.replace(destination);
+      });
     },
     onError: (error) => {
       setValidationError(error.message);
