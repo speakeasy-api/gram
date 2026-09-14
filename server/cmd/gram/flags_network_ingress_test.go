@@ -41,6 +41,7 @@ func TestNetworkIngressProviderFlagsRejectInvalidValues(t *testing.T) {
 		name, valid, invalid string
 	}{
 		{"network-ingress-operator-namespace", "tailscale", "Invalid Namespace"},
+		{"network-ingress-worker-namespace", "gram-dev", "other/namespace"},
 		{"network-ingress-backend-namespace", "gram-dev", "other/namespace"},
 		{"network-ingress-backend-service", "gram-private", "https://service"},
 		{"network-ingress-attestor-ca-secret", "gram-private-ca", "secret/name"},
@@ -94,6 +95,7 @@ func TestNetworkIngressConfigFromCLIReadsProviderSettings(t *testing.T) {
 		networkIngressQueueFlag:               "gram-dev-network-ingress",
 		networkIngressMutationFlag:            "true",
 		"network-ingress-operator-namespace":  "tailscale",
+		"network-ingress-worker-namespace":    "gram-dev",
 		"network-ingress-backend-namespace":   "gram-dev",
 		"network-ingress-backend-service":     "gram-private",
 		"network-ingress-backend-port":        "8443",

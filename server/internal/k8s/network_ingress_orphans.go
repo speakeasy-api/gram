@@ -3,11 +3,15 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 // NetworkIngressOrphan identifies a labelled resource without persisted ownership.
@@ -46,6 +50,7 @@ func (r *NetworkIngressProvisionerRegistry) FindOrphans(ctx context.Context, kno
 	return result, nil
 }
 
+//nolint:exhaustruct // Internal identity keys intentionally build up namespace/name fields in stages.
 func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, known []NetworkIngressResourceNames) ([]NetworkIngressOrphan, error) {
 	type resourceKey struct{ kind, namespace, name string }
 	expected := make(map[resourceKey]uuid.UUID)
@@ -54,71 +59,187 @@ func (p *TailscaleNetworkIngressProvisioner) FindOrphans(ctx context.Context, kn
 			return nil, fmt.Errorf("invalid persisted identity during orphan scan")
 		}
 		for key, name := range map[resourceKey]string{
-			{kind: "namespaces", namespace: "", name: ""}:                              names.Namespace,
-			{kind: "tailnets", namespace: "", name: ""}:                                names.Tailnet,
-			{kind: "proxygroups", namespace: "", name: ""}:                             names.ProxyGroup,
-			{kind: "proxygrouppolicies", namespace: names.Namespace, name: ""}:         names.ProxyGroupPolicy,
-			{kind: "deployments", namespace: names.Namespace, name: ""}:                names.AttestorDeployment,
-			{kind: "services", namespace: names.Namespace, name: ""}:                   names.AttestorService,
-			{kind: "serviceaccounts", namespace: names.Namespace, name: ""}:            names.AttestorServiceAccount,
-			{kind: "ingresses", namespace: names.Namespace, name: ""}:                  names.Ingress,
-			{kind: "secrets", namespace: names.Namespace, name: ""}:                    names.AttestorCASecret,
-			{kind: "secrets", namespace: p.config.OperatorNamespace, name: ""}:         names.CredentialsSecret,
-			{kind: "networkpolicies", namespace: names.Namespace, name: ""}:            names.AttestorNetworkPolicy,
-			{kind: "networkpolicies", namespace: p.config.OperatorNamespace, name: ""}: names.ProxyNetworkPolicy,
+			{kind: "namespaces"}:  names.Namespace,
+			{kind: "tailnets"}:    names.Tailnet,
+			{kind: "proxygroups"}: names.ProxyGroup,
+			{kind: "proxygrouppolicies", namespace: names.Namespace}:         names.ProxyGroupPolicy,
+			{kind: "deployments", namespace: names.Namespace}:                names.AttestorDeployment,
+			{kind: "services", namespace: names.Namespace}:                   names.AttestorService,
+			{kind: "serviceaccounts", namespace: names.Namespace}:            names.AttestorServiceAccount,
+			{kind: "ingresses", namespace: names.Namespace}:                  names.Ingress,
+			{kind: "secrets", namespace: names.Namespace}:                    names.AttestorCASecret,
+			{kind: "networkpolicies", namespace: names.Namespace}:            names.AttestorNetworkPolicy,
+			{kind: "networkpolicies", namespace: p.config.OperatorNamespace}: names.ProxyNetworkPolicy,
+			{kind: "rolebindings", namespace: names.Namespace}:               networkIngressAttestorManagerBinding,
 		} {
 			key.name = name
 			expected[key] = names.OwnerID
 		}
 	}
-	resources := []struct {
-		gvr        schema.GroupVersionResource
-		namespaced bool
-	}{
-		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}, false},
-		{tailnetGVR, false}, {proxyGroupGVR, false}, {proxyGroupPolicyGVR, true},
-		{schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, true},
-		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}, true},
-		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}, true},
-		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"}, true},
-		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}, true},
-		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}, true},
+
+	selector := labels.Set{managedByLabelKey: networkIngressManagedBy}.String()
+	list := func(gvr schema.GroupVersionResource, namespace, ownerSelector, name string, visit func(metav1.Object)) error {
+		var client dynamic.ResourceInterface = p.dynamic.Resource(gvr)
+		if namespace != "" {
+			client = p.dynamic.Resource(gvr).Namespace(namespace)
+		}
+		options := metav1.ListOptions{LabelSelector: ownerSelector, Limit: 100}
+		if name != "" {
+			options.FieldSelector = fields.OneTermEqualSelector("metadata.name", name).String()
+		}
+		for range 10 {
+			objects, err := client.List(ctx, options)
+			if err != nil {
+				return fmt.Errorf("network ingress orphan inventory unavailable")
+			}
+			for i := range objects.Items {
+				visit(&objects.Items[i])
+			}
+			options.Continue = objects.GetContinue()
+			if options.Continue == "" {
+				return nil
+			}
+		}
+		return fmt.Errorf("network ingress orphan inventory limit exceeded")
+	}
+	malformedManagedOwner := func(object metav1.Object) bool {
+		objectLabels := object.GetLabels()
+		if objectLabels[managedByLabelKey] != networkIngressManagedBy {
+			return false
+		}
+		ownerLabel := objectLabels[networkIngressIDLabel]
+		owner, err := uuid.Parse(ownerLabel)
+		return err != nil || owner == uuid.Nil || owner.String() != ownerLabel
+	}
+	identity := func(object metav1.Object) (NetworkIngressResourceNames, bool) {
+		objectLabels := object.GetLabels()
+		if objectLabels[managedByLabelKey] != networkIngressManagedBy {
+			return NetworkIngressResourceNames{}, false
+		}
+		ownerLabel := objectLabels[networkIngressIDLabel]
+		owner, err := uuid.Parse(ownerLabel)
+		if err != nil || owner == uuid.Nil || owner.String() != ownerLabel {
+			return NetworkIngressResourceNames{}, false
+		}
+		names, err := NewNetworkIngressResourceNames(owner)
+		return names, err == nil
 	}
 	var orphans []NetworkIngressOrphan
-	selector := labels.Set{managedByLabelKey: networkIngressManagedBy}.String()
-	for _, resource := range resources {
-		var continuation string
-		for range 10 {
-			client := p.dynamic.Resource(resource.gvr)
-			options := metav1.ListOptions{LabelSelector: selector, Limit: 100, Continue: continuation}
-			// List remains inside the provider boundary. Only owner IDs and kinds
-			// escape it, never Secret payloads or untrusted Kubernetes errors.
-			list, err := client.List(ctx, options)
-			if err != nil {
-				return nil, fmt.Errorf("network ingress orphan inventory unavailable")
-			}
-			for _, object := range list.Items {
-				ownerLabel := object.GetLabels()[networkIngressIDLabel]
-				owner, err := uuid.Parse(ownerLabel)
-				if err != nil || owner.String() != ownerLabel {
-					owner = uuid.Nil
-				}
-				key := resourceKey{kind: resource.gvr.Resource, namespace: object.GetNamespace(), name: object.GetName()}
-				if resource.namespaced && key.namespace == "" {
-					continue
-				}
-				if expectedOwner, ok := expected[key]; !ok || owner != expectedOwner {
-					orphans = append(orphans, NetworkIngressOrphan{OwnerID: owner, Kind: resource.gvr.Resource})
-				}
-			}
-			continuation = list.GetContinue()
-			if continuation == "" {
-				break
-			}
-		}
-		if continuation != "" {
-			return nil, fmt.Errorf("network ingress orphan inventory limit exceeded")
+	report := func(key resourceKey, owner uuid.UUID) {
+		if expectedOwner, ok := expected[key]; !ok || expectedOwner != owner {
+			orphans = append(orphans, NetworkIngressOrphan{OwnerID: owner, Kind: key.kind})
 		}
 	}
+
+	namespaces := make(map[string]NetworkIngressResourceNames)
+	namespaceGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
+	if err := list(namespaceGVR, "", selector, "", func(object metav1.Object) {
+		if malformedManagedOwner(object) {
+			orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: "namespaces"})
+			return
+		}
+		names, ok := identity(object)
+		if !ok || object.GetName() != names.Namespace {
+			return
+		}
+		namespaces[names.Namespace] = names
+		report(resourceKey{kind: "namespaces", name: names.Namespace}, names.OwnerID)
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, resource := range []struct {
+		gvr  schema.GroupVersionResource
+		name func(NetworkIngressResourceNames) string
+	}{
+		{tailnetGVR, func(names NetworkIngressResourceNames) string { return names.Tailnet }},
+		{proxyGroupGVR, func(names NetworkIngressResourceNames) string { return names.ProxyGroup }},
+	} {
+		if err := list(resource.gvr, "", selector, "", func(object metav1.Object) {
+			if malformedManagedOwner(object) {
+				orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: resource.gvr.Resource})
+				return
+			}
+			names, ok := identity(object)
+			if !ok || object.GetName() != resource.name(names) {
+				return
+			}
+			report(resourceKey{kind: resource.gvr.Resource, name: object.GetName()}, names.OwnerID)
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	orderedNamespaces := make([]string, 0, len(namespaces))
+	for namespace := range namespaces {
+		orderedNamespaces = append(orderedNamespaces, namespace)
+	}
+	sort.Strings(orderedNamespaces)
+	namespacedResources := []struct {
+		gvr  schema.GroupVersionResource
+		name func(NetworkIngressResourceNames) string
+	}{
+		{proxyGroupPolicyGVR, func(names NetworkIngressResourceNames) string { return names.ProxyGroupPolicy }},
+		{schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, func(names NetworkIngressResourceNames) string { return names.AttestorDeployment }},
+		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}, func(names NetworkIngressResourceNames) string { return names.AttestorService }},
+		{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}, func(names NetworkIngressResourceNames) string { return names.AttestorServiceAccount }},
+		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}, func(names NetworkIngressResourceNames) string { return names.Ingress }},
+		{schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}, func(names NetworkIngressResourceNames) string { return names.AttestorNetworkPolicy }},
+	}
+	for _, namespace := range orderedNamespaces {
+		names := namespaces[namespace]
+		ownerSelector := labels.Set{
+			managedByLabelKey:     networkIngressManagedBy,
+			networkIngressIDLabel: names.OwnerID.String(),
+		}.String()
+		for _, resource := range namespacedResources {
+			name := resource.name(names)
+			if err := list(resource.gvr, namespace, ownerSelector, name, func(object metav1.Object) {
+				objectNames, ok := identity(object)
+				if !ok || objectNames.OwnerID != names.OwnerID || object.GetNamespace() != namespace || object.GetName() != name {
+					return
+				}
+				report(resourceKey{kind: resource.gvr.Resource, namespace: namespace, name: name}, names.OwnerID)
+			}); err != nil {
+				return nil, err
+			}
+		}
+		caSecret, err := p.clientset.CoreV1().Secrets(namespace).Get(ctx, names.AttestorCASecret, metav1.GetOptions{})
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("network ingress orphan inventory unavailable")
+		}
+		if err == nil {
+			secretNames, ok := identity(caSecret)
+			if ok {
+				report(resourceKey{kind: "secrets", namespace: namespace, name: names.AttestorCASecret}, secretNames.OwnerID)
+			}
+		}
+		binding, err := p.clientset.RbacV1().RoleBindings(namespace).Get(ctx, networkIngressAttestorManagerBinding, metav1.GetOptions{})
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return nil, fmt.Errorf("network ingress orphan inventory unavailable")
+		}
+		if err == nil {
+			bindingNames, ok := identity(binding)
+			if ok {
+				report(resourceKey{kind: "rolebindings", namespace: namespace, name: networkIngressAttestorManagerBinding}, bindingNames.OwnerID)
+			}
+		}
+	}
+
+	networkPolicyGVR := schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}
+	if err := list(networkPolicyGVR, p.config.OperatorNamespace, selector, "", func(object metav1.Object) {
+		if malformedManagedOwner(object) {
+			orphans = append(orphans, NetworkIngressOrphan{OwnerID: uuid.Nil, Kind: "networkpolicies"})
+			return
+		}
+		names, ok := identity(object)
+		if !ok || object.GetNamespace() != p.config.OperatorNamespace || object.GetName() != names.ProxyNetworkPolicy {
+			return
+		}
+		report(resourceKey{kind: "networkpolicies", namespace: p.config.OperatorNamespace, name: names.ProxyNetworkPolicy}, names.OwnerID)
+	}); err != nil {
+		return nil, err
+	}
+
 	return orphans, nil
 }

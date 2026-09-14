@@ -40,6 +40,7 @@ func TestRuntimeConfigMutationRequiresEverySetting(t *testing.T) {
 		{"enabled", func(c *RuntimeConfig) { c.ProviderMutationsEnabled = false }},
 		{"queue", func(c *RuntimeConfig) { c.ReconcileTaskQueue = "" }},
 		{"operator namespace", func(c *RuntimeConfig) { c.Tailscale.OperatorNamespace = "" }},
+		{"worker namespace", func(c *RuntimeConfig) { c.Tailscale.WorkerNamespace = "" }},
 		{"backend namespace", func(c *RuntimeConfig) { c.Tailscale.BackendNamespace = "" }},
 		{"backend labels", func(c *RuntimeConfig) { c.Tailscale.BackendPodLabels = nil }},
 		{"proxy tag", func(c *RuntimeConfig) { c.Tailscale.ProxyTag = "" }},
@@ -86,6 +87,7 @@ func TestRuntimeConfigRejectsInvalidValuesWithoutCLI(t *testing.T) {
 	}{
 		{"queue", func(c *RuntimeConfig) { c.ReconcileTaskQueue = "other/queue" }},
 		{"operator namespace", func(c *RuntimeConfig) { c.Tailscale.OperatorNamespace = "Invalid" }},
+		{"worker namespace", func(c *RuntimeConfig) { c.Tailscale.WorkerNamespace = "other/namespace" }},
 		{"backend namespace", func(c *RuntimeConfig) { c.Tailscale.BackendNamespace = "other/namespace" }},
 		{"backend service", func(c *RuntimeConfig) { c.BackendService = "https://service" }},
 		{"CA secret", func(c *RuntimeConfig) { c.Tailscale.AttestorCASecret = "secret/name" }},
@@ -116,6 +118,7 @@ func completeRuntimeConfig() RuntimeConfig {
 		ProviderMutationsEnabled: true,
 		Tailscale: k8s.TailscaleNetworkIngressConfig{
 			OperatorNamespace: "tailscale",
+			WorkerNamespace:   "gram-dev",
 			BackendNamespace:  "gram-dev",
 			BackendPodLabels:  map[string]string{"app.kubernetes.io/name": "gram-server"},
 			ProxyTag:          "tag:gram-proxy",
