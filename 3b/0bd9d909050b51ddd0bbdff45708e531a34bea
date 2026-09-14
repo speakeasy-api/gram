@@ -1,0 +1,997 @@
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-154
+server/internal/networkingress/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 112-115,143
+  s_8c25379f270d5a::t_13b0077310b9df 111
+server/cmd/gram/worker.go
+  s_8c25379f270d5a::t_16b1f282a929fa 50,75-76,127-151,320,763-765,797-798,836-840
+server/internal/mcp/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 79,82,182-187,483-485,623-641,1620,1623
+server/internal/plugins/assignments/subset_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-27
+server/internal/remotesessions/challenge_synthetic_expiry_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 18,223-228,297-308,356,358-359,362-367,394-402,438-439,486
+client/dashboard/src/components/sidebar-brand-header.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-44
+server/internal/remotesessions/refreshservice_metrics_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 6,8,16,109-123,127
+server/internal/risk/scanner.go
+  s_8c25379f270d5a::t_16b1f282a929fa 439,663,669
+server/internal/platformmcp/risk_version.go
+  s_8c25379f270d5a::t_16b1f282a929fa 170-174
+server/internal/mcp/authnchallenge_consent_identity_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19
+client/dashboard/src/lib/local-storage-keys.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 9-20
+server/internal/background/activities/generate_toolset_embeddings.go
+  s_8c25379f270d5a::t_16b1f282a929fa 5,23-24,34-38,80-84,93-99,103
+client/admin/src/lib/gramAdminApi.test.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 95-116
+server/cmd/gram/streams.go
+  s_8c25379f270d5a::t_16b1f282a929fa 32,55,252,608-611
+server/internal/plugins/distribution_admission_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-41
+client/dashboard/src/lib/featureFlags.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 2,16
+server/internal/mcp/authnchallenge_consent_autoverify.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-152
+server/internal/mcp/authnchallenge_consent_validate.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-380
+infra/pkg/topics/topics_gen.go
+  s_8c25379f270d5a::t_16b1f282a929fa 13,33-34,76,104-105,155-156
+server/internal/workloadidentity/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 34-57
+server/internal/plugins/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 28-37
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_8c25379f270d5a::t_16b1f282a929fa 277
+server/internal/platformmcp/risk_policy_mutations_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 169,176
+client/admin/src/pages/remote-session-issuers/IssuerDetail.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-144
+server/internal/background/network_ingress_activities.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-187
+client/dashboard/src/pages/org/litellm-integration-row.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 34,37,47,375,382-383,395,699,788-792
+server/internal/mcp/authnchallenge_consent_routability_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 152-158,184,210,263,266
+client/dashboard/src/components/project-guide/useSecretGuideOperations.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 90-95,211-212
+server/internal/platformmcp/tool_distribution.go
+  s_8c25379f270d5a::t_16b1f282a929fa 149-153
+server/internal/mcp/authnchallenge_workloadidentity_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-274
+client/dashboard/src/hooks/useProjectFavorites.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 1,5,20-25
+  s_8c25379f270d5a::t_7c6411aecfd455 26
+server/internal/k8s/network_ingress_metrics.go
+  s_8c25379f270d5a::t_16b1f282a929fa 146-148
+.mise-tasks/open/admin-dashboard.sh
+  s_8c25379f270d5a::t_16b1f282a929fa 1-7
+client/dashboard/src/pages/org/PrivateNetworkLifecycleDialogs.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-223
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 4,13-14,41-45,73-77,141,154-279,383-563,574
+server/internal/plugins/distribution_lock_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-35
+server/internal/shadowmcp/admission/rollout_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-315
+server/internal/usage/stripe_webhook_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1586-1589
+server/internal/background/network_ingress_reconcile.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-121
+server/internal/mcp/authnchallenge_consent_template_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 90-124,143-153,198-199,209,252,290,294,701,706,733,737,741
+server/internal/demoseed/safety_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 94-96
+client/admin/src/pages/stoken/StokenCalculator.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 88
+server/internal/remotesessions/tokenservice_resource_backfill_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 267,269,372-373
+server/internal/usage/checkout_trial_conversion.go
+  s_8c25379f270d5a::t_16b1f282a929fa 106-107,133
+server/internal/mcp/authnchallenge_consent_probe_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-20
+.mise-tasks/git/workinit.sh
+  s_8c25379f270d5a::t_16b1f282a929fa 12-15
+server/internal/networkingress/reconcile_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-237
+server/internal/platformmcp/shadow_inventory_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 16,65-67,72,87-89
+server/internal/remotemcp/distribution_admission.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-36
+server/internal/mcpservers/distribution_admission.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-48
+server/internal/mcp/authnchallenge_workloadauth.go
+  s_8c25379f270d5a::t_16b1f282a929fa 12,15-16,18-20,22-28,31,33
+server/internal/networkingress/orphans_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-114
+client/dashboard/src/components/project-guide/journeyStatus.test.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 176-181,192,196,200,209-214,223-228,236-241,246,250-256,264-269,277-279
+server/cmd/gram/network_ingress_worker_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-64
+server/internal/background/network_ingress_history_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-74
+server/internal/mcpapproval/supersession.go
+  s_8c25379f270d5a::t_16b1f282a929fa 16,43,128-130
+server/internal/rag/repo/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 9-43,68,73,75-77,81-84,216
+server/internal/shadowmcp/admission/guard_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-47
+server/internal/remotesessions/identity.go
+  s_8c25379f270d5a::t_16b1f282a929fa 199-200,245-271,294-296,300-302,305-322,325
+server/internal/usersessions/clientauth/expectation.go
+  s_8c25379f270d5a::t_16b1f282a929fa 78-82,102-129,171-179
+server/internal/shadowmcp/admission/guard.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-376
+client/admin/src/routeTree.gen.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 15,21-22,28-30,49-53,79-90,121-138,156,160,163,168-169,171,181,186-187,189,198,202,205,210-211,213,223,227,230,235-236,238,248,253-254,256,264,268,271,276-277,279,288,315-321,357-370,406-426,499-533,538
+server/internal/remotesessions/challenge_identity_e2e_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 42-45,98,122,221-227,336
+server/internal/background/activities/list_toolsets_for_indexing.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-81
+server/internal/mcp/authnchallenge_consent_panel_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-47
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 83,238-239,242,308,312-313
+server/internal/mcpendpoints/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 42,48-56,75-83,87-93,134-136,145-147,165,167,170-171,236-243,262-264,268,273
+server/internal/organizations/listsetuptasks_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 25,30,57-59
+client/admin/src/components/site-header.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 9,28-32,140-143
+client/admin/src/pages/organizations/StatStrip.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 129-132,424,434,442,449,459,464
+server/internal/platformmcp/risk_policy_mutations.go
+  s_8c25379f270d5a::t_16b1f282a929fa 31,165-167,240-242,255,401,477-478,800,802,812,828
+server/internal/platformmcp/shadow_inventory.go
+  s_8c25379f270d5a::t_16b1f282a929fa 112-115,129-138,155,159-165,285-294
+server/internal/remotesessions/issuermetadatarefresh_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-52
+server/internal/background/network_ingress_history_setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-119
+server/internal/mcp/authnchallenge_consent_routability.go
+  s_8c25379f270d5a::t_16b1f282a929fa 68-85
+server/internal/remotesessions/issuerrefresh.go
+  s_8c25379f270d5a::t_16b1f282a929fa 308-315
+infra/gen_py/gram/networkingress/v1/reconcile_requested_pb2.pyi
+  s_8c25379f270d5a::t_16b1f282a929fa 1-16
+server/internal/background/network_ingress_worker_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-40
+server/internal/remotesessions/remotesessionmetrics/validation.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-43
+client/admin/src/pages/remote-session-issuers/ConvergenceSummary.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-47
+server/internal/background/network_ingress_activities_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-65
+server/cmd/gram/network_ingress_worker.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-261
+server/internal/plugins/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 56,170-171,209-211,240-241,676-681,786-788,853-863,1164-1166,1172-1174,1191,1198-1199
+server/internal/remotesessions/validationoutcome.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-19
+server/internal/background/network_ingress_sweep_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-134
+server/internal/workloadidentity/admissionlookup.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-56
+client/admin/src/lib/gramAdminApi.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 168-218,312,326-328
+client/dashboard/src/routes.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 103-109
+server/internal/mcp/authnchallenge_workloadallowlist.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-234
+client/admin/src/pages/remote-session-issuers/IssuerList.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-165
+server/internal/usersessions/clientauth/replayid.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-116
+server/internal/admin/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 197-209
+server/internal/background/deployments.go
+  s_8c25379f270d5a::t_16b1f282a929fa 188-198
+server/internal/background/activities/reconcile_payg_openrouter_chat_key_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 498,503
+client/dashboard/src/lib/logout-storage.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 2-3,6,13-19,22,64-222,232-235,258-260,270,283-284,286,289-290,297-300
+server/internal/k8s/network_ingress_orphans.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-245
+client/dashboard/src/contexts/AuthProvider.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 22-25,127-144
+  s_8c25379f270d5a::t_d35f2149d1ecd3 145
+server/internal/authz/principal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 198-201
+server/internal/remotesessions/enrichment_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-121
+client/admin/src/pages/organizations/index.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 159,379-382,431-482,940,951,953-956,962,974,983,1025,1028,1038,1048,1050,1053,1056,1066,1081,1113,1214-1216,1399,1459-1461,1493,1600,1756,1786,1925,2326-2328,2376-2378,3228-3230,3279-3281,3329,3334,3831,4168-4171
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-457
+server/internal/remotesessions/upstreamrevoke.go
+  s_8c25379f270d5a::t_16b1f282a929fa 102,513
+server/internal/shadowmcp/admission/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-96
+server/internal/background/network_ingress_reconcile_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-119
+server/internal/mcp/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 145,297-314,325,329,341,468
+server/internal/background/index_toolset_sweep_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-117
+infra/proto/gram/networkingress/v1/reconcile_requested.proto
+  s_8c25379f270d5a::t_16b1f282a929fa 1-19
+server/internal/database/models.go
+  s_8c25379f270d5a::t_16b1f282a929fa 2272-2295
+server/internal/rag/search_tools_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 52
+server/internal/platformmcp/shadow_distribution_read_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-93
+server/internal/remotesessions/repo/models.go
+  s_8c25379f270d5a::t_16b1f282a929fa 43-66
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-300
+seed/demo/verify.md
+  s_8c25379f270d5a::t_16b1f282a929fa 32-37
+server/internal/remotesessions/refreshservice.go
+  s_8c25379f270d5a::t_16b1f282a929fa 43-46,93-95,115-119,122-130,209,347,362,409,452,549
+client/dashboard/dev-slot-plugin.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 1-31
+server/internal/usage/create_stripe_checkout_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 28,1035,1046-1048,1054-1055,1082-1134
+  s_8c25379f270d5a::t_1a1c7bcee9b15b 1135-1136
+server/design/platformmcp/design.go
+  s_8c25379f270d5a::t_16b1f282a929fa 8,67-74
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  s_8c25379f270d5a::t_16b1f282a929fa 12,17,21,25,33-50,66,89-98,102,107,110,115-117,132-134,156-158,248-250,252-258,261-267,293-324,330-337,339-366,368-388,390-448,485-491,534-541,543-544,547,549-550,552-577,646-651,657-662,752-766,790-794,798-813,895-897,901-903
+server/internal/mcpendpoints/distribution_admission_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-66
+server/internal/networkingress/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 54-55,61,72-73,86-91,121,126-128,131,136,244-246,303-305,345-347,394-396,412-414,436,439,453-455,457-458,460
+server/internal/background/activities.go
+  s_8c25379f270d5a::t_16b1f282a929fa 149,246,325-328,433,771-781
+  s_8c25379f270d5a::t_54f93c5e0ea734 782
+client/dashboard/src/pages/setup/components/steps/litellm-setup-step.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-262
+client/admin/src/pages/remote-session-issuers/IssuerActions.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-146
+server/internal/plugins/assignments/command.go
+  s_8c25379f270d5a::t_16b1f282a929fa 79-103,106-121,185-189,287-289
+client/admin/src/pages/organizations/rowActions.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 185,213,255
+client/dashboard/src/pages/remote-identity-providers/issuerMismatches.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 50-51
+server/CHANGELOG.md
+  s_8c25379f270d5a::t_16b1f282a929fa 3-32
+client/dashboard/tsconfig.app.json
+  s_8c25379f270d5a::t_16b1f282a929fa 34-37
+server/internal/remotesessions/issuermetadatarefresh.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-541
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_8c25379f270d5a::t_16b1f282a929fa 343
+client/admin/src/pages/remote-session-issuers/IssuerActions.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-143
+server/internal/networkingress/reconcile_delivery_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-60
+server/internal/mcp/export_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-29
+server/internal/mcpapproval/enforcement_backfill.go
+  s_8c25379f270d5a::t_16b1f282a929fa 17,47
+server/internal/platformmcp/distribution_error_mapping_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-61
+client/admin/src/pages/remote-session-issuers/ConvergenceSummary.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-28
+server/internal/platformmcp/risk_reads_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 193,204
+server/internal/mcpapproval/decision_core.go
+  s_8c25379f270d5a::t_16b1f282a929fa 18,98
+server/internal/remotesessions/enrichment.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-710
+client/admin/src/pages/remote-session-issuers/IssuerList.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-166
+.changeset/admin-nav-management-groups.md
+  s_8c25379f270d5a::t_16b1f282a929fa 1-5
+client/admin/src/routes/remote-session-issuers.index.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-6
+server/internal/mcp/authnchallenge_consent_validate_cleanup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-47
+server/internal/demoseed/celexpr_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 12-13,27
+client/dashboard/src/theme-init.test.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 5-17,39-51
+  s_8c25379f270d5a::t_25d997f92405e3 52-53
+server/internal/mcp/authnchallenge_token_claim_loser_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 48
+server/internal/mcp/authnchallenge_workloadallowlist_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-436
+server/internal/plugins/generate_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 2927-2997
+server/internal/remotesessions/validation.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-74
+server/internal/shadowmcp/admission/admission_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-122
+client/admin/src/pages/organizations/CreateOrganization.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 137,244-247
+server/internal/remotesessions/remotesessionmetrics/validation_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-78
+client/dashboard/src/components/org-sidebar.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 2-3,5,7,23,27-28,75-87,107-125
+client/dashboard/src/pages/org/PrivateNetworkSetupSheet.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-202
+server/internal/mcp/serveendpoint.go
+  s_8c25379f270d5a::t_16b1f282a929fa 686-709,712,716,718,723,727,730-732
+server/internal/mcpservers/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 54,78,113,645-647,659-661,709-734,824,859,871-876
+  s_8c25379f270d5a::t_5b1e3220f4eb2e 877
+server/internal/risk/policycore/mutation.go
+  s_8c25379f270d5a::t_16b1f282a929fa 16,199-201,317-319
+server/internal/usage/payg_openrouter_chat_key_repair.go
+  s_8c25379f270d5a::t_16b1f282a929fa 87-89
+server/design/mcpservers/design.go
+  s_8c25379f270d5a::t_16b1f282a929fa 8,18-27
+server/internal/usersessions/clientauth/reason.go
+  s_8c25379f270d5a::t_16b1f282a929fa 69-73,76-81
+client/dashboard/vite.consent.config.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 19-21
+server/migrations/20260911154450_remote-session-clients-add-token-endpoint-auth-audience-format.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 1-2
+seed/demo/PAGES.md
+  s_8c25379f270d5a::t_16b1f282a929fa 47
+client/dashboard/src/pages/setup/task-slugs.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 9
+server/internal/background/activities/generate_toolset_embeddings_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 10,27,41-51
+  s_8c25379f270d5a::t_3a74e33794ee2c 52
+server/internal/demoseed/postgres.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 167-171,378-385,1533,1540,1545-1548,1557-1564,1569,1576,1581-1584,1592,1597-1603,1608-1611,2154-2163
+server/internal/mcp/rpc_tools_list.go
+  s_8c25379f270d5a::t_16b1f282a929fa 137
+client/admin/src/pages/organizations/applyFilters.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 21,41
+client/admin/src/routes/remote-session-issuers.$issuerId.convergence.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-5
+server/internal/mcpapproval/record_decision_enforcement_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 125-141
+  s_8c25379f270d5a::t_c1069f5c2558c3 142-143
+server/internal/mcp/authnchallenge_consent_validate_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-1289
+server/internal/mcpservers/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 25,30,34,111-132
+  s_8c25379f270d5a::t_1b9f952cdb1bff 133-134
+server/internal/platformmcp/shadow_distribution_read_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-62
+server/internal/risk/policy_audience_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 85-103
+client/admin/package.json
+  s_8c25379f270d5a::t_16b1f282a929fa 4,22
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 15-16,174-178,526-529,544-546,910-976
+server/internal/shadowmcp/admission/admission_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-196
+client/admin/src/lib/adminNav.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 1-58
+client/admin/src/components/app-sidebar.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 14,20,65-87
+client/admin/src/pages/organization/SetStripeCustomer.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 106
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-475
+server/internal/k8s/network_ingress_orphans_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-251
+server/internal/background/index_toolset.go
+  s_8c25379f270d5a::t_16b1f282a929fa 5,22-27,44,47,51-59,73-148
+server/internal/mcpservers/distribution_enable_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-66
+server/internal/networkingress/reconcile.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-325
+server/internal/networkingress/rollout_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 49,54,57-64
+server/internal/remotesessions/validation_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-388
+server/internal/platformmcp/distribution_service.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19,39-40,105-113,123-130,174,191,212-221,413-419,424,435-447,495-541
+server/internal/feature/flags.go
+  s_8c25379f270d5a::t_16b1f282a929fa 66-74
+server/internal/mcp/dynamic_tool_calling.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19,63-64,155,272-276,283
+server/internal/authz/principal.go
+  s_8c25379f270d5a::t_16b1f282a929fa 152-154
+server/cmd/tools/migrations/main.go
+  s_8c25379f270d5a::t_16b1f282a929fa 93
+.github/workflows/claude.yml
+  s_8c25379f270d5a::t_16b1f282a929fa 35
+client/admin/src/pages/organizations/index.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 2,4,20,74-75,79-80,125-126,136-137,140,149,159,174,180,182,186-195,497-534,577,585
+client/admin/src/pages/remote-session-issuers/createRoute.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-55
+client/dashboard/src/pages/platform-admin/Overview.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 6,91-93
+client/dashboard/src/theme-init.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 9-24,26-50
+server/internal/mcp/consent_script.js
+  s_8c25379f270d5a::t_16b1f282a929fa 31-43,137,158
+server/internal/mcpendpoints/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 34,39,193-213
+  s_8c25379f270d5a::t_72070928b782f1 214-215
+server/internal/risk/policy_bypass.go
+  s_8c25379f270d5a::t_16b1f282a929fa 28,294-296,477-479
+server/internal/shadowmcp/admission/rollout_strict_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-36
+server/internal/usersessions/clientauth/result.go
+  s_8c25379f270d5a::t_16b1f282a929fa 17-28
+server/internal/remotesessions/accountlabel.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-119
+client/dashboard/src/components/project-guide/journeyStatus.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 127-129,134-136
+client/dashboard/src/App.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 54-57,68-72,93
+server/internal/mcp/authnchallenge_workloadidentity.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-142
+server/internal/mcp/rpc_tools_call.go
+  s_8c25379f270d5a::t_16b1f282a929fa 156
+server/internal/remotesessions/tokenservice_attrs_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-38
+server/internal/mcp/authnchallenge_consent_action.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1,93-94,191-206,228,288-296
+  s_8c25379f270d5a::t_e06aecb4e92854 297
+server/internal/mcp/serve_meta_config.go
+  s_8c25379f270d5a::t_16b1f282a929fa 5,11-16,23-28
+server/internal/platformmcp/risk_reads.go
+  s_8c25379f270d5a::t_16b1f282a929fa 153,460
+.changeset/platform-mcp-shadow-distribution-workflow.md
+  s_8c25379f270d5a::t_16b1f282a929fa 1-5
+server/internal/deployments/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 203
+server/internal/networkingress/reconcile_requests.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-52
+client/admin/src/pages/remote-session-issuers/IssuerConfiguration.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-58
+client/admin/src/routes/remote-session-issuers.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-4
+server/internal/networkingress/reconcile_handler_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-36
+client/dashboard/src/hooks/useNetworkIngressRollout.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 1-20
+client/admin/src/pages/remote-session-issuers/Convergence.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-416
+server/internal/platformmcp/plugins_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 13,79-87,117
+server/internal/remotesessions/issuermetadatarefresh_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-1252
+server/internal/remotesessions/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 478-481,483,998-1002,1017-1021,1102-1103,1110-1113,1116-1125,1134-1149,1152-1159,1163-1176,1191-1193,1235-1260,1306-1311,1391-1393,1395-1410,1417-1436,1489-1504,1567-1571,1637-1641,1687-1691,2482-2486,2882-2904,2916-3007
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_8c25379f270d5a::t_16b1f282a929fa 100-101,108,113,129-131,153,181
+server/internal/remotesessions/tokenservice.go
+  s_8c25379f270d5a::t_16b1f282a929fa 181-183,220-225,314-323,463,466,477,479,483,495,499,502,504-505,508,527,630-631,633-634,674,729,739,780
+server/internal/shadowmcp/admission/report_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-91
+client/dashboard/src/pages/setup/components/hook-event-sources.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 18-30,37-39
+  s_8c25379f270d5a::t_dd42b93ee9ae6e 17
+server/internal/admin/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 676-677,739,743-746
+server/internal/platformmcp/shadow_distribution_read.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-254
+client/dashboard/src/dev/worktree-readout.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-81
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-216
+server/internal/mcp/serve_meta_tools.go
+  s_8c25379f270d5a::t_16b1f282a929fa 269
+client/dashboard/src/lib/logout-storage.test.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 6-11,13,16-17,19-20,65-72,192-495
+server/internal/remotemcp/distribution_admission_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-33
+server/internal/mcp/no_temporal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 26
+server/internal/workloadidentity/admissionlookup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-238
+client/dashboard/package.json
+  s_8c25379f270d5a::t_16b1f282a929fa 4,89,108-110,125-126
+server/internal/platformmcp/tools.go
+  s_8c25379f270d5a::t_16b1f282a929fa 454-456
+server/internal/remotesessions/migrateissuer_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 141,156
+server/internal/urn/principal_system_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-47
+server/migrations/atlas.sum
+  s_8c25379f270d5a::t_16b1f282a929fa 1,402-403
+server/internal/access/shadow_mcp_inventory.go
+  s_8c25379f270d5a::t_16b1f282a929fa 28,774-776
+server/internal/usersessions/clientauth/verifier.go
+  s_8c25379f270d5a::t_16b1f282a929fa 158-162,192-193,202,207-212,215
+server/cmd/gram/network_ingress_runtime.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-39
+client/admin/src/components/command-palette.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-604
+.mise-tasks/git/workcopy.sh
+  s_8c25379f270d5a::t_16b1f282a929fa 1-115
+server/internal/networkingress/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 188-261
+client/dashboard/src/components/project-guide/useProjectGuideProgress.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 176-181,207-212,278-283,323-328
+client/dashboard/src/pages/setup/components/steps/litellm-setup-step.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-300
+client/admin/src/components/app-sidebar.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 183-209,605-611
+  s_8c25379f270d5a::t_d71acccf4d19f9 612
+server/internal/background/worker.go
+  s_8c25379f270d5a::t_16b1f282a929fa 120-123,190,223-230,268,319,340,434,478-479,607,681-689,699-703,793-796,882-886
+client/admin/CHANGELOG.md
+  s_8c25379f270d5a::t_16b1f282a929fa 3-20
+client/admin/src/pages/remote-session-issuers/IssuerConfiguration.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-154
+server/internal/remotesessions/remotesessionmetrics/issuer_metadata_refresh_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-50
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 3,9-15,18-19,60-67
+client/dashboard/src/pages/setup/components/steps/index.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 5
+server/internal/rag/search_tools.go
+  s_8c25379f270d5a::t_16b1f282a929fa 52-59,114-118,138-153,163-174,181-204,212,225-228,456-460,523,536,812-816
+server/internal/k8s/network_ingress_provisioner.go
+  s_8c25379f270d5a::t_16b1f282a929fa 36-38,182-183
+server/internal/shadowmcp/admission/report.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-66
+server/internal/usage/create_stripe_checkout.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19,306-314
+  s_8c25379f270d5a::t_07639782268f4d 315
+client/admin/src/pages/organization/Overview.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 553,836,873,1075,1136
+server/internal/networkingress/runtime_config_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-137
+server/cmd/gram/platform_mcp.go
+  s_8c25379f270d5a::t_16b1f282a929fa 50,67,331-332,334-336,342-343,417-418,423,466,505-508,719-720,722-724,730-731,738,742
+server/internal/mcpapproval/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 434-439,469-493
+  s_8c25379f270d5a::t_802e6f4b7ae33d 494-495
+server/cmd/gram/start_network_ingress_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-57
+client/admin/src/lib/adminQueries.test.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 40,138,163,262-265,285,299
+server/internal/demoseed/demoseedtest/demoseedtest.go
+  s_8c25379f270d5a::t_16b1f282a929fa 286-289,303-325
+  s_8c25379f270d5a::t_b99e5fac745463 326-328
+server/internal/mcp/serve_meta_proxy_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 6,16-25,177
+server/design/plugins/design.go
+  s_8c25379f270d5a::t_16b1f282a929fa 17-26
+server/internal/background/worker_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 44
+server/internal/platformmcp/management.go
+  s_8c25379f270d5a::t_16b1f282a929fa 509,515-516
+server/internal/plugins/impl_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 41,937-947
+  s_8c25379f270d5a::t_1397799068e9a2 948-955
+server/internal/testenv/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 95-101
+server/internal/mcp/consent_template.html
+  s_8c25379f270d5a::t_16b1f282a929fa 178-181,183-185,197-204,206-208,210-222,224-226,230,232-233,252,277-287,295,320-388
+server/internal/attr/conventions.go
+  s_8c25379f270d5a::t_39a12142d69ca6 542
+  s_8c25379f270d5a::t_16b1f282a929fa 507,514-541,543-570,2079-2083
+.mise-tasks/git/worksync.sh
+  s_8c25379f270d5a::t_16b1f282a929fa 111-114
+server/cmd/gram/root.go
+  s_8c25379f270d5a::t_16b1f282a929fa 42,44
+server/internal/platformmcp/plugin_audience_mutation_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 5,11-12,15-39
+  s_8c25379f270d5a::t_d35c6efd51ca83 40
+server/internal/remotesessions/identity_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 101,105,112,124-125,127-130,143,151,157,164,192
+server/cmd/gram/flags_network_ingress.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-225
+server/internal/remotesessions/remotesessionmetrics/issuer_metadata_refresh.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-81
+server/internal/toolsets/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 386
+server/internal/usersessions/clientauth/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 34-36,216-260
+server/internal/mcp/authnchallenge_consent_probe.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-201
+server/internal/mcp/authnchallenge_consent_autoverify_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-407
+server/internal/remotesessions/challenge_enrichment_e2e_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-827
+client/admin/src/routes/remote-session-issuers.$issuerId.settings.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-5
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 16
+server/design/admin/design.go
+  s_8c25379f270d5a::t_16b1f282a929fa 673,684,686-687
+client/admin/src/pages/remote-session-issuers/IssuerEditor.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-464
+server/internal/remotesessions/issuerdiscovery_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 29,31,34
+server/internal/organizations/setup_tasks.go
+  s_8c25379f270d5a::t_16b1f282a929fa 55
+server/internal/platformmcp/plugin_audience_mutation.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19,99-105,107,143-145,158-160,184-187,189-208,248-259
+  s_8c25379f270d5a::t_84be0819c5e848 260
+server/internal/shadowmcp/admission/rollout.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-156
+server/internal/remotemcp/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 38,43-52,72-81,257-259,268-270,297-301
+client/dashboard/src/contexts/SdkProvider.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 4,47-50,76
+server/internal/mcp/dynamic_tool_calling_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 15,18
+server/internal/background/network_ingress_sweep.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-91
+server/internal/mcp/servepublic_tunneled_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 6,40-50,146,159
+server/internal/usersessions/clientauth/verifier_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 12,678-858
+infra/proto/gram/networkingress/v1/reconciler.proto
+  s_8c25379f270d5a::t_16b1f282a929fa 1-20
+.changeset/ais-607-network-access-dashboard.md
+  s_8c25379f270d5a::t_16b1f282a929fa 1-6
+server/internal/mcp/authnchallenge_consent_validate_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-235
+server/internal/access/shadow_mcp_inventory_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 23,891-936
+  s_8c25379f270d5a::t_901822c6cecd3d 937-938
+server/internal/mcp/serve_meta_proxy.go
+  s_8c25379f270d5a::t_16b1f282a929fa 93,97-99,120-138,140,143-144,150,156,172,175,179,183,192,197,209,212,216-217,271,308-318,324,326-330,332,334-335,337-341,343-345,347-356,358-366,377,398,400-407,410,412,420,422,448-449,453,468-483,485-486
+server/internal/platformmcp/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 1839-1971
+client/dashboard/src/pages/org/use-litellm-instance-projects.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 1-28
+server/cmd/tools/migrations/README.md
+  s_8c25379f270d5a::t_16b1f282a929fa 9-12
+client/dashboard/src/vite-env.d.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 8-14
+client/admin/src/routes/remote-session-issuers.$issuerId.index.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-6
+server/cmd/gram/flags_network_ingress_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 4-5,12-163,171-235
+server/database/schema.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 2785-2812,2831-2842,2955-2958
+client/admin/src/pages/remote-session-issuers/routes.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-117
+server/internal/mcpservers/distribution_admission_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-33
+server/cmd/gram/start.go
+  s_8c25379f270d5a::t_16b1f282a929fa 149,301-317,319-342,665-666,679-680,684-697,700,702,1176,1190-1192,1274-1275,1297-1309,1321-1325,1697-1699,1748-1751,1753-1754,1756-1757,1760,1764-1765,1822,1855-1857,2076,2130,2148-2153,2173-2179,2181-2182,2192-2193,2218-2228,2240-2256,2258-2265,2268,2280-2291,2296,2309-2312,2315
+server/internal/platformmcp/plugins_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 29,34-77,333-334,342,562-569
+client/dashboard/src/pages/access/CreateRoleDialog.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-143
+server/internal/remotesessions/challenge_complete_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-35
+server/internal/plugins/distribution_admission.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-64
+server/internal/remotesessions/tokenservice_resolve_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 100-114,132,144-146,319,369,408
+server/internal/risk/policy_bypass_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 25,118-164,249-276
+  s_8c25379f270d5a::t_1d8fc200f42824 277
+server/internal/background/activities/queries.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 1083-1232
+server/internal/background/index_toolset_sweep.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-182
+server/internal/mcpservers/distribution_visibility_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-104
+client/dashboard/CHANGELOG.md
+  s_8c25379f270d5a::t_16b1f282a929fa 3-19
+client/dashboard/src/components/org-sidebar.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 14,23-25,72,158,195-199,291-293
+server/internal/networkingress/reconcile_handler.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-51
+client/dashboard/src/dev/brand-slot.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-33
+server/internal/mcp/authnchallenge_consent_validate_regression_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-96
+server/internal/platformmcp/plugins.go
+  s_8c25379f270d5a::t_16b1f282a929fa 23,132-133,254-260,278-289,293-299,473-476,711-712
+client/dashboard/knip.config.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 35-39
+server/internal/remotesessions/platformmigrateissuer_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 136,148
+server/internal/shadowmcp/admission/guard_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-84
+server/internal/platformmcp/shadow_decision_integration_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 126
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 896-898
+server/internal/mcp/authnchallenge_workloadauth_internal_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 9,16-17,26,33-35,38-44,52
+server/migrations/20260911201356_aim-206-remote-session-client-resource-display.sql
+  s_8c25379f270d5a::t_16b1f282a929fa 1-2
+server/internal/networkingress/runtime_config.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-141
+server/internal/risk/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 68,978-985,1038-1040
+client/dashboard/vitest.config.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 4,7,19-22
+server/internal/xmcp/setup_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 160
+server/internal/platformmcp/lifecycle_visibility.go
+  s_8c25379f270d5a::t_16b1f282a929fa 19,75-85,92-100,136-147,190-204
+.gitignore
+  s_8c25379f270d5a::t_16b1f282a929fa 9-10
+client/dashboard/src/pages/setup/components/setup-task-content.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 9,41-42
+  s_8c25379f270d5a::t_321ebbc5d5ff23 43
+go.mod
+  s_8c25379f270d5a::t_16b1f282a929fa 33
+infra/gen_py/gram/networkingress/v1/reconciler_pb2.pyi
+  s_8c25379f270d5a::t_16b1f282a929fa 1-10
+client/dashboard/vite.config.ts
+  s_8c25379f270d5a::t_16b1f282a929fa 4-5,7-14,18,88-220,228-229,288,329-332,425-429,455-456
+server/internal/admin/listorganizations_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 49-53,858-859,1153,1162-1166,1527-1567
+  s_8c25379f270d5a::t_b3741c35ce6e1a 1568
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 2,21-67,621,847-850,853-858,860-906,908,911,913,915-932,937-940,943,945-978,981-982,984-986,988-990,992-1000,1002-1032,1034-1097,1101-1109,1111-1114,1117-1121
+server/internal/background/openrouter_admin_mutation_generation_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 34,40-43,48-59
+server/internal/networkingress/orphans.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-75
+server/internal/remotesessions/export_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 3-12,20-56
+server/internal/networkingress/impl_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 48-56,161,165-172
+  s_8c25379f270d5a::t_9dbebfc75394af 173
+infra/gen/kcc.yaml
+  s_8c25379f270d5a::t_16b1f282a929fa 88-100,1237-1254,1640-1656
+server/internal/risk/prompt_policy_scanner_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 28-30,69,71,74,118,141,166,185,202,222
+server/internal/mcp/authnchallenge_consent.go
+  s_8c25379f270d5a::t_16b1f282a929fa 159-160,243-316,499-523,648,1094-1095,1104-1106,1194-1213,1315-1321,1330,1343-1356,1387-1393
+  s_8c25379f270d5a::t_cdb7180f5bf092 1394
+server/internal/mcp/consent_page_assets/consent-page.css
+  s_8c25379f270d5a::t_16b1f282a929fa 2
+server/internal/plugins/platform_mcp_skills/review-shadow-mcp/SKILL.md
+  s_8c25379f270d5a::t_16b1f282a929fa 1-32
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 154
+server/package.json
+  s_8c25379f270d5a::t_16b1f282a929fa 3
+server/internal/remotesessions/challenge.go
+  s_8c25379f270d5a::t_16b1f282a929fa 207-234,254-264,287-291,298,303-305,307,420,422-425,491,493-494,497-508,555-564,574-575,577-582,848,850-864,875,877,882,892,894,901,904,907,921,933,935,943,946,950,953,964,972,979,986,988,1004,1006,1009-1013,1018,1024,1048,1084,1092,1107,1110,1113,1132-1134,1138,1161-1171,1191-1192,1195,1200,1204,1218,1220,1292,1321-1328,1331-1332,1336-1355,1357-1359,1361
+client/admin/src/components/command-palette.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-423
+server/internal/shadowmcp/admission/admission.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-238
+client/admin/src/pages/remote-session-issuers/IssuerEditor.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-609
+server/internal/killswitches/evaluator_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 179,203,210-214
+server/internal/mcp/authnchallenge_consent_script_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-60
+client/dashboard/src/pages/org/NetworkIngressCredentialsFields.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-40
+docs/pubsub-topology.md
+  s_8c25379f270d5a::t_16b1f282a929fa 22-23,58,85-93,95,97-114,120-121,157-206,217-218,258
+server/internal/toolsets/impl.go
+  s_8c25379f270d5a::t_16b1f282a929fa 18,257,331-378,680
+server/internal/urn/principal.go
+  s_8c25379f270d5a::t_16b1f282a929fa 8,22-23,36-40,43-45,47-50,74-78,243-245
+  s_8c25379f270d5a::t_ec3747e6ed2b87 246-247
+server/internal/background/index_toolset_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 4-5,7,11-14,17,24-29,34-201
+server/design/networkingress/design.go
+  s_8c25379f270d5a::t_16b1f282a929fa 30-34,49,51
+.changeset/platform-mcp-shadow-distribution-enforcement.md
+  s_8c25379f270d5a::t_16b1f282a929fa 1-5
+client/admin/src/pages/remote-session-issuers/Convergence.test.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-371
+client/dashboard/src/components/app-sidebar.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 17,272-273
+server/internal/toolsets/list_tool_schema_static_values_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 4,10,144-153,156-162
+server/internal/background/activities/list_toolsets_for_indexing_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-348
+server/internal/mcp/serve_meta_handshake_test.go
+  s_8c25379f270d5a::t_16b1f282a929fa 1-187
+client/admin/src/routes/remote-session-issuers.$issuerId.tsx
+  s_8c25379f270d5a::t_16b1f282a929fa 1-15
+.speakeasy/out.admin.openapi.yaml
+  s_8c25379f270d5a::t_9c4d414b862443 2352,2404,2408,2419,2423,2426,2430
+.speakeasy/out.openapi.yaml
+  s_8c25379f270d5a::t_0c3be90b817821 28389-28394,28500-28505,28610-28615,28728-28733,28848-28853,28985-28990,29076-29081,29193-29198,29314-29319,29425-29430,29536-29541,29647-29652,31273,31288,38126-38131,38220-38225,38308-38313,38396-38401,38484-38489,38574-38579,38668-38673,38762-38767,38856-38861,38950-38955,39038-39043,39139-39144,39241-39246,39340-39345,39444-39449,39561-39566,39691-39696,39785-39790,39888-39893,39984-39989,40080-40085,40176-40181,40278-40283,40386-40391,40488-40493,40590-40595,40692-40697,40794-40799,80406-80411
+client/admin/src/sdk/src/funcs/adminListOrganizations.ts
+  s_8c25379f270d5a::t_0370fa2e1acdb8 47
+client/admin/src/sdk/src/models/operations/adminlistorganizations.ts
+  s_8c25379f270d5a::t_371cf424d090f8 41,49,53
+client/admin/src/sdk/src/react-query/adminListOrganizations.ts
+  s_8c25379f270d5a::t_48c3063586209f 77,104,131,172
+client/admin/src/sdk/src/sdk/admin.ts
+  s_8c25379f270d5a::t_02e4b10918bb85 562
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_8c25379f270d5a::t_b15a50bd23d261 1258,6155
+client/dashboard/src/sdk/src/funcs/mcpServersAddToolMetadataBatch.ts
+  s_8c25379f270d5a::t_bae0a6fdf37777 216
+client/dashboard/src/sdk/src/funcs/mcpServersCreate.ts
+  s_8c25379f270d5a::t_b95146409b9e5b 215
+client/dashboard/src/sdk/src/funcs/mcpServersDelete.ts
+  s_8c25379f270d5a::t_bfbd84971218e7 213
+client/dashboard/src/sdk/src/funcs/mcpServersDeleteToolMetadata.ts
+  s_8c25379f270d5a::t_446839083f862d 215
+client/dashboard/src/sdk/src/funcs/mcpServersGet.ts
+  s_8c25379f270d5a::t_a77e486bf058a5 218
+client/dashboard/src/sdk/src/funcs/mcpServersList.ts
+  s_8c25379f270d5a::t_9e72b544fa4851 220
+client/dashboard/src/sdk/src/funcs/mcpServersListForOrg.ts
+  s_8c25379f270d5a::t_4915a3c9c9c525 188
+client/dashboard/src/sdk/src/funcs/mcpServersListToolFilters.ts
+  s_8c25379f270d5a::t_f959215e8e557d 222
+client/dashboard/src/sdk/src/funcs/mcpServersListToolMetadata.ts
+  s_8c25379f270d5a::t_585cdf4734c644 218
+client/dashboard/src/sdk/src/funcs/mcpServersSetToolMetadata.ts
+  s_8c25379f270d5a::t_694882600b325e 215
+client/dashboard/src/sdk/src/funcs/mcpServersSetToolMetadataBatch.ts
+  s_8c25379f270d5a::t_2de22cd0913e97 216
+client/dashboard/src/sdk/src/funcs/mcpServersUpdate.ts
+  s_8c25379f270d5a::t_5ae3d2bcfc0300 215
+client/dashboard/src/sdk/src/funcs/networkIngressGetIngress.ts
+  s_8c25379f270d5a::t_6f11623b6d8aa7 16-18,45,54,82,175,186
+client/dashboard/src/sdk/src/funcs/platformMcpDismissOnboarding.ts
+  s_8c25379f270d5a::t_5f4d35bb1231d4 187
+client/dashboard/src/sdk/src/funcs/platformMcpDistributeOnboardingCandidate.ts
+  s_8c25379f270d5a::t_81acb1371d4750 196
+client/dashboard/src/sdk/src/funcs/platformMcpGetOnboarding.ts
+  s_8c25379f270d5a::t_03390ee282302d 191
+client/dashboard/src/sdk/src/funcs/platformMcpRecheckOnboardingReadiness.ts
+  s_8c25379f270d5a::t_c3ddc6852a41a0 191
+client/dashboard/src/sdk/src/funcs/platformMcpRecordAgentConfigurationCopied.ts
+  s_8c25379f270d5a::t_2cd3f34ec08a92 193
+client/dashboard/src/sdk/src/funcs/platformMcpRecordDashboardCtaEvent.ts
+  s_8c25379f270d5a::t_b344e4dab7282c 187
+client/dashboard/src/sdk/src/funcs/platformMcpRecordInstallIntent.ts
+  s_8c25379f270d5a::t_6718d9d75ab2a7 191
+client/dashboard/src/sdk/src/funcs/platformMcpRemoveOnboardingDistribution.ts
+  s_8c25379f270d5a::t_1e3beea9eaf08d 196
+client/dashboard/src/sdk/src/funcs/platformMcpRepairOnboardingPublication.ts
+  s_8c25379f270d5a::t_dbc340fa3d07a1 196
+client/dashboard/src/sdk/src/funcs/platformMcpStartOnboarding.ts
+  s_8c25379f270d5a::t_d7c4caba253a17 190
+client/dashboard/src/sdk/src/funcs/platformMcpStartOnboardingSetup.ts
+  s_8c25379f270d5a::t_1933ae06a3897c 191
+client/dashboard/src/sdk/src/funcs/pluginsAddPluginServer.ts
+  s_8c25379f270d5a::t_071c5e13a35ad6 199
+client/dashboard/src/sdk/src/funcs/pluginsCreatePlugin.ts
+  s_8c25379f270d5a::t_7e47add3f857b5 194
+client/dashboard/src/sdk/src/funcs/pluginsDeletePlugin.ts
+  s_8c25379f270d5a::t_b2ba2bc122e468 197
+client/dashboard/src/sdk/src/funcs/pluginsDownloadCodexInstallScript.ts
+  s_8c25379f270d5a::t_d956b24c7394fd 202
+client/dashboard/src/sdk/src/funcs/pluginsDownloadObservabilityPlugin.ts
+  s_8c25379f270d5a::t_46733f028c0939 204
+client/dashboard/src/sdk/src/funcs/pluginsDownloadPluginPackage.ts
+  s_8c25379f270d5a::t_afb6f2c58e694e 207
+client/dashboard/src/sdk/src/funcs/pluginsGetMarketplaceSettings.ts
+  s_8c25379f270d5a::t_14944aab6213e5 197
+client/dashboard/src/sdk/src/funcs/pluginsGetPlugin.ts
+  s_8c25379f270d5a::t_4cc6d79b4c99ad 198
+client/dashboard/src/sdk/src/funcs/pluginsGetPublishStatus.ts
+  s_8c25379f270d5a::t_351cfa99c196b6 197
+client/dashboard/src/sdk/src/funcs/pluginsListAudiences.ts
+  s_8c25379f270d5a::t_fd14f67c561b83 196
+client/dashboard/src/sdk/src/funcs/pluginsListPlugins.ts
+  s_8c25379f270d5a::t_1ca631687e4857 196
+client/dashboard/src/sdk/src/funcs/pluginsPublishPlugins.ts
+  s_8c25379f270d5a::t_1098ecd881761d 199
+client/dashboard/src/sdk/src/funcs/pluginsRemovePluginServer.ts
+  s_8c25379f270d5a::t_d28ed8d223e135 198
+client/dashboard/src/sdk/src/funcs/pluginsSetPluginAssignments.ts
+  s_8c25379f270d5a::t_d8437767a5ac96 199
+client/dashboard/src/sdk/src/funcs/pluginsUpdateMarketplaceSettings.ts
+  s_8c25379f270d5a::t_6e49f6323e7e4e 201
+client/dashboard/src/sdk/src/funcs/pluginsUpdatePlugin.ts
+  s_8c25379f270d5a::t_ec9b19c7e68640 194
+client/dashboard/src/sdk/src/funcs/pluginsUpdatePluginServer.ts
+  s_8c25379f270d5a::t_b983a691f22ead 199
+client/dashboard/src/sdk/src/models/components/networkingressresult.ts
+  s_8c25379f270d5a::t_b4897c00e2e569 1-37
+client/dashboard/src/sdk/src/react-query/networkIngress.core.ts
+  s_8c25379f270d5a::t_b72516b7381410 14,20
+client/dashboard/src/sdk/src/react-query/networkIngress.ts
+  s_8c25379f270d5a::t_71af3ef960e37c 62,85
+client/dashboard/src/sdk/src/sdk/networkingress.ts
+  s_8c25379f270d5a::t_b9cae3ee70c8d4 15,108,114
+infra/gen/gram/networkingress/v1/reconcile_requested.pb.go
+  s_8c25379f270d5a::t_ad69c022e07a99 1-216
+infra/gen/gram/networkingress/v1/reconciler.pb.go
+  s_8c25379f270d5a::t_553eaa7134454a 1-112
+infra/gen_py/gram/networkingress/v1/reconcile_requested_pb2.py
+  s_8c25379f270d5a::t_677e30514c026c 1-40
+infra/gen_py/gram/networkingress/v1/reconciler_pb2.py
+  s_8c25379f270d5a::t_4cee903597edd7 1-40
+pnpm-lock.yaml
+  s_8c25379f270d5a::t_c81a67b8e53d44 106-108,361,387-388,436,439-440,442-443,445-446,490-491,493-494,497,554,609,676,733,1507,1773-1777,1783-1785,1793-1794,1796,1803-1805,1813-1814,1816,1823-1826,1833-1834,1843-1845,1847,1855-1856,1859,1867-1869,1871,1879-1881,1891-1892,1895,1903-1905,1907,1915-1917,1927-1928,1931,1939-1942,1949-1952,1959-1962,1969-1971,3327-3328,3331,3336-3337,3339,3341-3342,3344,3355-3356,3362,3369-3370,3374,3381-3382,3388,3516-3519,3540-3546,5763-5765,6148-6150,6489-6490,6790-6791,6811-6812,6915-6917,7335,7639-7640,7652-7654,7664-7665,7679-7680,7697-7700,7708,7713,8389,8408-8409,8432-8433,8657-8659,8663,8669,8675,8681,8687,8693,8699,8705,8711,8717,8723,8729,8735,8741,8747,8753-8757,8767,8773,9963,9967-9968,9971,9973,9975,9977,9980,9982,9992,9996-9998,10000,10004-10005,10007,10012,10015,10020,10023-10025,10030,10129-10132,10149-10155,10312,10349,10405,10720,10832,10839,11831-11832,12385-12388,12827-12828,12885,12891,13022-13043,13120,13419,13477,13749,13756,13861,13876,13883,13891-13892,14003,14007,14009,14011,14557,14560,14577,14581,14586,14714-14715,14717,14719
+server/gen/admin/service.go
+  s_8c25379f270d5a::t_399402bd12b77c 70-71,972-975,980-982,985-986
+server/gen/http/cli/gram/cli.go
+  s_8c25379f270d5a::t_8101c6330b4d6f 17354,17373,21310,21751
+server/gen/http/mcp_servers/client/encode_decode.go
+  s_8c25379f270d5a::t_489d06d03dd696 80,259-272,341,520-533,608,787-800,854,1033-1046,1111,1290-1303,1372,1551-1564,1630,1809-1822,1888,2067-2080,2147,2326-2339,2404,2583-2596,2662,2828-2841,2905,3071-3084
+server/gen/http/mcp_servers/client/types.go
+  s_8c25379f270d5a::t_eebb9c4f1113c9 491-509,692-709,894-912,1103-1121,1308-1326,1513-1531,1722-1740,1931-1949,2137-2155,2342-2360,2551-2569,2756-2774,3146-3160,3335-3349,3516-3530,3697-3711,3886-3900,4079-4098,4262-4276,4443-4457,4624-4638,4808-4822,4973-4987,5138-5152,5739-5762,6003-6026,6267-6290,6531-6554,6795-6818,7059-7082,7323-7346,7587-7610,7851-7874,8115-8138,8379-8402,8643-8666
+server/gen/http/mcp_servers/server/encode_decode.go
+  s_8c25379f270d5a::t_1215225b76edda 255-268,504-517,772-785,979-992,1230-1243,1479-1492,1730-1743,1981-1994,2234-2247,2485-2498,2729-2742,2967-2980
+server/gen/http/mcp_servers/server/types.go
+  s_8c25379f270d5a::t_437861ec853c9d 491-509,692-709,894-912,1103-1121,1308-1326,1513-1531,1722-1740,1931-1949,2137-2155,2342-2360,2551-2569,2756-2774,3237-3250,3391-3404,3546-3559,3710-3724,3869-3882,4027-4040,4191-4205,4356-4370,4515-4529,4674-4687,4835-4849,4994-5007
+server/gen/http/network_ingress/client/encode_decode.go
+  s_8c25379f270d5a::t_443075e4ba5496 95,1645-1673
+server/gen/http/network_ingress/client/types.go
+  s_8c25379f270d5a::t_1cad809a45c765 44,1520-1551,1586-1591,2778-2780,4775-4841
+server/gen/http/network_ingress/server/encode_decode.go
+  s_8c25379f270d5a::t_8ff04b8b0be07c 26,1439-1467
+server/gen/http/network_ingress/server/types.go
+  s_8c25379f270d5a::t_0f36d0f01e28b3 44,1520-1551,1554-1557
+server/gen/http/openapi3.yaml
+  s_8c25379f270d5a::t_9ea8ee533b261d 2374,2426,2430,2441,2445,2448,2452,32066-32071,32176-32181,32285-32290,32402-32407,32521-32526,32657-32662,32747-32752,32863-32868,32983-32988,33093-33098,33203-33208,33313-33318,34922,34937,41703-41708,41796-41801,41883-41888,41970-41975,42057-42062,42146-42151,42239-42244,42332-42337,42425-42430,42518-42523,42605-42610,42705-42710,42806-42811,42904-42909,43007-43012,43123-43128,43252-43257,43345-43350,43447-43452,43542-43547,43637-43642,43732-43737,43833-43838,43940-43945,44041-44046,44142-44147,44243-44248,44344-44349,84940-84945
+server/gen/http/platform_mcp/client/encode_decode.go
+  s_8c25379f270d5a::t_094bb73617db26 66,245-258,315,494-507,565,731-744,802,981-994,1049,1228-1241,1295,1470-1483,1537,1716-1729,1788,1967-1980,2039,2218-2231,2290,2469-2482,2535,2701-2714
+server/gen/http/platform_mcp/client/types.go
+  s_8c25379f270d5a::t_2487ba219c64ee 835-853,1041-1059,1250-1268,1459-1477,1668-1686,1877-1895,2086-2104,2295-2313,2504-2522,2713-2731,2922-2940,3187-3201,3386-3400,3551-3565,3750-3764,3950-3964,4127-4141,4327-4341,4527-4541,4727-4741,4897-4914,4927-4929,5092-5106,6315-6338,6579-6602,6845-6868,7109-7132,7379-7403,7644-7667,7910-7933,8179-8203,8448-8471,8715-8738,8978-9001
+server/gen/http/platform_mcp/server/encode_decode.go
+  s_8c25379f270d5a::t_6c67c2d443d55f 209-222,436-449,660-673,887-900,1095-1108,1302-1315,1509-1522,1736-1749,1963-1976,2190-2203,2394-2407
+server/gen/http/platform_mcp/server/types.go
+  s_8c25379f270d5a::t_1e92d8897ab66a 835-853,1041-1059,1250-1268,1459-1477,1668-1686,1877-1895,2086-2104,2295-2313,2504-2522,2713-2731,2922-2940,3360-3373,3518-3531,3682-3696,3847-3861,4012-4026,4177-4191,4342-4356,4507-4521,4672-4686,4837-4851,4994-5008
+server/gen/http/plugins/client/encode_decode.go
+  s_8c25379f270d5a::t_0824d262804f84 71,250-263,323,502-515,576,755-768,829,1008-1021,1081,1247-1260,1321,1500-1513,1575,1754-1767,1829,1995-2008,2070,2249-2262,2319,2498-2511,2574,2771-2784,2845,3028-3041,3099,3282-3295,3352,3531-3544,3605,3784-3797,3855,4034-4047,4109,4288-4301
+server/gen/http/plugins/client/types.go
+  s_8c25379f270d5a::t_348ed0875af17a 509-526,707-724,907-924,1107-1124,1307-1324,1507-1524,1711-1729,1916-1934,2124-2142,2325-2342,2552-2570,2761-2779,2970-2988,3173-3190,3373-3390,3581-3599,3790-3794,3796-3816,4175-4189,4380-4394,4585-4599,4790-4804,4955-4969,5136-5150,5317-5331,5482-5496,5663-5677,5844-5858,6034-6048,6209-6223,6384-6398,6571-6585,6746-6760,6924-6938,7101-7115,7677-7700,7941-7943,7965-7967,7989-8013,8205-8228,8469-8492,8733-8756,8997-9020,9261-9284,9525-9548,9789-9812,10053-10076,10343-10366,10610-10633,10876-10899,11140-11163,11404-11427,11669-11692,11933-11956
+server/gen/http/plugins/server/encode_decode.go
+  s_8c25379f270d5a::t_8d6cdf556f75b1 221-234,450-463,689-702,928-941,1154-1167,1393-1406,1632-1645,1865-1878,2104-2117,2323-2336,2576-2589,2808-2821,3028-3041,3247-3260,3482-3495,3701-3714,3936-3949
+server/gen/http/plugins/server/types.go
+  s_8c25379f270d5a::t_73f7a8410d530b 509-526,707-724,907-924,1107-1124,1307-1324,1507-1524,1711-1729,1916-1934,2124-2142,2325-2342,2552-2570,2761-2779,2970-2988,3173-3190,3373-3390,3581-3599,3790-3808,4294-4307,4448-4461,4602-4615,4756-4769,4910-4923,5065-5078,5226-5240,5388-5402,5553-5567,5708-5721,5887-5901,6052-6066,6217-6231,6374-6387,6529-6542,6693-6707,6858-6872
+server/gen/mcp_servers/client.go
+  s_8c25379f270d5a::t_d439abbec4131f 64,87,111,135,159,183,207,231,255,279,303,323
+server/gen/mcp_servers/service.go
+  s_8c25379f270d5a::t_797a5a8cad2690 374-378
+server/gen/network_ingress/client.go
+  s_8c25379f270d5a::t_e86c1b3ef2ebf0 53,59
+server/gen/network_ingress/service.go
+  s_8c25379f270d5a::t_1d2f2a85d3de57 19-20,97-98,139-144
+server/gen/platform_mcp/client.go
+  s_8c25379f270d5a::t_4cd7009c5abef5 61,85,109,129,153,177,201,225,249,273,297
+server/gen/platform_mcp/service.go
+  s_8c25379f270d5a::t_0cddaf36b1268b 297-301
+server/gen/plugins/client.go
+  s_8c25379f270d5a::t_127b9cbd8565e1 73,96,119,142,165,185,209,233,253,276,301,326,351,376,399,423,447
+server/gen/plugins/service.go
+  s_8c25379f270d5a::t_11ab0ac47f712a 513-517
+server/internal/admin/repo/queries.sql.go
+  s_8c25379f270d5a::t_c47d11f908eca0 564-576
+server/internal/background/activities/repo/queries.sql.go
+  s_8c25379f270d5a::t_cbb337a818992b 1514-1558,1992-2163
+server/internal/deployments/repo/queries.sql.go
+  s_8c25379f270d5a::t_50e94ddc649dce 1020
+server/internal/mcpapproval/repo/queries.sql.go
+  s_8c25379f270d5a::t_3b8cf52b40787d 784-830,1469-1474
+server/internal/networkingress/repo/queries.sql.go
+  s_8c25379f270d5a::t_d5ef7f63f10cdd 313-353,438-560,599-640,692-744,791-811,853-864
+server/internal/platformmcp/repo/queries.sql.go
+  s_8c25379f270d5a::t_fe37bbd14c02d3 1704-1748,3955-4184
+server/internal/plugins/repo/queries.sql.go
+  s_8c25379f270d5a::t_e45a2845dd2900 634-668
+server/internal/rag/repo/queries.sql.go
+  s_8c25379f270d5a::t_be9d451c2f2bb5 94-104,516-565,568,571,573,576-584,590,594
+server/internal/remotesessions/repo/queries.sql.go
+  s_8c25379f270d5a::t_23790be325ab48 570,618,621-625,659,703,706-710,954,973,976-980,1060,1088,1091-1095,1176,1200,1203-1207,1442-1510,1677,1701,1704-1708,1943,1974,1977-1981,2063,2106,2109-2113,2406,2447,2450-2454,2618-2620,2622-2637,2646-2673,2703-2705,2708-2713,3034-3111,3349,3391,3394-3398,3764,3872,3875-3879,4247,4305,4308-4312,4331,4401,4404-4408,4448-4463,4506-4511,4552-4557,4912-4917,4962-4967,5030-5035,5545-5815,5824-5828,5922-5926,5991,6022,6025-6029,6049,6084,6087-6091,6257,6296,6299-6303,6312-6399,6423-6479,6488-6492,6571-6575,6615-6619,6661-6665,6797,6833,6836-6840,7072,7112,7115-7119,7346,7383,7386-7390,7441-7448,7450,7452-7465,7467-7468,7471-7472,7475-7478,7480-7481,7486-7488,7490,7495,7507-7522,7525,7808-7811,7813,7998-8013,8015-8016,8018,8027,8043-8044,8051
+server/internal/risk/repo/queries.sql.go
+  s_8c25379f270d5a::t_3363d9df85318d 788-791,795-796,5641-5647,5649,5657-5661,5666-5667
+server/internal/testenv/testrepo/queries.sql.go
+  s_8c25379f270d5a::t_01dba0d6248c91 633-645
+server/internal/toolsets/repo/queries.sql.go
+  s_8c25379f270d5a::t_bb94362d9a7ce8 1471
+server/internal/workloadidentity/repo/queries.sql.go
+  s_8c25379f270d5a::t_e3b15a3310ac7e 87-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3b0bd9d909050b51ddd0bbdff45708e531a34bea",
+  "prompts": {},
+  "sessions": {
+    "s_8c25379f270d5a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a036-642b-73d0-b9d9-ec1971c3ac5b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
