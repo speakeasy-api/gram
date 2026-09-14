@@ -13388,6 +13388,102 @@ paths:
             x-speakeasy-name-override: describe
             x-speakeasy-react-hook:
                 name: AnalyticsDescribe
+    /rpc/analytics.dimensionValues:
+        post:
+            description: List the values a dimension holds inside a window, most frequent first, for filter pickers. Values are resolved after the dataset collapses its observations, so every value returned is one a query would match.
+            operationId: analyticsDimensionValues
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DimensionValuesRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AnalyticsDimensionValuesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: dimensionValues analytics
+            tags:
+                - analytics
+            x-speakeasy-name-override: dimensionValues
+            x-speakeasy-react-hook:
+                name: AnalyticsDimensionValues
+                type: query
     /rpc/analytics.query:
         post:
             description: 'Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset''s grain, newest first.'
@@ -73589,6 +73685,35 @@ components:
                         $ref: '#/components/schemas/AnalyticsDataset'
             required:
                 - datasets
+        AnalyticsDimensionValue:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Rows at the dataset's grain carrying this value inside the window
+                    format: int64
+                value:
+                    type: string
+                    description: A non-empty value of the dimension
+            required:
+                - value
+                - count
+        AnalyticsDimensionValuesResult:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                dimension:
+                    type: string
+                values:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsDimensionValue'
+            description: The values a dimension actually holds inside the window, most frequent first, after the dataset has collapsed its observations.
+            required:
+                - dataset
+                - dimension
+                - values
         AnalyticsField:
             type: object
             properties:
@@ -78843,6 +78968,36 @@ components:
             description: Outcome of probing the provider with the stored credentials.
             required:
                 - ok
+        DimensionValuesRequestBody:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Dataset to look in
+                    example: sessions
+                dimension:
+                    type: string
+                    description: Dimension to list values of
+                    example: model
+                from:
+                    type: string
+                    description: Start of the half-open window [from, to), ISO 8601
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Maximum values. Defaults to 50, at most 200.
+                    format: int64
+                    minimum: 1
+                    maximum: 200
+                to:
+                    type: string
+                    description: End of the half-open window [from, to), ISO 8601
+                    format: date-time
+            required:
+                - dataset
+                - dimension
+                - from
+                - to
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:

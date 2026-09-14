@@ -156,3 +156,54 @@ func BuildDescribePayload(analyticsDescribeSessionToken string, analyticsDescrib
 
 	return v, nil
 }
+
+// BuildDimensionValuesPayload builds the payload for the analytics
+// dimensionValues endpoint from CLI flags.
+func BuildDimensionValuesPayload(analyticsDimensionValuesBody string, analyticsDimensionValuesSessionToken string, analyticsDimensionValuesProjectSlugInput string) (*analytics.DimensionValuesPayload, error) {
+	var err error
+	var body DimensionValuesRequestBody
+	{
+		err = json.Unmarshal([]byte(analyticsDimensionValuesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dataset\": \"sessions\",\n      \"dimension\": \"model\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.Limit != nil {
+			if *body.Limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+			}
+		}
+		if body.Limit != nil {
+			if *body.Limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 200, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if analyticsDimensionValuesSessionToken != "" {
+			sessionToken = &analyticsDimensionValuesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if analyticsDimensionValuesProjectSlugInput != "" {
+			projectSlugInput = &analyticsDimensionValuesProjectSlugInput
+		}
+	}
+	v := &analytics.DimensionValuesPayload{
+		Dataset:   body.Dataset,
+		Dimension: body.Dimension,
+		From:      body.From,
+		To:        body.To,
+		Limit:     body.Limit,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
