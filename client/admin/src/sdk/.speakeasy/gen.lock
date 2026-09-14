@@ -390,7 +390,7 @@ examples:
           id: "887a6721-cc2b-4734-a60c-fea5320bb908"
       responses:
         "200":
-          application/json: {"global_client_count": 162286, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-12-22T04:27:24.743Z", "id": "0388e02f-c4a5-4551-aa64-72dedf0f5622", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T04:43:32.628Z"}, "tenant_client_count": 965841}
+          application/json: {"global_client_count": 162286, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-12-22T04:27:24.743Z", "id": "0388e02f-c4a5-4551-aa64-72dedf0f5622", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T04:43:32.628Z"}, "tenant_client_count": 965841, "trusted_user_session_issuer_count": 535906}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -412,7 +412,7 @@ examples:
           target_id: "6e6e7d42-1a46-4050-9c7d-d0b99fa8ace3"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 589058, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>"], "target_tenant_client_count": 373762, "warnings": [{"field": "<value>"}]}
+          application/json: {"can_migrate": false, "client_count": 589058, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>"], "target_tenant_client_count": 373762, "trusted_user_session_issuer_count": 444688, "warnings": [{"field": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

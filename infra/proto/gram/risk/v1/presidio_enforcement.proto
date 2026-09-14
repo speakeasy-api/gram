@@ -42,6 +42,7 @@ message PresidioEnforcement {
   string policy_link_reason = 25;
   // Raw external conversation ID; independent of the persisted Gram chat_id.
   string external_conversation_id = 26;
+  bool content_truncated = 27;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {seconds: 600}

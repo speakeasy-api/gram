@@ -176,6 +176,9 @@ func parseKeySet(raw json.RawMessage) (jose.JSONWebKeySet, error) {
 	if len(raw) == 0 {
 		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf("empty key set document: %w", ErrKeySetInvalid)
 	}
+	if containsNULEscape(raw) {
+		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf("key set contains a NUL escape: %w", ErrKeySetInvalid)
+	}
 
 	// One pass over the document: the envelope is unmarshalled once and each
 	// key is screened from its raw members before go-jose sees it, rather

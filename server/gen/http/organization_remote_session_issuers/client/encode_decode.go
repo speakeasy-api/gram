@@ -2915,6 +2915,8 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
@@ -2982,6 +2984,19 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		for i, val := range v.ScopeOverride {
 			res.ScopeOverride[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalTrustedUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionissuersTrustedUserSessionIssuerReference
+// builds a value of type
+// *organizationremotesessionissuers.TrustedUserSessionIssuerReference from a
+// value of type *TrustedUserSessionIssuerReferenceResponseBody.
+func unmarshalTrustedUserSessionIssuerReferenceResponseBodyToOrganizationremotesessionissuersTrustedUserSessionIssuerReference(v *TrustedUserSessionIssuerReferenceResponseBody) *organizationremotesessionissuers.TrustedUserSessionIssuerReference {
+	res := &organizationremotesessionissuers.TrustedUserSessionIssuerReference{
+		ID:   *v.ID,
+		Slug: *v.Slug,
 	}
 
 	return res
