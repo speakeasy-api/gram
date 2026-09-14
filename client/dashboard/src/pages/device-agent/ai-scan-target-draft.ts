@@ -4,7 +4,7 @@ import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/componen
 // Form state and rules for the scan target editor; the rules mirror the
 // server's aitargets.Validate.
 
-export type TargetCategory = "harness" | "local_model";
+export type TargetCategory = "harness" | "assistant" | "local_model";
 
 export const TARGET_CATEGORIES: ReadonlyArray<{
   value: TargetCategory;
@@ -16,6 +16,12 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
     label: "Harness",
     description:
       "An agentic coding tool or AI IDE, such as Claude Code or Cursor.",
+  },
+  {
+    value: "assistant",
+    label: "Assistant",
+    description:
+      "A general-purpose AI assistant or agent, such as Goose or Hermes.",
   },
   {
     value: "local_model",

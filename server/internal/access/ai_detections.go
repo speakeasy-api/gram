@@ -2,7 +2,7 @@ package access
 
 import (
 	"context"
-	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,7 +12,6 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -25,24 +24,17 @@ import (
 // agent binaries can ship newer target lists than the catalog — are echoed
 // under their raw id with the category recorded at detection time.
 //
-// Org-scoped by design: detections attach to devices and enrolled users, not
-// projects (the same shape as agent.listSyncedUsers).
+// The reads are org-scoped: detections attach to devices and enrolled users,
+// not projects (the same shape as agent.listSyncedUsers). The surface is
+// nonetheless reached through a project, which is why project:read admits a
+// caller — see inventoryProjection for what that scope does and does not see.
 func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetectionsPayload) (*gen.ListAIDetectionsResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if contextvalues.IsSupportSession(ctx) {
-		if err := s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeOrgAdmin,
-			ResourceKind: "",
-			ResourceID:   ac.ActiveOrganizationID,
-			Dimensions:   nil,
-		}); err != nil {
-			return nil, err
-		}
-	} else if err := s.authz.RequireUserOrganizationScope(ctx, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
-		return nil, fmt.Errorf("authorize AI detections organization administrator: %w", err)
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+		return nil, err
 	}
 
 	var categories []string
@@ -53,6 +45,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	// The team filter resolves a SCIM directory group to its active members'
 	// normalized emails and pushes them down to ClickHouse as a user_email
 	// restriction. A group with no active members matches nothing.
+	//
 	var userEmails []string
 	if payload.DirectoryGroupID != nil {
 		groupID, err := uuid.Parse(*payload.DirectoryGroupID)
@@ -69,13 +62,17 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 		userEmails = emails
 	}
 
-	return s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		Categories:           categories,
 		UserEmails:           userEmails,
 		ExactUserEmail:       "",
 		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // ListEmployeeAIDetections returns one employee's organization-scoped device
@@ -103,13 +100,21 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		return nil, oops.E(oops.CodeBadRequest, nil, "employee email is required").LogError(ctx, s.logger)
 	}
 
-	return s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       userEmail,
 		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	// The counts are about the employee the caller already named, so they say
+	// nothing new. Why an administrator decided about a tool is a different
+	// matter, and not part of what this endpoint answers.
+	redactAIDecisionRationale(result.Detections)
+	return result, nil
 }
 
 func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
@@ -120,20 +125,34 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 
 	// Trouble reading the organization's scan targets degrades to the stored
 	// ids and categories.
-	catalog := aitargets.NewSnapshot(0, nil)
-	if list, err := aitargets.LoadOrganizationList(ctx, agentrepo.New(s.db), params.OrganizationID); err != nil {
+	queries := agentrepo.New(s.db)
+	// The target and what the organization decided about it come off one row,
+	// so one read covers both. Trouble reading it degrades rather than fails:
+	// tools list under their stored ids and read unreviewed. Nothing is
+	// enforced from here, so a degraded status column beats no inventory.
+	var catalog *aitargets.OrganizationList
+	if list, err := aitargets.LoadOrganizationList(ctx, queries, params.OrganizationID); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; listing detections as stored", attr.SlogError(err))
+		catalog = &aitargets.OrganizationList{Entries: nil, Snapshot: aitargets.NewSnapshot(0, nil)}
 	} else {
-		catalog = list.Snapshot
+		catalog = list
 	}
 
 	detections := make([]*gen.AIDetection, 0, len(rows))
 	for _, row := range rows {
 		displayName := row.TargetID
 		category := row.Category
-		if target, known := catalog.ByID(row.TargetID); known {
-			displayName = target.DisplayName
-			category = string(target.Category)
+		// A detection can name a target the catalog no longer serves, because
+		// an agent binary can ship a newer list than the server's. The zero
+		// target is the honest input for the access summary there: nothing
+		// matches a caller to it any more, so nothing is enforceable.
+		target := aitargets.ZeroTarget()
+		decision := aitargets.UnreviewedDecisionRecord(row.TargetID)
+		if entry, ok := catalog.Entry(row.TargetID); ok {
+			target = entry.Target
+			decision = entry.Decision
+			displayName = entry.DisplayName
+			category = string(entry.Category)
 		}
 		detections = append(detections, &gen.AIDetection{
 			TargetID:    row.TargetID,
@@ -145,8 +164,50 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 			Versions:    row.Versions,
 			FirstSeen:   formatTimeValue(row.FirstSeen),
 			LastSeen:    formatTimeValue(row.LastSeen),
+			Access:      aiToolAccessView(aitargets.SummarizeAccess(target, decision)),
 		})
 	}
 
 	return &gen.ListAIDetectionsResult{Detections: detections}, nil
+}
+
+// AIDetectionsReadInput is an organization-scoped Shadow AI inventory read for
+// a trusted internal caller that has established its own principal.
+type AIDetectionsReadInput struct {
+	OrganizationID string
+
+	// Category narrows to harness, assistant or local_model; empty is all.
+	Category string
+}
+
+// ReadAIDetections is the seam the Platform MCP reads through, mirroring
+// ReadShadowMCPInventory for the MCP half of the same section.
+//
+// Returns the full row. Every caller of this section is an organization
+// administrator; the one endpoint that is not, listEmployeeAIDetections, does
+// not read through here.
+func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadInput) (*gen.ListAIDetectionsResult, error) {
+	if strings.TrimSpace(input.OrganizationID) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
+	}
+
+	var categories []string
+	if category := strings.TrimSpace(input.Category); category != "" {
+		if !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unknown detection category %q", category).LogError(ctx, s.logger)
+		}
+		categories = []string{category}
+	}
+
+	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+		OrganizationID:       input.OrganizationID,
+		Categories:           categories,
+		UserEmails:           nil,
+		ExactUserEmail:       "",
+		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, input.OrganizationID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

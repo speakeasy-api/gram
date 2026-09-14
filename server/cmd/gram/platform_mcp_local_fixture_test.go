@@ -52,6 +52,14 @@ func (allowingPlatformMCPBudget) AllowN(context.Context, string, int) (ratelimit
 	return ratelimit.Result{Allowed: true}, nil
 }
 
+// The Shadow AI reads hang off the same attach, and both halves are held to
+// a live org:admin recheck rather than the session that installed the package.
+type stubLiveOrgAdminAuthorizer struct{}
+
+func (stubLiveOrgAdminAuthorizer) RequireLiveOrgAdmin(context.Context, platformmcp.Principal) error {
+	return nil
+}
+
 func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -60,7 +68,7 @@ func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.
 	attached := attachShadowInventory(reader, platformMCPConfig{
 		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
 		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},
-	}, platformmcp.OperationBudget{Connection: limiter, Organization: limiter})
+	}, stubLiveOrgAdminAuthorizer{}, platformmcp.OperationBudget{Connection: limiter, Organization: limiter})
 	require.True(t, attached)
 }
 

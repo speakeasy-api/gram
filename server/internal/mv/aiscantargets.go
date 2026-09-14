@@ -26,11 +26,16 @@ func BuildAiScanTargetView(entry aitargets.Entry) *gen.AiScanTarget {
 			ProcessNames: emptyIfNil(entry.Signatures.ProcessNames),
 		},
 		VersionPlistKey: plistKey,
-		Enabled:         entry.Enabled,
-		Origin:          string(entry.Source),
-		Customized:      entry.Customized,
-		CreatedAt:       formatOptionalTime(entry.CreatedAt),
-		UpdatedAt:       formatOptionalTime(entry.UpdatedAt),
+		GatewayClient: &gen.AiScanTargetGatewayClient{
+			CimdVendorKeys:  emptyIfNil(entry.GatewayClient.CIMDVendorKeys),
+			OauthClientIds:  emptyIfNil(entry.GatewayClient.OAuthClientIDs),
+			ClientInfoNames: emptyIfNil(entry.GatewayClient.ClientInfoNames),
+		},
+		Enabled:    entry.Enabled,
+		Origin:     string(entry.Source),
+		Customized: entry.Customized,
+		CreatedAt:  formatOptionalTime(entry.CreatedAt),
+		UpdatedAt:  formatOptionalTime(entry.UpdatedAt),
 	}
 }
 

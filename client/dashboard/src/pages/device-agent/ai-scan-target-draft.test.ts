@@ -20,6 +20,11 @@ const classic: AiScanTarget = {
     configDirs: [],
     processNames: [],
   },
+  gatewayClient: {
+    cimdVendorKeys: [],
+    clientInfoNames: [],
+    oauthClientIds: [],
+  },
   enabled: true,
   origin: "default",
   customized: false,

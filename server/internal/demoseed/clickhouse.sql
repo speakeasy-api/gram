@@ -818,6 +818,19 @@ FROM (
 -- signal) matching the ReplacingMergeTree key. Priya carries two devices so
 -- the users/devices counts differ. Versions stamp installed rows only —
 -- running detections usually cannot extract one.
+-- Cline and Continue are the editor-extension case: both are matched only by
+-- a wildcard config dir, so they are also the rows that prove the glob path
+-- end to end. Zed and Goose are the two new targets that publish CIMD, so
+-- they are the ones carrying a real decision below.
+--
+-- The two assistants are deliberately a pair: both speak MCP to Gram like a
+-- harness does without being coding tools, but Hermes publishes a CIMD
+-- document and OpenClaw does not. So a decision on Hermes is enforceable and
+-- shows as one, while OpenClaw reads unreviewed however hard somebody wants
+-- to block it — the same contrast the Harnesses tab draws between Codex and
+-- Cursor.
+-- Keep every comment above this statement: ClickHouse parses the VALUES list
+-- as data and cannot skip a comment between rows.
 INSERT INTO ai_detections
   (organization_id, target_id, device_serial, user_email, signal, category,
    version, first_seen, last_seen, updated_at)
@@ -873,7 +886,59 @@ VALUES
   ('org_gram_demo_workspace', 'lmstudio', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
    'local_model', '0.3.9', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
   ('org_gram_demo_workspace', 'aider', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
-   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9));
+   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '0.4.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 40 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'assistant', '0.3.8', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 64 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.2.0', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'assistant', '1.1.4', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 30 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '4.1.12', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'continue', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '2.1.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 44 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.34.2', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 34 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.33.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 58 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 21 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.2', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.0', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 52 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'local_model', '0.8.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9));
 
 -- Scan receipts: one per device per day over the trailing 5 days, proving
 -- every enrolled device scanned recently (the page's freshness story and the
@@ -1605,8 +1670,17 @@ SELECT throwIf(
 
 SELECT throwIf(
   (SELECT uniqExact(target_id) FROM ai_detections
-   WHERE organization_id = 'org_gram_demo_workspace') < 6,
+   WHERE organization_id = 'org_gram_demo_workspace') < 15,
   'demo seed postflight: ai_detections missing targets');
+
+-- Each AI Discovery tab reads one category, so a category with no rows is an
+-- empty page. Assert all three survived the reseed rather than only the
+-- target count, which cannot tell a missing tab from a missing tool.
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND category IN ('harness', 'assistant', 'local_model')) < 3,
+  'demo seed postflight: ai_detections must cover harness, assistant and local_model');
 
 SELECT throwIf(
   (SELECT count() FROM ai_scan_receipts

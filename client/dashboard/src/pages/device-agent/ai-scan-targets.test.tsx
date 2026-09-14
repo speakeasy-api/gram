@@ -42,6 +42,11 @@ const targets: AiScanTarget[] = [
       configDirs: [],
       processNames: [],
     },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
+    },
     enabled: true,
     origin: "organization",
     customized: false,
@@ -58,6 +63,11 @@ const targets: AiScanTarget[] = [
       configDirs: ["~/.aider"],
       processNames: ["aider"],
     },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
+    },
     enabled: true,
     origin: "default",
     customized: false,
@@ -71,6 +81,11 @@ const targets: AiScanTarget[] = [
       binaries: [],
       configDirs: [],
       processNames: [],
+    },
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
     },
     enabled: false,
     origin: "default",
@@ -101,24 +116,22 @@ vi.mock("@/components/ui/Table", () => ({
     </div>
   ),
 }));
-vi.mock("@gram/client/react-query/deviceAgentAiScanTargets.js", () => ({
-  invalidateAllDeviceAgentAiScanTargets: mocks.invalidateList,
-  useDeviceAgentAiScanTargets: () => ({
+vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
+  invalidateAllAiScanTargets: mocks.invalidateList,
+  useAiScanTargets: () => ({
     data: { listVersion: 11, etag: "etag", targets },
     isLoading: false,
     error: null,
   }),
 }));
-vi.mock("@gram/client/react-query/upsertDeviceAgentAiScanTarget.js", () => ({
-  useUpsertDeviceAgentAiScanTargetMutation: (
-    options: MutationOptions<MutationResult>,
-  ) => {
+vi.mock("@gram/client/react-query/upsertAiScanTarget.js", () => ({
+  useUpsertAiScanTargetMutation: (options: MutationOptions<MutationResult>) => {
     mocks.upsertOptions.push(options);
     return { mutate: mocks.upsertMutate, isPending: false };
   },
 }));
-vi.mock("@gram/client/react-query/deleteDeviceAgentAiScanTarget.js", () => ({
-  useDeleteDeviceAgentAiScanTargetMutation: () => ({
+vi.mock("@gram/client/react-query/deleteAiScanTarget.js", () => ({
+  useDeleteAiScanTargetMutation: () => ({
     mutate: mocks.deleteMutate,
     isPending: false,
   }),

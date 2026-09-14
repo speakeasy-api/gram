@@ -60,18 +60,16 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	organizationID := authCtx.ActiveOrganizationID
 
 	target := aitargets.Target{
-		ID:          strings.TrimSpace(payload.ID),
-		DisplayName: strings.TrimSpace(payload.DisplayName),
-		Category:    aitargets.Category(strings.TrimSpace(payload.Category)),
-		Signatures:  signaturesFromPayload(payload.Signatures),
-		VersionHint: nil,
-		Enabled:     payload.Enabled,
+		ID:            strings.TrimSpace(payload.ID),
+		DisplayName:   strings.TrimSpace(payload.DisplayName),
+		Category:      aitargets.Category(strings.TrimSpace(payload.Category)),
+		Signatures:    signaturesFromPayload(payload.Signatures),
+		VersionHint:   nil,
+		GatewayClient: gatewayClientFromPayload(payload.GatewayClient),
+		Enabled:       payload.Enabled,
 	}
 	if key := strings.TrimSpace(conv.PtrValOr(payload.VersionPlistKey, "")); key != "" {
 		target.VersionHint = &aitargets.VersionHint{PlistKey: key}
-	}
-	if err := aitargets.ValidateTarget(target); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -80,7 +78,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
-	if err := queries.AcquireDeviceAgentAIScanCatalogLock(ctx, organizationID); err != nil {
+	if err := queries.AcquireAIScanTargetsLock(ctx, organizationID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai scan target update").LogError(ctx, s.logger)
 	}
 
@@ -88,7 +86,37 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read existing ai scan target").LogError(ctx, s.logger)
 	}
-	if _, err := queries.UpsertDeviceAgentAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
+	// gateway_client is the one attribute an omitted field leaves alone rather
+	// than clearing. Every other field is a full replacement, but a client that
+	// predates gateway matchers — or one just flipping a built-in off — would
+	// otherwise silently unlink the target from the caller it blocks, and for a
+	// built-in that carries matchers the read-only check below would reject the
+	// toggle outright. Sending gateway_client with empty lists still clears it.
+	if payload.GatewayClient == nil && before != nil {
+		target.GatewayClient = before.GatewayClient.Clone()
+	}
+
+	if err := aitargets.ValidateTarget(target); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
+	}
+	// Built-in targets are system-supplied and read-only, the same contract
+	// Detection Rules holds its built-ins to. The one change an organization
+	// may make is switching one off, so a write under a built-in's id is
+	// accepted only when it carries that built-in's definition unchanged.
+	//
+	// Enforced here and not only in the dashboard because the API is the
+	// contract: a hand-rolled call must not be able to silently redefine what
+	// every agent in the organization probes for.
+	if builtin, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin && !aitargets.SameDefinition(builtin, target) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target and cannot be edited; it can only be enabled or disabled", target.ID)
+	}
+	// A built-in stores only the organization's choice about it; its
+	// definition is compiled in and stays there.
+	params := aitargets.UpsertParams(organizationID, target)
+	if _, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin {
+		params = aitargets.BuiltInUpsertParams(organizationID, target.ID, target.Enabled)
+	}
+	if _, err := queries.UpsertAIScanTarget(ctx, params); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)
@@ -100,10 +128,6 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	if err := aitargets.ValidateServed(list.Snapshot.Targets()); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
-	counter, err := queries.BumpDeviceAgentAIScanCatalogVersion(ctx, organizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "bump ai scan list version").LogError(ctx, s.logger)
-	}
 	entry, ok := list.Entry(target.ID)
 	if !ok {
 		return nil, oops.E(oops.CodeUnexpected, nil, "saved ai scan target %q missing from the organization's list", target.ID).LogError(ctx, s.logger)
@@ -112,22 +136,22 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	after := entry.Target
 	if before == nil {
-		err = s.audit.LogDeviceAgentAiScanTargetCreate(ctx, dbtx, audit.LogDeviceAgentAiScanTargetCreateEvent{
+		err = s.audit.LogAiScanTargetCreate(ctx, dbtx, audit.LogAiScanTargetCreateEvent{
 			OrganizationID:            organizationID,
 			Actor:                     actor,
 			ActorDisplayName:          authCtx.Email,
 			ActorSlug:                 nil,
-			AiScanTargetURN:           urn.NewDeviceAgentAiScanTarget(organizationID, after.ID),
+			AiScanTargetURN:           urn.NewAiScanTarget(organizationID, after.ID),
 			TargetDisplayName:         after.DisplayName,
 			AiScanTargetSnapshotAfter: &after,
 		})
 	} else {
-		err = s.audit.LogDeviceAgentAiScanTargetUpdate(ctx, dbtx, audit.LogDeviceAgentAiScanTargetUpdateEvent{
+		err = s.audit.LogAiScanTargetUpdate(ctx, dbtx, audit.LogAiScanTargetUpdateEvent{
 			OrganizationID:             organizationID,
 			Actor:                      actor,
 			ActorDisplayName:           authCtx.Email,
 			ActorSlug:                  nil,
-			AiScanTargetURN:            urn.NewDeviceAgentAiScanTarget(organizationID, after.ID),
+			AiScanTargetURN:            urn.NewAiScanTarget(organizationID, after.ID),
 			TargetDisplayName:          after.DisplayName,
 			AiScanTargetSnapshotBefore: before,
 			AiScanTargetSnapshotAfter:  &after,
@@ -141,7 +165,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	}
 
 	return &gen.AiScanTargetMutationResult{
-		ListVersion: int(aitargets.ListVersion(counter)),
+		ListVersion: int(aitargets.ListVersion()),
 		Target:      mv.BuildAiScanTargetView(entry),
 	}, nil
 }
@@ -160,19 +184,19 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
-	if err := queries.AcquireDeviceAgentAIScanCatalogLock(ctx, organizationID); err != nil {
+	if err := queries.AcquireAIScanTargetsLock(ctx, organizationID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai scan target delete").LogError(ctx, s.logger)
 	}
 
-	key := repo.GetDeviceAgentAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id}
-	row, err := queries.GetDeviceAgentAIScanTargetForUpdate(ctx, key)
+	key := repo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id}
+	row, err := queries.GetAIScanTargetForUpdate(ctx, key)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, nil, "ai scan target %q is not one this organization added or customized", id)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "read ai scan target").LogError(ctx, s.logger)
 	}
-	if _, err := queries.DeleteDeviceAgentAIScanTarget(ctx, repo.DeleteDeviceAgentAIScanTargetParams{OrganizationID: organizationID, ID: id}); err != nil {
+	if _, err := queries.DeleteAIScanTarget(ctx, repo.DeleteAIScanTargetParams{OrganizationID: organizationID, ID: id}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete ai scan target").LogError(ctx, s.logger)
 	}
 	// Dropping a customization serves the default again, which can grow the
@@ -184,18 +208,14 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 	if err := aitargets.ValidateServed(list.Snapshot.Targets()); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
-	counter, err := queries.BumpDeviceAgentAIScanCatalogVersion(ctx, organizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "bump ai scan list version").LogError(ctx, s.logger)
-	}
 
 	before := aitargets.EntryFromRow(row).Target
-	if err := s.audit.LogDeviceAgentAiScanTargetDelete(ctx, dbtx, audit.LogDeviceAgentAiScanTargetDeleteEvent{
+	if err := s.audit.LogAiScanTargetDelete(ctx, dbtx, audit.LogAiScanTargetDeleteEvent{
 		OrganizationID:             organizationID,
 		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:           authCtx.Email,
 		ActorSlug:                  nil,
-		AiScanTargetURN:            urn.NewDeviceAgentAiScanTarget(organizationID, before.ID),
+		AiScanTargetURN:            urn.NewAiScanTarget(organizationID, before.ID),
 		TargetDisplayName:          before.DisplayName,
 		AiScanTargetSnapshotBefore: &before,
 	}); err != nil {
@@ -205,14 +225,14 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ai scan target delete").LogError(ctx, s.logger)
 	}
 
-	return &gen.DeleteAiScanTargetResult{ListVersion: int(aitargets.ListVersion(counter))}, nil
+	return &gen.DeleteAiScanTargetResult{ListVersion: int(aitargets.ListVersion())}, nil
 }
 
 // aiScanTargetBefore is what the organization's list held for id ahead of a
 // write: its own row, locked for the transaction; else the default the write
 // customizes; else nothing.
 func aiScanTargetBefore(ctx context.Context, queries *repo.Queries, organizationID string, id string) (*aitargets.Target, error) {
-	row, err := queries.GetDeviceAgentAIScanTargetForUpdate(ctx, repo.GetDeviceAgentAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id})
+	row, err := queries.GetAIScanTargetForUpdate(ctx, repo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id})
 	switch {
 	case err == nil:
 		target := aitargets.EntryFromRow(row).Target
@@ -226,6 +246,27 @@ func aiScanTargetBefore(ctx context.Context, queries *repo.Queries, organization
 		}
 	}
 	return nil, nil
+}
+
+// gatewayClientFromPayload keeps empty matcher lists nil rather than empty, so
+// a target nobody has linked to a gateway caller stays out of the served-list
+// fingerprint entirely.
+func gatewayClientFromPayload(gateway *gen.AiScanTargetGatewayClient) aitargets.GatewayClient {
+	if gateway == nil {
+		return aitargets.GatewayClient{CIMDVendorKeys: nil, OAuthClientIDs: nil, ClientInfoNames: nil}
+	}
+	return aitargets.GatewayClient{
+		CIMDVendorKeys:  nilIfEmpty(trimAll(gateway.CimdVendorKeys)),
+		OAuthClientIDs:  nilIfEmpty(trimAll(gateway.OauthClientIds)),
+		ClientInfoNames: nilIfEmpty(trimAll(gateway.ClientInfoNames)),
+	}
+}
+
+func nilIfEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func signaturesFromPayload(signatures *gen.AiScanTargetSignatures) aitargets.Signatures {

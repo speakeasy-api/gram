@@ -331,9 +331,8 @@ func TestService_ListEmployeeAIDetections_ProjectReaderGetsCanonicalEmployeeOnly
 	seedAIDetection(t, ctx, ti, "detections-test-org-"+uuid.NewString(), "codex", "serial-9", workEmail, "running", "harness", "1.0.0", now.Add(2*time.Hour))
 
 	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        strings.ToUpper(workEmail),
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    strings.ToUpper(workEmail),
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Detections, 2)
@@ -358,9 +357,8 @@ func TestService_ListEmployeeAIDetections_RejectsInsufficientProjectScope(t *tes
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "employee@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "employee@example.com",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -385,9 +383,8 @@ func TestService_ListEmployeeAIDetections_RejectsProjectFromAnotherActiveOrganiz
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "employee@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "employee@example.com",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -407,9 +404,8 @@ func TestService_ListEmployeeAIDetections_RejectsEmptyEmployeeScope(t *testing.T
 	})
 
 	_, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "",
+		SessionToken: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
@@ -429,9 +425,8 @@ func TestService_ListEmployeeAIDetections_UserWithoutDetectionsGetsEmptyResult(t
 	})
 
 	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "missing-" + uuid.NewString() + "@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "missing-" + uuid.NewString() + "@example.com",
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Detections)

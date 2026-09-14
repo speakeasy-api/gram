@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -32,6 +33,14 @@ type AIScanReceipt struct {
 	ReceivedAt        time.Time
 }
 
+// aiDetectionCategories is the category vocabulary this write path accepts.
+// It must stay in step with aitargets.KnownCategories, which the scan-report
+// ingest enforces at the API boundary and which the catalog's own category
+// overwrites a reported one with. A category missing here rejects the whole
+// batch rather than the one detection, so drift silently drops good scans;
+// TestUpsertAIDetectionsAcceptsEveryKnownCategory pins the two together.
+var aiDetectionCategories = []string{"harness", "assistant", "local_model"}
+
 // UpsertAIDetections merges AI-scan detections into the ai_detections
 // inventory, preserving first_seen via the repo's read-merge-write.
 // It returns the target ids that were new to the organization, so a caller can
@@ -56,7 +65,7 @@ func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetectio
 		if detection.Signal != "installed" && detection.Signal != "running" {
 			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection has invalid signal")
 		}
-		if detection.Category != "harness" && detection.Category != "local_model" {
+		if !slices.Contains(aiDetectionCategories, detection.Category) {
 			return nil, oops.E(oops.CodeUnexpected, nil, "ai detection has invalid category")
 		}
 		if detection.SeenAt.IsZero() {

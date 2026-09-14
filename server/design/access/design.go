@@ -254,7 +254,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listShadowMCPInventory", func() {
-		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.")
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -288,7 +288,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("getShadowMCPInventoryServer", func() {
-		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.")
+		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -441,12 +441,12 @@ var _ = Service("access", func() {
 	})
 
 	Method("listAIDetections", func() {
-		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
 		Security(security.Session)
 
 		Payload(func() {
 			Attribute("category", String, "Filter to detection targets of one category.", func() {
-				Enum("harness", "local_model")
+				Enum("harness", "assistant", "local_model")
 			})
 			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
 				Format(FormatUUID)
@@ -470,7 +470,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listEmployeeAIDetections", func() {
-		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.")
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.")
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
@@ -496,6 +496,37 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listEmployeeAIDetections")
 		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
+	})
+
+	Method("setAIToolDecision", func() {
+		Description("Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool whose only gateway matcher is a self-reported client name records the decision and enforces nothing — the returned summary says which case applies. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to decide on, as agents report it.", func() {
+				Pattern(`^[a-z0-9][a-z0-9-]{0,63}$`)
+			})
+			Attribute("decision", String, "The decision to record. unreviewed clears an earlier one.", func() {
+				Enum("unreviewed", "approved", "blocked")
+			})
+			Attribute("rationale", String, "Why the decision was made. Shown beside it and carried into the audit trail.", func() {
+				MaxLength(1024)
+			})
+			Required("target_id", "decision")
+			security.SessionPayload()
+		})
+
+		Result(SetAIToolDecisionResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setAIToolDecision")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAIToolDecision", "type": "mutation"}`)
 	})
 
 	Method("listResourceAudience", func() {
@@ -1102,8 +1133,8 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
-	Attribute("user_count", Int)
-	Attribute("top_users", ArrayOf(String))
+	Attribute("user_count", Int, "Distinct users who reached this server.")
+	Attribute("top_users", ArrayOf(String), "The users who reached this server most.")
 	Attribute("access", String, func() {
 		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
@@ -1151,12 +1182,12 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 
 var AIDetectionModel = Type("AIDetection", func() {
 	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
-	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen", "access")
 
 	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
 	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
-	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
-		Enum("harness", "local_model")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "assistant", "local_model")
 	})
 	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
 	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
@@ -1174,6 +1205,30 @@ var AIDetectionModel = Type("AIDetection", func() {
 		Description("When this tool was most recently detected.")
 		Format(FormatDateTime)
 	})
+	Attribute("access", AIToolAccessSummaryModel)
+})
+
+var AIToolAccessSummaryModel = Type("AIToolAccessSummary", func() {
+	Description("The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.")
+
+	Required("state", "decision", "enforceable")
+
+	Attribute("state", String, func() {
+		Description("The decision as a table renders it: allowed and blocked are the recorded organization decision, unreviewed means nobody has decided and nothing is enforced.")
+		Enum("allowed", "blocked", "unreviewed")
+	})
+	Attribute("decision", String, func() {
+		Description("The recorded organization decision behind state. Absent rows read as unreviewed, so every tool has one.")
+		Enum("unreviewed", "approved", "blocked")
+	})
+	Attribute("enforceable", Boolean, "Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.")
+	Attribute("rationale", String, "Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.")
+})
+
+var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
+	Required("target_id", "access")
+	Attribute("target_id", String, "The detection target the decision was recorded for.")
+	Attribute("access", AIToolAccessSummaryModel)
 })
 
 var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
