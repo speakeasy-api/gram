@@ -537,6 +537,7 @@ func TestUpdateMetaMcpServer_InstructionsNormalizedLength(t *testing.T) {
 		{name: "blank over raw limit", input: strings.Repeat(" \x00", 10001)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			body := &srv.UpdateMetaMcpServerRequestBody{ID: &created.ID, Name: &created.Name, Instructions: &tc.input}
 			require.NoError(t, srv.ValidateUpdateMetaMcpServerRequestBody(body))
 			updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: created.ID, Name: created.Name, Instructions: &tc.input})

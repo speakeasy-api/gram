@@ -1,9 +1,7 @@
 package mcp
 
 import (
-	"context"
 	"encoding/json"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
@@ -24,7 +23,7 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 				Instructions:        instructions,
 				UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: gated},
 			}
-			bs, err := (&Service{}).handleMetaServerDiscover(context.Background(), slog.Default(), meta, &rawRequest{ID: mcpjsonrpc.NumberID(7)})
+			bs, err := (&Service{}).handleMetaServerDiscover(t.Context(), testenv.NewLogger(t), meta, &rawRequest{ID: mcpjsonrpc.NumberID(7)})
 			require.NoError(t, err)
 			var response struct {
 				Result struct {

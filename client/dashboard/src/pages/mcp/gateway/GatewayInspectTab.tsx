@@ -18,7 +18,8 @@ import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Pencil } from "lucide-react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
@@ -144,6 +145,8 @@ function InspectBody({
   onRetry: () => void;
   settingsHref: string;
 }): JSX.Element {
+  const navigate = useNavigate();
+
   if (!hasUrl && !isLoading) {
     return (
       <Text muted small>
@@ -228,12 +231,20 @@ function InspectBody({
         <InspectCard
           title="server instructions"
           action={
-            <Link
-              to={`${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`}
-              className="text-muted-foreground hover:text-foreground text-xs underline-offset-4 hover:underline"
+            <Button
+              variant="secondary"
+              size="xs"
+              onClick={() => {
+                void navigate(
+                  `${settingsHref}#${GATEWAY_INSTRUCTIONS_SECTION_ID}`,
+                );
+              }}
             >
-              Edit
-            </Link>
+              <Button.LeftIcon>
+                <Pencil />
+              </Button.LeftIcon>
+              <Button.Text>Edit</Button.Text>
+            </Button>
           }
         >
           {/* Prose, not code: a plain pre keeps the paragraph breaks that a

@@ -17,6 +17,7 @@ func TestResolveInstructions(t *testing.T) {
 		{name: "custom preserved verbatim", custom: &custom, want: custom},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if got := ResolveInstructions(tc.custom); got != tc.want {
 				t.Errorf("ResolveInstructions() = %q, want %q", got, tc.want)
 			}

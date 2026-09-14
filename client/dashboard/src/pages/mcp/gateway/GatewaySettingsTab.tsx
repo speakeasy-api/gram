@@ -212,7 +212,9 @@ export function GatewayInstructionsSection({
 
   const trimmedDraft = draft.trim();
   const dirty = trimmedDraft !== stored.trim();
-  const characterCount = Array.from(trimmedDraft).length;
+  // Mirror the server's normalization (NUL strip + trim) so the counter and
+  // the limit agree with what will be stored.
+  const characterCount = Array.from(trimmedDraft.replaceAll("\0", "")).length;
   const overLimit = characterCount > INSTRUCTIONS_MAX_LENGTH;
   const saveDisabled = !canWrite || !dirty || overLimit || update.isPending;
 
