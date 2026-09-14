@@ -75,6 +75,7 @@ func seedRemoteLoginInFlight(t *testing.T, slug string, spy *revocationSpy) (con
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		ti.redisCache,
 		mustURL(t, "http://localhost"),
 	)

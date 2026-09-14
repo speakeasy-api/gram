@@ -1,8 +1,14 @@
 package gram
 
 import (
+	"net"
+
+	"github.com/urfave/cli/v2"
+
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/tunnel/route"
 	"log/slog"
 	"net/url"
 
@@ -29,16 +35,33 @@ type mcpRemoteSessionDependencies struct {
 
 // Both listener processes must use identical identity verification and private
 // authority checks when resuming the OAuth flows that cross their boundary.
-func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, redisClient *redis.Client, serverURL *url.URL, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {
+// newTunnelHTTPClient builds the transport that carries back-channel OAuth
+// calls (token exchange, refresh, revocation, dynamic client registration) for
+// remote session issuers bound to a tunneled MCP server, instead of dialing
+// them from cloud egress.
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
+	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
+	// here would strand tunnels fail-closed with no signal. Reject
+	// misconfiguration at startup instead.
+	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
+	for _, cidr := range cidrs {
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+		}
+	}
+	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+}
+
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
 	}
 	verifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
-	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
 	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
 		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), refresher)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), serverURL,
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, cache.NewRedisCacheAdapter(redisClient), serverURL,
 		remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
 			return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
 		}),
