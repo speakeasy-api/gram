@@ -159,6 +159,9 @@ export const AUDIT_ACTIONS = [
   "project:create",
   "project:delete",
   "project:update",
+  "query:create",
+  "query:delete",
+  "query:update",
   "remote-mcp-server-header:create",
   "remote-mcp-server-header:delete",
   "remote-mcp-server-header:update",
@@ -604,6 +607,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated project";
     case "project:delete":
       return "deleted project";
+
+    case "query:create":
+      return "created saved query";
+    case "query:update":
+      return "updated saved query";
+    case "query:delete":
+      return "deleted saved query";
 
     case "remote-mcp:create":
       return "added remote MCP server";
