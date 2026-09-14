@@ -321,7 +321,7 @@ func TestTailscaleNetworkIngressDeleteWaitsForAcceptedDeletion(t *testing.T) {
 
 func TestTailscaleNetworkIngressDeleteWaitsForTerminatingDeployment(t *testing.T) {
 	t.Parallel()
-	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
 	_, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	client := typed.AppsV1().Deployments(desired.Resources.Namespace)
@@ -336,6 +336,8 @@ func TestTailscaleNetworkIngressDeleteWaitsForTerminatingDeployment(t *testing.T
 	for _, action := range typed.Actions() {
 		require.False(t, action.GetVerb() == "delete" && action.GetResource().Resource == "deployments")
 	}
+	_, err = dynamicClient.Resource(proxyGroupPolicyGVR).Namespace(desired.Resources.Namespace).Get(t.Context(), desired.Resources.ProxyGroupPolicy, metav1.GetOptions{})
+	require.NoError(t, err)
 	_, err = typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
 	require.NoError(t, err)
 	_, err = typed.CoreV1().ServiceAccounts(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorServiceAccount, metav1.GetOptions{})

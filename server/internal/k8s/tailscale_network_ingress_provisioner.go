@@ -398,8 +398,11 @@ func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resourc
 
 	// Initiate all independent deletions in each named phase, but do not cross a
 	// dependency barrier until every resource in the preceding phase is absent.
-	controllerPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment, deleteProxyGroupPolicy}
-	if err := runNetworkIngressDeletionPhase(controllerPhase...); err != nil {
+	workloadPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment}
+	if err := runNetworkIngressDeletionPhase(workloadPhase...); err != nil {
+		return err
+	}
+	if err := runNetworkIngressDeletionPhase(deleteProxyGroupPolicy); err != nil {
 		return err
 	}
 	if err := runNetworkIngressDeletionPhase(deleteProxyGroup); err != nil {
