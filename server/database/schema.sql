@@ -1310,8 +1310,6 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   oauth_client_ids TEXT[] NOT NULL DEFAULT '{}',
   client_info_names TEXT[] NOT NULL DEFAULT '{}',
 
-  -- Whether the organization's agents probe for the target.
-  enabled boolean NOT NULL DEFAULT true,
   -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
   -- blocked. Who set it and when is the audit log's job, not a column here.
   status TEXT NOT NULL DEFAULT 'unreviewed',
@@ -2878,6 +2876,14 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   resource_documentation TEXT,
   resource_policy_uri TEXT,
   resource_tos_uri TEXT,
+
+  -- When the issuer's token endpoint last answered invalid_client for this
+  -- client_id. Set by the refresh path and cleared by a successful
+  -- re-registration, a successful refresh, or a manually replaced secret. The
+  -- next remote login confirms the rejection against the token endpoint and
+  -- re-registers the client at the registration_endpoint of its
+  -- remote_session_issuer, which discovery keeps current.
+  upstream_rejected_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

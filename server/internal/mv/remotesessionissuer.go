@@ -33,6 +33,8 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		RevocationEndpoint:                conv.FromPGText[string](row.RevocationEndpoint),
 		RegistrationEndpoint:              conv.FromPGText[string](row.RegistrationEndpoint),
 		JwksURI:                           conv.FromPGText[string](row.JwksUri),
+		JwksFetchedAt:                     conv.PtrEmpty(conv.FromPGTimestamptz(row.JwksFetchedAt)),
+		JwksCacheExpiresAt:                conv.PtrEmpty(conv.FromPGTimestamptz(row.JwksCacheExpiresAt)),
 		ServiceDocumentation:              conv.FromPGText[string](row.ServiceDocumentation),
 		OpPolicyURI:                       conv.FromPGText[string](row.OpPolicyUri),
 		OpTosURI:                          conv.FromPGText[string](row.OpTosUri),

@@ -2309,6 +2309,7 @@ type RemoteSessionClient struct {
 	ResourceDocumentation           pgtype.Text
 	ResourcePolicyUri               pgtype.Text
 	ResourceTosUri                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz

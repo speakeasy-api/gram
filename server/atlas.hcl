@@ -29,6 +29,10 @@ docker "clickhouse" "dev" {
   // Keep server scope for marts, but replay unqualified application DDL in gram.
   baseline = <<SQL
     CREATE DATABASE gram;
+    -- Docker/CI provision gram through XML. Only Atlas's sandbox needs this
+    -- local-only SQL principal. Never provision Cloud credentials here.
+    CREATE USER IF NOT EXISTS gram IDENTIFIED BY 'gram';
+    GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE ON gram.* TO gram;
     ${file("../local/clickhouse/initdb/01-marts-definer.sql")}
     USE gram;
   SQL

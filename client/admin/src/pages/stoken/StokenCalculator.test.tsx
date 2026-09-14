@@ -85,7 +85,7 @@ describe("stoken calculator route", () => {
       initialPath: "/projects",
     });
 
-    fireEvent.click(screen.getByRole("link", { name: "S-token calculator" }));
+    fireEvent.click(screen.getByRole("link", { name: "S-token Calculator" }));
 
     await screen.findByRole("heading", { name: "Monthly usage" });
     expect(router.state.location.pathname).toBe("/stoken-calculator");

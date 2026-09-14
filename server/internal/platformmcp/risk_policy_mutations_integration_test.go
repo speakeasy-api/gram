@@ -166,14 +166,14 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 		urn.NewPrincipal(urn.PrincipalTypeUser, "first-user"),
 	}))
 	policy := policycore.Project(stored, []string{authz.AllUsersPrincipal().String()}, nil)
-	firstGrantState, err := riskPolicyVersionState(ctx, conn, policy, false)
+	firstGrantState, err := riskPolicyVersionState(ctx, conn, policy)
 	require.NoError(t, err)
 	firstGrantVersion, err := controls.Versions().PolicyVersion(firstGrantState)
 	require.NoError(t, err)
 	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, policyID.String(), serverURL, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "second-user"),
 	}))
-	secondGrantState, err := riskPolicyVersionState(ctx, conn, policy, false)
+	secondGrantState, err := riskPolicyVersionState(ctx, conn, policy)
 	require.NoError(t, err)
 	secondGrantVersion, err := controls.Versions().PolicyVersion(secondGrantState)
 	require.NoError(t, err)
