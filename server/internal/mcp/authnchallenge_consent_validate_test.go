@@ -1268,7 +1268,7 @@ func TestServeConsentAction_ValidateRejectedThenIntrospectedAsInactive(t *testin
 	require.Equal(t, remotesessions.IdentitySourceIntrospection, sess.IdentitySource.String)
 	page := renderConsent(t, fx)
 	require.Contains(t, page, `data-validation="rejected"`)
-	require.Contains(t, page, `Authenticated as <span class="-mx-0.5 rounded-sm px-0.5 py-px box-decoration-clone" data-identity-text>grant`)
+	require.Contains(t, page, `Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>grant`)
 
 	// The provider reports the token dead: inactive.
 	body.Store(conv.PtrEmpty(`{"active":false}`))

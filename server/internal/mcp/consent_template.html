@@ -345,7 +345,7 @@
                     {{if $panel.ShowIdentity}}
                     <span
                       class="text-xs text-muted-foreground break-words has-[[data-caveat-trigger]:hover]:[&_[data-identity-text]]:bg-destructive/20 has-[[data-caveat-trigger]:focus-visible]:[&_[data-identity-text]]:bg-destructive/20"
-                      >Authenticated as <span class="-mx-0.5 rounded-sm px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
+                      >Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
                       <span class="group/caveat relative inline-block" data-identity-caveat
                         ><span
                           class="text-destructive cursor-help inline-block"
