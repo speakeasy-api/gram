@@ -2835,7 +2835,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -3363,7 +3363,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -3546,7 +3546,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -3731,7 +3731,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -3914,7 +3914,7 @@ func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponse
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -4115,7 +4115,7 @@ func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponse
 		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
 		ClientID:                *body.ClientID,
 		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
+		ClientIDIssuedAt:        body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         body.JSONWebKeySetID,
@@ -4652,9 +4652,6 @@ func ValidateGetClientResponseBody(body *GetClientResponseBody) (err error) {
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4742,9 +4739,6 @@ func ValidateCreateClientResponseBody(body *CreateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4803,9 +4797,6 @@ func ValidateCreateCimdClientResponseBody(body *CreateCimdClientResponseBody) (e
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -4866,9 +4857,6 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4928,9 +4916,6 @@ func ValidateAttachClientKeySetResponseBody(body *AttachClientKeySetResponseBody
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
 	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4989,9 +4974,6 @@ func ValidateDetachClientKeySetResponseBody(body *DetachClientKeySetResponseBody
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -7763,9 +7745,6 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.ClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
-	}
-	if body.ClientIDIssuedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_issued_at", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

@@ -7,10 +7,13 @@ package remotesessions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -66,7 +69,8 @@ type Service struct {
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
 	// which is what ties this one link to customer_managed_encryption_keys.
-	productFeatures *productfeatures.Client
+	productFeatures   *productfeatures.Client
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
 }
 
 var (
@@ -90,20 +94,21 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		sessions:     sessionManager,
-		authz:        authzEngine,
-		enc:          enc,
-		environments: env,
-		policy:       policy,
-		auditLogger:  auditLogger,
-		serverURL:    serverURL,
-		refresher:    refresher,
-		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
-		jwksResolver: jwks.NewResolver(policy, meterProvider, logger),
+		bindingAuthorizer: nil,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:            logger,
+		db:                db,
+		auth:              auth.New(logger, db, sessionManager, authzEngine),
+		sessions:          sessionManager,
+		authz:             authzEngine,
+		enc:               enc,
+		environments:      env,
+		policy:            policy,
+		auditLogger:       auditLogger,
+		serverURL:         serverURL,
+		refresher:         refresher,
+		revoker:           NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		jwksResolver:      jwks.NewResolver(policy, meterProvider, logger),
 
 		productFeatures: productFeatures,
 	}
@@ -170,5 +175,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	if ctx.Value(goa.MethodKey) == "listRemoteSessions" {
+		authorizedCtx, err := s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
+		if err != nil {
+			return authorizedCtx, fmt.Errorf("authorize remote-session listing: %w", err)
+		}
+		return authorizedCtx, nil
+	}
+
 	return s.auth.Authorize(ctx, key, schema)
 }

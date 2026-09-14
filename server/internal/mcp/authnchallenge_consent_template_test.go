@@ -917,3 +917,45 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: false, ConnectedAs: "grant-owner@example.com"})
 	require.NotContains(t, html, "Authenticated as", "a disconnected card names nobody")
 }
+
+func TestConsentTemplateAgentConnectionsRemainVisibleAndUseResolvedRoute(t *testing.T) {
+	t.Parallel()
+	for _, routeBase := range []string{"mcp", "x/mcp"} {
+		t.Run(routeBase, func(t *testing.T) {
+			t.Parallel()
+			var page bytes.Buffer
+			require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+				MCPSlug: "example", MCPRouteBase: routeBase, State: "state", CSRFToken: "csrf",
+				AgentSelectionEnabled: true, AgentOptions: []consentAgentOption{{ID: "agent", Name: "Agent"}},
+				AgentSetupURL:      "https://dashboard.example.test/org/agent-management",
+				RemoteSessionCards: []remoteSessionCard{{ClientID: "provider", IssuerDisplay: "Provider"}},
+			}))
+			html := normalizeWhitespace(page.String())
+			require.Contains(t, html, `data-action-url="/`+routeBase+`/example/connect/remote-session"`)
+			require.Contains(t, html, `data-remote-client="provider"`)
+			require.Contains(t, html, "The agent's tool policy is never changed here.")
+			require.Contains(t, html, "data-agent-access")
+			require.NotContains(t, html, "Agent service connections")
+			require.Contains(t, html, `href="https://dashboard.example.test/org/agent-management"`)
+			require.NotContains(t, html, `data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"> <div class="flex items-baseline`)
+			require.NotContains(t, html, "connections and tool access apply only")
+		})
+	}
+}
+
+func TestConsentTemplateAgentAccessUsesExistingProviderCard(t *testing.T) {
+	t.Parallel()
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ConsentEnabled: true, AgentSelectionEnabled: true,
+		RemoteSessionCards: []remoteSessionCard{{ClientID: "client-a", IssuerDisplay: "Example provider", Connected: true, ConnectedAs: "account@example.com"}},
+	})
+	require.NoError(t, err)
+	html := page.String()
+	require.Equal(t, 1, strings.Count(html, `data-remote-client="client-a"`))
+	require.Equal(t, 1, strings.Count(normalizeWhitespace(html), `data-agent-access `))
+	require.Contains(t, html, `data-connected-as="account@example.com"`)
+	require.NotContains(t, html, "Agent service connections")
+	require.NotContains(t, html, "data-agent-connection-list")
+	require.Contains(t, html, `value="disconnect"`)
+}

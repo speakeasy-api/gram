@@ -13,6 +13,8 @@ package mcpidentity
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -53,8 +55,9 @@ const (
 // construct or mutate it; only a ValidatorBoundary can stamp one after its
 // owning authentication strategy accepts a credential.
 type Identity struct {
-	kind   Kind
-	userID string
+	kind    Kind
+	userID  string
+	agentID string
 }
 
 // Kind returns the validated credential class.
@@ -63,6 +66,9 @@ func (i Identity) Kind() Kind { return i.kind }
 // UserID returns the concrete Gram user ID for KindUserSession and is empty
 // for every other credential class.
 func (i Identity) UserID() string { return i.userID }
+
+// AgentID returns the authenticated agent ID, never its owner or authorizer.
+func (i Identity) AgentID() string { return i.agentID }
 
 // ValidatorBoundary is the capability held by the MCP credential validators.
 // It deliberately exposes only bounded, strategy-specific stamps: there is no
@@ -83,7 +89,7 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: ""})
 }
 
 // StampValidatedSession records provenance from an opaque session proof returned
@@ -103,7 +109,7 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 	case urn.SessionSubjectKindAPIKey:
 		return b.withIdentity(ctx, KindAPIKey, "")
 	case urn.SessionSubjectKindAgent:
-		return b.withIdentity(ctx, KindAgent, "")
+		return b.stampAgentID(ctx, subject.ID)
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
 	default:
@@ -132,4 +138,17 @@ func (b *ValidatorBoundary) StampChatSession(ctx context.Context) context.Contex
 func FromContext(ctx context.Context) (Identity, bool) {
 	identity, ok := ctx.Value(contextKey{}).(Identity)
 	return identity, ok && identity.kind != ""
+}
+
+// StampAgent records an agent principal only after credential validation and
+// principal admission. It does not change the actor or any authorization policy.
+func (b *ValidatorBoundary) StampAgent(ctx context.Context, agentID uuid.UUID) context.Context {
+	return b.stampAgentID(ctx, agentID.String())
+}
+
+func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) context.Context {
+	if b == nil || !b.initialized {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: ""})
 }

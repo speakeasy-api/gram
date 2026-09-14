@@ -59,13 +59,14 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 		}, observation)
 	}
 
+	// The random agent does not exist, so derivation fails closed.
 	agentCtx := testIdentityContext(t, mcpidentity.KindAgent, "")
 	disposition, err = checkpoint.Evaluate(agentCtx, orgID, source)
 	require.NoError(t, err)
 	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
 	require.Equal(t, coverageObservation{
 		surface:  mcpmetrics.KillswitchSurfaceHosted,
-		identity: mcpmetrics.KillswitchIdentityAgent,
+		identity: mcpmetrics.KillswitchIdentityUnavailable,
 		resource: mcpmetrics.KillswitchResourceCanonicalServer,
 	}, recorder.observations[len(recorder.observations)-1])
 
