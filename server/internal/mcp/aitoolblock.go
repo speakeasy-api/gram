@@ -49,13 +49,18 @@ func (e *AIToolBlockedError) Error() string {
 // commit to a client id at metadata-discovery time and do not fall back to
 // dynamic registration when /authorize refuses them.
 //
-// It carries no request-access link. The only self-service flow available is
-// the MCP RBAC request, which grants a role on an MCP server and cannot clear
-// ai_scan_targets.status for the blocked tool, so the link sent the user to a
-// form whose successful submission changed nothing about why they were
-// refused. Saying an administrator must act, without a link that cannot
-// deliver, is the honest version. This is why the dashboard warns an admin
-// before they record the block.
+// It carries no request-access link, deliberately and by scope. Self-service
+// access requests are a Shadow MCP feature; Shadow AI has no equivalent flow
+// yet and is not getting one here. The only link available is the MCP RBAC
+// request, which grants a role on an MCP server and cannot clear
+// ai_scan_targets.status for the blocked tool, so offering it sent the user to
+// a form whose successful submission changed nothing about why they were
+// refused.
+//
+// So the text stops at naming the tool and saying an administrator must act.
+// If Shadow AI gains a decision-request flow of its own, this is where its
+// link belongs; until then there is nothing honest to point at. This is why
+// the dashboard warns an admin before they record the block.
 func (e *AIToolBlockedError) Description() string {
 	return fmt.Sprintf(
 		"%s is not permitted to connect to this organization's MCP servers; an organization administrator must approve it",
