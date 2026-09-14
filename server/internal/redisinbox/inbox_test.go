@@ -206,8 +206,16 @@ func TestDrainerSupervisorRestartsAfterPanic(t *testing.T) {
 func TestDrainerAliveMetricIsAHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	te := setupToyInbox(t, "toy-heartbeat", nil)
-	require.Eventually(t, te.inbox.drainerAlive.Load, time.Second, 5*time.Millisecond)
+	drainerStarted := make(chan struct{})
+	te := setupToyInbox(t, "toy-heartbeat", func(ctx context.Context) {
+		close(drainerStarted)
+		<-ctx.Done()
+	})
+	select {
+	case <-drainerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for drainer to start")
+	}
 
 	value, ok := collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
 	require.True(t, ok)
@@ -231,6 +239,7 @@ func TestDrainerAliveMetricIsAHeartbeat(t *testing.T) {
 	closeResult := make(chan error, 1)
 	go func() { closeResult <- te.inbox.Close() }()
 	<-registration.started
+	require.False(t, te.inbox.drainerAlive.Load(), "drainer state after Close reached Unregister")
 
 	value, ok = collectInt64Gauge(t, te.reader, "toy.requests.drainer_alive")
 	require.True(t, ok)
