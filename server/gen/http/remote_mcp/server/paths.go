@@ -37,6 +37,11 @@ func DiscoverProtectedResourceMetadataRemoteMcpPath() string {
 	return "/rpc/remoteMcp.discoverProtectedResourceMetadata"
 }
 
+// ProbeURLRemoteMcpPath returns the URL path to the remoteMcp service probeURL HTTP endpoint.
+func ProbeURLRemoteMcpPath() string {
+	return "/rpc/remoteMcp.probeURL"
+}
+
 // VerifyURLRemoteMcpPath returns the URL path to the remoteMcp service verifyURL HTTP endpoint.
 func VerifyURLRemoteMcpPath() string {
 	return "/rpc/remoteMcp.verifyURL"

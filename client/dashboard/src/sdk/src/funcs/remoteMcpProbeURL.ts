@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  VerifyURLResult,
-  VerifyURLResult$inboundSchema,
-} from "../models/components/verifyurlresult.js";
+  ProbeURLResult,
+  ProbeURLResult$inboundSchema,
+} from "../models/components/probeurlresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,31 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  VerifyRemoteMcpURLRequest,
-  VerifyRemoteMcpURLRequest$outboundSchema,
-  VerifyRemoteMcpURLSecurity,
-} from "../models/operations/verifyremotemcpurl.js";
+  ProbeRemoteMcpURLRequest,
+  ProbeRemoteMcpURLRequest$outboundSchema,
+  ProbeRemoteMcpURLSecurity,
+} from "../models/operations/proberemotemcpurl.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * verifyURL remoteMcp
+ * probeURL remoteMcp
  *
  * @remarks
- * Probe a candidate remote MCP server URL and return the legacy boolean verification result.
- *
- * Deprecated: use probeURL instead.
- *
- * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
+ * Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.
  */
-export function remoteMcpVerifyURL(
+export function remoteMcpProbeURL(
   client: GramCore,
-  request: VerifyRemoteMcpURLRequest,
-  security?: VerifyRemoteMcpURLSecurity | undefined,
+  request: ProbeRemoteMcpURLRequest,
+  security?: ProbeRemoteMcpURLSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    VerifyURLResult,
+    ProbeURLResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -77,13 +73,13 @@ export function remoteMcpVerifyURL(
 
 async function $do(
   client: GramCore,
-  request: VerifyRemoteMcpURLRequest,
-  security?: VerifyRemoteMcpURLSecurity | undefined,
+  request: ProbeRemoteMcpURLRequest,
+  security?: ProbeRemoteMcpURLSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      VerifyURLResult,
+      ProbeURLResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -99,16 +95,16 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(VerifyRemoteMcpURLRequest$outboundSchema, value),
+    (value) => z.parse(ProbeRemoteMcpURLRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.VerifyURLForm, { explode: true });
+  const body = encodeJSON("body", payload.ProbeURLForm, { explode: true });
 
-  const path = pathToFunc("/rpc/remoteMcp.verifyURL")();
+  const path = pathToFunc("/rpc/remoteMcp.probeURL")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -157,7 +153,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "verifyRemoteMcpURL",
+    operationID: "probeRemoteMcpURL",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -201,7 +197,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    VerifyURLResult,
+    ProbeURLResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -212,7 +208,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, VerifyURLResult$inboundSchema),
+    M.json(200, ProbeURLResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

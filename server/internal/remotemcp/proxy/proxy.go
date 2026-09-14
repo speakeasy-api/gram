@@ -874,6 +874,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	return nil
 }
 
+// redirectStatus reports the status of the response that produced req, which
+// net/http populates only on a redirected request.
+func redirectStatus(req *http.Request) int {
+	if req.Response == nil {
+		return 0
+	}
+	return req.Response.StatusCode
+}
+
 // forwardRequest builds and sends the upstream HTTP request, applying a
 // two-phase timeout policy:
 //
@@ -916,6 +925,13 @@ func (p *Proxy) forwardRequest(
 		forwardCancel()
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
 	}
+	if p.Identity.RemoteMCPServerID != "" {
+		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
+			phaseTimer.Stop()
+			forwardCancel()
+			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+		}
+	}
 
 	if err := p.applyRequestHeaders(ctx, r, upstreamReq); err != nil {
 		phaseTimer.Stop()
@@ -934,6 +950,26 @@ func (p *Proxy) forwardRequest(
 	if p.DisableRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
+		}
+	} else if p.Identity.RemoteMCPServerID != "" {
+		configuredOrigin := upstreamReq.URL
+		client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+			if _, err := validateRemoteMCPTransportURL(req.URL.String()); err != nil {
+				return fmt.Errorf("validate remote MCP redirect: %w", err)
+			}
+			// Redirects are still followed, but a hop off the configured
+			// origin travels without the project's credentials.
+			if !sameRemoteMCPOrigin(configuredOrigin, req.URL) {
+				// 307 and 308 are the codes that replay method and body, so
+				// following one off-origin would hand the JSON-RPC request —
+				// tool arguments included — to a host the upstream chose.
+				// Stripping credentials does not cover that, so refuse.
+				if status := redirectStatus(req); status == http.StatusTemporaryRedirect || status == http.StatusPermanentRedirect {
+					return fmt.Errorf("remote MCP redirect to %s: %w", req.URL.Host, ErrCrossOriginRemoteMCPRedirect)
+				}
+				p.stripConfiguredCredentials(req.Header)
+			}
+			return nil
 		}
 	}
 	resp, err := client.Do(upstreamReq)
