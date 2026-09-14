@@ -272,6 +272,7 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
+              { item: routes.explore, ...accessFor(routes.explore) },
               { item: routes.insights, ...accessFor(routes.insights) },
               {
                 item: routes.agentSessions,
