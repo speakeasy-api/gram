@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -59,6 +60,18 @@ func TestPersistentLocalSigningClient_ReusesKeyAcrossClients(t *testing.T) {
 	secondDER, err := x509.MarshalPKIXPublicKey(secondPublic.Key)
 	require.NoError(t, err)
 	require.Equal(t, firstDER, secondDER)
+}
+
+func TestPersistentLocalSigningClient_RejectsLooseKeyPermissions(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "local-kms.pem")
+	_, err := NewPersistentLocalSigningClient(jose.RS256, path)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(path, 0o644))
+
+	_, err = NewPersistentLocalSigningClient(jose.RS256, path)
+	require.ErrorContains(t, err, "accessible only to its owner")
 }
 
 func TestPersistentLocalSigningClient_ConcurrentCreationConverges(t *testing.T) {

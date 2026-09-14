@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -124,8 +125,19 @@ func NewPersistentLocalSigningClient(alg jose.SignatureAlgorithm, path string) (
 }
 
 func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
-	doc, err := os.ReadFile(path) //nolint:gosec // path is an application-selected local-development config file, not request input.
+	file, err := os.Open(path) //nolint:gosec // path is an application-selected local-development config file, not request input.
 	if err != nil {
+		return nil, fmt.Errorf("open persistent local %s key: %w", alg, err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("inspect persistent local %s key: %w", alg, err), file.Close())
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.Join(fmt.Errorf("persistent local %s key must be a regular file accessible only to its owner", alg), file.Close())
+	}
+	doc, readErr := io.ReadAll(file)
+	if err := errors.Join(readErr, file.Close()); err != nil {
 		return nil, fmt.Errorf("read persistent local %s key: %w", alg, err)
 	}
 	block, rest := pem.Decode(doc)
