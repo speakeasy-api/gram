@@ -1,0 +1,52 @@
+server/internal/gateway/resources_risk_test.go
+  s_b2fbf10079c9c3::t_bab61e24780cc0 1-79,82-100,102-122,124
+  s_b2fbf10079c9c3::t_4d8ea2f93b3364 80-81,101,123
+server/internal/mcp/rpc_resources_read.go
+  s_b2fbf10079c9c3::t_99a00b4c2c1270 8,218-220
+server/internal/gateway/resources.go
+  s_b2fbf10079c9c3::t_256ffa47437ee7 61-64
+  s_b2fbf10079c9c3::t_4d8ea2f93b3364 4,54-60
+server/cmd/gram/start.go
+  s_b2fbf10079c9c3::t_a8991b525475ba 1059-1080,1204
+server/internal/risk/scanner.go
+  s_b2fbf10079c9c3::t_7b033648b8bb6e 79,418,420
+  s_b2fbf10079c9c3::t_2a49ef1ed0c017 419
+  s_b2fbf10079c9c3::t_71756caf81889d 76-78,80-81,221,390-417,421-476,532-538,576-577
+server/internal/gateway/proxy.go
+  s_b2fbf10079c9c3::t_596a4841357233 137-145,165-173
+  s_b2fbf10079c9c3::t_256ffa47437ee7 38,114-128,146,159,164,174-198,200-213
+server/internal/mcp/rpc_prompt_get.go
+  s_b2fbf10079c9c3::t_a8991b525475ba 6
+  s_b2fbf10079c9c3::t_7b033648b8bb6e 32,59,95,100
+  s_b2fbf10079c9c3::t_99a00b4c2c1270 9,31,33-35,60-62,94,96-99,101-110
+server/internal/risk/scanner_test.go
+  s_b2fbf10079c9c3::t_bab61e24780cc0 313-327,329-333
+  s_b2fbf10079c9c3::t_7b033648b8bb6e 328
+  s_b2fbf10079c9c3::t_7d441db6971e49 334-365
+server/internal/mcp/setup_test.go
+  s_b2fbf10079c9c3::t_a8991b525475ba 448
+server/internal/mcp/impl.go
+  s_b2fbf10079c9c3::t_99a00b4c2c1270 82,139,353,433,1607
+  s_b2fbf10079c9c3::t_596a4841357233 435
+server/internal/mcp/rpc_prompt_get_risk_test.go
+  s_b2fbf10079c9c3::t_7b033648b8bb6e 22,62
+  s_b2fbf10079c9c3::t_bab61e24780cc0 1-9,11-21,23-34,56,58-61,63-72
+  s_b2fbf10079c9c3::t_ebb0e895c35e41 35-55,57
+  s_b2fbf10079c9c3::t_a2173dc999987d 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2472cc4372e04b74ac339e091fbf568324f2ca13",
+  "prompts": {},
+  "sessions": {
+    "s_b2fbf10079c9c3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-f276-75e1-a2cc-1a287f91110f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
