@@ -9,6 +9,8 @@ import (
 )
 
 func TestPostgresCloneWithCleanupConnection(t *testing.T) {
+	t.Parallel()
+
 	container, clone, err := NewTestPostgres(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, container.Terminate(context.Background())) })
