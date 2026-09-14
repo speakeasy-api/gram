@@ -14,13 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -114,7 +117,26 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, nil
+	}
+
+	// Agent-principal keys may only poll plugins, and only with an explicit grant.
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
+	}
+	return ctx, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -147,6 +169,12 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// An agent-principal key is itself the identity; APIKeyAuth already
+	// required its device-sync grant.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return s.getAgentPlugins(ctx, authCtx, actor)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries
@@ -253,6 +281,41 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
+	return s.pluginSetFor(ctx, authCtx, principals)
+}
+
+// getAgentPlugins resolves plugins for an agent-principal key: the agent, the
+// roles it holds, and the org wildcard. There is no email to vouch for and no
+// sync row to write; the key's last-use timestamp records the poll.
+func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.AuthContext, actor urn.Principal) (*gen.GetPluginsResult, error) {
+	agent, err := agents.ResolvePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, actor)
+	switch {
+	case errors.Is(err, agents.ErrPrincipalInvalid), errors.Is(err, agents.ErrPrincipalNotFound):
+		return nil, oops.C(oops.CodeUnauthorized)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent principal").LogError(ctx, s.logger)
+	}
+
+	canonical := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	rolePrincipals, err := accessrepo.New(s.db).ListAgentRolePrincipals(ctx, accessrepo.ListAgentRolePrincipalsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		AgentID:        agent.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent roles").LogError(ctx, s.logger)
+	}
+	principals := append([]string{canonical.String(), urn.PrincipalWildcard}, rolePrincipals...)
+
+	result, err := s.pluginSetFor(ctx, authCtx, principals)
+	if err != nil {
+		return nil, err
+	}
+	result.Principal = &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name}
+	return result, nil
+}
+
+// pluginSetFor builds the poll response for an already-resolved principal set.
+func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
 	var (
 		rows             []repo.GetAgentPluginSetRow
 		configurationRow repo.DeviceAgentConfiguration

@@ -47,6 +47,10 @@ const (
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
 	ScopeAgentTransfer           Scope = "agent:transfer"
+	// Device-agent sync and hook ingestion for agent-principal keys. Human
+	// callers reach these routes through transport scopes, not these grants.
+	ScopeOrgDeviceAgentSync Scope = "org:device_agent_sync"
+	ScopeOrgHooksIngest     Scope = "org:hooks_ingest"
 )
 
 type scopeVisibility int
@@ -124,6 +128,8 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
 	ScopeAgentTransfer:           scopeVisibilityUserVisible,
+	ScopeOrgDeviceAgentSync:      scopeVisibilityUserVisible,
+	ScopeOrgHooksIngest:          scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -232,6 +238,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
 	ScopeAgentTransfer:           nil,
+	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
+	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -270,6 +278,8 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",
 	ScopeAgentTransfer:           "",
+	ScopeOrgDeviceAgentSync:      "",
+	ScopeOrgHooksIngest:          "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
