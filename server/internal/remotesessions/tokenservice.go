@@ -722,6 +722,7 @@ func (s *RefreshService) restateIdentity(
 		case errors.Is(err, errIDTokenVerificationDisabled):
 		case err != nil:
 			logIdentityFailure(ctx, s.logger, "refresh id token rejected; stored identity kept", err, attrs...)
+			noteUnknownSigningKey(ctx, s.issuerMetadata, client, err)
 		default:
 			identity = &verified
 		}
