@@ -1182,7 +1182,13 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 
 var AIDetectionModel = Type("AIDetection", func() {
 	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
-	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen", "access")
+	// access is optional for one release rather than required. The endpoint
+	// predates it, so a dashboard from this revision can meet a server that
+	// does not send it yet, during a deploy or after a rollback, and a required
+	// member would fail SDK validation on every row and blank the page. The
+	// server always sends it; only the client's tolerance is relaxed. Make it
+	// required in the release after this one ships, as access_summary was.
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
 
 	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
 	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")

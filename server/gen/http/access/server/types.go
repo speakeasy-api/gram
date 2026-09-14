@@ -5484,7 +5484,7 @@ type AIDetectionResponseBody struct {
 	FirstSeen string `form:"first_seen" json:"first_seen" xml:"first_seen"`
 	// When this tool was most recently detected.
 	LastSeen string                           `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	Access   *AIToolAccessSummaryResponseBody `form:"access" json:"access" xml:"access"`
+	Access   *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 }
 
 // AIToolAccessSummaryResponseBody is used to define fields on response body

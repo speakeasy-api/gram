@@ -39,7 +39,7 @@ export type AIDetection = {
   /**
    * The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
    */
-  access: AIToolAccessSummary;
+  access?: AIToolAccessSummary | undefined;
   /**
    * Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.
    */
@@ -92,7 +92,7 @@ export const Signals$inboundSchema: z.ZodMiniEnum<typeof Signals> = z.enum(
 export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
   .pipe(
     z.object({
-      access: AIToolAccessSummary$inboundSchema,
+      access: z.optional(AIToolAccessSummary$inboundSchema),
       category: Category$inboundSchema,
       device_count: z.int(),
       display_name: z.string(),

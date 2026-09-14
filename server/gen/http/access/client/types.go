@@ -17672,9 +17672,6 @@ func ValidateAIDetectionResponseBody(body *AIDetectionResponseBody) (err error) 
 	if body.LastSeen == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
 	}
-	if body.Access == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
-	}
 	if body.Category != nil {
 		if !(*body.Category == "harness" || *body.Category == "assistant" || *body.Category == "local_model") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"harness", "assistant", "local_model"}))

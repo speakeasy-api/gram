@@ -545,7 +545,10 @@ ORDER BY id
 // decision only: its definition columns, gateway matchers included, are empty
 // by design because the matchers are compiled in. Requiring a non-empty
 // matcher column would silently drop every blocked built-in, which is most of
-// the catalog.
+// the catalog. No filter is needed for the other case either: a target that
+// loses its last matcher on an upsert has its decision cleared by that same
+// write, so a row with status = 'blocked' always names a target the gateway
+// can still recognize.
 func (q *Queries) ListBlockedAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listBlockedAITargetIDs, organizationID)
 	if err != nil {

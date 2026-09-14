@@ -6570,7 +6570,9 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 	for i, val := range v.Versions {
 		res.Versions[i] = val
 	}
-	res.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v.Access)
+	if v.Access != nil {
+		res.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v.Access)
+	}
 
 	return res
 }
@@ -6579,6 +6581,9 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 // value of type *access.AIToolAccessSummary from a value of type
 // *AIToolAccessSummaryResponseBody.
 func unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *access.AIToolAccessSummary {
+	if v == nil {
+		return nil
+	}
 	res := &access.AIToolAccessSummary{
 		State:       *v.State,
 		Decision:    *v.Decision,

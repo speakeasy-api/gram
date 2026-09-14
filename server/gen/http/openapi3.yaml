@@ -71090,7 +71090,6 @@ components:
                 - versions
                 - first_seen
                 - last_seen
-                - access
         AIIntegrationConfig:
             type: object
             properties:

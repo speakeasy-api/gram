@@ -154,7 +154,8 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "clear ai tool decision on an unenforceable target").LogError(ctx, s.logger)
 		}
-		decisionAfter := aitargets.EntryFromRow(saved).Decision
+		refreshed := aitargets.EntryFromRow(saved)
+		decisionAfter := refreshed.Decision
 		if err := s.audit.LogAIToolDecisionSet(ctx, dbtx, audit.LogAIToolDecisionSetEvent{
 			OrganizationID:         organizationID,
 			Actor:                  actor,
@@ -167,7 +168,10 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log cleared ai tool decision").LogError(ctx, s.logger)
 		}
+		// The status write happened after the list was read, so carry its
+		// row forward or the response reports the pre-clearing timestamp.
 		entry.Decision = decisionAfter
+		entry.UpdatedAt = refreshed.UpdatedAt
 	}
 
 	after := entry.Target

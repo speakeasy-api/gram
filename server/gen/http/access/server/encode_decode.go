@@ -6187,6 +6187,9 @@ func marshalAccessAIDetectionToAIDetectionResponseBody(v *access.AIDetection) *A
 // value of type *AIToolAccessSummaryResponseBody from a value of type
 // *access.AIToolAccessSummary.
 func marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *access.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &AIToolAccessSummaryResponseBody{
 		State:       v.State,
 		Decision:    v.Decision,
