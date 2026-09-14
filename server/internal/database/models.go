@@ -1649,6 +1649,14 @@ type OrganizationMetadatum struct {
 	DisabledAt         pgtype.Timestamptz
 }
 
+type OrganizationOnboarding struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Preset         pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type OrganizationRole struct {
 	ID                uuid.UUID
 	OrganizationID    string
