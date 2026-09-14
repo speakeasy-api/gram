@@ -233,7 +233,7 @@ func (s *Service) writeCodexOTELLogsToClickHouse(ctx context.Context, payload *g
 					Timestamp:  timestamp,
 					ToolInfo:   toolInfo,
 					UserInfo:   userInfo,
-					Attributes: logAttrs,
+					Attributes: withAgentActor(ctx, logAttrs),
 				}, observedTimestamp, resourceAttrs))
 			}
 		}
@@ -343,7 +343,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 						Timestamp:  timestamp,
 						ToolInfo:   toolInfo,
 						UserInfo:   userInfo,
-						Attributes: attrs,
+						Attributes: withAgentActor(ctx, attrs),
 					}, timestamp, resourceAttrs))
 				}
 			}

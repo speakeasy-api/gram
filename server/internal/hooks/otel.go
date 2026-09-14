@@ -116,6 +116,9 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attributionBySession[session.SessionID] = cached
 			continue
 		}
+		if agent {
+			cached = agentSessionView(cached)
+		}
 
 		// Merge this batch's identity over anything an earlier (incomplete) batch
 		// cached, so a session split across batches attributes on the union of its
@@ -178,13 +181,14 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
 		// non-fatal — session capture/enforcement must continue regardless.
-		if agent {
-			// Account attribution (incl. the device bridge) links to employees.
-		} else if err := s.attributeSession(ctx, &completeMetadata); err != nil {
-			sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
-				attr.SlogEvent("account_attribution_failed"),
-				attr.SlogError(err),
-			)
+		// Agent actors skip it: attribution (incl. the device bridge) links to employees.
+		if !agent {
+			if err := s.attributeSession(ctx, &completeMetadata); err != nil {
+				sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
+					attr.SlogEvent("account_attribution_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
@@ -219,7 +223,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// lets the next batch re-attribute and retry the link. Process each
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
-		if !linkFailed {
+		// Agent sessions never seed the human-keyed session cache.
+		if !linkFailed && !agent {
 			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
@@ -486,7 +491,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(surface, orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
-					Attributes: logAttrs,
+					Attributes: withAgentActor(ctx, logAttrs),
 				}, observedTimestamp, resourceAttrs)
 
 				// Claude redacts user-configured MCP server/tool names to

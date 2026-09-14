@@ -310,7 +310,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		// Hostname counts as cacheable identity alongside the email: an
 		// identity-less session carries nothing else, and later events may
 		// omit the hostname the fallback attribution needs.
-		if metadata.SessionID != "" && (metadata.UserEmail != "" || metadata.Hostname != "") {
+		if metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.UserEmail != "" || metadata.Hostname != "") {
 			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),

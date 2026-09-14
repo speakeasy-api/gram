@@ -38,6 +38,30 @@ func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	return nil
 }
 
+// agentSessionView keeps only the surface fields of a cached session so an
+// agent event never inherits a human's identity or account attribution.
+func agentSessionView(cached SessionMetadata) SessionMetadata {
+	return SessionMetadata{
+		SessionID:           cached.SessionID,
+		ServiceName:         cached.ServiceName,
+		UserEmail:           "",
+		UserID:              "",
+		Provider:            cached.Provider,
+		ExternalOrgID:       "",
+		ExternalAccountUUID: "",
+		ExternalAccountID:   "",
+		DeviceID:            "",
+		Hostname:            cached.Hostname,
+		Cwd:                 cached.Cwd,
+		AccountType:         "",
+		BillingMode:         "",
+		UserAccountID:       "",
+		ObservedUserEmail:   "",
+		GramOrgID:           cached.GramOrgID,
+		ProjectID:           cached.ProjectID,
+	}
+}
+
 // withAgentActor stamps the agent actor onto a per-event hook telemetry row.
 func withAgentActor(ctx context.Context, attrs map[attr.Key]any) map[attr.Key]any {
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {

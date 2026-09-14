@@ -258,3 +258,70 @@ func TestCodex_AgentKeyAcceptedWithoutEmail(t *testing.T) {
 	require.Empty(t, metadata.UserEmail)
 	require.Empty(t, metadata.UserID)
 }
+
+func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+	ti.service.db = nil
+
+	require.Empty(t, ti.service.resolveUserByEmail(t.Context(), "", "org-unused"))
+}
+
+func TestCanonicalSessionMetadata_AgentIgnoresCachedAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "agent-cached-account-" + uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:           sessionID,
+		ServiceName:         "claude",
+		UserEmail:           "cached-human@example.com",
+		UserID:              authCtx.UserID,
+		Provider:            providerAnthropic,
+		ExternalOrgID:       "ext-org",
+		ExternalAccountUUID: "ext-account-uuid",
+		ExternalAccountID:   "ext-account",
+		DeviceID:            "device-1",
+		Hostname:            "host-1",
+		Cwd:                 "/work",
+		AccountType:         accountTypePersonal,
+		BillingMode:         "metered",
+		UserAccountID:       uuid.NewString(),
+		ObservedUserEmail:   "cached-human@example.com",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}, time.Hour))
+
+	agentCtx := agentKeyContext(t, ctx, ti)
+	agentAuth, ok := contextvalues.GetAuthContext(agentCtx)
+	require.True(t, ok)
+	metadata := ti.service.canonicalSessionMetadata(agentCtx, canonicalIngestPayload("claude", "tool.requested", sessionID), agentAuth, canonicalActor{UserID: "", Email: ""})
+
+	require.Empty(t, metadata.UserEmail)
+	require.Empty(t, metadata.UserID)
+	require.Empty(t, metadata.UserAccountID)
+	require.Empty(t, metadata.DeviceID)
+	require.Empty(t, metadata.ExternalAccountUUID)
+	require.Empty(t, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+	require.Empty(t, metadata.ObservedUserEmail)
+	require.Equal(t, "host-1", metadata.Hostname, "surface fields still merge")
+}
+
+func TestIngest_AgentSessionStartDoesNotSeedSessionCache(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "agent-no-cache-" + uuid.NewString()
+	hostname := "agent-host"
+	payload := canonicalIngestPayload("claude", "session.started", sessionID)
+	payload.Source.Hostname = &hostname
+
+	_, err := ti.service.Ingest(agentKeyContext(t, ctx, ti), payload)
+	require.NoError(t, err)
+
+	var cached SessionMetadata
+	require.Error(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached), "agent sessions never seed the human-keyed cache")
+}

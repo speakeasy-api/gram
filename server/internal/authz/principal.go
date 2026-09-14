@@ -23,6 +23,36 @@ var ErrPrincipalNotFound = errors.New("principal not found")
 // principal.
 var ErrPrincipalInvalid = errors.New("principal invalid")
 
+// ResolveAgentPrincipals resolves the principals considered for an agent actor:
+// user:all (so everyone-audience policies still apply), the agent, and the
+// roles it holds. The agent must be active in the organization.
+func ResolveAgentPrincipals(ctx context.Context, db repo.DBTX, organizationID string, agent urn.Principal) ([]urn.Principal, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	resolved, err := agents.ResolvePrincipal(ctx, db, organizationID, agent)
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent principal: %w", err)
+	}
+
+	principals := []urn.Principal{AllUsersPrincipal(), urn.NewPrincipal(urn.PrincipalTypeAgent, resolved.ID.String())}
+	roleURNs, err := repo.New(db).ListAgentRolePrincipals(ctx, repo.ListAgentRolePrincipalsParams{
+		OrganizationID: organizationID,
+		AgentID:        resolved.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent role principals: %w", err)
+	}
+	for _, raw := range roleURNs {
+		principal, err := parseRolePrincipalURN(raw)
+		if err != nil {
+			return nil, err
+		}
+		principals = append(principals, principal)
+	}
+	return principals, nil
+}
+
 // ResolveUserPrincipals resolves the principals that should be considered for
 // an organization-scoped request. Every request with a known organization gets
 // user:all. When userID identifies an active organization member, the result

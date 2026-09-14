@@ -696,9 +696,15 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// An agent actor persists on its auth identity at once; buffering would
 	// let a later OTEL export re-attribute the event to a human.
 	if isAgentActor(ctx) {
-		if metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, ""); err == nil {
-			go s.persistHook(ctx, payload, &metadata)
+		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, "")
+		if err != nil {
+			logger.WarnContext(ctx, "dropping agent claude hook without project scope",
+				attr.SlogEvent("claude_hook_agent_unscoped"),
+				attr.SlogError(err),
+			)
+			return
 		}
+		go s.persistHook(ctx, payload, &metadata)
 		return
 	}
 

@@ -471,7 +471,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
 			UserInfo:   userInfo,
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 	}
 
