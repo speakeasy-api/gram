@@ -231,6 +231,10 @@ trackedFiles:
   src/funcs/environmentsSetSourceLink.ts: {}
   src/funcs/environmentsSetToolsetLink.ts: {}
   src/funcs/environmentsUpdateBySlug.ts: {}
+  src/funcs/exploreCreateQuery.ts: {}
+  src/funcs/exploreDeleteQuery.ts: {}
+  src/funcs/exploreListQueries.ts: {}
+  src/funcs/exploreUpdateQuery.ts: {}
   src/funcs/externalCredentialsCreateAwsIam.ts: {}
   src/funcs/externalCredentialsCreateGcpIam.ts: {}
   src/funcs/externalCredentialsDeleteAwsIam.ts: {}
@@ -884,6 +888,7 @@ trackedFiles:
   src/models/components/createprojectresult.ts: {}
   src/models/components/createprompttemplateform.ts: {}
   src/models/components/createprompttemplateresult.ts: {}
+  src/models/components/createqueryrequestbody.ts: {}
   src/models/components/createremotesessionclientform.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createrequestbody.ts: {}
@@ -962,6 +967,8 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/explorelistqueriesresult.ts: {}
+  src/models/components/explorequery.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
@@ -1701,6 +1708,7 @@ trackedFiles:
   src/models/components/updateprojectresult.ts: {}
   src/models/components/updateprompttemplateform.ts: {}
   src/models/components/updateprompttemplateresult.ts: {}
+  src/models/components/updatequeryrequestbody.ts: {}
   src/models/components/updateremotesessionclientform.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
   src/models/components/updateriskexclusionrequestbody.ts: {}
@@ -1819,6 +1827,7 @@ trackedFiles:
   src/models/operations/createdataexportroute.ts: {}
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
+  src/models/operations/createexplorequery.ts: {}
   src/models/operations/creategcpiamcredential.ts: {}
   src/models/operations/creategcpiamplatformcredential.ts: {}
   src/models/operations/creategcpkmskey.ts: {}
@@ -1881,6 +1890,7 @@ trackedFiles:
   src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
   src/models/operations/deleteenvironment.ts: {}
+  src/models/operations/deleteexplorequery.ts: {}
   src/models/operations/deletegcpiamcredential.ts: {}
   src/models/operations/deletegcpiamplatformcredential.ts: {}
   src/models/operations/deletegcpkmskey.ts: {}
@@ -2131,6 +2141,7 @@ trackedFiles:
   src/models/operations/listemployeeaidetections.ts: {}
   src/models/operations/listenvironments.ts: {}
   src/models/operations/listeventlog.ts: {}
+  src/models/operations/listexplorequeries.ts: {}
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
   src/models/operations/listfilteroptions.ts: {}
@@ -2388,6 +2399,7 @@ trackedFiles:
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
   src/models/operations/updateenvironment.ts: {}
+  src/models/operations/updateexplorequery.ts: {}
   src/models/operations/updateexternaloauthserver.ts: {}
   src/models/operations/updategcpiamcredential.ts: {}
   src/models/operations/updategcpiamplatformcredential.ts: {}
@@ -2570,6 +2582,7 @@ trackedFiles:
   src/react-query/createDataExportRoute.ts: {}
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
+  src/react-query/createExploreQuery.ts: {}
   src/react-query/createGcpIamCredential.ts: {}
   src/react-query/createGcpIamPlatformCredential.ts: {}
   src/react-query/createGcpKmsKey.ts: {}
@@ -2626,6 +2639,7 @@ trackedFiles:
   src/react-query/deleteDeviceIntegrationConfig.ts: {}
   src/react-query/deleteDomain.ts: {}
   src/react-query/deleteEnvironment.ts: {}
+  src/react-query/deleteExploreQuery.ts: {}
   src/react-query/deleteGcpIamCredential.ts: {}
   src/react-query/deleteGcpIamPlatformCredential.ts: {}
   src/react-query/deleteGcpKmsKey.ts: {}
@@ -2691,6 +2705,8 @@ trackedFiles:
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
+  src/react-query/exploreQueries.core.ts: {}
+  src/react-query/exploreQueries.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
@@ -3361,6 +3377,7 @@ trackedFiles:
   src/react-query/updateDeviceAgentConfiguration.ts: {}
   src/react-query/updateDomain.ts: {}
   src/react-query/updateEnvironment.ts: {}
+  src/react-query/updateExploreQuery.ts: {}
   src/react-query/updateExternalOAuthServer.ts: {}
   src/react-query/updateGcpIamCredential.ts: {}
   src/react-query/updateGcpIamPlatformCredential.ts: {}
@@ -3476,6 +3493,7 @@ trackedFiles:
   src/sdk/evals.ts: {}
   src/sdk/events.ts: {}
   src/sdk/exclusions.ts: {}
+  src/sdk/explore.ts: {}
   src/sdk/expr.ts: {}
   src/sdk/external.ts: {}
   src/sdk/externalcredentials.ts: {}
@@ -4197,6 +4215,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-09-29T21:34:47.183Z", "entries": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2025-10-03T03:38:55.120Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createExploreQuery:
+    speakeasy-default-create-explore-query:
+      requestBody:
+        application/json: {"dataset": "<value>", "name": "<value>", "spec": {"key": "<value>"}}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-07-10T04:29:18.539Z", "dataset": "sessions", "id": "01daa6bf-7711-4f6a-8f9e-6594ffe23860", "name": "<value>", "organization_id": "<id>", "project_id": "44aecd49-acf6-4346-90ac-5865ed5c443d", "spec": {}, "updated_at": "2024-08-18T01:43:04.977Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -4924,6 +4953,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteExploreQuery:
+    speakeasy-default-delete-explore-query:
+      parameters:
+        query:
+          id: "01a7b980-a740-4b03-aaa0-9a337dc2e921"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteGcpIamCredential:
     speakeasy-default-delete-gcp-iam-credential:
       parameters:
@@ -7991,6 +8030,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listExploreQueries:
+    speakeasy-default-list-explore-queries:
+      responses:
+        "200":
+          application/json: {"queries": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listExternalCredentials:
     speakeasy-default-list-external-credentials:
       responses:
@@ -10956,6 +11004,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateExploreQuery:
+    speakeasy-default-update-explore-query:
+      requestBody:
+        application/json: {"dataset": "<value>", "id": "245c4040-42e5-4c86-9f30-caf62f0006ad", "name": "<value>", "spec": {"key": "<value>", "key1": "<value>"}}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-11-07T09:59:45.379Z", "dataset": "sessions", "id": "c8657a47-92bb-46a1-88e9-c54809273679", "name": "<value>", "organization_id": "<id>", "project_id": "378b3615-6738-42ca-b073-3e61885745ae", "spec": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2026-10-18T04:17:03.021Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateExternalOAuthServer:
     speakeasy-default-update-external-O-auth-server:
       parameters:
