@@ -30,6 +30,7 @@ const routes = {
   chat: route("Project Assistant", "chat"),
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
+  explore: route("Explore", "explore"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
   identities: route("Identities", "identities"),
