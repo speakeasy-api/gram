@@ -24,6 +24,7 @@ import (
 	agentc "github.com/speakeasy-api/gram/server/gen/http/agent/client"
 	agentsc "github.com/speakeasy-api/gram/server/gen/http/agents/client"
 	aiintegrationsc "github.com/speakeasy-api/gram/server/gen/http/ai_integrations/client"
+	analyticsc "github.com/speakeasy-api/gram/server/gen/http/analytics/client"
 	assetsc "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	assistantmemoriesc "github.com/speakeasy-api/gram/server/gen/http/assistant_memories/client"
 	assistantsc "github.com/speakeasy-api/gram/server/gen/http/assistants/client"
@@ -112,6 +113,7 @@ func UsageCommands() []string {
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
+		"analytics (query|describe)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
@@ -575,6 +577,17 @@ func ParseEndpoint(
 		aiIntegrationsRetryScheduleBodyFlag         = aiIntegrationsRetryScheduleFlags.String("body", "REQUIRED", "")
 		aiIntegrationsRetryScheduleApikeyTokenFlag  = aiIntegrationsRetryScheduleFlags.String("apikey-token", "", "")
 		aiIntegrationsRetryScheduleSessionTokenFlag = aiIntegrationsRetryScheduleFlags.String("session-token", "", "")
+
+		analyticsFlags = flag.NewFlagSet("analytics", flag.ContinueOnError)
+
+		analyticsQueryFlags                = flag.NewFlagSet("query", flag.ExitOnError)
+		analyticsQueryBodyFlag             = analyticsQueryFlags.String("body", "REQUIRED", "")
+		analyticsQuerySessionTokenFlag     = analyticsQueryFlags.String("session-token", "", "")
+		analyticsQueryProjectSlugInputFlag = analyticsQueryFlags.String("project-slug-input", "", "")
+
+		analyticsDescribeFlags                = flag.NewFlagSet("describe", flag.ExitOnError)
+		analyticsDescribeSessionTokenFlag     = analyticsDescribeFlags.String("session-token", "", "")
+		analyticsDescribeProjectSlugInputFlag = analyticsDescribeFlags.String("project-slug-input", "", "")
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -4299,6 +4312,10 @@ func ParseEndpoint(
 	aiIntegrationsSetScheduleEnabledFlags.Usage = aiIntegrationsSetScheduleEnabledUsage
 	aiIntegrationsRetryScheduleFlags.Usage = aiIntegrationsRetryScheduleUsage
 
+	analyticsFlags.Usage = analyticsUsage
+	analyticsQueryFlags.Usage = analyticsQueryUsage
+	analyticsDescribeFlags.Usage = analyticsDescribeUsage
+
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
 	assetsUploadImageFlags.Usage = assetsUploadImageUsage
@@ -5134,6 +5151,8 @@ func ParseEndpoint(
 			svcf = agentsFlags
 		case "ai-integrations":
 			svcf = aiIntegrationsFlags
+		case "analytics":
+			svcf = analyticsFlags
 		case "assets":
 			svcf = assetsFlags
 		case "organization-assets":
@@ -5548,6 +5567,16 @@ func ParseEndpoint(
 
 			case "retry-schedule":
 				epf = aiIntegrationsRetryScheduleFlags
+
+			}
+
+		case "analytics":
+			switch epn {
+			case "query":
+				epf = analyticsQueryFlags
+
+			case "describe":
+				epf = analyticsDescribeFlags
 
 			}
 
@@ -8088,6 +8117,16 @@ func ParseEndpoint(
 			case "retry-schedule":
 				endpoint = c.RetrySchedule()
 				data, err = aiintegrationsc.BuildRetrySchedulePayload(*aiIntegrationsRetryScheduleBodyFlag, *aiIntegrationsRetryScheduleApikeyTokenFlag, *aiIntegrationsRetryScheduleSessionTokenFlag)
+			}
+		case "analytics":
+			c := analyticsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "query":
+				endpoint = c.Query()
+				data, err = analyticsc.BuildQueryPayload(*analyticsQueryBodyFlag, *analyticsQuerySessionTokenFlag, *analyticsQueryProjectSlugInputFlag)
+			case "describe":
+				endpoint = c.Describe()
+				data, err = analyticsc.BuildDescribePayload(*analyticsDescribeSessionTokenFlag, *analyticsDescribeProjectSlugInputFlag)
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12120,6 +12159,60 @@ func aiIntegrationsRetryScheduleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations retry-schedule --body '{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+// analyticsUsage displays the usage of the analytics command and its
+// subcommands.
+func analyticsUsage() {
+	fmt.Fprintln(os.Stderr, `Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] analytics COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    query: Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.`)
+	fmt.Fprintln(os.Stderr, `    describe: Describe every dataset and the fields it exposes, with the operators and aggregations each admits.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s analytics COMMAND --help\n", os.Args[0])
+}
+func analyticsQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset's grain, newest first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics query --body '{\n      \"dataset\": \"sessions\",\n      \"dimensions\": [\n         \"abc123\"\n      ],\n      \"filters\": [\n         {\n            \"field\": \"surface\",\n            \"operator\": \"in\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-09-01T00:00:00Z\",\n      \"grain\": \"hour\",\n      \"limit\": 2,\n      \"measures\": [\n         {\n            \"alias\": \"tool_calls\",\n            \"field\": \"tool_call_count\",\n            \"op\": \"sum\"\n         }\n      ],\n      \"order_by\": [\n         {\n            \"direction\": \"desc\",\n            \"measure\": \"tool_calls\"\n         }\n      ],\n      \"to\": \"2026-09-08T00:00:00Z\",\n      \"ungrouped\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func analyticsDescribeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] analytics describe", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Describe every dataset and the fields it exposes, with the operators and aggregations each admits.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "analytics describe --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.
