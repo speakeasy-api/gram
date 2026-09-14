@@ -98,8 +98,12 @@ type Product struct {
 }
 
 // SpeaksCIMD reports whether a decision about this product is enforceable.
+// A product whose documents are all disabled does NOT speak CIMD for this
+// purpose: admission skips those rows, so no caller can be resolved through
+// them, and reporting the product as CIMD-capable would let a de-admitted
+// vendor be classified as enforceable.
 func (p Product) SpeaksCIMD() bool {
-	return len(p.Documents) > 0
+	return hasEnabledDocument(p)
 }
 
 // IsScanned reports whether device agents probe for this product.

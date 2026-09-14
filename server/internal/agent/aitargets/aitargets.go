@@ -67,6 +67,11 @@ type Signatures struct {
 	ProcessNames []string `json:"process_names"`
 }
 
+// DefaultVersionPlistKey is what an omitted version hint resolves to, so an
+// explicit value equal to it says nothing an omission does not. The two are
+// folded together before a definition comparison; see normalizeForComparison.
+const DefaultVersionPlistKey = "CFBundleShortVersionString"
+
 // VersionHint names the Info.plist key that carries a bundle-matched
 // target's version; empty means CFBundleShortVersionString.
 type VersionHint struct {

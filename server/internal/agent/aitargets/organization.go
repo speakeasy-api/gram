@@ -178,7 +178,10 @@ func normalizeForComparison(t Target) Target {
 		OAuthClientIDs:  orEmpty(out.GatewayClient.OAuthClientIDs),
 		ClientInfoNames: orEmpty(out.GatewayClient.ClientInfoNames),
 	}
-	if out.VersionHint != nil && out.VersionHint.PlistKey == "" {
+	// An omitted hint and an explicit DefaultVersionPlistKey mean the same
+	// thing, so a client that round-trips a built-in and sends the default back
+	// is not accused of redefining it.
+	if out.VersionHint != nil && (out.VersionHint.PlistKey == "" || out.VersionHint.PlistKey == DefaultVersionPlistKey) {
 		out.VersionHint = nil
 	}
 	return out

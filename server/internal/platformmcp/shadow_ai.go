@@ -121,9 +121,17 @@ func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, in
 	if err := s.admit(ctx, principal); err != nil {
 		return ListShadowAIToolsOutput{}, err
 	}
+	// Validated here rather than left to the read: the access service rejects
+	// an unknown category with a generic bad-request error, which the tool
+	// would surface as a raw handler failure instead of the correctable
+	// invalid-argument refusal ListLibrary gives for the same mistake.
+	category := strings.TrimSpace(input.Category)
+	if category != "" && !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
+		return ListShadowAIToolsOutput{}, ErrShadowAIInvalid
+	}
 	result, err := s.detections.ReadAIDetections(ctx, access.AIDetectionsReadInput{
 		OrganizationID: principal.OrganizationID,
-		Category:       strings.TrimSpace(input.Category),
+		Category:       category,
 	})
 	if err != nil {
 		return ListShadowAIToolsOutput{}, fmt.Errorf("read shadow ai detections: %w", err)

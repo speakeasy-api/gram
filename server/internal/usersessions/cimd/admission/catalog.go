@@ -75,10 +75,6 @@ func (p Preset) IsPattern() bool {
 // issuer custom URL). Be generous here; an extra entry costs a string
 // comparison, a missing one costs a support ticket.
 //
-// Every entry must be verified live before it lands: HTTP 200, valid JSON,
-// `client_id` exactly equal to URL, and `token_endpoint_auth_method` of
-// "none" (Gram's validator accepts public clients only). Record the
-// verification date in the comment above each vendor block.
 // catalog is Gram's curated preset list, derived from the aivendors registry
 // so a vendor's documents and on-device signatures are declared once. Issuers
 // in ModePresets accept every enabled entry, so adding a vendor extends every

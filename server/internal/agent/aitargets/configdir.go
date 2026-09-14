@@ -51,11 +51,17 @@ func cleanSignature(signature string) string {
 // split a directory literally named `a\b` in two, so the wildcard signature
 // that should match it stops matching, and the unrelated path `a/b` starts
 // comparing equal to it.
+//
+// The converted path is then cleaned, for the same reason cleanSignature
+// cleans: a UNC path converts to a doubled leading separator (`\\host\share`
+// becomes `//host/share`), which splits into one more segment than the
+// identically cleaned signature, so the counts never line up and no UNC
+// directory could match. Both sides go through the same cleaning.
 func slashPath(path string) string {
 	if !hasWindowsRoot(path) {
 		return path
 	}
-	return strings.ReplaceAll(path, `\`, "/")
+	return gopath.Clean(strings.ReplaceAll(path, `\`, "/"))
 }
 
 // hasWindowsRoot reports whether a path carries a Windows root: a drive letter

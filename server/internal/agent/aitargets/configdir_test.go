@@ -73,6 +73,21 @@ func TestMatchConfigDir(t *testing.T) {
 			`C:\Users\dev\.vscode\extensions`,
 			false,
 		},
+		// A UNC path converts to a doubled leading separator, which splits
+		// into one more segment than the signature does after cleaning. Both
+		// sides have to be cleaned the same way or no share path can match.
+		{
+			"a unc share path is matched by a signature authored with slashes",
+			"//host/share/dev/.claude",
+			`\\host\share\dev\.claude`,
+			true,
+		},
+		{
+			"a wildcard on a unc share stays inside its segment",
+			"//host/share/dev/*",
+			`\\host\share\dev\.vscode\extensions`,
+			false,
+		},
 
 		// ...but only a Windows path. `\` is a legal character in a Unix
 		// filename, so canonicalizing it away there both loses matches a

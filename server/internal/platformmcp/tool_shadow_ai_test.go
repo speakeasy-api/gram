@@ -148,3 +148,59 @@ func TestShadowAIServiceRequiresEveryDependency(t *testing.T) {
 	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, nil, allowingBudget()))
 	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, stubAuthorizer{}, OperationBudget{}))
 }
+
+// TestShadowAIListToolsProjectsTheUnenforceableHalf covers the distinction the
+// feature exists to make. A tool publishing no client ID metadata document
+// reads unreviewed because no decision about it can be enforced, and a
+// detection may carry no access summary at all. Both must project as
+// unreviewed with enforceable false, and the earlier test only pinned the
+// blocked-and-enforceable half.
+func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
+	t.Parallel()
+
+	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: []*accessgen.AIDetection{
+		{
+			TargetID:    "unreviewed-but-enforceable",
+			DisplayName: "Reviewable",
+			Category:    "assistant",
+			Signals:     []string{"running"},
+			Access:      &accessgen.AIToolAccessSummary{State: "unreviewed", Enforceable: true},
+		},
+		{
+			TargetID:    "no-summary-at-all",
+			DisplayName: "Unknown",
+			Category:    "local_model",
+			Signals:     []string{"installed"},
+			Access:      nil,
+		},
+	}}}
+	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
+	require.NotNil(t, service)
+
+	out, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{})
+	require.NoError(t, err)
+	require.Len(t, out.Tools, 2)
+
+	require.Equal(t, "unreviewed", out.Tools[0].State)
+	require.True(t, out.Tools[0].Enforceable, "nobody has decided, but a decision could be enforced")
+
+	require.Empty(t, out.Tools[1].State, "a detection with no summary carries no state")
+	require.False(t, out.Tools[1].Enforceable, "and nothing about it can be enforced")
+}
+
+// TestShadowAIListToolsRejectsUnknownCategory: an unknown category is a
+// mistake the caller can correct, so it must reach the invalid-argument
+// refusal rather than fall through to the read and surface as a raw handler
+// error. ListLibrary already behaved this way; ListTools did not.
+func TestShadowAIListToolsRejectsUnknownCategory(t *testing.T) {
+	t.Parallel()
+
+	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: nil}}
+	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
+	require.NotNil(t, service)
+
+	_, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{Category: "not-a-category"})
+	require.ErrorIs(t, err, ErrShadowAIInvalid)
+	require.NotErrorIs(t, err, ErrShadowAIUnavailable, "the service is configured; only the argument is wrong")
+	require.Empty(t, detections.lastInput.OrganizationID, "the read must not run for an argument that cannot be valid")
+}

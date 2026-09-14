@@ -177,3 +177,26 @@ func TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone(t *testing.T) {
 	own := target("an-organization-target", true)
 	require.Equal(t, own, aitargets.ResolveBuiltinDefinition(own))
 }
+
+// TestSameDefinitionFoldsTheDefaultVersionPlistKey: an omitted version hint
+// resolves to DefaultVersionPlistKey, so sending that key explicitly says
+// nothing an omission does not. A client that reads a built-in and sends the
+// resolved default back was being told it had redefined a read-only target.
+func TestSameDefinitionFoldsTheDefaultVersionPlistKey(t *testing.T) {
+	t.Parallel()
+
+	omitted := target("a-built-in", true)
+	omitted.VersionHint = nil
+
+	explicit := target("a-built-in", true)
+	explicit.VersionHint = &aitargets.VersionHint{PlistKey: aitargets.DefaultVersionPlistKey}
+
+	require.True(t, aitargets.SameDefinition(omitted, explicit),
+		"the explicit default must compare equal to omitting the hint")
+
+	// A genuinely different key is still a redefinition.
+	other := target("a-built-in", true)
+	other.VersionHint = &aitargets.VersionHint{PlistKey: "CFBundleVersion"}
+	require.False(t, aitargets.SameDefinition(omitted, other),
+		"a different key is a real change and must still be rejected")
+}
