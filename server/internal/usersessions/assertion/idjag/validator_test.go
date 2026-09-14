@@ -50,7 +50,7 @@ type testKeys struct {
 	calls int
 }
 
-func (k *testKeys) VerificationKey(_ context.Context, _ jwks.Source, _ string) (*jose.JSONWebKey, error) {
+func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source, _ string, _ jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
 	k.calls++
 	return k.key, k.err
 }
@@ -213,4 +213,41 @@ func TestValidateRejectsLongLifetime(t *testing.T) {
 	_, err := validator.Validate(t.Context(), raw, request)
 	require.Equal(t, ReasonLifetimeTooLong, ReasonOf(err))
 	require.Zero(t, guard.calls)
+}
+
+func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	cases := []struct {
+		name   string
+		mutate func(*jwt.Claims, *additionalClaims)
+		reason Reason
+	}{
+		{name: "missing email", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Email = "" }, reason: ReasonEmailMissing},
+		{name: "missing expiry", mutate: func(claims *jwt.Claims, _ *additionalClaims) { claims.Expiry = nil }, reason: ReasonExpiryMissing},
+		{name: "missing jti", mutate: func(claims *jwt.Claims, _ *additionalClaims) { claims.ID = "" }, reason: ReasonIDMissing},
+		{name: "expired", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
+			claims.Expiry = jwt.NewNumericDate(time.Now().Add(-10 * time.Minute))
+		}, reason: ReasonExpired},
+		{name: "future nbf", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
+			claims.NotBefore = jwt.NewNumericDate(time.Now().Add(10 * time.Minute))
+		}, reason: ReasonNotYetValid},
+		{name: "future iat", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
+			claims.IssuedAt = jwt.NewNumericDate(time.Now().Add(10 * time.Minute))
+		}, reason: ReasonNotYetValid},
+		{name: "token endpoint audience", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
+			claims.Audience = jwt.Audience{"https://gram.example.com/token"}
+		}, reason: ReasonAudienceMismatch},
+		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = "" }, reason: ReasonResourceMismatch},
+		{name: "client mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.ClientID = "https://other.example.com/client" }, reason: ReasonClientMismatch},
+	}
+	for _, testCase := range cases {
+		validator, _, _, guard, request := newTestValidator(t, assertion.key)
+		claims, extra := validTestClaims(), validTestExtra()
+		testCase.mutate(&claims, &extra)
+		raw := signTestAssertion(t, assertion.signer, claims, extra)
+		_, err := validator.Validate(t.Context(), raw, request)
+		require.Equal(t, testCase.reason, ReasonOf(err), testCase.name)
+		require.Zero(t, guard.calls, testCase.name)
+	}
 }

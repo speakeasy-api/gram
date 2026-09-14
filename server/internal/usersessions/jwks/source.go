@@ -27,11 +27,12 @@ const (
 // Set document (no fetch at all) or a remote HTTPS URL. Construct one with
 // NewInlineSource or NewRemoteSource.
 type Source struct {
-	kind     sourceKind
-	inline   json.RawMessage
-	uri      string
-	origin   string
-	cacheKey string
+	kind             sourceKind
+	inline           json.RawMessage
+	uri              string
+	origin           string
+	cacheKey         string
+	refreshNamespace string
 
 	// fetchScope names the party whose fetch budget an upstream consult of
 	// this source is charged to, when the KeyResolver has a fetch limiter.
@@ -73,9 +74,16 @@ func (s Source) WithFetchScope(scope string) Source {
 	return s
 }
 
+// WithRefreshNamespace separates the unknown-kid refresh budget for two
+// assertion profiles that happen to publish the same key-set URL.
+func (s Source) WithRefreshNamespace(namespace string) Source {
+	s.refreshNamespace = namespace
+	return s
+}
+
 // WithCacheKey stores a remote source under a durable configuration-row key
-// bound to the configured URI. The URI remains the network target and
-// refresh-rate-limit key.
+// bound to the configured URI. The URI remains the network target and part
+// of the refresh-rate-limit key.
 func (s Source) WithCacheKey(key string) Source {
 	s.cacheKey = key
 	return s
@@ -87,9 +95,9 @@ func (s Source) WithCacheKey(key string) Source {
 // The document is parsed and screened at resolve time, not here.
 func NewInlineSource(keySet json.RawMessage) (Source, error) {
 	if len(keySet) == 0 {
-		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", fetchScope: "", doer: nil}, errors.New("inline key set is empty")
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, errors.New("inline key set is empty")
 	}
-	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", cacheKey: "", fetchScope: "", doer: nil}, nil
+	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, nil
 }
 
 // NewRemoteSource returns a Source for a jwks_uri, whether it came from a
@@ -109,9 +117,9 @@ func NewInlineSource(keySet json.RawMessage) (Source, error) {
 func NewRemoteSource(jwksURI string) (Source, error) {
 	parsed, err := parseJWKSURI(jwksURI)
 	if err != nil {
-		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", fetchScope: "", doer: nil}, err
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, err
 	}
-	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, cacheKey: "", fetchScope: "", doer: nil}, nil
+	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, nil
 }
 
 // ValidateURI reports whether a jwks_uri satisfies the syntax every remote

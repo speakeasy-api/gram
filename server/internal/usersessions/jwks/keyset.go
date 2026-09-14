@@ -255,12 +255,12 @@ func allowsVerification(members map[string]json.RawMessage) bool {
 // VerificationKeyFromDocument re-screens a stored public JWK Set and selects
 // an already known key without fetching. It is used only for a bounded stale
 // fallback when an issuer's key endpoint is temporarily unavailable.
-func VerificationKeyFromDocument(raw json.RawMessage, kid string) (*jose.JSONWebKey, error) {
+func VerificationKeyFromDocument(raw json.RawMessage, kid string, algorithm jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
 	set, err := parseKeySet(raw)
 	if err != nil {
 		return nil, err
 	}
-	return selectKey(set, kid)
+	return selectKeyForAlgorithm(set, kid, algorithm)
 }
 
 // selectKey picks the verification key for kid out of an already-screened
