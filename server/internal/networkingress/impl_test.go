@@ -45,6 +45,15 @@ func TestCreateIngressRequiresEntitlementAndRollout(t *testing.T) {
 	require.True(t, result.CredentialsConfigured)
 }
 
+func TestGetIngressReturnsEmptyResultWhenNotConfigured(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.Nil(t, result.Ingress)
+}
+
 func TestCreateIngressEncryptsCredentialsAndPinsResources(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -149,9 +158,18 @@ func TestIdentityRequiredUpdateMarksIngressPendingAndClearsError(t *testing.T) {
 func TestDisableAndDeleteRemainAvailableAfterGateRemoval(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	ti.create(t, ctx)
+	created := ti.create(t, ctx)
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
 	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
+
+	// Existing desired state and deletion impact remain visible so the dashboard
+	// can explain what is still enforced and offer safe recovery.
+	current, err := ti.service.GetIngress(ctx, &gen.GetIngressPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, current.Ingress)
+	require.Equal(t, created.ID, current.Ingress.ID)
+	_, err = ti.service.GetDeleteImpact(ctx, &gen.GetDeleteImpactPayload{})
+	require.NoError(t, err)
 
 	disabled := false
 	result, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})

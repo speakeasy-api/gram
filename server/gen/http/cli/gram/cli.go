@@ -17351,7 +17351,7 @@ func networkIngressUsage() {
 	fmt.Fprintln(os.Stderr, `Manage an organization's private network ingress desired state.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] network-ingress COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-ingress: Get the active network ingress for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-ingress: Get the active network ingress for the current organization, when configured.`)
 	fmt.Fprintln(os.Stderr, `    create-ingress: Create the organization's Tailscale ingress. Provider credentials are encrypted and never returned.`)
 	fmt.Fprintln(os.Stderr, `    update-ingress: Update desired ingress settings. Enabling is expansion-gated; disabling remains available after gate removal.`)
 	fmt.Fprintln(os.Stderr, `    rotate-credentials: Replace the provider OAuth client credentials without returning either value.`)
@@ -17370,7 +17370,7 @@ func networkIngressGetIngressUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the active network ingress for the current organization.`)
+	fmt.Fprintln(os.Stderr, `Get the active network ingress for the current organization, when configured.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

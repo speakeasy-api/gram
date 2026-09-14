@@ -59,7 +59,7 @@ export type NetworkIngressQueryError =
  * getIngress networkIngress
  *
  * @remarks
- * Get the active network ingress for the current organization.
+ * Get the active network ingress for the current organization, when configured.
  */
 export function useNetworkIngress(
   request?: GetNetworkIngressRequest | undefined,
@@ -82,7 +82,7 @@ export function useNetworkIngress(
  * getIngress networkIngress
  *
  * @remarks
- * Get the active network ingress for the current organization.
+ * Get the active network ingress for the current organization, when configured.
  */
 export function useNetworkIngressSuspense(
   request?: GetNetworkIngressRequest | undefined,
