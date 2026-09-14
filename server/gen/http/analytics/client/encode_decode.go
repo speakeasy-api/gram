@@ -853,10 +853,11 @@ func marshalAnalyticsOrderByRequestBodyToAnalyticsAnalyticsOrderBy(v *AnalyticsO
 // *AnalyticsDatasetResponseBody.
 func unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(v *AnalyticsDatasetResponseBody) *analytics.AnalyticsDataset {
 	res := &analytics.AnalyticsDataset{
-		Name:        *v.Name,
-		Kind:        *v.Kind,
-		Grain:       *v.Grain,
-		Description: *v.Description,
+		Name:         *v.Name,
+		Kind:         *v.Kind,
+		Grain:        *v.Grain,
+		Description:  *v.Description,
+		SummaryField: v.SummaryField,
 	}
 	res.Fields = make([]*analytics.AnalyticsField, len(v.Fields))
 	for i, val := range v.Fields {
