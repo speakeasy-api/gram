@@ -15,6 +15,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -219,6 +220,12 @@ type syntheticLoginOptions struct {
 	// onAuthorizationURL sees the authorize URL the manager built before the
 	// callback is driven, so a token handler can mint claims that match it.
 	onAuthorizationURL func(*url.URL)
+	// enrichment, when set, advertises its userinfo and introspection endpoints on the issuer and trusts its TLS cert.
+	enrichment *enrichmentAS
+	// metadataRefresh, when set, receives the issuer id an enrichment 404 asks to refresh.
+	metadataRefresh func(context.Context, uuid.UUID)
+	// enrichmentRate, when set, paces the enricher through a Redis-backed limiter.
+	enrichmentRate *ratelimit.Rate
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
@@ -287,6 +294,18 @@ func withAuthorizationURLObserver(fn func(*url.URL)) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.onAuthorizationURL = fn }
 }
 
+func withEnrichmentAS(as *enrichmentAS) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.enrichment = as }
+}
+
+func withIssuerMetadataRefreshSeam(fn func(context.Context, uuid.UUID)) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.metadataRefresh = fn }
+}
+
+func withEnrichmentRate(rate ratelimit.Rate) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.enrichmentRate = &rate }
+}
+
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
 // endpoint (tokenHandler) and drives BuildAuthorizationUrl →
 // HandleRemoteLoginCallback, returning the request context plus the persisted
@@ -334,9 +353,17 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	tracerProvider := testenv.NewTracerProvider(t)
 	var policyOptions []func(*guardian.Policy)
 	issuerURL, jwksURI := "https://idp.example.com", ""
+	trusted := x509.NewCertPool()
 	if options.idTokenIssuer != nil {
-		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(options.idTokenIssuer.pool))
+		trusted.AddCert(options.idTokenIssuer.cert)
+		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
 		issuerURL, jwksURI = options.idTokenIssuer.issuerURL, options.idTokenIssuer.jwksURI
+	}
+	userinfoEndpoint, introspectionEndpoint := "", ""
+	if options.enrichment != nil {
+		trusted.AddCert(options.enrichment.cert)
+		policyOptions = append(policyOptions, guardian.WithTLSRootCAs(trusted))
+		userinfoEndpoint, introspectionEndpoint = options.enrichment.userinfoURL, options.enrichment.introspectionURL
 	}
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, policyOptions...)
 	require.NoError(t, err)
@@ -364,6 +391,15 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		}
 		managerOptions = append(managerOptions, remotesessions.WithIDTokenVerifier(verifier))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshIDTokenVerifier(verifier))
+		var enrichmentLimiter *ratelimit.Limiter
+		if options.enrichmentRate != nil {
+			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
+		}
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter)
+		if options.metadataRefresh != nil {
+			enricher.SetIssuerMetadataRefreshSeam(options.metadataRefresh)
+		}
+		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
@@ -399,6 +435,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
 		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
+		UserinfoEndpoint:                  conv.ToPGTextEmpty(userinfoEndpoint),
+		IntrospectionEndpoint:             conv.ToPGTextEmpty(introspectionEndpoint),
 		IDTokenSigningAlgValuesSupported:  options.signingAlgs,
 		ScopesSupported:                   options.issuerScopes,
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
@@ -445,6 +483,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: userIssuer,
 		Subject:             &subject,
 		McpSlug:             "synthetic-mcp-" + slugSuffix,

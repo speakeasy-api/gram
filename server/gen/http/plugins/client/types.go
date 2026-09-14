@@ -506,6 +506,24 @@ type ListPluginsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPluginsUnavailableResponseBody is the type of the "plugins" service
+// "listPlugins" endpoint HTTP response body for the "unavailable" error.
+type ListPluginsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPluginUnauthorizedResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "unauthorized" error.
 type GetPluginUnauthorizedResponseBody struct {
@@ -671,6 +689,24 @@ type GetPluginUnexpectedResponseBody struct {
 // GetPluginGatewayErrorResponseBody is the type of the "plugins" service
 // "getPlugin" endpoint HTTP response body for the "gateway_error" error.
 type GetPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetPluginUnavailableResponseBody is the type of the "plugins" service
+// "getPlugin" endpoint HTTP response body for the "unavailable" error.
+type GetPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -868,6 +904,24 @@ type CreatePluginGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreatePluginUnavailableResponseBody is the type of the "plugins" service
+// "createPlugin" endpoint HTTP response body for the "unavailable" error.
+type CreatePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdatePluginUnauthorizedResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "unauthorized" error.
 type UpdatePluginUnauthorizedResponseBody struct {
@@ -1035,6 +1089,24 @@ type UpdatePluginUnexpectedResponseBody struct {
 // UpdatePluginGatewayErrorResponseBody is the type of the "plugins" service
 // "updatePlugin" endpoint HTTP response body for the "gateway_error" error.
 type UpdatePluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdatePluginUnavailableResponseBody is the type of the "plugins" service
+// "updatePlugin" endpoint HTTP response body for the "unavailable" error.
+type UpdatePluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1232,6 +1304,24 @@ type DeletePluginGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DeletePluginUnavailableResponseBody is the type of the "plugins" service
+// "deletePlugin" endpoint HTTP response body for the "unavailable" error.
+type DeletePluginUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AddPluginServerUnauthorizedResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "unauthorized" error.
 type AddPluginServerUnauthorizedResponseBody struct {
@@ -1399,6 +1489,24 @@ type AddPluginServerUnexpectedResponseBody struct {
 // AddPluginServerGatewayErrorResponseBody is the type of the "plugins" service
 // "addPluginServer" endpoint HTTP response body for the "gateway_error" error.
 type AddPluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AddPluginServerUnavailableResponseBody is the type of the "plugins" service
+// "addPluginServer" endpoint HTTP response body for the "unavailable" error.
+type AddPluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1600,6 +1708,25 @@ type UpdatePluginServerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// UpdatePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "updatePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type UpdatePluginServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RemovePluginServerUnauthorizedResponseBody is the type of the "plugins"
 // service "removePluginServer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1771,6 +1898,25 @@ type RemovePluginServerUnexpectedResponseBody struct {
 // service "removePluginServer" endpoint HTTP response body for the
 // "gateway_error" error.
 type RemovePluginServerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RemovePluginServerUnavailableResponseBody is the type of the "plugins"
+// service "removePluginServer" endpoint HTTP response body for the
+// "unavailable" error.
+type RemovePluginServerUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1975,6 +2121,25 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetPluginAssignmentsUnavailableResponseBody is the type of the "plugins"
+// service "setPluginAssignments" endpoint HTTP response body for the
+// "unavailable" error.
+type SetPluginAssignmentsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListAudiencesUnauthorizedResponseBody is the type of the "plugins" service
 // "listAudiences" endpoint HTTP response body for the "unauthorized" error.
 type ListAudiencesUnauthorizedResponseBody struct {
@@ -2142,6 +2307,24 @@ type ListAudiencesUnexpectedResponseBody struct {
 // ListAudiencesGatewayErrorResponseBody is the type of the "plugins" service
 // "listAudiences" endpoint HTTP response body for the "gateway_error" error.
 type ListAudiencesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListAudiencesUnavailableResponseBody is the type of the "plugins" service
+// "listAudiences" endpoint HTTP response body for the "unavailable" error.
+type ListAudiencesUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2366,6 +2549,25 @@ type DownloadPluginPackageGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DownloadPluginPackageUnavailableResponseBody is the type of the "plugins"
+// service "downloadPluginPackage" endpoint HTTP response body for the
+// "unavailable" error.
+type DownloadPluginPackageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DownloadObservabilityPluginUnauthorizedResponseBody is the type of the
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -2541,6 +2743,25 @@ type DownloadObservabilityPluginUnexpectedResponseBody struct {
 // "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
 // for the "gateway_error" error.
 type DownloadObservabilityPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// DownloadObservabilityPluginUnavailableResponseBody is the type of the
+// "plugins" service "downloadObservabilityPlugin" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadObservabilityPluginUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2746,6 +2967,25 @@ type DownloadCodexInstallScriptGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// DownloadCodexInstallScriptUnavailableResponseBody is the type of the
+// "plugins" service "downloadCodexInstallScript" endpoint HTTP response body
+// for the "unavailable" error.
+type DownloadCodexInstallScriptUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPublishStatusUnauthorizedResponseBody is the type of the "plugins"
 // service "getPublishStatus" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2930,6 +3170,24 @@ type GetPublishStatusGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetPublishStatusUnavailableResponseBody is the type of the "plugins" service
+// "getPublishStatus" endpoint HTTP response body for the "unavailable" error.
+type GetPublishStatusUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // PublishPluginsUnauthorizedResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "unauthorized" error.
 type PublishPluginsUnauthorizedResponseBody struct {
@@ -3097,6 +3355,24 @@ type PublishPluginsUnexpectedResponseBody struct {
 // PublishPluginsGatewayErrorResponseBody is the type of the "plugins" service
 // "publishPlugins" endpoint HTTP response body for the "gateway_error" error.
 type PublishPluginsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PublishPluginsUnavailableResponseBody is the type of the "plugins" service
+// "publishPlugins" endpoint HTTP response body for the "unavailable" error.
+type PublishPluginsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3302,6 +3578,25 @@ type GetMarketplaceSettingsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMarketplaceSettingsUnavailableResponseBody is the type of the "plugins"
+// service "getMarketplaceSettings" endpoint HTTP response body for the
+// "unavailable" error.
+type GetMarketplaceSettingsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateMarketplaceSettingsUnauthorizedResponseBody is the type of the
 // "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -3477,6 +3772,25 @@ type UpdateMarketplaceSettingsUnexpectedResponseBody struct {
 // "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
 // for the "gateway_error" error.
 type UpdateMarketplaceSettingsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpdateMarketplaceSettingsUnavailableResponseBody is the type of the
+// "plugins" service "updateMarketplaceSettings" endpoint HTTP response body
+// for the "unavailable" error.
+type UpdateMarketplaceSettingsUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3858,6 +4172,21 @@ func NewListPluginsGatewayError(body *ListPluginsGatewayErrorResponseBody) *goa.
 	return v
 }
 
+// NewListPluginsUnavailable builds a plugins service listPlugins endpoint
+// unavailable error.
+func NewListPluginsUnavailable(body *ListPluginsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetPluginPluginOK builds a "plugins" service "getPlugin" endpoint result
 // from a HTTP "OK" response.
 func NewGetPluginPluginOK(body *GetPluginResponseBody) *plugins.Plugin {
@@ -4036,6 +4365,21 @@ func NewGetPluginUnexpected(body *GetPluginUnexpectedResponseBody) *goa.ServiceE
 // NewGetPluginGatewayError builds a plugins service getPlugin endpoint
 // gateway_error error.
 func NewGetPluginGatewayError(body *GetPluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetPluginUnavailable builds a plugins service getPlugin endpoint
+// unavailable error.
+func NewGetPluginUnavailable(body *GetPluginUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4238,6 +4582,21 @@ func NewCreatePluginGatewayError(body *CreatePluginGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewCreatePluginUnavailable builds a plugins service createPlugin endpoint
+// unavailable error.
+func NewCreatePluginUnavailable(body *CreatePluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdatePluginPluginOK builds a "plugins" service "updatePlugin" endpoint
 // result from a HTTP "OK" response.
 func NewUpdatePluginPluginOK(body *UpdatePluginResponseBody) *plugins.Plugin {
@@ -4428,6 +4787,21 @@ func NewUpdatePluginGatewayError(body *UpdatePluginGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewUpdatePluginUnavailable builds a plugins service updatePlugin endpoint
+// unavailable error.
+func NewUpdatePluginUnavailable(body *UpdatePluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeletePluginUnauthorized builds a plugins service deletePlugin endpoint
 // unauthorized error.
 func NewDeletePluginUnauthorized(body *DeletePluginUnauthorizedResponseBody) *goa.ServiceError {
@@ -4566,6 +4940,21 @@ func NewDeletePluginUnexpected(body *DeletePluginUnexpectedResponseBody) *goa.Se
 // NewDeletePluginGatewayError builds a plugins service deletePlugin endpoint
 // gateway_error error.
 func NewDeletePluginGatewayError(body *DeletePluginGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDeletePluginUnavailable builds a plugins service deletePlugin endpoint
+// unavailable error.
+func NewDeletePluginUnavailable(body *DeletePluginUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4744,6 +5133,21 @@ func NewAddPluginServerGatewayError(body *AddPluginServerGatewayErrorResponseBod
 	return v
 }
 
+// NewAddPluginServerUnavailable builds a plugins service addPluginServer
+// endpoint unavailable error.
+func NewAddPluginServerUnavailable(body *AddPluginServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdatePluginServerPluginServerOK builds a "plugins" service
 // "updatePluginServer" endpoint result from a HTTP "OK" response.
 func NewUpdatePluginServerPluginServerOK(body *UpdatePluginServerResponseBody) *plugins.PluginServer {
@@ -4910,6 +5314,21 @@ func NewUpdatePluginServerGatewayError(body *UpdatePluginServerGatewayErrorRespo
 	return v
 }
 
+// NewUpdatePluginServerUnavailable builds a plugins service updatePluginServer
+// endpoint unavailable error.
+func NewUpdatePluginServerUnavailable(body *UpdatePluginServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRemovePluginServerUnauthorized builds a plugins service
 // removePluginServer endpoint unauthorized error.
 func NewRemovePluginServerUnauthorized(body *RemovePluginServerUnauthorizedResponseBody) *goa.ServiceError {
@@ -5048,6 +5467,21 @@ func NewRemovePluginServerUnexpected(body *RemovePluginServerUnexpectedResponseB
 // NewRemovePluginServerGatewayError builds a plugins service
 // removePluginServer endpoint gateway_error error.
 func NewRemovePluginServerGatewayError(body *RemovePluginServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRemovePluginServerUnavailable builds a plugins service removePluginServer
+// endpoint unavailable error.
+func NewRemovePluginServerUnavailable(body *RemovePluginServerUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5226,6 +5660,21 @@ func NewSetPluginAssignmentsGatewayError(body *SetPluginAssignmentsGatewayErrorR
 	return v
 }
 
+// NewSetPluginAssignmentsUnavailable builds a plugins service
+// setPluginAssignments endpoint unavailable error.
+func NewSetPluginAssignmentsUnavailable(body *SetPluginAssignmentsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListAudiencesResultOK builds a "plugins" service "listAudiences" endpoint
 // result from a HTTP "OK" response.
 func NewListAudiencesResultOK(body *ListAudiencesResponseBody) *plugins.ListAudiencesResult {
@@ -5380,6 +5829,21 @@ func NewListAudiencesUnexpected(body *ListAudiencesUnexpectedResponseBody) *goa.
 // NewListAudiencesGatewayError builds a plugins service listAudiences endpoint
 // gateway_error error.
 func NewListAudiencesGatewayError(body *ListAudiencesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListAudiencesUnavailable builds a plugins service listAudiences endpoint
+// unavailable error.
+func NewListAudiencesUnavailable(body *ListAudiencesUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5567,6 +6031,21 @@ func NewDownloadPluginPackageGatewayError(body *DownloadPluginPackageGatewayErro
 	return v
 }
 
+// NewDownloadPluginPackageUnavailable builds a plugins service
+// downloadPluginPackage endpoint unavailable error.
+func NewDownloadPluginPackageUnavailable(body *DownloadPluginPackageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDownloadObservabilityPluginResultOK builds a "plugins" service
 // "downloadObservabilityPlugin" endpoint result from a HTTP "OK" response.
 func NewDownloadObservabilityPluginResultOK(contentType string, contentDisposition string) *plugins.DownloadObservabilityPluginResult {
@@ -5727,6 +6206,21 @@ func NewDownloadObservabilityPluginGatewayError(body *DownloadObservabilityPlugi
 	return v
 }
 
+// NewDownloadObservabilityPluginUnavailable builds a plugins service
+// downloadObservabilityPlugin endpoint unavailable error.
+func NewDownloadObservabilityPluginUnavailable(body *DownloadObservabilityPluginUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDownloadCodexInstallScriptResultOK builds a "plugins" service
 // "downloadCodexInstallScript" endpoint result from a HTTP "OK" response.
 func NewDownloadCodexInstallScriptResultOK(contentType string, contentDisposition string) *plugins.DownloadCodexInstallScriptResult {
@@ -5875,6 +6369,21 @@ func NewDownloadCodexInstallScriptUnexpected(body *DownloadCodexInstallScriptUne
 // NewDownloadCodexInstallScriptGatewayError builds a plugins service
 // downloadCodexInstallScript endpoint gateway_error error.
 func NewDownloadCodexInstallScriptGatewayError(body *DownloadCodexInstallScriptGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewDownloadCodexInstallScriptUnavailable builds a plugins service
+// downloadCodexInstallScript endpoint unavailable error.
+func NewDownloadCodexInstallScriptUnavailable(body *DownloadCodexInstallScriptUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6059,6 +6568,21 @@ func NewGetPublishStatusGatewayError(body *GetPublishStatusGatewayErrorResponseB
 	return v
 }
 
+// NewGetPublishStatusUnavailable builds a plugins service getPublishStatus
+// endpoint unavailable error.
+func NewGetPublishStatusUnavailable(body *GetPublishStatusUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewPublishPluginsResultOK builds a "plugins" service "publishPlugins"
 // endpoint result from a HTTP "OK" response.
 func NewPublishPluginsResultOK(body *PublishPluginsResponseBody) *plugins.PublishPluginsResult {
@@ -6207,6 +6731,21 @@ func NewPublishPluginsUnexpected(body *PublishPluginsUnexpectedResponseBody) *go
 // NewPublishPluginsGatewayError builds a plugins service publishPlugins
 // endpoint gateway_error error.
 func NewPublishPluginsGatewayError(body *PublishPluginsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPublishPluginsUnavailable builds a plugins service publishPlugins
+// endpoint unavailable error.
+func NewPublishPluginsUnavailable(body *PublishPluginsUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6382,6 +6921,21 @@ func NewGetMarketplaceSettingsGatewayError(body *GetMarketplaceSettingsGatewayEr
 	return v
 }
 
+// NewGetMarketplaceSettingsUnavailable builds a plugins service
+// getMarketplaceSettings endpoint unavailable error.
+func NewGetMarketplaceSettingsUnavailable(body *GetMarketplaceSettingsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateMarketplaceSettingsResultOK builds a "plugins" service
 // "updateMarketplaceSettings" endpoint result from a HTTP "OK" response.
 func NewUpdateMarketplaceSettingsResultOK(body *UpdateMarketplaceSettingsResponseBody) *plugins.UpdateMarketplaceSettingsResult {
@@ -6532,6 +7086,21 @@ func NewUpdateMarketplaceSettingsUnexpected(body *UpdateMarketplaceSettingsUnexp
 // NewUpdateMarketplaceSettingsGatewayError builds a plugins service
 // updateMarketplaceSettings endpoint gateway_error error.
 func NewUpdateMarketplaceSettingsGatewayError(body *UpdateMarketplaceSettingsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpdateMarketplaceSettingsUnavailable builds a plugins service
+// updateMarketplaceSettings endpoint unavailable error.
+func NewUpdateMarketplaceSettingsUnavailable(body *UpdateMarketplaceSettingsUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -7105,6 +7674,30 @@ func ValidateListPluginsGatewayErrorResponseBody(body *ListPluginsGatewayErrorRe
 	return
 }
 
+// ValidateListPluginsUnavailableResponseBody runs the validations defined on
+// listPlugins_unavailable_response_body
+func ValidateListPluginsUnavailableResponseBody(body *ListPluginsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPluginUnauthorizedResponseBody runs the validations defined on
 // getPlugin_unauthorized_response_body
 func ValidateGetPluginUnauthorizedResponseBody(body *GetPluginUnauthorizedResponseBody) (err error) {
@@ -7324,6 +7917,30 @@ func ValidateGetPluginUnexpectedResponseBody(body *GetPluginUnexpectedResponseBo
 // ValidateGetPluginGatewayErrorResponseBody runs the validations defined on
 // getPlugin_gateway_error_response_body
 func ValidateGetPluginGatewayErrorResponseBody(body *GetPluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetPluginUnavailableResponseBody runs the validations defined on
+// getPlugin_unavailable_response_body
+func ValidateGetPluginUnavailableResponseBody(body *GetPluginUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7585,6 +8202,30 @@ func ValidateCreatePluginGatewayErrorResponseBody(body *CreatePluginGatewayError
 	return
 }
 
+// ValidateCreatePluginUnavailableResponseBody runs the validations defined on
+// createPlugin_unavailable_response_body
+func ValidateCreatePluginUnavailableResponseBody(body *CreatePluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdatePluginUnauthorizedResponseBody runs the validations defined on
 // updatePlugin_unauthorized_response_body
 func ValidateUpdatePluginUnauthorizedResponseBody(body *UpdatePluginUnauthorizedResponseBody) (err error) {
@@ -7804,6 +8445,30 @@ func ValidateUpdatePluginUnexpectedResponseBody(body *UpdatePluginUnexpectedResp
 // ValidateUpdatePluginGatewayErrorResponseBody runs the validations defined on
 // updatePlugin_gateway_error_response_body
 func ValidateUpdatePluginGatewayErrorResponseBody(body *UpdatePluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdatePluginUnavailableResponseBody runs the validations defined on
+// updatePlugin_unavailable_response_body
+func ValidateUpdatePluginUnavailableResponseBody(body *UpdatePluginUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8065,6 +8730,30 @@ func ValidateDeletePluginGatewayErrorResponseBody(body *DeletePluginGatewayError
 	return
 }
 
+// ValidateDeletePluginUnavailableResponseBody runs the validations defined on
+// deletePlugin_unavailable_response_body
+func ValidateDeletePluginUnavailableResponseBody(body *DeletePluginUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAddPluginServerUnauthorizedResponseBody runs the validations defined
 // on addPluginServer_unauthorized_response_body
 func ValidateAddPluginServerUnauthorizedResponseBody(body *AddPluginServerUnauthorizedResponseBody) (err error) {
@@ -8284,6 +8973,30 @@ func ValidateAddPluginServerUnexpectedResponseBody(body *AddPluginServerUnexpect
 // ValidateAddPluginServerGatewayErrorResponseBody runs the validations defined
 // on addPluginServer_gateway_error_response_body
 func ValidateAddPluginServerGatewayErrorResponseBody(body *AddPluginServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAddPluginServerUnavailableResponseBody runs the validations defined
+// on addPluginServer_unavailable_response_body
+func ValidateAddPluginServerUnavailableResponseBody(body *AddPluginServerUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8545,6 +9258,30 @@ func ValidateUpdatePluginServerGatewayErrorResponseBody(body *UpdatePluginServer
 	return
 }
 
+// ValidateUpdatePluginServerUnavailableResponseBody runs the validations
+// defined on updatePluginServer_unavailable_response_body
+func ValidateUpdatePluginServerUnavailableResponseBody(body *UpdatePluginServerUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRemovePluginServerUnauthorizedResponseBody runs the validations
 // defined on removePluginServer_unauthorized_response_body
 func ValidateRemovePluginServerUnauthorizedResponseBody(body *RemovePluginServerUnauthorizedResponseBody) (err error) {
@@ -8764,6 +9501,30 @@ func ValidateRemovePluginServerUnexpectedResponseBody(body *RemovePluginServerUn
 // ValidateRemovePluginServerGatewayErrorResponseBody runs the validations
 // defined on removePluginServer_gateway_error_response_body
 func ValidateRemovePluginServerGatewayErrorResponseBody(body *RemovePluginServerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRemovePluginServerUnavailableResponseBody runs the validations
+// defined on removePluginServer_unavailable_response_body
+func ValidateRemovePluginServerUnavailableResponseBody(body *RemovePluginServerUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9025,6 +9786,30 @@ func ValidateSetPluginAssignmentsGatewayErrorResponseBody(body *SetPluginAssignm
 	return
 }
 
+// ValidateSetPluginAssignmentsUnavailableResponseBody runs the validations
+// defined on setPluginAssignments_unavailable_response_body
+func ValidateSetPluginAssignmentsUnavailableResponseBody(body *SetPluginAssignmentsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListAudiencesUnauthorizedResponseBody runs the validations defined
 // on listAudiences_unauthorized_response_body
 func ValidateListAudiencesUnauthorizedResponseBody(body *ListAudiencesUnauthorizedResponseBody) (err error) {
@@ -9244,6 +10029,30 @@ func ValidateListAudiencesUnexpectedResponseBody(body *ListAudiencesUnexpectedRe
 // ValidateListAudiencesGatewayErrorResponseBody runs the validations defined
 // on listAudiences_gateway_error_response_body
 func ValidateListAudiencesGatewayErrorResponseBody(body *ListAudiencesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListAudiencesUnavailableResponseBody runs the validations defined on
+// listAudiences_unavailable_response_body
+func ValidateListAudiencesUnavailableResponseBody(body *ListAudiencesUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9531,6 +10340,30 @@ func ValidateDownloadPluginPackageGatewayErrorResponseBody(body *DownloadPluginP
 	return
 }
 
+// ValidateDownloadPluginPackageUnavailableResponseBody runs the validations
+// defined on downloadPluginPackage_unavailable_response_body
+func ValidateDownloadPluginPackageUnavailableResponseBody(body *DownloadPluginPackageUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDownloadObservabilityPluginUnauthorizedResponseBody runs the
 // validations defined on downloadObservabilityPlugin_unauthorized_response_body
 func ValidateDownloadObservabilityPluginUnauthorizedResponseBody(body *DownloadObservabilityPluginUnauthorizedResponseBody) (err error) {
@@ -9753,6 +10586,30 @@ func ValidateDownloadObservabilityPluginUnexpectedResponseBody(body *DownloadObs
 // validations defined on
 // downloadObservabilityPlugin_gateway_error_response_body
 func ValidateDownloadObservabilityPluginGatewayErrorResponseBody(body *DownloadObservabilityPluginGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateDownloadObservabilityPluginUnavailableResponseBody runs the
+// validations defined on downloadObservabilityPlugin_unavailable_response_body
+func ValidateDownloadObservabilityPluginUnavailableResponseBody(body *DownloadObservabilityPluginUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10016,6 +10873,30 @@ func ValidateDownloadCodexInstallScriptGatewayErrorResponseBody(body *DownloadCo
 	return
 }
 
+// ValidateDownloadCodexInstallScriptUnavailableResponseBody runs the
+// validations defined on downloadCodexInstallScript_unavailable_response_body
+func ValidateDownloadCodexInstallScriptUnavailableResponseBody(body *DownloadCodexInstallScriptUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPublishStatusUnauthorizedResponseBody runs the validations
 // defined on getPublishStatus_unauthorized_response_body
 func ValidateGetPublishStatusUnauthorizedResponseBody(body *GetPublishStatusUnauthorizedResponseBody) (err error) {
@@ -10256,6 +11137,30 @@ func ValidateGetPublishStatusGatewayErrorResponseBody(body *GetPublishStatusGate
 	return
 }
 
+// ValidateGetPublishStatusUnavailableResponseBody runs the validations defined
+// on getPublishStatus_unavailable_response_body
+func ValidateGetPublishStatusUnavailableResponseBody(body *GetPublishStatusUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidatePublishPluginsUnauthorizedResponseBody runs the validations defined
 // on publishPlugins_unauthorized_response_body
 func ValidatePublishPluginsUnauthorizedResponseBody(body *PublishPluginsUnauthorizedResponseBody) (err error) {
@@ -10475,6 +11380,30 @@ func ValidatePublishPluginsUnexpectedResponseBody(body *PublishPluginsUnexpected
 // ValidatePublishPluginsGatewayErrorResponseBody runs the validations defined
 // on publishPlugins_gateway_error_response_body
 func ValidatePublishPluginsGatewayErrorResponseBody(body *PublishPluginsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePublishPluginsUnavailableResponseBody runs the validations defined
+// on publishPlugins_unavailable_response_body
+func ValidatePublishPluginsUnavailableResponseBody(body *PublishPluginsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10737,6 +11666,30 @@ func ValidateGetMarketplaceSettingsGatewayErrorResponseBody(body *GetMarketplace
 	return
 }
 
+// ValidateGetMarketplaceSettingsUnavailableResponseBody runs the validations
+// defined on getMarketplaceSettings_unavailable_response_body
+func ValidateGetMarketplaceSettingsUnavailableResponseBody(body *GetMarketplaceSettingsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateMarketplaceSettingsUnauthorizedResponseBody runs the
 // validations defined on updateMarketplaceSettings_unauthorized_response_body
 func ValidateUpdateMarketplaceSettingsUnauthorizedResponseBody(body *UpdateMarketplaceSettingsUnauthorizedResponseBody) (err error) {
@@ -10958,6 +11911,30 @@ func ValidateUpdateMarketplaceSettingsUnexpectedResponseBody(body *UpdateMarketp
 // ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody runs the
 // validations defined on updateMarketplaceSettings_gateway_error_response_body
 func ValidateUpdateMarketplaceSettingsGatewayErrorResponseBody(body *UpdateMarketplaceSettingsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpdateMarketplaceSettingsUnavailableResponseBody runs the
+// validations defined on updateMarketplaceSettings_unavailable_response_body
+func ValidateUpdateMarketplaceSettingsUnavailableResponseBody(body *UpdateMarketplaceSettingsUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

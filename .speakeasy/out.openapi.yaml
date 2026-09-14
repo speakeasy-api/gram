@@ -772,7 +772,7 @@ paths:
         name: AIDetections
   /rpc/access.listAudienceOptions:
     get:
-      description: 'List the principals that can be given access: everyone, roles, and people.'
+      description: 'List the principals that can be given access: everyone, roles, people, and agents.'
       operationId: listAudienceOptions
       parameters:
         - allowEmptyValue: true
@@ -1373,6 +1373,96 @@ paths:
       x-speakeasy-name-override: listGrants
       x-speakeasy-react-hook:
         name: Grants
+  /rpc/access.listIdentityAccess:
+    get:
+      description: 'List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.'
+      operationId: listIdentityAccess
+      parameters:
+        - allowEmptyValue: true
+          description: The Gram user ID to look up accessible resources for.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: The Gram user ID to look up accessible resources for.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIdentityAccessResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listIdentityAccess access
+      tags:
+        - access
+      x-speakeasy-name-override: listIdentityAccess
+      x-speakeasy-react-hook:
+        name: IdentityAccess
   /rpc/access.listMembers:
     get:
       description: List all team members with their role assignments.
@@ -28296,6 +28386,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28401,6 +28497,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28505,6 +28607,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28617,6 +28725,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28731,6 +28845,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28862,6 +28982,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -28947,6 +29073,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -29058,6 +29190,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -29173,6 +29311,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -29278,6 +29422,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -29383,6 +29533,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -29488,6 +29644,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -31108,7 +31270,7 @@ paths:
       x-speakeasy-name-override: deleteIngress
   /rpc/networkIngress.get:
     get:
-      description: Get the active network ingress for the current organization.
+      description: Get the active network ingress for the current organization, when configured.
       operationId: getNetworkIngress
       parameters:
         - allowEmptyValue: true
@@ -31123,7 +31285,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworkIngress'
+                $ref: '#/components/schemas/NetworkIngressResult'
           description: OK response.
         "400":
           content:
@@ -37961,6 +38123,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38049,6 +38217,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38131,6 +38305,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38213,6 +38393,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38295,6 +38481,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38379,6 +38571,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38467,6 +38665,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38555,6 +38759,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38643,6 +38853,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38731,6 +38947,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38813,6 +39035,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - session_header_Gram-Session: []
         - {}
@@ -38908,6 +39136,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39004,6 +39238,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39097,6 +39337,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39195,6 +39441,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39306,6 +39558,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39430,6 +39688,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39518,6 +39782,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39615,6 +39885,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39705,6 +39981,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39795,6 +40077,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39885,6 +40173,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -39981,6 +40275,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40083,6 +40383,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40179,6 +40485,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40275,6 +40587,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40371,6 +40689,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40467,6 +40791,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       security:
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
@@ -40583,7 +40913,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetOrganizationFeatureRequestBody'
+              $ref: '#/components/schemas/SetProductFeatureRequestBody'
         required: true
       responses:
         "200":
@@ -52059,6 +52389,15 @@ paths:
             description: Only return skills that have any of these tags.
             items:
               maxLength: 64
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+          in: query
+          name: accessible_by
+          schema:
+            description: Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+            items:
               type: string
             type: array
         - allowEmptyValue: true
@@ -67361,6 +67700,59 @@ components:
         - email
         - role_ids
         - joined_at
+    AccessibleMCPServer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique server identifier.
+          format: uuid
+        name:
+          type: string
+          description: Display name of the server.
+        project_id:
+          type: string
+          description: Project the server belongs to.
+          format: uuid
+        project_slug:
+          type: string
+          description: Slug of the project the server belongs to.
+        slug:
+          type: string
+          description: URL-safe server slug.
+      description: An MCP server an identity is authorized to reach.
+      required:
+        - id
+        - name
+        - slug
+        - project_id
+        - project_slug
+    AccessibleSkill:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Human-readable display name, when set.
+        id:
+          type: string
+          description: Unique skill identifier.
+          format: uuid
+        name:
+          type: string
+          description: Internal name of the skill.
+        project_id:
+          type: string
+          description: Project the skill belongs to.
+          format: uuid
+        project_slug:
+          type: string
+          description: Slug of the project the skill belongs to.
+      description: A skill an identity is authorized to reach.
+      required:
+        - id
+        - name
+        - project_id
+        - project_slug
     AcknowledgeRiskPolicyChallengeRequestBody:
       type: object
       properties:
@@ -68066,9 +68458,7 @@ components:
           type: array
           items:
             type: string
-            pattern: ^~?/[^\\]+$
-            maxLength: 256
-          description: Home-relative (~/...) or absolute (/...) directories whose existence marks the tool as installed.
+          description: Directories whose existence marks the tool as installed, taken as home-relative unless they start with /.
           maxItems: 16
         process_names:
           type: array
@@ -68632,6 +69022,7 @@ components:
             - everyone
             - role
             - user
+            - agent
         member_count:
           type: integer
           description: How many people the principal reaches, when known.
@@ -71497,6 +71888,12 @@ components:
     CreateRoleForm:
       type: object
       properties:
+        agent_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.
         description:
           type: string
           description: Optional description of what this role can do.
@@ -77608,6 +78005,22 @@ components:
       description: Result of listing hook traces
       required:
         - traces
+    ListIdentityAccessResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessibleMCPServer'
+          description: MCP servers accessible to this identity.
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessibleSkill'
+          description: Skills accessible to this identity.
+      required:
+        - servers
+        - skills
     ListInstancesResponseBody:
       type: object
       properties:
@@ -79990,6 +80403,12 @@ components:
         - mcp_servers_private_only
         - meta_mcp_servers_dual
         - meta_mcp_servers_private_only
+    NetworkIngressResult:
+      type: object
+      properties:
+        ingress:
+          $ref: '#/components/schemas/NetworkIngress'
+      description: The organization's active private network ingress, when configured.
     NotModified:
       type: object
       properties:
@@ -83522,6 +83941,12 @@ components:
     ResourceAudienceEntry:
       type: object
       properties:
+        agent_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ids of the agents this rule currently reaches, whether it names them or a role they hold.
         applies_to:
           type: string
           description: Whether the rule names this resource or every resource of its kind.
@@ -83551,6 +83976,7 @@ components:
             - everyone
             - role
             - user
+            - agent
             - directory_group
             - directory_attribute
             - unknown
@@ -84134,11 +84560,6 @@ components:
           type: string
           description: The risk policy ID.
           format: uuid
-        message_types:
-          type: array
-          items:
-            type: string
-          description: 'Read-only legacy policy-level scope: message types this policy still narrows itself to. Empty means no narrowing. Cannot be set; use detection_scopes instead.'
         model_config:
           $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
@@ -84179,12 +84600,6 @@ components:
           items:
             type: string
           description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
-        scope_exempt:
-          type: string
-          description: Read-only legacy policy-level CEL exemption predicate still stored on this policy. Empty means no exemption. Cannot be set; use detection_scopes instead.
-        scope_include:
-          type: string
-          description: Read-only legacy policy-level CEL scope predicate still stored on this policy. Empty means all messages are in scope. Cannot be set; use detection_scopes instead.
         score:
           type: number
           description: CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.
@@ -84934,6 +85349,11 @@ components:
     Role:
       type: object
       properties:
+        agent_ids:
+          type: array
+          items:
+            type: string
+          description: IDs of the agent principals assigned to this role.
         created_at:
           type: string
           format: date-time
@@ -85198,6 +85618,9 @@ components:
     ScopeDefinition:
       type: object
       properties:
+        agent_eligible:
+          type: boolean
+          description: Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
         description:
           type: string
           description: What this scope protects.
@@ -85275,6 +85698,7 @@ components:
         - description
         - resource_type
         - visibility
+        - agent_eligible
     SearchBusinessMemoriesRequestBody:
       type: object
       properties:
@@ -86114,41 +86538,6 @@ components:
           description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
-    SetOrganizationFeatureRequestBody:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        feature_name:
-          type: string
-          enum:
-            - logs
-            - tool_io_logs
-            - session_capture
-            - authz_challenge_logging
-            - sso
-            - scim
-            - hooks_browser_login
-            - hooks_fail_open
-            - custom_model_keys
-            - skills
-            - skill_capture_metadata_only
-            - ai_platform_push_integrations
-            - platform_mcp
-            - customer_managed_encryption_keys
-            - remote_session_auto_refresh
-            - remote_session_auto_refresh_enforced
-            - consent_tool_filtering
-            - session_portability
-            - network_ingress
-          maxLength: 60
-        organization_id:
-          type: string
-      required:
-        - organization_id
-        - feature_name
-        - enabled
-      x-speakeasy-name-override: SetProductFeatureRequestBody
     SetOrganizationWhitelistRequestBody:
       type: object
       properties:
@@ -86197,6 +86586,43 @@ components:
           description: The updated assignments.
       required:
         - assignments
+    SetProductFeatureRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the feature should be enabled
+        feature_name:
+          type: string
+          description: Name of the feature to update
+          enum:
+            - logs
+            - tool_io_logs
+            - session_capture
+            - authz_challenge_logging
+            - sso
+            - scim
+            - hooks_browser_login
+            - hooks_fail_open
+            - custom_model_keys
+            - skills
+            - skill_capture_metadata_only
+            - ai_platform_push_integrations
+            - platform_mcp
+            - customer_managed_encryption_keys
+            - remote_session_auto_refresh
+            - remote_session_auto_refresh_enforced
+            - consent_tool_filtering
+            - session_portability
+            - network_ingress
+          maxLength: 60
+        organization_id:
+          type: string
+          description: Organization whose product feature to update.
+      required:
+        - organization_id
+        - feature_name
+        - enabled
     SetProjectLogoResult:
       type: object
       properties:
@@ -91817,6 +92243,12 @@ components:
           items:
             $ref: '#/components/schemas/RoleGrant'
           description: Scope grants to add.
+        agent_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.
         description:
           type: string
           description: Updated description.

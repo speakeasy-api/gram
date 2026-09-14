@@ -29,6 +29,7 @@ import { useToolsets } from "../toolsets/useToolsets";
 import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
 import {
+  accessibleByFilterOptions,
   useFilterState as useMcpDimensionFilters,
   type FilterValue,
 } from "@/components/filters";
@@ -41,9 +42,13 @@ import {
   MCP_FILTER_OPTIONS,
   pluginFilterOptions,
   pluginMembership,
+  serverIdByToolsetId,
   toolsetFacets,
 } from "./mcp-filter-schema";
+import { useAccessibleServerIds } from "./use-accessible-by";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useSession } from "@/contexts/Auth";
 
 export function MCPRoot(): JSX.Element {
   return <Outlet />;
@@ -120,10 +125,13 @@ function MCPOverview() {
     void toolsets.refetch();
     void refetchMcpServers();
     void refetchPlugins();
+    // The reach reads and the member list back the "Accessible by" control, so
+    // a grant, plugin assignment or membership change would otherwise stay
+    // invisible here until some other refetch happened to run.
+    void refetchMembers();
+    refetchReach();
     if (gatewaysEnabled) void refetchGateways();
   };
-  const isRefreshing =
-    isFetchingMcpServers || isFetchingGateways || toolsets.isFetching;
   // Until AGE-1902 moves hosted rows here, this grid only renders mcp_servers-backed MCPs.
   const mcpServers = useMemo(
     () =>
@@ -140,21 +148,80 @@ function MCPOverview() {
     [gatewaysResult],
   );
 
-  const isLoading =
-    toolsets.isLoading || isLoadingMcpServers || isLoadingGateways;
-
-  const hasRefreshError =
-    toolsets.isError || isMcpServersError || isGatewaysError;
-
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useViewMode();
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
   const plugins = useMemo(() => pluginsResult?.plugins ?? [], [pluginsResult]);
   const membership = useMemo(() => pluginMembership(plugins), [plugins]);
+
+  // Who the org has, for the "Accessible by" options, and what each selected
+  // person can actually reach. Both are org reads, so a viewer without them
+  // simply gets no people to pick from rather than a broken control.
+  const {
+    data: membersResult,
+    refetch: refetchMembers,
+    isFetching: isFetchingMembers,
+  } = useMembers(undefined, undefined, { throwOnError: false });
+  const { user } = useSession();
+  const members = useMemo(() => membersResult?.members ?? [], [membersResult]);
+  const {
+    serverIds: reachableServerIds,
+    isLoading: isLoadingReach,
+    isFetching: isFetchingReach,
+    isError: isReachError,
+    refetch: refetchReach,
+  } = useAccessibleServerIds(mcpFilters.values.accessibleBy);
+
+  // The reach read gates the rows just as the listings do: with an active
+  // "Accessible by" filter and no answer yet, every row is filtered out, and
+  // rendering that as "no servers match" states a result we do not have.
+  const isLoading =
+    toolsets.isLoading ||
+    isLoadingMcpServers ||
+    isLoadingGateways ||
+    isLoadingReach;
+
+  const hasRefreshError =
+    toolsets.isError || isMcpServersError || isGatewaysError || isReachError;
+
+  // A failed reach read with the filter on leaves every row excluded for a
+  // reason that is not the filter's answer, so the listing says so outright
+  // rather than rendering an empty result as a finding.
+  //
+  // Only when there is no answer at all, though: a background refetch that
+  // fails over a cached set is still filtering correctly, and replacing those
+  // rows would hide a true result. That case keeps its rows and says it is
+  // stale through the refresh-failed badge instead.
+  const reachUnanswered =
+    isReachError &&
+    mcpFilters.values.accessibleBy.length > 0 &&
+    reachableServerIds === undefined;
+
+  // Declared after the reads it names: the spinner has to outlast the slowest
+  // of them, and a refresh that stopped spinning while the reach or member
+  // read was still in flight would look finished before it was.
+  const isRefreshing =
+    isFetchingMcpServers ||
+    isFetchingGateways ||
+    toolsets.isFetching ||
+    isFetchingMembers ||
+    isFetchingReach;
+
+  // Built from the unfiltered list: the grid drops toolset-backed rows below,
+  // but those are exactly the ones whose server id a hosted row needs.
+  const hostedServerIds = useMemo(
+    () => serverIdByToolsetId(mcpServersResult?.mcpServers ?? []),
+    [mcpServersResult],
+  );
+
   const filterOptions = useMemo(
-    () => ({ ...MCP_FILTER_OPTIONS, plugins: pluginFilterOptions(plugins) }),
-    [plugins],
+    () => ({
+      ...MCP_FILTER_OPTIONS,
+      plugins: pluginFilterOptions(plugins),
+      accessibleBy: accessibleByFilterOptions(members, user.id),
+    }),
+    [plugins, members, user.id],
   );
 
   const filteredToolsets = useMemo(() => {
@@ -163,8 +230,9 @@ function MCPOverview() {
       .filter((toolset) => {
         if (
           !matchesMcpFilters(
-            toolsetFacets(toolset, membership),
+            toolsetFacets(toolset, membership, hostedServerIds),
             mcpFilters.values,
+            reachableServerIds,
           )
         )
           return false;
@@ -175,7 +243,14 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search, mcpFilters.values, membership]);
+  }, [
+    toolsets,
+    search,
+    mcpFilters.values,
+    membership,
+    hostedServerIds,
+    reachableServerIds,
+  ]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
@@ -185,6 +260,7 @@ function MCPOverview() {
           !matchesMcpFilters(
             mcpServerFacets(server, membership),
             mcpFilters.values,
+            reachableServerIds,
           )
         )
           return false;
@@ -195,19 +271,25 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search, mcpFilters.values, membership]);
+  }, [mcpServers, search, mcpFilters.values, membership, reachableServerIds]);
 
   const filteredGateways = useMemo(() => {
     const query = search.toLowerCase();
     return [...gateways]
       .filter((gateway) => {
-        if (!matchesMcpFilters(gatewayFacets(), mcpFilters.values))
+        if (
+          !matchesMcpFilters(
+            gatewayFacets(),
+            mcpFilters.values,
+            reachableServerIds,
+          )
+        )
           return false;
         if (!query) return true;
         return gateway.name.toLowerCase().includes(query);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [gateways, search, mcpFilters.values]);
+  }, [gateways, search, mcpFilters.values, reachableServerIds]);
 
   // Show the filter bar once there's anything to filter. Filters can drive the
   // result set to empty on their own, so the no-matches state must consider an
@@ -300,7 +382,15 @@ function MCPOverview() {
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         )}
-        {showNoMatches ? (
+        {reachUnanswered ? (
+          // The rows are empty because the reach read failed, not because
+          // nothing matches. Saying "no matches" here would report a result
+          // off a request that never landed.
+          <Text muted className="py-8 text-center">
+            Couldn’t load who can reach these servers. Retry to filter by
+            access.
+          </Text>
+        ) : showNoMatches ? (
           <Text muted className="py-8 text-center">
             {search !== ""
               ? `No MCP servers matching “${search}”`

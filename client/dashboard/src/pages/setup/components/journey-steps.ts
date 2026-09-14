@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect } from "react";
 
 export interface JourneyStep {
   index: number;
@@ -38,7 +38,10 @@ export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
   const registry = useContext(RegistryContext);
   const { index, slug, title, complete, badge } = step;
 
-  useEffect(() => {
+  // A layout effect so the provider knows every section before the first
+  // paint. With a passive effect the initial mount painted once with no steps
+  // registered: every section hidden and the footer reading "Mark done".
+  useLayoutEffect(() => {
     if (!registry) return;
     registry.register(id, { index, slug, title, complete, badge });
   }, [registry, id, index, slug, title, complete, badge]);

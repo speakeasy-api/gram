@@ -59,7 +59,7 @@ export type AudienceOptionsQueryError =
  * listAudienceOptions access
  *
  * @remarks
- * List the principals that can be given access: everyone, roles, and people.
+ * List the principals that can be given access: everyone, roles, people, and agents.
  */
 export function useAudienceOptions(
   request?: ListAudienceOptionsRequest | undefined,
@@ -85,7 +85,7 @@ export function useAudienceOptions(
  * listAudienceOptions access
  *
  * @remarks
- * List the principals that can be given access: everyone, roles, and people.
+ * List the principals that can be given access: everyone, roles, people, and agents.
  */
 export function useAudienceOptionsSuspense(
   request?: ListAudienceOptionsRequest | undefined,

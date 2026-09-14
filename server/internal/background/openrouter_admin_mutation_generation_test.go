@@ -31,29 +31,32 @@ func TestOpenRouterAdminAbortRetiresOnlyItsOperation(t *testing.T) {
 		reconciledCursor.Store(cursor.Load())
 		return cursor.Load(), nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
-	updateBegin := func(id string, token *int64) {
+	updateBegin := func(id string, token *int64, after func()) {
 		env.UpdateWorkflow(OpenRouterAdminBeginUpdate, id, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				require.NoError(t, err)
-				if value, ok := result.(int64); ok {
-					*token = value
-				}
+				value, ok := result.(int64)
+				require.True(t, ok)
+				*token = value
+				after()
 			},
 		})
 	}
-	env.RegisterDelayedCallback(func() { updateBegin("a", &tokenA) }, time.Millisecond)
-	env.RegisterDelayedCallback(func() { updateBegin("b", &tokenB) }, 2*time.Millisecond)
-	env.RegisterDelayedCallback(func() { env.SignalWorkflow(OpenRouterAdminAbortSignal, tokenA) }, 3*time.Millisecond)
 	env.RegisterDelayedCallback(func() {
-		cursor.Store(1)
-		env.UpdateWorkflow(OpenRouterAdminCompleteUpdate, "complete-b", &testsuite.TestUpdateCallback{
-			OnReject:   func(err error) { require.NoError(t, err) },
-			OnAccept:   func() {},
-			OnComplete: func(_ any, err error) { require.NoError(t, err) },
-		}, tokenB)
-	}, 4*time.Millisecond)
+		updateBegin("a", &tokenA, func() {
+			updateBegin("b", &tokenB, func() {
+				env.SignalWorkflow(OpenRouterAdminAbortSignal, tokenA)
+				cursor.Store(1)
+				env.UpdateWorkflow(OpenRouterAdminCompleteUpdate, "complete-b", &testsuite.TestUpdateCallback{
+					OnReject:   func(err error) { require.NoError(t, err) },
+					OnAccept:   func() {},
+					OnComplete: func(_ any, err error) { require.NoError(t, err) },
+				}, tokenB)
+			})
+		})
+	}, time.Millisecond)
 
 	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
 	require.NoError(t, env.GetWorkflowError())
@@ -139,6 +142,8 @@ func TestOpenRouterAdminTokenMismatchAndCompleteRetryAreIdempotent(t *testing.T)
 		reconciles.Add(1)
 		return cursor.Load(), nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
+	var begun int
+	var afterBegins func()
 	updateBegin := func(id string, token *int64) {
 		env.UpdateWorkflow(OpenRouterAdminBeginUpdate, id, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
@@ -148,6 +153,12 @@ func TestOpenRouterAdminTokenMismatchAndCompleteRetryAreIdempotent(t *testing.T)
 				var ok bool
 				*token, ok = result.(int64)
 				require.True(t, ok)
+				begun++
+				if begun == 2 {
+					// Capture activities are asynchronous: elapsed time does not
+					// guarantee both Begin tokens are ready for Complete/Abort.
+					env.RegisterDelayedCallback(afterBegins, 0)
+				}
 			},
 		})
 	}
@@ -168,11 +179,11 @@ func TestOpenRouterAdminTokenMismatchAndCompleteRetryAreIdempotent(t *testing.T)
 	}
 	env.RegisterDelayedCallback(func() { updateBegin("a", &tokenA) }, time.Millisecond)
 	env.RegisterDelayedCallback(func() { updateBegin("b", &tokenB) }, 2*time.Millisecond)
-	env.RegisterDelayedCallback(func() { env.SignalWorkflow(OpenRouterAdminAbortSignal, tokenA+1000) }, 3*time.Millisecond)
-	env.RegisterDelayedCallback(func() {
+	afterBegins = func() {
+		env.SignalWorkflow(OpenRouterAdminAbortSignal, tokenA+1000)
 		cursor.Store(1)
 		complete("complete")
-	}, 4*time.Millisecond)
+	}
 
 	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
 	require.NoError(t, env.GetWorkflowError())

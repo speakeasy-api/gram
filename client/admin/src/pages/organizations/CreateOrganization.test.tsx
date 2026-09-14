@@ -134,7 +134,7 @@ beforeEach(() => {
   mocks.createOrganization.mockReset();
   mocks.createOrganization.mockResolvedValue(CREATED);
   mocks.listOrganizations.mockReset();
-  mocks.listOrganizations.mockResolvedValue({ organizations: [] });
+  mocks.listOrganizations.mockResolvedValue({ total: 0, organizations: [] });
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(CREATED);
   announce.mockReset();
@@ -241,7 +241,10 @@ describe("creating an organization", () => {
 
     // The new record belongs wherever the sort, the filter and the cursor put
     // it, so the page is fetched again rather than patched.
-    mocks.listOrganizations.mockResolvedValue({ organizations: [CREATED] });
+    mocks.listOrganizations.mockResolvedValue({
+      total: 1,
+      organizations: [CREATED],
+    });
     type("Placeholder New");
     submitForm();
 

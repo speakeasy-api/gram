@@ -1,5 +1,35 @@
 # server
 
+## 2.4.0
+
+### Minor Changes
+
+- e28870b: Expose standalone admin global issuer management and regenerate SDK metadata while preserving legacy internal SDK operation naming.
+- 7e1671c: Expose standalone admin image upload and public serving endpoints with a generated browser SDK.
+- 1d9fb99: Add optional standalone admin asset storage configuration with explicit filesystem and validated GCS resolution.
+- 5827550: Verify a remote session automatically when its grant is connected or reconnected, show the card as Verifying until the verdict lands, and drain in-flight verifications on shutdown.
+- 83acd9e: Add a Verify action to the remote-session consent page that presents a stored credential to its upstream MCP server in a dry run of dispatch (connect and list tools) and records the verdict (valid, rejected by the member, or unknown) on the session, shown on the card.
+- ad99b04: Enrich remote sessions from the issuer's userinfo and introspection endpoints: capture identity from userinfo when the exchange returned no ID token, and let Verify mark a grant inactive when the provider's introspection says its token is dead.
+- 18582c0: Refresh remote session issuer metadata when a session flow uses the issuer: stale or never-fetched metadata is re-fetched off the request path and stored capability documents are re-projected onto the typed columns, audited under a new `system:` principal type that audit feeds display and that can never hold grants.
+
+### Patch Changes
+
+- beecb96: Support trusted standalone admin authorization for existing global operations while retaining tenant authorization boundaries.
+- e65573a: Stop policing the shape of an AI scan target config dir. Any path the device agent can resolve is accepted, including one written with a trailing slash such as `~/Library/Application Support/com.openai.chat/`.
+- 7f87390: Stripe Checkout trial conversions now switch the organization to payg instead of leaving it on enterprise.
+- ae992a6: Index dynamic MCP toolsets in a scheduled background sweep so MCP requests no longer initiate Temporal indexing work.
+- 6d2ded6: Show project names instead of project IDs when choosing MCP servers for a killswitch.
+- 3606376: The risk policy create and update endpoints no longer accept the policy-level `message_types`, `scope_include`, and `scope_exempt` fields. New policies leave those legacy columns empty and updates carry stored values forward unchanged; scope through `detection_scopes` instead. The fields remain readable on a policy until the legacy scope migration folds them. The dashboard's secrets guide now scopes its default policy through a detection scope.
+- 28f5a9a: Platform MCP risk policy tools no longer accept or return the policy-level `message_types` field. New policies leave the legacy scope columns empty and scope through `detection_scopes`; a stored policy whose legacy `message_types` still narrows it is reported as `raw_scope` until the legacy scope migration folds it.
+- 9ca6e44: The setup board gains a Set up LiteLLM card, hidden by default until a platform admin reveals it. Its page creates a LiteLLM instance in place, shows that instance's proxy environment, guardrail fragment, and verification requests exactly as the AI Integrations page does, and confirms traffic from the instance's connection diagnostics. LiteLLM guardrail events no longer count toward the other-platforms card.
+- 22a6232: Speed up the scheduled toolset index sweep so its discovery query no longer times out on projects with many HTTP tools.
+- fe564b4: Read a workload identity's admission from the database, scoped to the caller's own project or the organization above it. Not yet wired to any request path.
+- fe564b4: Admission for the workload assertion grant: check a verified assertion's subject against the workload identities an endpoint admits, keyed on the exact organization, endpoint issuer, external issuer and subject, behind an injected lookup that admits nothing until a policy is configured
+- fe564b4: Admission for the workload assertion grant: resolve an assertion's issuer to the row the rest of the grant is built on, share one issuer resolution between the management API and admission, bound admission lookups per endpoint, and remember recent rejections in the shared cache so a repeated unknown issuer costs no query on any replica
+- 5c280cc: Resolve a workload session issuer from an assertion's issuer URL, scoped to the caller's own project or organization. Not yet wired to any request path.
+- fe564b4: Verify workload assertions against the keys published by their `workload_issuers` record rather than a remote session issuer row. Not yet wired to any request path.
+- 37d7a90: Derive a workload assertion's replay identifier when the platform sends no `jti` — Google sends none and Microsoft Entra calls it `uti`. Client assertions still require one.
+
 ## 2.3.0
 
 ### Minor Changes

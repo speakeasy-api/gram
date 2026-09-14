@@ -1384,6 +1384,12 @@ WHERE project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR tags && @tags::text[]
+  )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR id = ANY(sqlc.narg(skill_ids)::uuid[])
   );
 
 -- name: ListDistinctSkillTags :many
@@ -1427,6 +1433,14 @@ SELECT
         COALESCE(cardinality(@tags::text[]), 0) = 0
         OR counted.tags && @tags::text[]
       )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        sqlc.narg(skill_ids)::uuid[] IS NULL
+        OR counted.id = ANY(sqlc.narg(skill_ids)::uuid[])
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -1460,6 +1474,10 @@ WHERE s.project_id = @project_id
   AND (
     COALESCE(cardinality(@tags::text[]), 0) = 0
     OR s.tags && @tags::text[]
+  )
+  AND (
+    sqlc.narg(skill_ids)::uuid[] IS NULL
+    OR s.id = ANY(sqlc.narg(skill_ids)::uuid[])
   )
   AND (
     (

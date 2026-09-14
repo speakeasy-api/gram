@@ -87,6 +87,41 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 	require.NotContains(t, page.String(), "Connection complete")
 }
 
+func TestConsentTemplateRendersPendingVerification(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Gram",
+		MCPSlug:        "example",
+		MCPRouteBase:   "x/mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		RedirectURI:    "",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:    "client-id",
+			IssuerSlug:  "example-issuer",
+			Connected:   true,
+			CanValidate: true,
+			Pending:     true,
+		}},
+		ValidationDeadlineMS: 15000,
+		ConsentEnabled:       true,
+		FirstParty:           true,
+		AutoClose:            false,
+	})
+	require.NoError(t, err)
+
+	html := normalizeWhitespace(page.String())
+	require.Contains(t, html, `data-verify-deadline-ms="15000"`)
+	require.Contains(t, html, `data-validation="pending"`)
+	require.Contains(t, html, "Verifying…")
+	require.NotContains(t, html, "Not yet verified")
+	require.NotContains(t, html, "data-auto-close")
+}
+
 func TestShouldAutoCloseFirstParty(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +140,17 @@ func TestShouldAutoCloseFirstParty(t *testing.T) {
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, reconnectable}), "a card offering an identity reconnect keeps the page open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, disconnected}), "partially connected flows must stay open")
 	require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, expired}), "flows with expired sessions must stay open")
+
+	for _, card := range []remoteSessionCard{
+		{Connected: true, CanValidate: true},
+		{Connected: true, CanValidate: true, Unverified: true},
+		{Connected: true, CanValidate: true, Rejected: true},
+		{Connected: true, Rejected: true},
+		{Connected: true, Pending: true},
+	} {
+		require.False(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, card}), "pending, unknown, and rejected verifications keep the page open")
+	}
+	require.True(t, shouldAutoCloseFirstParty(true, []remoteSessionCard{connected, {Connected: true, CanValidate: true, Verified: true}}))
 }
 
 func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
@@ -149,7 +195,8 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.Contains(t, normalizedHTML, "idle connections lapse and need reconnecting")
 	// Auto refresh is on for this card, and auto refresh is precisely what
 	// stops an idle lapse — so the lapse notice must not appear alongside it.
-	require.NotContains(t, normalizedHTML, "lapsing in")
+	require.NotContains(t, normalizedHTML, "Lapses in")
+	require.Contains(t, normalizedHTML, "Auto refresh on.")
 	require.NotContains(t, html, `datetime="2026-09-05T18:00:00Z"`)
 	// The absolute grant deadline survives that suppression: refreshing does
 	// not move it, so auto refresh being on says nothing about it.
@@ -159,7 +206,7 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
 	require.NotContains(t, html, "3 hours 12 minutes")
 	require.NotContains(t, html, "Current access expires in")
-	require.Contains(t, normalizedHTML, "Connected · auto refresh on")
+	require.NotContains(t, normalizedHTML, "auto refresh on", "the status line no longer carries the setting")
 	require.Contains(t, html, `data-refresh-link`)
 }
 
@@ -202,7 +249,7 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 	// The per-card hidden input still carries the required "on" value so the
 	// connect action persists auto_refresh=on.
 	require.Contains(t, html, `value="on"`)
-	require.Contains(t, normalizeWhitespace(html), "Connected · auto refresh on")
+	require.Contains(t, normalizeWhitespace(html), "Auto refresh on.")
 }
 
 func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T) {
@@ -240,11 +287,11 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 	// subject knows idle connections will lapse.
 	require.Contains(t, normalizeWhitespace(html), "Off · managed by your organization")
 	require.Contains(t, html, `data-auto-refresh-managed`)
-	require.NotContains(t, normalizeWhitespace(html), "auto refresh on")
+	require.NotContains(t, normalizeWhitespace(html), "Auto refresh on.")
 	// With nothing renewing the session, an idle lapse is a real outcome and
 	// the provider's reported deadline is worth stating — as a report, not a
 	// guarantee.
-	require.Contains(t, normalizeWhitespace(html), "Provider reports it lapsing in")
+	require.Contains(t, normalizeWhitespace(html), "Lapses in")
 	// Nothing to change and nothing to persist.
 	require.NotContains(t, html, `data-auto-refresh-select`)
 	require.NotContains(t, html, `id="auto-refresh-form"`)
@@ -651,12 +698,12 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	}
 
 	with := renderCard(true)
-	require.Contains(t, with, "Reconnect to enable identity")
+	require.Contains(t, with, "Reconnect to add account details")
 	require.Contains(t, with, "> Reconnect </button>")
 	require.Contains(t, with, "Connected")
 
 	without := renderCard(false)
-	require.NotContains(t, without, "Reconnect to enable identity")
+	require.NotContains(t, without, "Reconnect to add account details")
 	require.NotContains(t, without, "data-connect-link")
 }
 
@@ -683,13 +730,13 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 	}
 
 	html := render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "grant-owner@example.com"})
-	require.Contains(t, html, "Connected as grant-owner@example.com")
+	require.Contains(t, html, "Authenticated as grant-owner@example.com")
 
 	// The identity is provider-supplied text and must render escaped.
 	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "<img src=x>"})
-	require.Contains(t, html, "Connected as &lt;img src=x&gt;")
+	require.Contains(t, html, "Authenticated as &lt;img src=x&gt;")
 	require.NotContains(t, html, "<img src=x>")
 
 	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: false, ConnectedAs: "grant-owner@example.com"})
-	require.NotContains(t, html, "Connected as", "a disconnected card names nobody")
+	require.NotContains(t, html, "Authenticated as", "a disconnected card names nobody")
 }

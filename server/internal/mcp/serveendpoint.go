@@ -683,29 +683,53 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
+	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstreamAuth, wwwAuthenticate, selection)
+	if err != nil {
+		return err
+	}
+	p, err := build(ctx)
+	if err != nil {
+		return err
+	}
+
+	return serveProxyBackend(w, r.WithContext(ctx), p)
+}
+
+// remoteBackendProxyBuilder loads a remote-backed server once and yields fresh one-request proxies for it.
+func (s *Service) remoteBackendProxyBuilder(
+	ctx context.Context,
+	logger *slog.Logger,
+	projectID uuid.UUID,
+	organizationID string,
+	mcpServer *mcpserversrepo.McpServer,
+	upstreamAuth string,
+	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
+	options ...remotemcp.BuildOption,
+) (memberProxyBuilder, error) {
 	server, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
 		ID:        mcpServer.RemoteMcpServerID.UUID,
-		ProjectID: endpoint.ProjectID,
+		ProjectID: projectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogWarn(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogWarn(ctx, logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
 	}
 
 	headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, server.ID, false)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
 	if s.remoteProxyManager == nil {
-		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, organizationID, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate, selection)
-
-	return serveProxyBackend(w, r.WithContext(ctx), p)
+	return func(context.Context) (*proxy.Proxy, error) {
+		return s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, organizationID, projectID.String(), upstreamAuth, wwwAuthenticate, selection, options...), nil
+	}, nil
 }
 
 func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) error {

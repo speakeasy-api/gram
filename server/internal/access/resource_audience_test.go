@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -788,6 +789,123 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 				Tools:        []string{"search"},
 				Dispositions: []string{"read_only"},
 			},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+// A suspended agent keeps the access it already had, and nothing more. The
+// guard matches the rule, not just the principal: otherwise a tool-limited
+// grant could be rewritten as an unrestricted one, widening what the agent
+// gets back when it resumes.
+func TestService_SetResourceAudience_SuspendedAgentKeepsButCannotWidenAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Release assistant",
+	})
+	require.NoError(t, err)
+	agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+
+	// While active, the agent is given connect on two named tools.
+	narrowed := []*gen.SetResourceAudienceEntry{
+		{PrincipalUrn: agentURN, Level: "use", Tools: []string{"search", "fetch"}, Dispositions: nil},
+	}
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         narrowed,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	// Saving the same rule back is allowed: nothing changed.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         narrowed,
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+
+	// Dropping the tool narrowing would widen it, so it is refused.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: agentURN, Level: "use", Tools: nil, Dispositions: nil},
+		},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+
+	// Removing it entirely stays available: the rule is simply left out.
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind:    "mcp",
+		ResourceID:      serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+		SessionToken:    nil,
+		ApikeyToken:     nil,
+	})
+	require.NoError(t, err)
+}
+
+// A suspended agent that holds no rule on this server cannot be given one.
+func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Support triage",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agent.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp",
+		ResourceID:   serverID,
+		Entries: []*gen.SetResourceAudienceEntry{
+			{PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(), Level: "use", Tools: nil, Dispositions: nil},
 		},
 		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
 		SessionToken:    nil,

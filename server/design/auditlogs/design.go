@@ -98,10 +98,10 @@ var AuditLog = Type("AuditLog", func() {
 	Attribute("subject_slug", String)
 
 	Attribute("before_snapshot", Any, func() {
-		Meta("struct:field:type", "json.RawMessage")
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
 	})
 	Attribute("after_snapshot", Any, func() {
-		Meta("struct:field:type", "json.RawMessage")
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
 	})
 
 	Attribute("metadata", MapOf(String, Any))

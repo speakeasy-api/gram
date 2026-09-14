@@ -384,12 +384,24 @@ export function addPrincipalsWrite(
   resourceName?: string,
 ): AudienceWrite {
   const server = serverLabel(resourceName);
+  // Named by what was actually added: the picker grants people and agents
+  // separately, and "1 person" is wrong for either an agent or a mixed set.
+  const agents = principalUrns.filter((principalUrn) =>
+    principalUrn.startsWith("agent:"),
+  ).length;
+  const noun =
+    agents === principalUrns.length
+      ? principalUrns.length === 1
+        ? "1 agent"
+        : `${principalUrns.length} agents`
+      : agents === 0
+        ? principalUrns.length === 1
+          ? "1 person"
+          : `${principalUrns.length} people`
+        : `${principalUrns.length} principals`;
   return {
     entries: withAdded(direct, principalUrns),
-    message:
-      principalUrns.length === 1
-        ? `1 person can now connect to ${server}.`
-        : `${principalUrns.length} people can now connect to ${server}.`,
+    message: `${noun} can now connect to ${server}.`,
   };
 }
 

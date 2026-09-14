@@ -150,6 +150,7 @@ var _ = Service("skills", func() {
 			Attribute("source_kinds", ArrayOf(String, func() { Enum("manual", "captured") }), "Only return skills from these sources.")
 			Attribute("classifications", ArrayOf(String, func() { Enum("custom", "built_in") }), "Only return skills with these classifications.")
 			Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Only return skills that have any of these tags.")
+			Attribute("accessible_by", ArrayOf(String), "Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.")
 			Attribute("sort", String, "How to order skills.", func() {
 				Enum("name", "updated")
 				Default("name")
@@ -169,6 +170,7 @@ var _ = Service("skills", func() {
 			Param("source_kinds")
 			Param("classifications")
 			Param("tags")
+			Param("accessible_by")
 			Param("sort")
 			security.SessionHeader()
 			security.ByKeyHeader()

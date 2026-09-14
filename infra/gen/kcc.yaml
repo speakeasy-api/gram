@@ -87,6 +87,19 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconcile-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message ReconcileRequested {
+          string ingress_id = 1;
+          string temporal_task_queue = 2;
+          string organization_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -1221,6 +1234,24 @@ pubsub:
         name: gram-metering-v1-meter-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconciler
+      topic_proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconciler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-networkingress-v1-reconciler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-networkingress-v1-reconcile-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -1604,6 +1635,23 @@ pubsub:
     name: gram-metering-v1-meter-reading-ch-writer-dlq
     spec:
       messageRetentionDuration: 2678400s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconcile-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-networkingress-v1-reconcile-requested
+  - labels:
+      dlq_for: gram-networkingress-v1-reconciler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconciler
+    name: gram-networkingress-v1-reconciler-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record

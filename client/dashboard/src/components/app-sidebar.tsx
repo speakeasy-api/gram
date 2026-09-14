@@ -7,17 +7,14 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/Sidebar";
 import { useMemo, useState } from "react";
 
 import { Button } from "./ui/Button";
-import { HatchRule } from "./hatch-rule";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { GramLogo } from "./gram-logo";
+import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
@@ -272,24 +269,8 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      {/* Logo row only — the project switcher now lives in the page header.
-          The row is exactly --header-height and closes with the same crosshatch
-          rule the page header uses, so the divider reads as one line running
-          across both panes. */}
-      <SidebarHeader className="gap-0 p-0">
-        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Link
-            to={`/${orgSlug}`}
-            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
-          >
-            <GramLogo className="w-28" />
-          </Link>
-          {/* Collapse control sits beside the logo (WorkOS placement); search
-              moved out to the page header. */}
-          <SidebarTrigger />
-        </div>
-        <HatchRule />
-      </SidebarHeader>
+      {/* Brand row only — the project switcher now lives in the page header. */}
+      <SidebarBrandHeader homeHref={`/${orgSlug}`} />
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
