@@ -189,7 +189,8 @@ type UpdateMetaMcpServerPayload struct {
 	NetworkAccessMode *types.NetworkAccessMode
 	// Server instructions returned in the gateway's MCP initialize response. Omit
 	// to leave them unchanged; send an empty string to restore Gram's built-in
-	// gateway instructions.
+	// gateway instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
 	Instructions *string
 }
 

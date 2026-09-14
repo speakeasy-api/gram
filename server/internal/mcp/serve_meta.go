@@ -368,6 +368,13 @@ func (s *Service) handleMetaServerDiscover(
 	metaServer *metamcprepo.MetaMcpServer,
 	req *rawRequest,
 ) (json.RawMessage, error) {
+	hints := cacheHintsCallerUniform
+	if metaServer.UserSessionIssuerID.Valid {
+		// Custom instructions are protected by the issuer gate even when
+		// every authorized caller receives the same self-description.
+		hints = cacheHintsCallerVarying
+	}
+
 	result := &result[metamcp.DiscoverResult]{
 		ID: req.ID,
 		Result: metamcp.DiscoverResult{
@@ -379,9 +386,7 @@ func (s *Service) handleMetaServerDiscover(
 			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
 		},
 		serverIdentity: serverInfoMetaServer,
-		// The self-description varies per gateway, never per caller, so every
-		// caller of this endpoint receives the same payload.
-		cacheHints: cacheHintsCallerUniform,
+		cacheHints:     hints,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {

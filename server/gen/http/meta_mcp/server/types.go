@@ -46,7 +46,8 @@ type UpdateMetaMcpServerRequestBody struct {
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Server instructions returned in the gateway's MCP initialize response. Omit
 	// to leave them unchanged; send an empty string to restore Gram's built-in
-	// gateway instructions.
+	// gateway instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 }
 
@@ -3563,11 +3564,6 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 	if body.NetworkAccessMode != nil {
 		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
-		}
-	}
-	if body.Instructions != nil {
-		if utf8.RuneCountInString(*body.Instructions) > 10000 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.instructions", *body.Instructions, utf8.RuneCountInString(*body.Instructions), 10000, false))
 		}
 	}
 	return

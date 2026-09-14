@@ -1,6 +1,7 @@
 package metamcp_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	srv "github.com/speakeasy-api/gram/server/gen/http/meta_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -442,6 +444,14 @@ func TestUpdateMetaMcpServer_Instructions(t *testing.T) {
 	require.NotNil(t, updated.Instructions)
 	require.Equal(t, "Call list_servers before anything else.", *updated.Instructions)
 
+	fetchedWithInstructions, err := ti.service.GetMetaMcpServer(ctx, &gen.GetMetaMcpServerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, updated.Instructions, fetchedWithInstructions.Instructions)
+	listed, err := ti.service.ListMetaMcpServers(ctx, &gen.ListMetaMcpServersPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.MetaMcpServers, 1)
+	require.Equal(t, updated.Instructions, listed.MetaMcpServers[0].Instructions)
+
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
@@ -511,4 +521,35 @@ func TestUpdateMetaMcpServer_InstructionsStripNUL(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, updated.Instructions)
 	require.Equal(t, "Call list_servers first.", *updated.Instructions)
+}
+
+func TestUpdateMetaMcpServer_InstructionsNormalizedLength(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "length gateway"})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, input, want string
+		invalid           bool
+	}{
+		{name: "unicode at limit with padding", input: " \t" + strings.Repeat("界", 10000) + "\x00\n", want: strings.Repeat("界", 10000)},
+		{name: "over limit", input: strings.Repeat("界", 10001), invalid: true},
+		{name: "blank over raw limit", input: strings.Repeat(" \x00", 10001)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := &srv.UpdateMetaMcpServerRequestBody{ID: &created.ID, Name: &created.Name, Instructions: &tc.input}
+			require.NoError(t, srv.ValidateUpdateMetaMcpServerRequestBody(body))
+			updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: created.ID, Name: created.Name, Instructions: &tc.input})
+			if tc.invalid {
+				require.ErrorContains(t, err, "instructions must not exceed 10000")
+				return
+			}
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Nil(t, updated.Instructions)
+			} else {
+				require.Equal(t, &tc.want, updated.Instructions)
+			}
+		})
+	}
 }

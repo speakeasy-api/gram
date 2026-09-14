@@ -96992,8 +96992,7 @@ components:
                     format: uuid
                 instructions:
                     type: string
-                    description: Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions.
-                    maxLength: 10000
+                    description: Server instructions returned in the gateway's MCP initialize response. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
                 name:
                     type: string
                     description: The display name of the meta MCP server

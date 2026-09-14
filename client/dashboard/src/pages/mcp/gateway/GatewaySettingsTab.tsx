@@ -35,7 +35,7 @@ import {
 // Shares mcp_servers' 40-char display-name convention.
 const NAME_MAX_LENGTH = 40;
 
-// Mirrors InstructionsMaxLength in the metaMcp Goa design.
+// Mirrors the normalized rune limit in the metaMcp update handler.
 const INSTRUCTIONS_MAX_LENGTH = 10000;
 
 export const GATEWAY_AUTHENTICATION_SECTION_ID = "authentication";
@@ -184,13 +184,13 @@ function GatewayNameSection({
   );
 }
 
-function GatewayInstructionsSection({
+export function GatewayInstructionsSection({
   metaMcpServer,
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("mcp:write");
+  const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const stored = metaMcpServer.instructions ?? "";
   const [draft, setDraft] = useState(stored);
 
@@ -204,6 +204,7 @@ function GatewayInstructionsSection({
       await Promise.all([
         invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+        queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
       ]);
       toast.success("Gateway instructions updated");
     },
@@ -211,8 +212,9 @@ function GatewayInstructionsSection({
 
   const trimmedDraft = draft.trim();
   const dirty = trimmedDraft !== stored.trim();
-  const overLimit = trimmedDraft.length > INSTRUCTIONS_MAX_LENGTH;
-  const saveDisabled = !dirty || overLimit || update.isPending;
+  const characterCount = Array.from(trimmedDraft).length;
+  const overLimit = characterCount > INSTRUCTIONS_MAX_LENGTH;
+  const saveDisabled = !canWrite || !dirty || overLimit || update.isPending;
 
   return (
     <SettingsSection id={GATEWAY_INSTRUCTIONS_SECTION_ID}>
@@ -220,10 +222,10 @@ function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Leave blank to use Gram&apos;s
-          built-in instructions, which teach agents to list servers and
-          describe tools before executing. Anyone who can connect to this
-          gateway can read the text, and clients already connected keep the old
-          text until they reconnect.
+          built-in instructions, which teach agents to list servers and describe
+          tools before executing. Anyone who can connect to this gateway can
+          read the text, and clients already connected keep the old text until
+          they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -239,7 +241,7 @@ function GatewayInstructionsSection({
               placeholder={`Which member to use for which task, required workflows,\nand any constraints.\n\nKeep it concise — members are already listed by list_servers.`}
               className="min-h-[160px]"
               aria-invalid={update.isError || overLimit}
-              disabled={!canWrite}
+              disabled={!canWrite || update.isPending}
             />
             {overLimit && (
               <FieldError>
@@ -253,10 +255,14 @@ function GatewayInstructionsSection({
           <SettingsSection.FooterHint
             className={cn(overLimit && "text-destructive")}
           >
-            {`${trimmedDraft.length.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
+            {`${characterCount.toLocaleString()} / ${INSTRUCTIONS_MAX_LENGTH.toLocaleString()} characters.`}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <RequireScope scope="mcp:write" level="component">
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.projectId}
+              level="component"
+            >
               <FooterSaveButton
                 pending={update.isPending}
                 disabled={saveDisabled}
