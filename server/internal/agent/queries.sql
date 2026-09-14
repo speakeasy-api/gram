@@ -400,10 +400,14 @@ RETURNING *;
 -- decision only: its definition columns, gateway matchers included, are empty
 -- by design because the matchers are compiled in. Requiring a non-empty
 -- matcher column would silently drop every blocked built-in, which is most of
--- the catalog. No filter is needed for the other case either: a target that
--- loses its last matcher on an upsert has its decision cleared by that same
--- write, so a row with status = 'blocked' always names a target the gateway
--- can still recognize.
+-- the catalog. No filter is needed for the other case either, but note that
+-- the guarantee is not this statement's: UpsertAIScanTarget never touches
+-- status. It is a transaction-level invariant kept by the upsert service,
+-- which follows the definition write with a status reset (SetAIScanTargetStatus)
+-- whenever the target it just wrote can no longer be recognized at the
+-- gateway, before committing. Callers of the repository queries directly do
+-- not get it for free. Held that way, a committed row with status = 'blocked'
+-- always names a target the gateway can still recognize.
 
 -- name: ListBlockedAITargetIDs :many
 SELECT id
