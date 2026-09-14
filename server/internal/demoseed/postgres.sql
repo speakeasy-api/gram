@@ -756,28 +756,24 @@ BEGIN
   --     document, so Gram cannot recognize them at the gateway and refuses to
   --     record any decision about them. They read unreviewed, and that is the
   --     honest answer rather than a block that enforces nothing.
-  DELETE FROM ai_tool_decisions WHERE organization_id = demo_org;
+  DELETE FROM ai_scan_targets WHERE organization_id = demo_org;
 
-  INSERT INTO ai_tool_decisions
-    (organization_id, target_id, decision, rationale, decided_by, decided_at)
+  -- The decided built-ins carry no definition: the compiled-in one stays
+  -- authoritative, so a later registry revision still reaches this org.
+  INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
   VALUES
     (demo_org, 'claude-code', 'approved',
-     'Standard issue for the platform team.',
-     'urn:gram:principal:user:user_demo_amara', now() - interval '9 days'),
+     'Standard issue for the platform team.'),
     (demo_org, 'codex', 'blocked',
-     'Not covered by the vendor review. Ask in #ai-tooling if you need it.',
-     'urn:gram:principal:user:user_demo_amara', now() - interval '4 days'),
+     'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
     (demo_org, 'hermes-agent', 'approved',
      'Reviewed with the research team. Publishes a client ID metadata '
-     || 'document, so the approval is enforced at the gateway.',
-     'urn:gram:principal:user:user_demo_amara', now() - interval '6 days'),
+     || 'document, so the approval is enforced at the gateway.'),
     (demo_org, 'zed', 'approved',
-     'Approved for the platform team after the editor review.',
-     'urn:gram:principal:user:user_demo_amara', now() - interval '7 days'),
+     'Approved for the platform team after the editor review.'),
     (demo_org, 'goose', 'blocked',
      'Runs arbitrary local commands under its own extensions. Blocked until '
-     || 'the extension policy lands.',
-     'urn:gram:principal:user:user_demo_amara', now() - interval '3 days');
+     || 'the extension policy lands.');
 
   -- MDM inventory (the identity Accounts & devices tab, and the device
   -- coverage widgets). One Jamf-shaped integration holding the fleet: mostly
@@ -2773,8 +2769,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   -- The Shadow AI status column is only worth looking at when it shows more
   -- than one answer, so assert all three states survived the reseed.
-  SELECT count(DISTINCT decision) INTO stray
-  FROM ai_tool_decisions WHERE organization_id = demo_org;
+  SELECT count(DISTINCT status) INTO stray
+  FROM ai_scan_targets WHERE organization_id = demo_org;
   IF stray < 2 THEN
     RAISE EXCEPTION 'demo seed postflight: AI tool decisions span % states, expected at least 2', stray;
   END IF;
