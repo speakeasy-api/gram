@@ -13451,6 +13451,191 @@ paths:
             x-speakeasy-name-override: upsertConfig
             x-speakeasy-react-hook:
                 name: UpsertAIIntegrationConfig
+    /rpc/analytics.describe:
+        get:
+            description: Describe every dataset and the fields it exposes, with the operators and aggregations each admits.
+            operationId: analyticsDescribe
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AnalyticsDescribeResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: describe analytics
+            tags:
+                - analytics
+            x-speakeasy-name-override: describe
+            x-speakeasy-react-hook:
+                name: AnalyticsDescribe
+    /rpc/analytics.query:
+        post:
+            description: 'Run a query against one dataset. Grouped: aggregate over dimensions, optionally bucketed by time. Ungrouped: rows at the dataset''s grain, newest first.'
+            operationId: analyticsQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AnalyticsQueryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AnalyticsQueryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: query analytics
+            tags:
+                - analytics
+            x-speakeasy-name-override: query
+            x-speakeasy-react-hook:
+                name: AnalyticsQuery
+                type: query
     /rpc/assets.createSignedChatAttachmentURL:
         post:
             description: Create a time-limited signed URL to access a chat attachment without authentication.
@@ -74330,6 +74515,227 @@ components:
                 - status
                 - created_at
                 - updated_at
+        AnalyticsDataset:
+            type: object
+            properties:
+                description:
+                    type: string
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsField'
+                grain:
+                    type: string
+                    description: What one row represents
+                    example: One row per agent session.
+                kind:
+                    type: string
+                    enum:
+                        - event
+                        - metric
+                name:
+                    type: string
+                    example: sessions
+            description: A dataset and the fields it exposes. The builder is generated from this.
+            required:
+                - name
+                - kind
+                - grain
+                - description
+                - fields
+        AnalyticsDescribeResult:
+            type: object
+            properties:
+                datasets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsDataset'
+            required:
+                - datasets
+        AnalyticsField:
+            type: object
+            properties:
+                aggregations:
+                    type: array
+                    items:
+                        type: string
+                    description: Ops a measure admits
+                name:
+                    type: string
+                    example: user
+                operators:
+                    type: array
+                    items:
+                        type: string
+                    description: Filter operators a dimension admits
+                role:
+                    type: string
+                    enum:
+                        - dimension
+                        - measure
+                type:
+                    type: string
+                    enum:
+                        - string
+                        - int64
+                        - float64
+                unit:
+                    type: string
+                    description: Unit of a measure, when it has one
+                    example: s
+            description: One queryable field on a dataset.
+            required:
+                - name
+                - type
+                - role
+        AnalyticsFilter:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: Dimension to filter on
+                    example: surface
+                operator:
+                    type: string
+                    description: Operator the dimension admits, per describe
+                    enum:
+                        - equals
+                        - in
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: equals takes exactly one value; in matches any of them.
+                    minItems: 1
+            description: A filter on a dimension. All filters are ANDed.
+            required:
+                - field
+                - operator
+                - values
+        AnalyticsMeasure:
+            type: object
+            properties:
+                alias:
+                    type: string
+                    description: Result column name. Defaults to the op, or op_field.
+                    example: tool_calls
+                field:
+                    type: string
+                    description: Measure field the op applies to. Absent for count.
+                    example: tool_call_count
+                op:
+                    type: string
+                    description: Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+                    example: sum
+                    enum:
+                        - count
+                        - sum
+                        - avg
+                        - min
+                        - max
+                        - p50
+                        - p95
+                        - p99
+            description: 'A composed measure: an op over a field, or count alone.'
+            required:
+                - op
+        AnalyticsOrderBy:
+            type: object
+            properties:
+                direction:
+                    type: string
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+                measure:
+                    type: string
+                    description: Alias of a requested measure
+                    example: tool_calls
+            description: Sort a grouped result by one of its measures.
+            required:
+                - measure
+        AnalyticsQueryPayload:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: Dataset to query, per describe
+                    example: sessions
+                dimensions:
+                    type: array
+                    items:
+                        type: string
+                    description: Group-by key when grouped; projected columns when ungrouped. At most 3.
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsFilter'
+                    description: Filters, ANDed. At most 100 values per filter.
+                from:
+                    type: string
+                    description: Start of the half-open window [from, to), ISO 8601
+                    example: "2026-09-01T00:00:00Z"
+                    format: date-time
+                grain:
+                    type: string
+                    description: Time bucket width for a grouped query. Absent means none.
+                    enum:
+                        - none
+                        - hour
+                        - day
+                        - week
+                        - month
+                limit:
+                    type: integer
+                    description: Maximum rows. Defaults to 100, at most 1000.
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                measures:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsMeasure'
+                    description: Composed measures. Required when grouped, forbidden when ungrouped.
+                order_by:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AnalyticsOrderBy'
+                    description: Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.
+                to:
+                    type: string
+                    description: End of the half-open window [from, to), ISO 8601
+                    example: "2026-09-08T00:00:00Z"
+                    format: date-time
+                ungrouped:
+                    type: boolean
+                    description: Return rows at the dataset's grain instead of aggregating.
+                    default: false
+            description: A query against one dataset, in catalog vocabulary. Organization comes from the session and project from the project header; neither is a field.
+            required:
+                - dataset
+                - from
+                - to
+        AnalyticsQueryResult:
+            type: object
+            properties:
+                dataset:
+                    type: string
+                    description: The dataset queried
+                plan:
+                    type: string
+                    description: A stable diagnostic identifier for how the query was answered. Deliberately not a table name.
+                rows:
+                    type: array
+                    items:
+                        type: object
+                        additionalProperties: true
+                    description: Result rows
+            description: One shape for both modes. Row keys are the requested dimension names plus each measure's alias; time_bucket is present only when grain is set, and time on ungrouped rows.
+            required:
+                - dataset
+                - plan
+                - rows
         AnthropicInferenceConfig:
             type: object
             properties:
@@ -102319,6 +102725,8 @@ tags:
       description: Human-only management of first-class agent principals.
     - name: aiIntegrations
       description: Manage organization-level AI provider integrations.
+    - name: analytics
+      description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
     - name: assets
       description: Manages assets used by Gram projects.
     - name: organizationAssets
