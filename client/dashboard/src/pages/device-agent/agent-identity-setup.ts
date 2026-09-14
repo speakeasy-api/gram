@@ -11,11 +11,11 @@ import {
 
 import { RELEASES_BASE } from "./cloud-setup";
 
-export const INSTALL_SCRIPT_URL = `${RELEASES_BASE}/install.sh`;
-export const PRODUCTION_SERVER_URL = "https://app.getgram.ai";
+const INSTALL_SCRIPT_URL = `${RELEASES_BASE}/install.sh`;
+const PRODUCTION_SERVER_URL = "https://app.getgram.ai";
 
-export const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
-export const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
+const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
+const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
 
 export type AgentHostOS = "linux" | "macos";
 export type AgentRunMode = "ephemeral" | "service";
