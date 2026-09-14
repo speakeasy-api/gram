@@ -126,11 +126,9 @@ export function ShadowMCPInventoryUsageCell({
       <Text variant="small">
         {countLabel(server.observedUseCount, "call", "calls")}
       </Text>
-      {server.userCount !== undefined && (
-        <Text muted small className="text-xs">
-          {countLabel(server.userCount, "user", "users")}
-        </Text>
-      )}
+      <Text muted small className="text-xs">
+        {countLabel(server.userCount, "user", "users")}
+      </Text>
     </div>
   );
 }

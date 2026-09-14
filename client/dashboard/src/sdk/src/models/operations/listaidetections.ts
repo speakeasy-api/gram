@@ -30,7 +30,7 @@ export type ListAIDetectionsRequest = {
    */
   category?: Category | undefined;
   /**
-   * Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list. Requires org:admin: narrowing an inventory to one team is itself attribution.
+   * Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.
    */
   directoryGroupId?: string | undefined;
   /**

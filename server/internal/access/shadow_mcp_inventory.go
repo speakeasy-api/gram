@@ -147,36 +147,22 @@ type ShadowMCPInventoryTargetInput struct {
 }
 
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
-	ac, err := s.authContext(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
-	// Project read to view, organization admin to see who. The MCP half of
-	// the Shadow AI section is held to the same split as the AI tools half,
-	// or the tabs would 403 for exactly the viewers the section is for.
-	projection, err := s.resolveShadowMCPInventoryProjection(ctx, ac, projectID)
-	if err != nil {
-		return nil, err
-	}
 
-	result, err := s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
+	return s.ReadShadowMCPInventory(ctx, ShadowMCPInventoryReadInput{
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      projectID,
 		Limit:          payload.Limit,
 		Cursor:         payload.Cursor,
 	})
-	if err != nil {
-		return nil, err
-	}
-	if !projection.Attributed {
-		redactShadowMCPInventoryAttribution(result.Servers)
-	}
-	return result, nil
 }
 
 // ReadShadowMCPInventory composes an inventory page after validating its organization and project boundary.
@@ -400,31 +386,20 @@ func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequest
 }
 
 func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.GetShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryServer, error) {
-	ac, err := s.authContext(ctx)
+	ac, err := s.requireOrgAdmin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
-	projection, err := s.resolveShadowMCPInventoryProjection(ctx, ac, projectID)
-	if err != nil {
-		return nil, err
-	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, projectID); err != nil {
 		return nil, err
 	}
 
-	server, err := s.readShadowMCPInventoryServer(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
-	if err != nil {
-		return nil, err
-	}
-	if !projection.Attributed {
-		redactShadowMCPInventoryAttribution([]*gen.ShadowMCPInventoryServer{server})
-	}
-	return server, nil
+	return s.readShadowMCPInventoryServer(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
 }
 
 func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverSlug string) (*gen.ShadowMCPInventoryServer, error) {
@@ -1617,17 +1592,15 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		LastSeen:           formatTimeValue(row.LastSeen),
 		LastCalled:         formatTimePtrValue(usage.LastCalled),
 		ObservedUseCount:   shadowMCPInventoryCount(usage.CallCount),
-		// Attribution: always built, then dropped for callers without
-		// org:admin by redactShadowMCPInventoryAttribution.
-		UserCount:        new(shadowMCPInventoryCount(usage.UserCount)),
-		TopUsers:         topUsers,
-		Access:           rowState.Access,
-		AccessSummary:    rowState.Summary,
-		RequestCount:     rowState.RequestCount,
-		LatestRequest:    rowState.LatestRequest,
-		ApprovalRequest:  rowState.ApprovalRequest,
-		AllowedPolicyIds: rowState.AllowedPolicyIDs,
-		BlockedPolicyIds: rowState.BlockedPolicyIDs,
+		UserCount:          shadowMCPInventoryCount(usage.UserCount),
+		TopUsers:           topUsers,
+		Access:             rowState.Access,
+		AccessSummary:      rowState.Summary,
+		RequestCount:       rowState.RequestCount,
+		LatestRequest:      rowState.LatestRequest,
+		ApprovalRequest:    rowState.ApprovalRequest,
+		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
 	}
 }
 

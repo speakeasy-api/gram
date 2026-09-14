@@ -33,8 +33,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	projection, err := s.resolveAIInventoryProjection(ctx, ac, conv.PtrValOr(ac.ProjectID, uuid.Nil))
-	if err != nil {
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
 		return nil, err
 	}
 
@@ -47,14 +46,8 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	// normalized emails and pushes them down to ClickHouse as a user_email
 	// restriction. A group with no active members matches nothing.
 	//
-	// It is attribution, not a convenience: narrowing an organization-wide
-	// inventory to one team and reading the result off tells you what that
-	// team runs, which is exactly what the unattributed projection withholds.
 	var userEmails []string
 	if payload.DirectoryGroupID != nil {
-		if !projection.Attributed {
-			return nil, oops.E(oops.CodeForbidden, nil, "filtering AI detections by team requires organization administrator access").LogError(ctx, s.logger)
-		}
 		groupID, err := uuid.Parse(*payload.DirectoryGroupID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group id").LogError(ctx, s.logger)
@@ -78,9 +71,6 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	})
 	if err != nil {
 		return nil, err
-	}
-	if !projection.Attributed {
-		redactAIDetectionAttribution(result.Detections)
 	}
 	return result, nil
 }
@@ -110,13 +100,22 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		return nil, oops.E(oops.CodeBadRequest, nil, "employee email is required").LogError(ctx, s.logger)
 	}
 
-	return s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       userEmail,
 		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	// The counts are about the employee the caller already named, so they say
+	// nothing new. Who recorded the access decision, when, and why is a
+	// different person entirely — an administrator — and naming them is not
+	// part of what this endpoint answers.
+	redactAIDecisionAttribution(result.Detections)
+	return result, nil
 }
 
 func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
@@ -162,10 +161,8 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 			TargetID:    row.TargetID,
 			DisplayName: displayName,
 			Category:    category,
-			// Attribution: always built, then dropped for callers without
-			// org:admin by redactAIDetectionAttribution.
-			UserCount:   new(int64(row.UserCount)),   //nolint:gosec // distinct enrolled users cannot approach int64 overflow
-			DeviceCount: new(int64(row.DeviceCount)), //nolint:gosec // distinct devices cannot approach int64 overflow
+			UserCount:   int64(row.UserCount),   //nolint:gosec // distinct enrolled users cannot approach int64 overflow
+			DeviceCount: int64(row.DeviceCount), //nolint:gosec // distinct devices cannot approach int64 overflow
 			Signals:     row.Signals,
 			Versions:    row.Versions,
 			FirstSeen:   formatTimeValue(row.FirstSeen),
@@ -184,14 +181,14 @@ type AIDetectionsReadInput struct {
 
 	// Category narrows to harness, assistant or local_model; empty is all.
 	Category string
-
-	// Attributed permits the user and device counts through. The caller
-	// decides it, having resolved a projection this function cannot see.
-	Attributed bool
 }
 
 // ReadAIDetections is the seam the Platform MCP reads through, mirroring
 // ReadShadowMCPInventory for the MCP half of the same section.
+//
+// Returns the full row. Every caller of this section is an organization
+// administrator; the one endpoint that is not, listEmployeeAIDetections, does
+// not read through here.
 func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadInput) (*gen.ListAIDetectionsResult, error) {
 	if strings.TrimSpace(input.OrganizationID) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
@@ -214,9 +211,6 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 	})
 	if err != nil {
 		return nil, err
-	}
-	if !input.Attributed {
-		redactAIDetectionAttribution(result.Detections)
 	}
 	return result, nil
 }

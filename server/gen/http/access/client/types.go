@@ -283,11 +283,9 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	LastSeen         *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
-	// Distinct users who reached this server. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// Distinct users who reached this server.
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
-	// The users who reached this server most. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// The users who reached this server most.
 	TopUsers []string `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
@@ -5376,11 +5374,9 @@ type ShadowMCPInventoryServerResponseBody struct {
 	LastSeen         *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount *int    `form:"observed_use_count,omitempty" json:"observed_use_count,omitempty" xml:"observed_use_count,omitempty"`
-	// Distinct users who reached this server. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// Distinct users who reached this server.
 	UserCount *int `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
-	// The users who reached this server most. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// The users who reached this server most.
 	TopUsers []string `form:"top_users,omitempty" json:"top_users,omitempty" xml:"top_users,omitempty"`
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
@@ -5498,12 +5494,10 @@ type AIDetectionResponseBody struct {
 	// locally). From the catalog for ids it knows, otherwise as recorded at
 	// detection time.
 	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
-	// Distinct enrolled users this tool was detected for. Attribution: omitted for
-	// callers who hold project:read but not org:admin.
+	// Distinct enrolled users this tool was detected for.
 	UserCount *int64 `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
 	// Distinct devices, by hardware serial, this tool was detected on. Devices
-	// that report no serial are not counted. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// that report no serial are not counted.
 	DeviceCount *int64 `form:"device_count,omitempty" json:"device_count,omitempty" xml:"device_count,omitempty"`
 	// Detection signals observed for this target across all reports: installed
 	// and/or running.
@@ -7650,15 +7644,13 @@ func NewGetShadowMCPInventoryServerShadowMCPInventoryServerOK(body *GetShadowMCP
 		LastSeen:           *body.LastSeen,
 		LastCalled:         body.LastCalled,
 		ObservedUseCount:   *body.ObservedUseCount,
-		UserCount:          body.UserCount,
+		UserCount:          *body.UserCount,
 		Access:             *body.Access,
 		RequestCount:       *body.RequestCount,
 	}
-	if body.TopUsers != nil {
-		v.TopUsers = make([]string, len(body.TopUsers))
-		for i, val := range body.TopUsers {
-			v.TopUsers[i] = val
-		}
+	v.TopUsers = make([]string, len(body.TopUsers))
+	for i, val := range body.TopUsers {
+		v.TopUsers[i] = val
 	}
 	if body.AccessSummary != nil {
 		v.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(body.AccessSummary)
@@ -10605,6 +10597,12 @@ func ValidateGetShadowMCPInventoryServerResponseBody(body *GetShadowMCPInventory
 	}
 	if body.ObservedUseCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observed_use_count", "body"))
+	}
+	if body.UserCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))
+	}
+	if body.TopUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
 	}
 	if body.Access == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
@@ -17437,6 +17435,12 @@ func ValidateShadowMCPInventoryServerResponseBody(body *ShadowMCPInventoryServer
 	if body.ObservedUseCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("observed_use_count", "body"))
 	}
+	if body.UserCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))
+	}
+	if body.TopUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("top_users", "body"))
+	}
 	if body.Access == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
 	}
@@ -17646,6 +17650,12 @@ func ValidateAIDetectionResponseBody(body *AIDetectionResponseBody) (err error) 
 	}
 	if body.Category == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	if body.UserCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_count", "body"))
+	}
+	if body.DeviceCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("device_count", "body"))
 	}
 	if body.Signals == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signals", "body"))

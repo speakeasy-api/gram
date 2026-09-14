@@ -137,7 +137,9 @@ func TestService_SetAIToolDecision_RequiresOrgAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
 }
 
-func TestService_ListAIDetections_ProjectReaderGetsNoAttribution(t *testing.T) {
+// The organization-wide inventory is an admin surface: it names how many
+// people run each tool. Project read does not open it.
+func TestService_ListAIDetections_ProjectReaderIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -147,9 +149,6 @@ func TestService_ListAIDetections_ProjectReaderGetsNoAttribution(t *testing.T) {
 	clone := *authCtx
 	clone.ActiveOrganizationID = "detections-test-org-" + uuid.NewString()
 	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
-	// The project the section is reached through has to belong to the org
-	// whose detections are being read; the per-test org keeps this package's
-	// parallel ClickHouse writes from bleeding into each other.
 	project := createShadowMCPProject(t, ctx, ti, clone.ActiveOrganizationID)
 	clone.ProjectID = &project.ID
 	ctx = contextvalues.SetAuthContext(ctx, &clone)
@@ -160,19 +159,44 @@ func TestService_ListAIDetections_ProjectReaderGetsNoAttribution(t *testing.T) {
 
 	seedAIDetection(t, ctx, ti, clone.ActiveOrganizationID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
-	result, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil, ProjectSlugInput: nil})
+	_, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil, ProjectSlugInput: nil})
+	require.Error(t, err, "project read does not open the organization-wide inventory")
+}
+
+// listEmployeeAIDetections stays on project read, because the caller has
+// already named the one employee it answers for. It carries the same model,
+// though, and that model now holds an access decision — so the administrator
+// who recorded it does not ride along.
+func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.ActiveOrganizationID = "detections-test-org-" + uuid.NewString()
+	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
+	project := createShadowMCPProject(t, ctx, ti, clone.ActiveOrganizationID)
+	clone.ProjectID = &project.ID
+	ctx = contextvalues.SetAuthContext(ctx, &clone)
+	ctx = withRBACGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, project.ID.String()),
+	})
+
+	seedAIDetection(t, ctx, ti, clone.ActiveOrganizationID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+
+	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
+		UserEmail:        "alex@example.com",
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
 	require.NoError(t, err)
 	require.Len(t, result.Detections, 1)
 
 	detection := result.Detections[0]
-	// The tool-level answer a project viewer is here for.
-	require.Equal(t, "cursor", detection.TargetID)
-	require.Equal(t, "Cursor", detection.DisplayName)
 	require.NotNil(t, detection.Access)
-	require.Equal(t, "unreviewed", detection.Access.State)
-	// Nothing that reaches a person.
-	require.Nil(t, detection.UserCount)
-	require.Nil(t, detection.DeviceCount)
+	require.Equal(t, "unreviewed", detection.Access.State, "the state itself reaches no person")
 	require.Nil(t, detection.Access.DecidedBy)
 	require.Nil(t, detection.Access.DecidedAt)
 	require.Nil(t, detection.Access.Rationale)

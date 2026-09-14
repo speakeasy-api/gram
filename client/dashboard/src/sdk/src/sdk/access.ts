@@ -216,7 +216,7 @@ export class Access extends ClientSDK {
    * getShadowMCPInventoryServer access
    *
    * @remarks
-   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.
+   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
    */
   async getShadowMCPInventoryServer(
     request: GetShadowMCPInventoryServerRequest,
@@ -235,7 +235,7 @@ export class Access extends ClientSDK {
    * listAIDetections access
    *
    * @remarks
-   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
    */
   async listAIDetections(
     request?: ListAIDetectionsRequest | undefined,
@@ -311,7 +311,7 @@ export class Access extends ClientSDK {
    * listEmployeeAIDetections access
    *
    * @remarks
-   * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+   * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
    */
   async listEmployeeAIDetections(
     request: ListEmployeeAIDetectionsRequest,
@@ -444,7 +444,7 @@ export class Access extends ClientSDK {
    * listShadowMCPInventory access
    *
    * @remarks
-   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
    */
   async listShadowMCPInventory(
     request: ListShadowMCPInventoryRequest,

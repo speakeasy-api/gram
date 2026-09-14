@@ -79,14 +79,14 @@ export type ShadowMCPInventoryServer = {
    */
   targetKind?: TargetKind | undefined;
   /**
-   * The users who reached this server most. Attribution: omitted for callers who hold project:read but not org:admin.
+   * The users who reached this server most.
    */
-  topUsers?: Array<string> | undefined;
+  topUsers: Array<string>;
   urlHost: string;
   /**
-   * Distinct users who reached this server. Attribution: omitted for callers who hold project:read but not org:admin.
+   * Distinct users who reached this server.
    */
-  userCount?: number | undefined;
+  userCount: number;
 };
 
 /** @internal */
@@ -129,9 +129,9 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
     server_name: z.optional(z.string()),
     server_slug: z.string(),
     target_kind: z.optional(TargetKind$inboundSchema),
-    top_users: z.optional(z.array(z.string())),
+    top_users: z.array(z.string()),
     url_host: z.string(),
-    user_count: z.optional(z.int()),
+    user_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {

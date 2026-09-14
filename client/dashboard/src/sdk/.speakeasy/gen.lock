@@ -6624,7 +6624,7 @@ examples:
           server_slug: "<value>"
       responses:
         "200":
-          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "url_host": "<value>"}
+          application/json: {"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>", "<value 2>", "<value 3>"], "canonical_server_url": "https://other-charlatan.com/", "first_seen": "2025-09-26T22:52:04.530Z", "last_seen": "2025-02-17T16:24:42.959Z", "observed_use_count": 376759, "request_count": 602872, "server_slug": "<value>", "top_users": ["<value 1>", "<value 2>", "<value 3>"], "url_host": "<value>", "user_count": 938464}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

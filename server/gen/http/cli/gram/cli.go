@@ -10564,14 +10564,14 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.`)
-	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
-	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
 	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool whose only gateway matcher is a self-reported client name records the decision and enforces nothing — the returned summary says which case applies. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
@@ -10786,7 +10786,7 @@ func accessListShadowMCPInventoryUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires project:read on the named project; the response is projected to what that scope may see, omitting the user count and top users. A caller with org:admin receives those as well. Every mutation on the inventory stays at org:admin.`)
+	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -10809,7 +10809,7 @@ func accessGetShadowMCPInventoryServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires project:read on the named project, under the same attribution split as listShadowMCPInventory.`)
+	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
@@ -10926,7 +10926,7 @@ func accessListAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. The reads are org-scoped — detections attach to devices and enrolled users, not projects — but the surface is reached per project, the same shape the Identities pages use: a project is how an organization segments the people it manages, and the answer is the same whichever project you arrive from. Requires project:read on the active project, and the response is projected to what that scope may see: tool-level rows only, with no user or device counts and no way to reach a person. A caller with org:admin additionally receives attribution — the counts, the team filter, and who recorded each access decision. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
@@ -10949,7 +10949,7 @@ func accessListEmployeeAIDetectionsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.`)
+	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-email STRING: `)

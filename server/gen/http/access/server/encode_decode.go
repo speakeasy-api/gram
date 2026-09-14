@@ -6033,6 +6033,8 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		for i, val := range v.TopUsers {
 			res.TopUsers[i] = val
 		}
+	} else {
+		res.TopUsers = []string{}
 	}
 	if v.AccessSummary != nil {
 		res.AccessSummary = marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody(v.AccessSummary)

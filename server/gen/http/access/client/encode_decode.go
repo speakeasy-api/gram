@@ -6430,15 +6430,13 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		LastSeen:           *v.LastSeen,
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   *v.ObservedUseCount,
-		UserCount:          v.UserCount,
+		UserCount:          *v.UserCount,
 		Access:             *v.Access,
 		RequestCount:       *v.RequestCount,
 	}
-	if v.TopUsers != nil {
-		res.TopUsers = make([]string, len(v.TopUsers))
-		for i, val := range v.TopUsers {
-			res.TopUsers[i] = val
-		}
+	res.TopUsers = make([]string, len(v.TopUsers))
+	for i, val := range v.TopUsers {
+		res.TopUsers[i] = val
 	}
 	if v.AccessSummary != nil {
 		res.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(v.AccessSummary)
@@ -6563,8 +6561,8 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 		TargetID:    *v.TargetID,
 		DisplayName: *v.DisplayName,
 		Category:    *v.Category,
-		UserCount:   v.UserCount,
-		DeviceCount: v.DeviceCount,
+		UserCount:   *v.UserCount,
+		DeviceCount: *v.DeviceCount,
 		FirstSeen:   *v.FirstSeen,
 		LastSeen:    *v.LastSeen,
 	}

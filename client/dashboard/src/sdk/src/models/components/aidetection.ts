@@ -45,9 +45,9 @@ export type AIDetection = {
    */
   category: Category;
   /**
-   * Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted. Attribution: omitted for callers who hold project:read but not org:admin.
+   * Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.
    */
-  deviceCount?: number | undefined;
+  deviceCount: number;
   /**
    * Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.
    */
@@ -69,9 +69,9 @@ export type AIDetection = {
    */
   targetId: string;
   /**
-   * Distinct enrolled users this tool was detected for. Attribution: omitted for callers who hold project:read but not org:admin.
+   * Distinct enrolled users this tool was detected for.
    */
-  userCount?: number | undefined;
+  userCount: number;
   /**
    * Unique non-empty detected versions for this target.
    */
@@ -94,7 +94,7 @@ export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
     z.object({
       access: AIToolAccessSummary$inboundSchema,
       category: Category$inboundSchema,
-      device_count: z.optional(z.int()),
+      device_count: z.int(),
       display_name: z.string(),
       first_seen: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -106,7 +106,7 @@ export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
       ),
       signals: z.array(Signals$inboundSchema),
       target_id: z.string(),
-      user_count: z.optional(z.int()),
+      user_count: z.int(),
       versions: z.array(z.string()),
     }),
     z.transform((v) => {

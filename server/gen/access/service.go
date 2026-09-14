@@ -35,14 +35,12 @@ type Service interface {
 	// Update a team member's role assignments.
 	UpdateMemberRoles(context.Context, *UpdateMemberRolesPayload) (res *AccessMember, err error)
 	// List project-scoped Shadow MCP server inventory composed from observed URLs,
-	// telemetry usage, and policy-bypass state. Requires project:read on the named
-	// project; the response is projected to what that scope may see, omitting the
-	// user count and top users. A caller with org:admin receives those as well.
-	// Every mutation on the inventory stays at org:admin.
+	// telemetry usage, and policy-bypass state. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	ListShadowMCPInventory(context.Context, *ListShadowMCPInventoryPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Get one project-scoped Shadow MCP server inventory URL with usage and
-	// policy-bypass state. Requires project:read on the named project, under the
-	// same attribution split as listShadowMCPInventory.
+	// policy-bypass state. Requires an authenticated session authorized for
+	// org:admin on the active organization.
 	GetShadowMCPInventoryServer(context.Context, *GetShadowMCPInventoryServerPayload) (res *ShadowMCPInventoryServer, err error)
 	// Update or clear the administrator-defined display name for one
 	// project-scoped Shadow MCP inventory server URL.
@@ -58,23 +56,19 @@ type Service interface {
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
 	// List AI tools detected on enrolled devices by device-agent AI scans,
-	// aggregated per detection target across the organization. The reads are
-	// org-scoped — detections attach to devices and enrolled users, not projects —
-	// but the surface is reached per project, the same shape the Identities pages
-	// use: a project is how an organization segments the people it manages, and
-	// the answer is the same whichever project you arrive from. Requires
-	// project:read on the active project, and the response is projected to what
-	// that scope may see: tool-level rows only, with no user or device counts and
-	// no way to reach a person. A caller with org:admin additionally receives
-	// attribution — the counts, the team filter, and who recorded each access
-	// decision. Display names and categories are decorated from the server's
-	// detection target catalog at read time; targets the catalog does not know are
-	// listed under their raw reported id.
+	// aggregated per detection target across the organization. Org-scoped —
+	// detections attach to devices and enrolled users, not projects. Requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Each row carries the organization's gateway access decision for that tool.
+	// Display names and categories are decorated from the server's detection
+	// target catalog at read time; targets the catalog does not know are listed
+	// under their raw reported id.
 	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// List AI tools detected for one enrolled employee in the active organization.
 	// The employee email is required so project viewers cannot broaden the request
 	// into an organization-wide inventory. Linked alias emails are folded to the
-	// canonical identity. Requires project:read on the active project.
+	// canonical identity. Requires project:read on the active project; the access
+	// decision on each row carries its state but not who recorded it, when, or why.
 	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
@@ -151,13 +145,11 @@ type AIDetection struct {
 	// locally). From the catalog for ids it knows, otherwise as recorded at
 	// detection time.
 	Category string
-	// Distinct enrolled users this tool was detected for. Attribution: omitted for
-	// callers who hold project:read but not org:admin.
-	UserCount *int64
+	// Distinct enrolled users this tool was detected for.
+	UserCount int64
 	// Distinct devices, by hardware serial, this tool was detected on. Devices
-	// that report no serial are not counted. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
-	DeviceCount *int64
+	// that report no serial are not counted.
+	DeviceCount int64
 	// Detection signals observed for this target across all reports: installed
 	// and/or running.
 	Signals []string
@@ -424,8 +416,7 @@ type ListAIDetectionsPayload struct {
 	// Filter to detection targets of one category.
 	Category *string
 	// Filter to detections attributed to active members of this SCIM directory
-	// group. A group with no active members yields an empty list. Requires
-	// org:admin: narrowing an inventory to one team is itself attribution.
+	// group. A group with no active members yields an empty list.
 	DirectoryGroupID *string
 	SessionToken     *string
 	ProjectSlugInput *string
@@ -974,11 +965,9 @@ type ShadowMCPInventoryServer struct {
 	LastSeen         string
 	LastCalled       *string
 	ObservedUseCount int
-	// Distinct users who reached this server. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
-	UserCount *int
-	// The users who reached this server most. Attribution: omitted for callers who
-	// hold project:read but not org:admin.
+	// Distinct users who reached this server.
+	UserCount int
+	// The users who reached this server most.
 	TopUsers []string
 	// Deprecated: read access_summary.state. Kept one release so older clients
 	// keep rendering, then removed together with making access_summary required.
