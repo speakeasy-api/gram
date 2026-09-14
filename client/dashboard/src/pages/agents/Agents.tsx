@@ -19,6 +19,7 @@ import {
   useSession,
 } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -151,15 +152,7 @@ function AgentList({
   onCreate: () => void;
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
-  const organization = useOrganization();
-  const sdk = useSdkClient();
-  const agents = useQuery({
-    queryKey: ["managed-agents", organization.id, "list"],
-    queryKeyHashFn: hashKey,
-    queryFn: ({ signal }) => sdk.agents.list(undefined, undefined, { signal }),
-    throwOnError: false,
-    retry: false,
-  });
+  const agents = useReadableAgents(true);
   const [search, setSearch] = useState("");
   const rows = (agents.data ?? []).filter((agent) =>
     agent.name.toLowerCase().includes(search.trim().toLowerCase()),

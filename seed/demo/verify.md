@@ -21,8 +21,8 @@ Most checks below can also be run WITHOUT impersonation, straight against your
 own org after `mise run seed` — it seeds the same data. Use that for quick
 iteration; use the demo org itself before ticking a row, since only it exercises
 the demo grant set and the impersonation carve-outs. Exceptions are the explicitly
-local-only Killswitch and managed-agent checks: verify those as an ordinary
-human in the local organization, not through impersonation.
+local-only Killswitch, managed-agent, and exact remote-session attachment checks:
+verify those as an ordinary human in the local organization, not through impersonation.
 
 ## Checks
 
@@ -175,17 +175,33 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       agents must not offer usable credentials. With the flag disabled, confirm
       the unavailable-rollout state, not a misleading empty-key success state.
       Never add usable keys to shared SQL.
-    - Delegable permissions are empty out of the box, because the shared SQL
-      seeds no agent policy grants. Confirm **Create API key** explains that
-      none can be delegated rather than showing an editor or a raw grant
-      field — the empty state is the correct result here, not a failure.
-    - Seed rationale: retain the three lifecycle fixtures, zero agent policy
-      grants, zero API keys, and expired non-authenticating session. They expose
-      the later policy-viewing entry point and its empty state; existing seeded
-      MCP servers/tools supply selector choices. Open Release assistant's policy
-      view and confirm an explicit empty policy, not a loading/error state.
-      No SQL changes are needed: populated policies are verified through local
-      UI creation below, not claimed as seeded data.
+    - Both active release agents have one direct `mcp:connect` grant scoped to
+      the demo project and Linear MCP server. Release assistant also inherits
+      a wildcard read-only `mcp:connect` grant from the Read-only Tools role.
+      Confirm the wizard offers only the intersection with owner/caller access. If that intersection is empty,
+      explain that no permissions can be delegated; never widen policy silently.
+    - **MCP credential setup:** Create API key opens a full-page, routable
+      setup flow. Check both ordinary MCP servers and gateways in the server
+      picker. Select servers, connect or reuse the signed-in human's upstream
+      accounts, explicitly authorize agent use, narrow existing delegable
+      grants, then review. Creating a credential must never edit agent policy.
+      The result shows the secret once and the selected server endpoints.
+      Select individual member servers for Meta MCP: aggregate membership is
+      not yet a supported agent consent/delegation target. Unproxied servers
+      cannot receive Gram credential grants.
+      Leaving setup must not delete connected accounts; start setup for the
+      same or another eligible agent and confirm owned accounts are offered.
+    - **Agent OAuth consent:** select an agent, finish required third-party
+      connections (or reuse an owned account), explicitly authorize its use,
+      and only then complete consent. Missing connections must block approval.
+      Verify policy is unchanged. Use a locally executable provider for live
+      exchange; the inert shared seed cannot prove third-party authentication.
+    - Seed rationale: four identities cover active, suspended and revoked
+      states; the two active release agents have exact project/server-scoped
+      Linear grants and share one inert human-owned upstream session. API keys
+      remain empty and the agent credential session is expired. Confirm the
+      release agents' policy views show their scoped grant; the other two
+      identities retain an explicit empty direct-policy state.
     - **Fresh creation is required acceptance evidence.** As an ordinary human
       in the local organization, create a new agent owned by that human using
       the dashboard. Enter a unique test name and configure initial permissions
@@ -240,8 +256,9 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       endpoint without a session issuer and a locally executable harmless tool.
       Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
       endpoint. Issuer-gated gateways require OAuth/session credentials instead;
-      `agent-identity-credentials` controls OAuth agent selection, not
-      standalone API-key admission. Display-only seeded tools cannot prove
+      `agent-identity-credentials` controls OAuth agent selection and agent
+      API-key issuance and management, not standalone API-key admission.
+      Display-only seeded tools cannot prove
       successful tool execution; filtered `tools/list` proves discovery only.
       Create a short-lived key from the UI's narrowed candidate. Confirm the
       secret appears exactly once and **Expires** shows an absolute future
@@ -256,15 +273,33 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       a test key into shared SQL or `RunLocalFixtures`. Do not mutate the shared
       demo remotely for these checks. Missing live-usage prerequisites mean
       the check is blocked, not passed.
-    - Rerun `mise run seed`: the same three identities/lifecycles return, agent
+    - Rerun `mise run seed`: the same four identities/lifecycles return, agent
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
 
+18. **Exact remote-session attachments (local only)**
+    - With the feature enabled, inspect Linear session 6 for the fictional
+      account and the two active release agents owned by the same human.
+      Both attachments must show the same upstream session, with no token
+      material exposed. Shared demo impersonation is not an authorized caller.
+    - Attachment mutations require the actual owner as an ordinary human
+      caller. The local developer is not automatically that fictional owner;
+      use a separate local-only account/session fixture for mutation checks.
+    - Detach one agent: the other binding and upstream account must survive.
+      Reattach the same exact session twice: only one active binding per
+      agent/issuer/client slot. A replacement session must not silently take
+      over a binding to the original session.
+    - Rerun `mise run seed` twice. Expect four agents, one inert upstream
+      session, two bindings and two exact project/server-scoped grants, with no
+      usable upstream credentials. This
+      fixture proves display and identity relationships, not live execution.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
-the failed check: `mise run seed` for the local-only Killswitch and managed-agent checks, or
+the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
+and exact remote-session attachment checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in

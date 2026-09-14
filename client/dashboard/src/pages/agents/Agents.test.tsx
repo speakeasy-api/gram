@@ -10,7 +10,7 @@ function setup() {
     defaultOptions: { queries: { retry: false } },
   });
   client.setQueryData(
-    ["managed-agents", mocks.organizationId, "list"],
+    ["managed-agents", mocks.organizationId, "list", mocks.user.id],
     mocks.agents,
   );
   client.setQueryData(
