@@ -284,6 +284,10 @@ func (s *Service) metaValidationTarget(
 		gate.apiKeyID = subject.ID
 	case urn.SessionSubjectKindAgent, urn.SessionSubjectKindAnonymous:
 		// The agent actor rides on ctx; the gate has no field for it.
+	case urn.SessionSubjectKindWorkload:
+		// Unreachable: contextForSessionSubject above refuses a workload
+		// subject. Listed so a new kind is a deliberate decision here rather
+		// than a silent fall-through.
 	}
 	ctx = s.memberAttributionContext(ctx, logger, &gate)
 	// routeMetaMember, not dialMetaMember: a probe is not a dispatch to count.

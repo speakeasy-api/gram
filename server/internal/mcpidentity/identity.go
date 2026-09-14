@@ -106,6 +106,11 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return b.withIdentity(ctx, KindAgent, "")
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
+	case urn.SessionSubjectKindWorkload:
+		// No provenance kind describes a workload, so it is left unstamped
+		// and downstream enforcement treats the request as unattributed
+		// rather than borrowing another kind's meaning.
+		return ctx
 	default:
 		return ctx
 	}

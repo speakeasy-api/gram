@@ -64,6 +64,18 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 	}
 }
 
+// A workload session proves a machine an external issuer vouched for, which no
+// provenance kind describes. Borrowing another kind would hand downstream
+// enforcement a meaning the credential does not carry, so the request stays
+// unattributed.
+func TestValidatorBoundaryLeavesWorkloadSessionUnattributed(t *testing.T) {
+	t.Parallel()
+
+	subject := urn.NewWorkloadSubject(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "repo:acme/payments-api:ref:refs/heads/main")
+	_, ok := mcpidentity.FromContext(mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSession(t, subject)))
+	require.False(t, ok)
+}
+
 func TestValidatorBoundaryRejectsZeroValidatedSession(t *testing.T) {
 	t.Parallel()
 

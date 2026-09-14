@@ -281,11 +281,11 @@ var (
 // errUnsupportedSessionSubject marks a session subject kind that parses but
 // that this path has no way to describe as a caller.
 //
-// A rejection rather than a fallback on purpose. AuthContext names a user or
-// an api key and nothing else, so a kind that is neither has no field to be
-// stamped into — and handing back a context carrying an empty identity would
-// read to authz.Engine as an authenticated session belonging to nobody, which
-// is wider than any answer the design intends.
+// A rejection rather than a fallback on purpose. An authenticated caller is
+// described by the principal it acts as, or by the legacy api-key path, and a
+// kind with no principal type has neither. Handing back a context with no
+// actor would read to authz.Engine as an authenticated session belonging to
+// nobody, which is wider than any answer the design intends.
 var errUnsupportedSessionSubject = errors.New("session subject kind cannot be described as a caller")
 
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
@@ -530,12 +530,12 @@ func (s *Service) contextForSessionSubject(
 		// for exhaustiveness so the linter doesn't flag the switch.
 		return ctx, nil
 	case urn.SessionSubjectKindWorkload:
-		// A workload is neither of the identities AuthContext carries, and
-		// giving it the anonymous treatment above would be worse than saying
-		// so: anonymous callers deliberately get no permission context, which
-		// for an admitted, issuer-vouched machine would skip authorization
-		// altogether. Refused, so an identity this path cannot describe is an
-		// error rather than a silent grant.
+		// No principal type represents a workload, so there is no actor to
+		// stamp, and giving it the anonymous treatment above would be worse
+		// than saying so: anonymous callers deliberately get no permission
+		// context, which for an admitted, issuer-vouched machine would skip
+		// authorization altogether. Refused, so an identity this path cannot
+		// describe is an error rather than a silent grant.
 		return nil, fmt.Errorf("%w: %q", errUnsupportedSessionSubject, subject.Kind)
 	}
 	return ctx, oops.C(oops.CodeUnauthorized)

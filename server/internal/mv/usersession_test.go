@@ -103,6 +103,27 @@ func TestBuildUserSessionView_AnonymousHasNoName(t *testing.T) {
 	require.Nil(t, got.SubjectDisplayName)
 }
 
+// A workload is named by its issuer and external subject, which the session
+// row does not join, so the view reports the kind and no display name rather
+// than borrowing a user or api key column.
+func TestBuildUserSessionView_WorkloadIsNamedByKind(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:               uuid.New(),
+		SubjectUrn:       urn.NewWorkloadSubject(uuid.New(), "repo:acme/payments-api:ref:refs/heads/main"),
+		RefreshExpiresAt: ts(time.Now()), ExpiresAt: ts(time.Now()),
+		CreatedAt: ts(time.Now()), UpdatedAt: ts(time.Now()),
+		IssuerSlug:      "iss",
+		UserDisplayName: pgtype.Text{String: "Ada Lovelace", Valid: true},
+		ApiKeyName:      pgtype.Text{String: "ci-key", Valid: true},
+	}
+
+	got := BuildUserSessionView(row, nil)
+	require.Equal(t, "workload", got.SubjectType)
+	require.Nil(t, got.SubjectDisplayName, "a workload must not borrow a user or api key name")
+}
+
 func TestBuildUserSessionView_ResolvesClientCredentialKind(t *testing.T) {
 	t.Parallel()
 
