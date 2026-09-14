@@ -16,3 +16,8 @@ func QueryAnalyticsPath() string {
 func DescribeAnalyticsPath() string {
 	return "/rpc/analytics.describe"
 }
+
+// DimensionValuesAnalyticsPath returns the URL path to the analytics service dimensionValues HTTP endpoint.
+func DimensionValuesAnalyticsPath() string {
+	return "/rpc/analytics.dimensionValues"
+}
