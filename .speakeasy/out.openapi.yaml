@@ -68272,14 +68272,11 @@ components:
           format: date-time
         customized:
           type: boolean
-          description: For a built-in, whether the organization has recorded a choice about it — in practice, switched it off. Always false for organization targets.
+          description: For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.
         display_name:
           type: string
           description: Name shown in the dashboard.
           maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for this target.
         gateway_client:
           $ref: '#/components/schemas/AiScanTargetGatewayClient'
         id:
@@ -68288,7 +68285,7 @@ components:
           pattern: ^[a-z0-9][a-z0-9-]{0,63}$
         origin:
           type: string
-          description: 'Where the target comes from: default (a Speakeasy built-in, read-only apart from being switched off) or organization (added by the organization, fully editable).'
+          description: 'Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy''s catalog, an organization target by being deleted.'
           enum:
             - default
             - organization
@@ -68309,7 +68306,6 @@ components:
         - category
         - signatures
         - gateway_client
-        - enabled
         - origin
         - customized
     AiScanTargetGatewayClient:
@@ -68320,7 +68316,7 @@ components:
           items:
             type: string
             pattern: ^[a-z0-9][a-z0-9-]{0,63}$
-          description: 'Vendor keys from Gram''s CIMD client catalog. Vendor-grained: no two enabled targets may claim the same key, or a block on either would silently cover the other.'
+          description: 'Vendor keys from Gram''s CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.'
           maxItems: 16
         client_info_names:
           type: array
@@ -68334,7 +68330,7 @@ components:
           items:
             type: string
             maxLength: 512
-          description: Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two enabled targets may claim the same entry.
+          description: Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.
           maxItems: 16
       description: 'How a target detected on a device is recognized again when the same tool calls Gram''s MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.'
       required:
@@ -77339,7 +77335,7 @@ components:
       properties:
         etag:
           type: string
-          description: Fingerprint of the served list; changes whenever the enabled set changes.
+          description: Fingerprint of the served list; changes whenever the targets or their definitions change.
         list_version:
           type: integer
           description: Version of the served catalog; the value agents echo as target_list_version once they receive it.
@@ -77348,7 +77344,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AiScanTarget'
-          description: Every target in the organization's list, enabled or not, ordered by id.
+          description: Every target in the organization's list, ordered by id.
       required:
         - list_version
         - etag
@@ -92614,10 +92610,6 @@ components:
           description: Name shown in the dashboard.
           minLength: 1
           maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for the target. Defaults to true.
-          default: true
         gateway_client:
           $ref: '#/components/schemas/AiScanTargetGatewayClient'
         id:

@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type AiScanTargetGatewayClient = {
   /**
-   * Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled targets may claim the same key, or a block on either would silently cover the other.
+   * Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.
    */
   cimdVendorKeys: Array<string>;
   /**
@@ -21,7 +21,7 @@ export type AiScanTargetGatewayClient = {
    */
   clientInfoNames: Array<string>;
   /**
-   * Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two enabled targets may claim the same entry.
+   * Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.
    */
   oauthClientIds: Array<string>;
 };

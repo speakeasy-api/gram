@@ -17,9 +17,6 @@ func TestDefaultsAreValid(t *testing.T) {
 	defaults := aitargets.Defaults()
 	require.Len(t, defaults, 36)
 	require.NoError(t, aitargets.Validate(defaults))
-	for _, target := range defaults {
-		require.True(t, target.Enabled, "default %q must be enabled", target.ID)
-	}
 }
 
 func TestDefaultsReturnsACopy(t *testing.T) {
@@ -109,7 +106,6 @@ func TestEnvelopeWireShape(t *testing.T) {
 			ProcessNames: []string{"Cursor"},
 		},
 		VersionHint: &aitargets.VersionHint{PlistKey: "CFBundleShortVersionString"},
-		Enabled:     true,
 	}})
 
 	data, err := json.Marshal(snapshot.Envelope())
@@ -127,7 +123,9 @@ func TestEnvelopeWireShape(t *testing.T) {
 	require.Len(t, targets, 1)
 	target, ok := targets[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, []string{"category", "display_name", "enabled", "id", "signatures", "version_hint"}, slices.Sorted(maps.Keys(target)))
+	// No enabled flag on the wire: presence in this list is what makes a
+	// target probed for, so there is nothing for a second field to say.
+	require.Equal(t, []string{"category", "display_name", "id", "signatures", "version_hint"}, slices.Sorted(maps.Keys(target)))
 	signatures, ok := target["signatures"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, []string{"binaries", "bundle_ids", "config_dirs", "process_names"}, slices.Sorted(maps.Keys(signatures)))

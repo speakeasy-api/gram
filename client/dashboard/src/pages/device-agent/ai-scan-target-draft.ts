@@ -33,8 +33,7 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
 // The form edits the name, category, binaries, config dirs, and process
 // names. The other fields ride along from an existing target so an edit never
 // wipes them: the id is derived from the name on create and fixed afterwards,
-// and bundle ids, the plist key, and the served flag are only set outside the
-// form.
+// and bundle ids and the plist key are only set outside the form.
 export type Draft = {
   id: string;
   displayName: string;
@@ -44,7 +43,6 @@ export type Draft = {
   configDirs: string[];
   processNames: string[];
   versionPlistKey: string;
-  enabled: boolean;
 };
 
 export type DraftErrors = Partial<Record<keyof Draft, string>>;
@@ -66,7 +64,6 @@ export function emptyDraft(): Draft {
     configDirs: [],
     processNames: [],
     versionPlistKey: "",
-    enabled: true,
   };
 }
 
@@ -85,7 +82,6 @@ export function draftFromTarget(target: AiScanTarget): Draft {
     configDirs: [...target.signatures.configDirs],
     processNames: [...target.signatures.processNames],
     versionPlistKey: target.versionPlistKey ?? "",
-    enabled: target.enabled,
   };
 }
 
@@ -198,7 +194,6 @@ export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
       processNames: draft.processNames,
     },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
-    enabled: draft.enabled,
   };
 }
 

@@ -26,7 +26,6 @@ const classic: AiScanTarget = {
     clientInfoNames: [],
     oauthClientIds: [],
   },
-  enabled: true,
   origin: "default",
   customized: false,
   createdAt: new Date("2026-09-08T00:00:00Z"),
@@ -119,7 +118,6 @@ describe("draftToUpsertBody", () => {
       bundleIds: ["com.openai.chat"],
       processNames: ["ChatGPT"],
       versionPlistKey: " ",
-      enabled: false,
     });
     expect(body).toEqual({
       id: "chatgpt-classic",
@@ -132,7 +130,6 @@ describe("draftToUpsertBody", () => {
         processNames: ["ChatGPT"],
       },
       versionPlistKey: undefined,
-      enabled: false,
     });
   });
 });
@@ -155,7 +152,7 @@ describe("signatureSummary", () => {
 });
 
 describe("draftFromTarget", () => {
-  // Editing or toggling a target round-trips it through the draft, so a
+  // Editing a target round-trips it through the draft, so a
   // category the draft cannot represent is silently rewritten on the next
   // upsert. That reclassified every assistant target as a harness.
   it("carries every category through unchanged", () => {

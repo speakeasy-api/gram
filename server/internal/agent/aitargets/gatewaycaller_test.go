@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
-// gatewayTarget is a minimal served target carrying one gateway-client block.
+// gatewayTarget is a minimal target carrying one gateway-client block.
 func gatewayTarget(id string, gateway aitargets.GatewayClient) aitargets.Target {
 	return aitargets.Target{
 		ID:            id,
@@ -20,7 +20,6 @@ func gatewayTarget(id string, gateway aitargets.GatewayClient) aitargets.Target 
 		Signatures:    aitargets.Signatures{BundleIDs: nil, Binaries: []string{id}, ConfigDirs: nil, ProcessNames: nil},
 		VersionHint:   nil,
 		GatewayClient: gateway,
-		Enabled:       true,
 	}
 }
 
@@ -118,42 +117,36 @@ func TestMatchGatewayCallerMatchesAnIssuerAdmittedClientWithNoPreset(t *testing.
 	require.False(t, ok, "a different document is a different client")
 }
 
-func TestMatchGatewayCallerIgnoresUnverifiedAndDisabledTargets(t *testing.T) {
+// TestMatchGatewayCallerIgnoresUnverifiedCallers: identity at the gateway is
+// a client_id the server verified. A caller presenting none is not identified
+// at all, whatever the catalog says about the vendor key it claims, so it
+// resolves to no target and no decision can be enforced against it.
+func TestMatchGatewayCallerIgnoresUnverifiedCallers(t *testing.T) {
 	t.Parallel()
 
-	disabled := gatewayTarget("cursor", aitargets.GatewayClient{
+	cursor := gatewayTarget("cursor", aitargets.GatewayClient{
 		CIMDVendorKeys:  []string{"cursor"},
 		OAuthClientIDs:  nil,
 		ClientInfoNames: []string{"Cursor"},
 	})
-	disabled.Enabled = false
 
-	// A caller with no verified client_id is not identified at all, whatever
-	// the catalog says about it.
-	_, ok := aitargets.MatchGatewayCaller([]aitargets.Target{disabled}, aitargets.GatewayCaller{
+	_, ok := aitargets.MatchGatewayCaller([]aitargets.Target{cursor}, aitargets.GatewayCaller{
 		OAuthClientID:  "",
 		CIMDVendorKey:  "cursor",
 		CIMDCatalogURL: "",
 	})
 	require.False(t, ok, "an unverified caller is never matched")
 
-	// And a target the organization does not scan for is not enforced on,
-	// even when the caller is fully identified — the case the early return
-	// above would otherwise hide.
-	_, ok = aitargets.MatchGatewayCaller([]aitargets.Target{disabled}, aitargets.GatewayCaller{
+	// The same caller carrying a verified client_id does match on the vendor
+	// key, so the refusal above is the missing client_id rather than the
+	// target being unreachable.
+	matched, ok := aitargets.MatchGatewayCaller([]aitargets.Target{cursor}, aitargets.GatewayCaller{
 		OAuthClientID:  "https://cursor.com/mcp/client.json",
 		CIMDVendorKey:  "cursor",
 		CIMDCatalogURL: "https://cursor.com/mcp/client.json",
 	})
-	require.False(t, ok, "a disabled target never matches")
-
-	enabled := gatewayTarget("cursor", disabled.GatewayClient)
-	_, ok = aitargets.MatchGatewayCaller([]aitargets.Target{enabled}, aitargets.GatewayCaller{
-		OAuthClientID:  "",
-		CIMDVendorKey:  "cursor",
-		CIMDCatalogURL: "",
-	})
-	require.False(t, ok, "a caller with no verified client id never matches")
+	require.True(t, ok, "a verified caller carrying the vendor key resolves")
+	require.Equal(t, "cursor", matched.ID)
 }
 
 // firstBlockableVendorKey borrows a vendor key the registry says the gateway
@@ -167,7 +160,7 @@ func firstBlockableVendorKey() (string, bool) {
 	return "", false
 }
 
-func TestValidateRejectsTwoServedTargetsClaimingOneMatcher(t *testing.T) {
+func TestValidateRejectsTwoTargetsClaimingOneMatcher(t *testing.T) {
 	t.Parallel()
 
 	// A key only one target may claim, so the failure under test is the
@@ -191,10 +184,10 @@ func TestValidateRejectsTwoServedTargetsClaimingOneMatcher(t *testing.T) {
 	require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 	require.Contains(t, err.Error(), "CIMD vendor key")
 
-	// Disabling one resolves the ambiguity, because only served targets are
-	// ever matched against a caller.
-	second.Enabled = false
-	require.NoError(t, aitargets.Validate([]aitargets.Target{first, second}))
+	// Dropping one resolves the ambiguity. Leaving the inventory is the only
+	// way a target stops being matched against a caller, so it is also the
+	// only way this collision clears.
+	require.NoError(t, aitargets.Validate([]aitargets.Target{first}))
 }
 
 func TestGatewayMatchersStayOutOfTheAgentEnvelope(t *testing.T) {
@@ -283,10 +276,15 @@ func TestEveryBlockableDefaultIsAdmissible(t *testing.T) {
 //
 // The catalog resolves the literal first, so the caller carries Codex's
 // identity into matching. Resolving the wildcard instead would let a block on
-// ChatGPT reject Codex, which is the failure this pins. The disabled case is
-// the one that actually regressed: with Codex out of the candidate list, a
-// caller that resolved to the wildcard fell through to the enabled ChatGPT
-// target instead of resolving to nothing.
+// ChatGPT reject Codex, which is the failure this pins. The absent case is the
+// one that actually regressed: with Codex out of the candidate list, a caller
+// that resolved to the wildcard fell through to the surviving ChatGPT target
+// instead of resolving to nothing.
+//
+// A target leaves the candidate list by leaving the organization's inventory —
+// a built-in by being dropped from the registry, an organization's own target
+// by having its row deleted. That is the single state deciding whether a
+// target is probed for and matched at all, so it is what this varies.
 func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 	t.Parallel()
 
@@ -308,37 +306,40 @@ func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 		return caller
 	}
 
-	defaultsWithout := func(disabled string) []aitargets.Target {
-		targets := aitargets.Defaults()
-		for i := range targets {
-			if targets[i].ID == disabled {
-				targets[i].Enabled = false
+	defaultsWithout := func(absent string) []aitargets.Target {
+		defaults := aitargets.Defaults()
+		targets := make([]aitargets.Target, 0, len(defaults))
+		for _, target := range defaults {
+			if target.ID == absent {
+				continue
 			}
+			targets = append(targets, target)
 		}
 		return targets
 	}
 
 	for _, tt := range []struct {
 		name     string
-		disabled string
+		absent   string
 		clientID string
 		want     string
 	}{
-		{name: "codex stable document", disabled: "", clientID: codexStable, want: "codex"},
-		{name: "codex per-server document", disabled: "", clientID: codexPerServer, want: "codex"},
-		{name: "chatgpt stable document", disabled: "", clientID: chatGPTStable, want: "chatgpt-classic"},
-		{name: "chatgpt connector document", disabled: "", clientID: chatGPTConn, want: "chatgpt-classic"},
+		{name: "codex stable document", absent: "", clientID: codexStable, want: "codex"},
+		{name: "codex per-server document", absent: "", clientID: codexPerServer, want: "codex"},
+		{name: "chatgpt stable document", absent: "", clientID: chatGPTStable, want: "chatgpt-classic"},
+		{name: "chatgpt connector document", absent: "", clientID: chatGPTConn, want: "chatgpt-classic"},
 
-		// Disabling one product must not hand its callers to the other.
-		{name: "codex disabled, stable document", disabled: "codex", clientID: codexStable, want: ""},
-		{name: "codex disabled, per-server document", disabled: "codex", clientID: codexPerServer, want: ""},
-		{name: "chatgpt disabled, stable document", disabled: "chatgpt-classic", clientID: chatGPTStable, want: ""},
-		{name: "chatgpt disabled, codex still resolves", disabled: "chatgpt-classic", clientID: codexStable, want: "codex"},
+		// One product leaving the inventory must not hand its callers to the
+		// other.
+		{name: "codex absent, stable document", absent: "codex", clientID: codexStable, want: ""},
+		{name: "codex absent, per-server document", absent: "codex", clientID: codexPerServer, want: ""},
+		{name: "chatgpt absent, stable document", absent: "chatgpt-classic", clientID: chatGPTStable, want: ""},
+		{name: "chatgpt absent, codex still resolves", absent: "chatgpt-classic", clientID: codexStable, want: "codex"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			target, matched := aitargets.MatchGatewayCaller(defaultsWithout(tt.disabled), callerFor(tt.clientID))
+			target, matched := aitargets.MatchGatewayCaller(defaultsWithout(tt.absent), callerFor(tt.clientID))
 			if tt.want == "" {
 				require.Falsef(t, matched, "%q must resolve to no target, got %q", tt.clientID, target.ID)
 				return

@@ -7392,7 +7392,7 @@ examples:
     speakeasy-default-list-ai-scan-targets:
       responses:
         "200":
-          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "enabled": true, "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
+          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -11285,10 +11285,10 @@ examples:
   upsertAiScanTarget:
     speakeasy-default-upsert-ai-scan-target:
       requestBody:
-        application/json: {"category": "assistant", "display_name": "Madaline_Nienow", "enabled": true, "id": "<id>", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}
+        application/json: {"category": "assistant", "display_name": "Madaline_Nienow", "id": "<id>", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}
       responses:
         "200":
-          application/json: {"list_version": 201443, "target": {"category": "local_model", "customized": true, "display_name": "Emil61", "enabled": false, "gateway_client": {"cimd_vendor_keys": [], "client_info_names": [], "oauth_client_ids": []}, "id": "<id>", "origin": "organization", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}}
+          application/json: {"list_version": 201443, "target": {"category": "local_model", "customized": true, "display_name": "Emil61", "gateway_client": {"cimd_vendor_keys": [], "client_info_names": [], "oauth_client_ids": []}, "id": "<id>", "origin": "organization", "signatures": {"binaries": ["<value 1>"], "bundle_ids": [], "config_dirs": [], "process_names": ["<value 1>", "<value 2>"]}}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

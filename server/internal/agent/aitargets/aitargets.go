@@ -145,9 +145,6 @@ type Target struct {
 	// GatewayClient names the MCP gateway callers that are this tool.
 	// Server-side only: Envelope strips it before agents see it.
 	GatewayClient GatewayClient `json:"gateway_client,omitzero"`
-
-	// Enabled is false for targets kept for history but not served.
-	Enabled bool `json:"enabled"`
 }
 
 // ZeroTarget is the empty target a lookup returns alongside ok=false. It is
@@ -166,7 +163,6 @@ func ZeroTarget() Target {
 		},
 		VersionHint:   nil,
 		GatewayClient: GatewayClient{CIMDVendorKeys: nil, OAuthClientIDs: nil, ClientInfoNames: nil},
-		Enabled:       false,
 	}
 }
 
@@ -215,7 +211,6 @@ func Defaults() []Target {
 				OAuthClientIDs:  matchers.ClientIDs,
 				ClientInfoNames: product.ClientInfoNames,
 			},
-			Enabled: true,
 		}
 		if product.VersionPlistKey != "" {
 			target.VersionHint = &VersionHint{PlistKey: product.VersionPlistKey}
@@ -292,7 +287,7 @@ type Envelope struct {
 	// ETag fingerprints the list.
 	ETag string `json:"etag"`
 
-	// Targets are the enabled targets, ordered by id.
+	// Targets are the organization's targets, ordered by id.
 	Targets []Target `json:"targets"`
 }
 

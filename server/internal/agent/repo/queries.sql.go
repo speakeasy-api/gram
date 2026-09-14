@@ -83,7 +83,7 @@ const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type DeleteAIScanTargetParams struct {
@@ -107,7 +107,6 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 		&i.CimdVendorKeys,
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
-		&i.Enabled,
 		&i.Status,
 		&i.Rationale,
 		&i.CreatedAt,
@@ -117,7 +116,7 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 }
 
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
@@ -145,7 +144,6 @@ func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTar
 		&i.CimdVendorKeys,
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
-		&i.Enabled,
 		&i.Status,
 		&i.Rationale,
 		&i.CreatedAt,
@@ -480,7 +478,7 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 
 const listAIScanTargets = `-- name: ListAIScanTargets :many
 
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
 ORDER BY id
@@ -511,7 +509,6 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 			&i.CimdVendorKeys,
 			&i.OauthClientIds,
 			&i.ClientInfoNames,
-			&i.Enabled,
 			&i.Status,
 			&i.Rationale,
 			&i.CreatedAt,
@@ -533,7 +530,6 @@ SELECT id
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND status = 'blocked'
-  AND enabled
 ORDER BY id
 `
 
@@ -541,16 +537,13 @@ ORDER BY id
 // Nearly every organization answers with an empty set, and that answer costs
 // one indexed lookup rather than loading the whole scan-target catalog.
 //
-// Disabled rows are excluded because MatchGatewayCaller skips a disabled
-// target, so a block recorded on one can never fire. Leaving it in kept the
-// fast path non-empty, which forces the catalog load below it, and a failure
-// there is answered with 503 rather than by allowing — so a stale block on a
-// switched-off tool turned a catalog outage into a refusal for the whole
-// organization.
+// Status is the only predicate, and that is the point. There is no second
+// column for the gateway to disagree with mid-write: a target is in the
+// organization's inventory or it is not, and its decision is this one value.
 //
-// The matchers are deliberately NOT filtered here as well. A built-in stores
-// its choices only: its definition columns, gateway matchers included, are
-// empty by design because the matchers are compiled in. Requiring a non-empty
+// The matchers are deliberately not filtered here. A built-in stores its
+// decision only: its definition columns, gateway matchers included, are empty
+// by design because the matchers are compiled in. Requiring a non-empty
 // matcher column would silently drop every blocked built-in, which is most of
 // the catalog.
 func (q *Queries) ListBlockedAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
@@ -677,7 +670,7 @@ ON CONFLICT (organization_id, id) DO UPDATE
 SET status = EXCLUDED.status
   , rationale = EXCLUDED.rationale
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type SetAIScanTargetStatusParams struct {
@@ -708,7 +701,6 @@ func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTarget
 		&i.CimdVendorKeys,
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
-		&i.Enabled,
 		&i.Status,
 		&i.Rationale,
 		&i.CreatedAt,
@@ -731,8 +723,7 @@ INSERT INTO ai_scan_targets (
   version_plist_key,
   cimd_vendor_keys,
   oauth_client_ids,
-  client_info_names,
-  enabled
+  client_info_names
 )
 VALUES (
   $1,
@@ -746,8 +737,7 @@ VALUES (
   $9,
   $10::text[],
   $11::text[],
-  $12::text[],
-  $13
+  $12::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
 SET display_name = EXCLUDED.display_name
@@ -760,9 +750,8 @@ SET display_name = EXCLUDED.display_name
   , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
   , oauth_client_ids = EXCLUDED.oauth_client_ids
   , client_info_names = EXCLUDED.client_info_names
-  , enabled = EXCLUDED.enabled
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 `
 
 type UpsertAIScanTargetParams struct {
@@ -778,7 +767,6 @@ type UpsertAIScanTargetParams struct {
 	CimdVendorKeys  []string
 	OauthClientIds  []string
 	ClientInfoNames []string
-	Enabled         bool
 }
 
 // The definition and the organization's status are written by different
@@ -799,7 +787,6 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 		arg.CimdVendorKeys,
 		arg.OauthClientIds,
 		arg.ClientInfoNames,
-		arg.Enabled,
 	)
 	var i AiScanTarget
 	err := row.Scan(
@@ -815,7 +802,6 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 		&i.CimdVendorKeys,
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
-		&i.Enabled,
 		&i.Status,
 		&i.Rationale,
 		&i.CreatedAt,

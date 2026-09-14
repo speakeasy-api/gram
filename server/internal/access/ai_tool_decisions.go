@@ -64,18 +64,11 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeNotFound, nil, "%q is not an AI detection target in this organization's catalog", targetID)
 	}
 
-	// Enforceable fails for two unrelated reasons and an operator acts on them
-	// differently, so they are answered separately. A target the organization
-	// has switched off is not served to agents and matches nothing at the
-	// gateway, but its matchers are intact: flipping it back on is the whole
-	// of the fix. Telling that operator the tool publishes no client ID
-	// metadata document would send them hunting for a document it already
-	// publishes. Checked before the matcher case because it is the
-	// organization's own choice and the one of the two it can undo.
-	if !entry.Enabled {
-		return nil, oops.E(oops.CodeBadRequest, nil, "%q is switched off in this organization's scan target list, so Gram neither scans for it nor recognizes it at the gateway; re-enable the scan target before deciding about it", targetID)
-	}
-
+	// Enforceability now has exactly one cause, so there is one answer. A
+	// target is in the organization's inventory or it is not; there is no
+	// switched-off state that could leave a recorded decision inert, which is
+	// what used to need a second, differently worded refusal here.
+	//
 	// A tool Gram cannot recognize at the gateway cannot be decided about.
 	// Refused rather than recorded-and-ignored for two reasons: the inventory
 	// would report unreviewed whatever was stored, so the write would look

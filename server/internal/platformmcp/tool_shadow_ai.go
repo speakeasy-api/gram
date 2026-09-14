@@ -32,7 +32,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 	addTool(reg, &mcp.Tool{
 		Name:        operationListAIScanLibrary,
 		Title:       "List AI Scan Library",
-		Description: "List the AI tools this organization's device agents probe for: the built-in library Speakeasy ships plus any targets the organization added. Says which targets are currently served to agents, which were added by this organization, and which publish a client ID metadata document and are therefore blockable at the gateway. The library version is the number agents echo back once they have received the list.",
+		Description: "List the AI tools this organization's device agents probe for: the built-in library Speakeasy ships plus any targets the organization added. Everything listed is probed for. Says which were added by this organization and which publish a client ID metadata document and are therefore blockable at the gateway. The library version is the number agents echo back once they have received the list.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAIScanLibraryInput) (*mcp.CallToolResult, ListAIScanLibraryOutput, error) {
 		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListAIScanLibraryOutput, error) {

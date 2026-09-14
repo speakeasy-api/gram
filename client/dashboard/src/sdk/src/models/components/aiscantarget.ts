@@ -31,14 +31,14 @@ export const AiScanTargetCategory = {
 export type AiScanTargetCategory = ClosedEnum<typeof AiScanTargetCategory>;
 
 /**
- * Where the target comes from: default (a Speakeasy built-in, read-only apart from being switched off) or organization (added by the organization, fully editable).
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export const Origin = {
   Default: "default",
   Organization: "organization",
 } as const;
 /**
- * Where the target comes from: default (a Speakeasy built-in, read-only apart from being switched off) or organization (added by the organization, fully editable).
+ * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
  */
 export type Origin = ClosedEnum<typeof Origin>;
 
@@ -55,17 +55,13 @@ export type AiScanTarget = {
    */
   createdAt?: Date | undefined;
   /**
-   * For a built-in, whether the organization has recorded a choice about it — in practice, switched it off. Always false for organization targets.
+   * For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.
    */
   customized: boolean;
   /**
    * Name shown in the dashboard.
    */
   displayName: string;
-  /**
-   * Whether the organization's agents probe for this target.
-   */
-  enabled: boolean;
   /**
    * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
    */
@@ -75,7 +71,7 @@ export type AiScanTarget = {
    */
   id: string;
   /**
-   * Where the target comes from: default (a Speakeasy built-in, read-only apart from being switched off) or organization (added by the organization, fully editable).
+   * Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy's catalog, an organization target by being deleted.
    */
   origin: Origin;
   /**
@@ -112,7 +108,6 @@ export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
       ),
       customized: z.boolean(),
       display_name: z.string(),
-      enabled: z.boolean(),
       gateway_client: AiScanTargetGatewayClient$inboundSchema,
       id: z.string(),
       origin: Origin$inboundSchema,

@@ -11,20 +11,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 )
 
-func target(id string, enabled bool) aitargets.Target {
+func target(id string) aitargets.Target {
 	return aitargets.Target{
 		ID:          id,
 		DisplayName: id,
 		Category:    aitargets.CategoryHarness,
 		Signatures:  aitargets.Signatures{BundleIDs: []string{}, Binaries: []string{id}, ConfigDirs: []string{}, ProcessNames: []string{}},
 		VersionHint: nil,
-		Enabled:     enabled,
 	}
 }
 
-func organizationRow(id string, enabled bool) aitargets.Entry {
+func organizationRow(id string) aitargets.Entry {
 	return aitargets.Entry{
-		Target:     target(id, enabled),
+		Target:     target(id),
 		Source:     aitargets.SourceOrganization,
 		Customized: false,
 		CreatedAt:  time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC),
@@ -34,8 +33,8 @@ func organizationRow(id string, enabled bool) aitargets.Entry {
 
 func TestOverlayReplacesDefaultsAndAppendsAdditions(t *testing.T) {
 	t.Parallel()
-	defaults := []aitargets.Target{target("aider", true), target("codex", true)}
-	rows := []aitargets.Entry{organizationRow("codex", false), organizationRow("acme-tool", true)}
+	defaults := []aitargets.Target{target("aider"), target("codex")}
+	rows := []aitargets.Entry{organizationRow("codex"), organizationRow("acme-tool")}
 
 	entries := aitargets.Overlay(defaults, rows)
 
@@ -52,12 +51,14 @@ func TestOverlayReplacesDefaultsAndAppendsAdditions(t *testing.T) {
 	require.Equal(t, "codex", entries[2].ID)
 	require.Equal(t, aitargets.SourceDefault, entries[2].Source, "a row under a default id customizes that default")
 	require.True(t, entries[2].Customized)
-	require.False(t, entries[2].Enabled)
 	require.False(t, entries[2].CreatedAt.IsZero())
 
+	// Everything in the inventory is served. A row under a built-in's id
+	// records a decision about it; it is not a second switch that could hold
+	// the target back from the agents.
 	served := aitargets.Served(entries)
-	require.Equal(t, []string{"acme-tool", "aider"}, []string{served[0].ID, served[1].ID})
-	require.Len(t, served, 2, "a disabled entry is not served")
+	require.Equal(t, []string{"acme-tool", "aider", "codex"}, []string{served[0].ID, served[1].ID, served[2].ID})
+	require.Len(t, served, 3, "every entry is served")
 }
 
 func TestOverlayLeavesTheDefaultsUntouched(t *testing.T) {
@@ -67,26 +68,25 @@ func TestOverlayLeavesTheDefaultsUntouched(t *testing.T) {
 	for _, entry := range entries {
 		require.Equal(t, aitargets.SourceDefault, entry.Source)
 		require.False(t, entry.Customized)
-		require.True(t, entry.Enabled)
 	}
 	require.NoError(t, aitargets.ValidateServed(aitargets.Served(entries)))
 }
 
 // The reason the definition columns are null for a built-in: an organization
-// that has switched one off, or decided about it, must still receive the next
-// revision of that built-in. Storing the definition alongside the choice would
-// freeze it at whatever the registry said on the day somebody clicked.
+// that has decided about one must still receive the next revision of that
+// built-in. Storing the definition alongside the decision would freeze it at
+// whatever the registry said on the day somebody clicked.
 func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 	t.Parallel()
 
 	// What the registry says today.
-	current := target("aider", true)
+	current := target("aider")
 	current.DisplayName = "Aider (renamed)"
 	current.Signatures.Binaries = []string{"aider", "aider-chat"}
 
-	// What the organization's row holds: its choices, and a definition that is
+	// What the organization's row holds: its decision, and a definition that is
 	// either absent or stale. Either way it must not win.
-	row := organizationRow("aider", false)
+	row := organizationRow("aider")
 	row.DisplayName = "Aider"
 	row.Signatures.Binaries = []string{"aider"}
 	row.Decision = aitargets.DecisionRecord{TargetID: "aider", Decision: aitargets.DecisionBlocked, Rationale: "not reviewed"}
@@ -97,9 +97,8 @@ func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 	require.Equal(t, "Aider (renamed)", entries[0].DisplayName, "the built-in's definition wins")
 	require.Equal(t, []string{"aider", "aider-chat"}, entries[0].Signatures.Binaries)
 
-	require.False(t, entries[0].Enabled, "the organization's choice still wins")
 	require.True(t, entries[0].Customized)
-	require.Equal(t, aitargets.DecisionBlocked, entries[0].Decision.Decision, "and so does its decision")
+	require.Equal(t, aitargets.DecisionBlocked, entries[0].Decision.Decision, "the organization's decision still wins")
 	require.Equal(t, "not reviewed", entries[0].Decision.Rationale)
 }
 
@@ -112,8 +111,8 @@ func TestListVersionIsTheDefaultsRevision(t *testing.T) {
 }
 
 // builtinRow is the row BuiltInUpsertParams writes for a built-in: the
-// organization's choice about it and nothing else.
-func builtinRow(id string, enabled bool) repo.AiScanTarget {
+// organization's decision about it and nothing else.
+func builtinRow(id string) repo.AiScanTarget {
 	return repo.AiScanTarget{
 		OrganizationID:  "org",
 		ID:              id,
@@ -127,7 +126,6 @@ func builtinRow(id string, enabled bool) repo.AiScanTarget {
 		CimdVendorKeys:  []string{},
 		OauthClientIds:  []string{},
 		ClientInfoNames: []string{},
-		Enabled:         enabled,
 		Status:          "unreviewed",
 		Rationale:       pgtype.Text{String: "", Valid: false},
 		CreatedAt:       pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
@@ -155,7 +153,7 @@ func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
 	}
 	require.NotEmpty(t, builtin.ID, "expected a built-in carrying gateway matchers")
 
-	fromRow := aitargets.EntryFromRow(builtinRow(builtin.ID, false)).Target
+	fromRow := aitargets.EntryFromRow(builtinRow(builtin.ID)).Target
 	require.Empty(t, fromRow.GatewayClient.OAuthClientIDs, "the row stores no definition; that is what makes resolution necessary")
 	require.False(t, aitargets.SameDefinition(builtin, fromRow), "the unresolved row must not already look like the built-in")
 
@@ -163,9 +161,6 @@ func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
 	require.True(t, aitargets.SameDefinition(builtin, resolved), "a built-in read back from its row must still be the built-in")
 	require.Equal(t, builtin.GatewayClient.OAuthClientIDs, resolved.GatewayClient.OAuthClientIDs)
 	require.Equal(t, builtin.DisplayName, resolved.DisplayName)
-	require.False(t, resolved.Enabled, "the row owns the enabled flag and nothing else")
-
-	require.True(t, aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(builtinRow(builtin.ID, true)).Target).Enabled)
 }
 
 // TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone: an organization's
@@ -174,7 +169,7 @@ func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
 func TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone(t *testing.T) {
 	t.Parallel()
 
-	own := target("an-organization-target", true)
+	own := target("an-organization-target")
 	require.Equal(t, own, aitargets.ResolveBuiltinDefinition(own))
 }
 
@@ -185,17 +180,17 @@ func TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone(t *testing.T) {
 func TestSameDefinitionFoldsTheDefaultVersionPlistKey(t *testing.T) {
 	t.Parallel()
 
-	omitted := target("a-built-in", true)
+	omitted := target("a-built-in")
 	omitted.VersionHint = nil
 
-	explicit := target("a-built-in", true)
+	explicit := target("a-built-in")
 	explicit.VersionHint = &aitargets.VersionHint{PlistKey: aitargets.DefaultVersionPlistKey}
 
 	require.True(t, aitargets.SameDefinition(omitted, explicit),
 		"the explicit default must compare equal to omitting the hint")
 
 	// A genuinely different key is still a redefinition.
-	other := target("a-built-in", true)
+	other := target("a-built-in")
 	other.VersionHint = &aitargets.VersionHint{PlistKey: "CFBundleVersion"}
 	require.False(t, aitargets.SameDefinition(omitted, other),
 		"a different key is a real change and must still be rejected")

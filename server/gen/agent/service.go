@@ -43,23 +43,25 @@ type Service interface {
 	// and credential keys are rejected.
 	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
 	// List the Shadow AI scan targets this organization's device agents probe for:
-	// the Speakeasy built-ins overlaid with the organization's own additions and
-	// its on/off choices, with the catalog version agents echo on scan receipts.
-	// Requires a session with the org:admin scope.
+	// the Speakeasy built-ins plus the organization's own additions, with the
+	// catalog version agents echo on scan receipts. Everything listed is probed
+	// for; a built-in leaves the list by leaving Speakeasy's catalog, an
+	// organization target by being deleted. Requires a session with the org:admin
+	// scope.
 	ListAiScanTargets(context.Context, *ListAiScanTargetsPayload) (res *ListAiScanTargetsResult, err error)
 	// Add a scan target for this organization or replace one it added earlier.
 	// Built-in targets are system-supplied and read-only: a write under a
 	// built-in's id is accepted only when it carries that built-in's definition
-	// unchanged, which is how a built-in is switched on or off. Every field is a
-	// full replacement except gateway_client, which an existing target keeps when
-	// the field is omitted, so a toggle need not restate the target's matchers;
-	// sending gateway_client with empty lists still clears them. Agents pick the
-	// change up on their next policy poll. Requires a session with the org:admin
-	// scope.
+	// unchanged. Every field is a full replacement except gateway_client, which an
+	// existing target keeps when the field is omitted, so a write need not restate
+	// the target's matchers; sending gateway_client with empty lists still clears
+	// them. Agents pick the change up on their next policy poll. Requires a
+	// session with the org:admin scope.
 	UpsertAiScanTarget(context.Context, *UpsertAiScanTargetPayload) (res *AiScanTargetMutationResult, err error)
-	// Remove a target the organization added, or drop its on/off choice for a
-	// built-in so the built-in is served again as supplied. Requires a session
-	// with the org:admin scope.
+	// Remove a target the organization added, or clear the row a built-in carries
+	// so it returns to having no recorded decision. A built-in itself cannot be
+	// removed here; it leaves the list only by leaving Speakeasy's catalog.
+	// Requires a session with the org:admin scope.
 	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
 	// Resolve display metadata (Gram chat id, generated title, last activity) for
 	// captured agent sessions the calling user owns. Used by the device agent's
@@ -185,14 +187,13 @@ type AiScanTarget struct {
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string
 	GatewayClient   *AiScanTargetGatewayClient
-	// Whether the organization's agents probe for this target.
-	Enabled bool
-	// Where the target comes from: default (a Speakeasy built-in, read-only apart
-	// from being switched off) or organization (added by the organization, fully
-	// editable).
+	// Where the target comes from: default (a Speakeasy built-in, whose definition
+	// is read-only) or organization (added by the organization, fully editable).
+	// Every target listed here is probed for; a built-in leaves the list by being
+	// removed from Speakeasy's catalog, an organization target by being deleted.
 	Origin string
-	// For a built-in, whether the organization has recorded a choice about it — in
-	// practice, switched it off. Always false for organization targets.
+	// For a built-in, whether the organization has recorded an access decision
+	// about it. Always false for organization targets.
 	Customized bool
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
@@ -207,15 +208,14 @@ type AiScanTarget struct {
 // enforced on, the third names what a client said about itself and is used
 // only to attribute traffic.
 type AiScanTargetGatewayClient struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled
-	// targets may claim the same key, or a block on either would silently cover
-	// the other.
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
+	// may claim the same key, or a block on either would silently cover the other.
 	CimdVendorKeys []string
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
 	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
-	// mints one document per MCP server is still named exactly. No two enabled
-	// targets may claim the same entry.
+	// mints one document per MCP server is still named exactly. No two targets may
+	// claim the same entry.
 	OauthClientIds []string
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
@@ -395,9 +395,10 @@ type ListAiScanTargetsResult struct {
 	// Version of the served catalog; the value agents echo as target_list_version
 	// once they receive it.
 	ListVersion int
-	// Fingerprint of the served list; changes whenever the enabled set changes.
+	// Fingerprint of the served list; changes whenever the targets or their
+	// definitions change.
 	Etag string
-	// Every target in the organization's list, enabled or not, ordered by id.
+	// Every target in the organization's list, ordered by id.
 	Targets []*AiScanTarget
 }
 
@@ -510,8 +511,6 @@ type UpsertAiScanTargetPayload struct {
 	// Info.plist key to read the installed version from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string
-	// Whether the organization's agents probe for the target. Defaults to true.
-	Enabled bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

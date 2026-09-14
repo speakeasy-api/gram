@@ -72,11 +72,6 @@ func Validate(targets []Target) error {
 			return fmt.Errorf("%w: duplicate target id %q", ErrInvalidTarget, target.ID)
 		}
 		seen[target.ID] = struct{}{}
-		// Only served targets are matched against callers, so only they can
-		// collide.
-		if !target.Enabled {
-			continue
-		}
 		for _, claim := range []struct {
 			kind   string
 			values []string

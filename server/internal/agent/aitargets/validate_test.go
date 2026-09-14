@@ -22,7 +22,6 @@ func validTarget() aitargets.Target {
 			ProcessNames: []string{},
 		},
 		VersionHint: nil,
-		Enabled:     true,
 	}
 }
 

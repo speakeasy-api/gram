@@ -43,8 +43,10 @@ type Entry struct {
 	// Source is where the target comes from.
 	Source Source
 
-	// Customized is set on a built-in the organization has a row for, for
-	// example to switch it off or to decide about it.
+	// Customized is set on a built-in the organization has a row for, which
+	// now means one thing: it has recorded an access decision about it. The
+	// row never carries a definition, so a built-in's definition is never
+	// customized in the literal sense.
 	Customized bool
 
 	// Decision is the organization's standing access decision for the target.
@@ -63,7 +65,8 @@ type Entry struct {
 // Overlay applies an organization's rows to the defaults: a row whose id
 // matches a built-in carries that organization's choices about it, every
 // other row is a target the organization added, and the result is ordered by
-// id. Disabled entries are kept so the management surface can show them.
+// id. Every entry is in the organization's inventory and therefore probed
+// for; there is no inert entry to keep around.
 func Overlay(defaults []Target, rows []Entry) []Entry {
 	byID := make(map[string]Entry, len(rows))
 	for _, row := range rows {
@@ -73,14 +76,11 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 	for _, target := range defaults {
 		if row, ok := byID[target.ID]; ok {
 			// The built-in's own definition wins. A row under its id records
-			// only what the organization may choose — whether to scan for it
-			// and what it has decided about it — so a later registry revision
-			// still reaches an organization that has touched this one. Read
-			// the choice off the row before the definition replaces it: both
-			// live on the embedded Target.
-			enabled := row.Enabled
+			// only the decision the organization has made about it, so a later
+			// registry revision still reaches an organization that has touched
+			// this one. The decision lives on the Entry rather than the
+			// embedded Target, so replacing the definition keeps it.
 			row.Target = target.Clone()
-			row.Enabled = enabled
 			row.Source = SourceDefault
 			row.Customized = true
 			entries = append(entries, row)
@@ -109,13 +109,16 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 	return entries
 }
 
-// Served picks the enabled targets out of entries, keeping their order.
+// Served is every target in the organization's inventory, in order.
+//
+// Being in the inventory is what makes a target probed for; there is no
+// second switch. A built-in leaves the inventory by being deleted from the
+// registry, which reaches agents on their next poll, and an organization's
+// own target leaves by having its row deleted.
 func Served(entries []Entry) []Target {
 	targets := make([]Target, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Enabled {
-			targets = append(targets, entry.Target)
-		}
+		targets = append(targets, entry.Target)
 	}
 	return targets
 }
@@ -148,17 +151,13 @@ func ResolveBuiltinDefinition(target Target) Target {
 	if !isBuiltin {
 		return target
 	}
-	resolved := builtin.Clone()
-	resolved.Enabled = target.Enabled
-	return resolved
+	return builtin.Clone()
 }
 
-// SameDefinition reports whether two targets describe the same tool, ignoring
-// whether it is served. Enabled is excluded deliberately: switching a built-in
-// off is the one change an organization may make to it, so it is not part of
-// the definition the built-in owns.
+// SameDefinition reports whether two targets describe the same tool. Every
+// field a target carries is part of its definition now, so the comparison is
+// total: there is no per-organization state left to exclude from it.
 func SameDefinition(a, b Target) bool {
-	a.Enabled, b.Enabled = false, false
 	return reflect.DeepEqual(normalizeForComparison(a), normalizeForComparison(b))
 }
 
@@ -197,10 +196,10 @@ func ListVersion() int32 {
 // OrganizationList is an organization's full target list and the snapshot
 // its agents are served.
 type OrganizationList struct {
-	// Entries is every target, enabled or not, ordered by id.
+	// Entries is every target in the organization's inventory, ordered by id.
 	Entries []Entry
 
-	// Snapshot is the enabled targets at the organization's list version.
+	// Snapshot is the organization's targets at its list version.
 	Snapshot *Snapshot
 }
 
@@ -268,7 +267,6 @@ func EntryFromRow(row repo.AiScanTarget) Entry {
 				OAuthClientIDs:  orNil(row.OauthClientIds),
 				ClientInfoNames: orNil(row.ClientInfoNames),
 			},
-			Enabled: row.Enabled,
 		},
 		Source:     SourceOrganization,
 		Customized: false,
@@ -279,28 +277,6 @@ func EntryFromRow(row repo.AiScanTarget) Entry {
 		},
 		CreatedAt: row.CreatedAt.Time,
 		UpdatedAt: row.UpdatedAt.Time,
-	}
-}
-
-// BuiltInUpsertParams writes only what an organization may choose about a
-// built-in: whether to scan for it. The definition columns stay null, so the
-// compiled-in definition is the only one and a later revision of it still
-// reaches this organization.
-func BuiltInUpsertParams(organizationID string, id string, enabled bool) repo.UpsertAIScanTargetParams {
-	return repo.UpsertAIScanTargetParams{
-		OrganizationID:  organizationID,
-		ID:              id,
-		DisplayName:     pgtype.Text{String: "", Valid: false},
-		Category:        pgtype.Text{String: "", Valid: false},
-		BundleIds:       []string{},
-		Binaries:        []string{},
-		ConfigDirs:      []string{},
-		ProcessNames:    []string{},
-		VersionPlistKey: pgtype.Text{String: "", Valid: false},
-		CimdVendorKeys:  []string{},
-		OauthClientIds:  []string{},
-		ClientInfoNames: []string{},
-		Enabled:         enabled,
 	}
 }
 
@@ -323,7 +299,6 @@ func UpsertParams(organizationID string, target Target) repo.UpsertAIScanTargetP
 		CimdVendorKeys:  orEmpty(target.GatewayClient.CIMDVendorKeys),
 		OauthClientIds:  orEmpty(target.GatewayClient.OAuthClientIDs),
 		ClientInfoNames: orEmpty(target.GatewayClient.ClientInfoNames),
-		Enabled:         target.Enabled,
 	}
 }
 

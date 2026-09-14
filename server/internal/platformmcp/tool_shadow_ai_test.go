@@ -93,14 +93,12 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 	blockable.ID = "codex"
 	blockable.DisplayName = "Codex"
 	blockable.Category = aitargets.CategoryHarness
-	blockable.Enabled = true
 	blockable.GatewayClient.OAuthClientIDs = []string{"https://chatgpt.com/oauth/codex/client.json"}
 
 	inert := aitargets.ZeroTarget()
 	inert.ID = "acme-tool"
 	inert.DisplayName = "Acme Tool"
 	inert.Category = aitargets.CategoryHarness
-	inert.Enabled = true
 
 	list := &aitargets.OrganizationList{
 		Entries: []aitargets.Entry{

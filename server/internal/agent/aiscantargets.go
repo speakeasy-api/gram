@@ -66,7 +66,6 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 		Signatures:    signaturesFromPayload(payload.Signatures),
 		VersionHint:   nil,
 		GatewayClient: gatewayClientFromPayload(payload.GatewayClient),
-		Enabled:       payload.Enabled,
 	}
 	if key := strings.TrimSpace(conv.PtrValOr(payload.VersionPlistKey, "")); key != "" {
 		target.VersionHint = &aitargets.VersionHint{PlistKey: key}
@@ -99,24 +98,25 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	if err := aitargets.ValidateTarget(target); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
-	// Built-in targets are system-supplied and read-only, the same contract
-	// Detection Rules holds its built-ins to. The one change an organization
-	// may make is switching one off, so a write under a built-in's id is
-	// accepted only when it carries that built-in's definition unchanged.
+	// Built-in targets are system-supplied, the same contract Detection Rules
+	// holds its built-ins to. There is nothing left for an organization to
+	// write about one: the definition is compiled in, and being in the
+	// inventory is what makes it probed for, so there is no per-organization
+	// switch either. The access decision is recorded through the AI tool
+	// decision endpoint, not here.
+	//
+	// So a write under a built-in's id is refused rather than accepted as a
+	// no-op. Accepting it would create a row carrying nothing, mark the
+	// built-in customized on the management surface, and log an update for a
+	// change that changed nothing.
 	//
 	// Enforced here and not only in the dashboard because the API is the
 	// contract: a hand-rolled call must not be able to silently redefine what
 	// every agent in the organization probes for.
-	if builtin, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin && !aitargets.SameDefinition(builtin, target) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target and cannot be edited; it can only be enabled or disabled", target.ID)
-	}
-	// A built-in stores only the organization's choice about it; its
-	// definition is compiled in and stays there.
-	params := aitargets.UpsertParams(organizationID, target)
 	if _, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin {
-		params = aitargets.BuiltInUpsertParams(organizationID, target.ID, target.Enabled)
+		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target: Gram supplies its definition and every organization is served it, so there is nothing to write here; record an access decision about it through the AI tool decision endpoint instead", target.ID)
 	}
-	if _, err := queries.UpsertAIScanTarget(ctx, params); err != nil {
+	if _, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)

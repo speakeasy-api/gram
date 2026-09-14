@@ -156,7 +156,7 @@ func BuildUpsertAiScanTargetPayload(agentUpsertAiScanTargetBody string, agentUps
 	{
 		err = json.Unmarshal([]byte(agentUpsertAiScanTargetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"category\": \"assistant\",\n      \"display_name\": \"aa\",\n      \"enabled\": false,\n      \"gateway_client\": {\n         \"cimd_vendor_keys\": [\n            \"1\",\n            \"1\",\n            \"1\"\n         ],\n         \"client_info_names\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"oauth_client_ids\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ]\n      },\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"category\": \"assistant\",\n      \"display_name\": \"aa\",\n      \"gateway_client\": {\n         \"cimd_vendor_keys\": [\n            \"1\",\n            \"1\",\n            \"1\"\n         ],\n         \"client_info_names\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"oauth_client_ids\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ]\n      },\n      \"id\": \"1\",\n      \"signatures\": {\n         \"binaries\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"bundle_ids\": [\n            \".\",\n            \".\",\n            \".\"\n         ],\n         \"config_dirs\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"process_names\": [\n            \"-\",\n            \"-\",\n            \"-\"\n         ]\n      },\n      \"version_plist_key\": \"1\"\n   }'")
 		}
 		if body.Signatures == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("signatures", "body"))
@@ -199,19 +199,12 @@ func BuildUpsertAiScanTargetPayload(agentUpsertAiScanTargetBody string, agentUps
 		DisplayName:     body.DisplayName,
 		Category:        body.Category,
 		VersionPlistKey: body.VersionPlistKey,
-		Enabled:         body.Enabled,
 	}
 	if body.Signatures != nil {
 		v.Signatures = marshalAiScanTargetSignaturesRequestBodyToAgentAiScanTargetSignatures(body.Signatures)
 	}
 	if body.GatewayClient != nil {
 		v.GatewayClient = marshalAiScanTargetGatewayClientRequestBodyToAgentAiScanTargetGatewayClient(body.GatewayClient)
-	}
-	{
-		var zero bool
-		if v.Enabled == zero {
-			v.Enabled = true
-		}
 	}
 	v.SessionToken = sessionToken
 

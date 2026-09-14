@@ -41,10 +41,6 @@ export type UpsertAiScanTargetRequestBody = {
    */
   displayName: string;
   /**
-   * Whether the organization's agents probe for the target. Defaults to true.
-   */
-  enabled?: boolean | undefined;
-  /**
    * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
    */
   gatewayClient?: AiScanTargetGatewayClient | undefined;
@@ -72,7 +68,6 @@ export const UpsertAiScanTargetRequestBodyCategory$outboundSchema:
 export type UpsertAiScanTargetRequestBody$Outbound = {
   category: string;
   display_name: string;
-  enabled: boolean;
   gateway_client?: AiScanTargetGatewayClient$Outbound | undefined;
   id: string;
   signatures: AiScanTargetSignatures$Outbound;
@@ -87,7 +82,6 @@ export const UpsertAiScanTargetRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     category: UpsertAiScanTargetRequestBodyCategory$outboundSchema,
     displayName: z.string(),
-    enabled: z._default(z.boolean(), true),
     gatewayClient: z.optional(AiScanTargetGatewayClient$outboundSchema),
     id: z.string(),
     signatures: AiScanTargetSignatures$outboundSchema,

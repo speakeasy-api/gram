@@ -21,7 +21,6 @@ type AiScanTarget struct {
 	CimdVendorKeys  []string
 	OauthClientIds  []string
 	ClientInfoNames []string
-	Enabled         bool
 	Status          string
 	Rationale       pgtype.Text
 	CreatedAt       pgtype.Timestamptz

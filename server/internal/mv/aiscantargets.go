@@ -31,7 +31,6 @@ func BuildAiScanTargetView(entry aitargets.Entry) *gen.AiScanTarget {
 			OauthClientIds:  emptyIfNil(entry.GatewayClient.OAuthClientIDs),
 			ClientInfoNames: emptyIfNil(entry.GatewayClient.ClientInfoNames),
 		},
-		Enabled:    entry.Enabled,
 		Origin:     string(entry.Source),
 		Customized: entry.Customized,
 		CreatedAt:  formatOptionalTime(entry.CreatedAt),

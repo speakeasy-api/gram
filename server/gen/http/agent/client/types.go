@@ -42,8 +42,6 @@ type UpsertAiScanTargetRequestBody struct {
 	// Info.plist key to read the installed version from on a bundle match;
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
-	// Whether the organization's agents probe for the target. Defaults to true.
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // DeleteAiScanTargetRequestBody is the type of the "agent" service
@@ -178,9 +176,10 @@ type ListAiScanTargetsResponseBody struct {
 	// Version of the served catalog; the value agents echo as target_list_version
 	// once they receive it.
 	ListVersion *int `form:"list_version,omitempty" json:"list_version,omitempty" xml:"list_version,omitempty"`
-	// Fingerprint of the served list; changes whenever the enabled set changes.
+	// Fingerprint of the served list; changes whenever the targets or their
+	// definitions change.
 	Etag *string `form:"etag,omitempty" json:"etag,omitempty" xml:"etag,omitempty"`
-	// Every target in the organization's list, enabled or not, ordered by id.
+	// Every target in the organization's list, ordered by id.
 	Targets []*AiScanTargetResponseBody `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
 }
 
@@ -2296,14 +2295,13 @@ type AiScanTargetResponseBody struct {
 	// defaults to CFBundleShortVersionString when omitted.
 	VersionPlistKey *string                                `form:"version_plist_key,omitempty" json:"version_plist_key,omitempty" xml:"version_plist_key,omitempty"`
 	GatewayClient   *AiScanTargetGatewayClientResponseBody `form:"gateway_client,omitempty" json:"gateway_client,omitempty" xml:"gateway_client,omitempty"`
-	// Whether the organization's agents probe for this target.
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Where the target comes from: default (a Speakeasy built-in, read-only apart
-	// from being switched off) or organization (added by the organization, fully
-	// editable).
+	// Where the target comes from: default (a Speakeasy built-in, whose definition
+	// is read-only) or organization (added by the organization, fully editable).
+	// Every target listed here is probed for; a built-in leaves the list by being
+	// removed from Speakeasy's catalog, an organization target by being deleted.
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
-	// For a built-in, whether the organization has recorded a choice about it — in
-	// practice, switched it off. Always false for organization targets.
+	// For a built-in, whether the organization has recorded an access decision
+	// about it. Always false for organization targets.
 	Customized *bool `form:"customized,omitempty" json:"customized,omitempty" xml:"customized,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -2331,15 +2329,14 @@ type AiScanTargetSignaturesResponseBody struct {
 // AiScanTargetGatewayClientResponseBody is used to define fields on response
 // body types.
 type AiScanTargetGatewayClientResponseBody struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled
-	// targets may claim the same key, or a block on either would silently cover
-	// the other.
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
+	// may claim the same key, or a block on either would silently cover the other.
 	CimdVendorKeys []string `form:"cimd_vendor_keys,omitempty" json:"cimd_vendor_keys,omitempty" xml:"cimd_vendor_keys,omitempty"`
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
 	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
-	// mints one document per MCP server is still named exactly. No two enabled
-	// targets may claim the same entry.
+	// mints one document per MCP server is still named exactly. No two targets may
+	// claim the same entry.
 	OauthClientIds []string `form:"oauth_client_ids,omitempty" json:"oauth_client_ids,omitempty" xml:"oauth_client_ids,omitempty"`
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
@@ -2366,15 +2363,14 @@ type AiScanTargetSignaturesRequestBody struct {
 // AiScanTargetGatewayClientRequestBody is used to define fields on request
 // body types.
 type AiScanTargetGatewayClientRequestBody struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two enabled
-	// targets may claim the same key, or a block on either would silently cover
-	// the other.
+	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
+	// may claim the same key, or a block on either would silently cover the other.
 	CimdVendorKeys []string `form:"cimd_vendor_keys" json:"cimd_vendor_keys" xml:"cimd_vendor_keys"`
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
 	// catalog entry that admitted it. Naming the catalog URL is how a vendor that
-	// mints one document per MCP server is still named exactly. No two enabled
-	// targets may claim the same entry.
+	// mints one document per MCP server is still named exactly. No two targets may
+	// claim the same entry.
 	OauthClientIds []string `form:"oauth_client_ids" json:"oauth_client_ids" xml:"oauth_client_ids"`
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
@@ -2435,19 +2431,12 @@ func NewUpsertAiScanTargetRequestBody(p *agent.UpsertAiScanTargetPayload) *Upser
 		DisplayName:     p.DisplayName,
 		Category:        p.Category,
 		VersionPlistKey: p.VersionPlistKey,
-		Enabled:         p.Enabled,
 	}
 	if p.Signatures != nil {
 		body.Signatures = marshalAgentAiScanTargetSignaturesToAiScanTargetSignaturesRequestBody(p.Signatures)
 	}
 	if p.GatewayClient != nil {
 		body.GatewayClient = marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientRequestBody(p.GatewayClient)
-	}
-	{
-		var zero bool
-		if body.Enabled == zero {
-			body.Enabled = true
-		}
 	}
 	return body
 }
@@ -7218,9 +7207,6 @@ func ValidateAiScanTargetResponseBody(body *AiScanTargetResponseBody) (err error
 	}
 	if body.GatewayClient == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("gateway_client", "body"))
-	}
-	if body.Enabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.Origin == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("origin", "body"))

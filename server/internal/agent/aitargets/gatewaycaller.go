@@ -50,7 +50,7 @@ func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
 			continue
 		}
 		for _, target := range targets {
-			if target.Enabled && slices.Contains(layer.lookup(target), layer.value) {
+			if slices.Contains(layer.lookup(target), layer.value) {
 				return target.Clone(), true
 			}
 		}

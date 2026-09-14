@@ -1310,10 +1310,15 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   oauth_client_ids TEXT[] NOT NULL DEFAULT '{}',
   client_info_names TEXT[] NOT NULL DEFAULT '{}',
 
-  -- Whether the organization's agents probe for the target.
-  enabled boolean NOT NULL DEFAULT true,
   -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
   -- blocked. Who set it and when is the audit log's job, not a column here.
+  --
+  -- The only state a row carries. Being in the organization's inventory is
+  -- what makes a target probed for, and a row exists only to record a
+  -- decision about one: there is no separate on/off switch that could leave a
+  -- recorded decision inert, or disagree with this column mid-write. A
+  -- built-in leaves the inventory by being deleted from the registry, an
+  -- organization's own target by having this row deleted.
   status TEXT NOT NULL DEFAULT 'unreviewed',
   rationale TEXT,
 

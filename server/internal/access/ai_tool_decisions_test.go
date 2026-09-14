@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
-	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
-	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -131,35 +129,6 @@ func TestService_ListAIDetections_UnenforceableToolReadsUnreviewed(t *testing.T)
 	require.Len(t, listed.Detections, 1)
 	require.Equal(t, "unreviewed", listed.Detections[0].Access.State)
 	require.False(t, listed.Detections[0].Access.Enforceable)
-}
-
-// A target the organization has switched off keeps its CIMD matchers, so the
-// refusal has to name the switch. The no-matcher wording would send an admin
-// hunting for a client ID metadata document this tool already publishes.
-func TestService_SetAIToolDecision_RejectsDisabledTarget(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
-	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
-
-	// Switching a built-in off is the one change an organization may make to
-	// it, and it writes no definition columns, so the matchers still come from
-	// the compiled-in default.
-	_, err := agentrepo.New(ti.conn).UpsertAIScanTarget(ctx, aitargets.BuiltInUpsertParams(orgID, "claude-code", false))
-	require.NoError(t, err)
-
-	_, err = ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
-		TargetID:     "claude-code",
-		Decision:     "blocked",
-		Rationale:    nil,
-		SessionToken: nil,
-	})
-	var shareableErr *oops.ShareableError
-	require.ErrorAs(t, err, &shareableErr)
-	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
-	require.Contains(t, shareableErr.Error(), "re-enable the scan target", "the message has to name the action that clears the refusal")
-	require.NotContains(t, shareableErr.Error(), "client ID metadata document", "this tool publishes one; the switch is what is in the way")
 }
 
 func TestService_SetAIToolDecision_RejectsUnknownTarget(t *testing.T) {

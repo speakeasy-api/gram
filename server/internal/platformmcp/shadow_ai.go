@@ -170,10 +170,8 @@ type AIScanTargetSummary struct {
 	DisplayName string `json:"display_name"`
 	Category    string `json:"category"`
 	// Origin is default for a target Speakeasy ships or organization for one
-	// this organization added. A default can only be switched on or off.
+	// this organization added. Everything listed is probed for either way.
 	Origin string `json:"origin"`
-	// Enabled reports whether agents are currently served this target.
-	Enabled bool `json:"enabled"`
 	// Blockable reports whether the target publishes a client ID metadata
 	// document, which is the only thing a gateway block can be enforced
 	// through.
@@ -208,7 +206,6 @@ func (s *ShadowAIService) ListLibrary(ctx context.Context, principal Principal, 
 			DisplayName: entry.DisplayName,
 			Category:    string(entry.Category),
 			Origin:      string(entry.Source),
-			Enabled:     entry.Enabled,
 			Blockable:   aitargets.Enforceable(entry.Target),
 		})
 	}

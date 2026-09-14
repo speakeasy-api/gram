@@ -2669,7 +2669,6 @@ func unmarshalAiScanTargetResponseBodyToAgentAiScanTarget(v *AiScanTargetRespons
 		DisplayName:     *v.DisplayName,
 		Category:        *v.Category,
 		VersionPlistKey: v.VersionPlistKey,
-		Enabled:         *v.Enabled,
 		Origin:          *v.Origin,
 		Customized:      *v.Customized,
 		CreatedAt:       v.CreatedAt,

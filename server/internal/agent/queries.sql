@@ -343,8 +343,7 @@ INSERT INTO ai_scan_targets (
   version_plist_key,
   cimd_vendor_keys,
   oauth_client_ids,
-  client_info_names,
-  enabled
+  client_info_names
 )
 VALUES (
   @organization_id,
@@ -358,8 +357,7 @@ VALUES (
   sqlc.narg('version_plist_key'),
   @cimd_vendor_keys::text[],
   @oauth_client_ids::text[],
-  @client_info_names::text[],
-  @enabled
+  @client_info_names::text[]
 )
 ON CONFLICT (organization_id, id) DO UPDATE
 SET display_name = EXCLUDED.display_name
@@ -372,7 +370,6 @@ SET display_name = EXCLUDED.display_name
   , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
   , oauth_client_ids = EXCLUDED.oauth_client_ids
   , client_info_names = EXCLUDED.client_info_names
-  , enabled = EXCLUDED.enabled
   , updated_at = clock_timestamp()
 RETURNING *;
 
@@ -395,16 +392,13 @@ RETURNING *;
 -- Nearly every organization answers with an empty set, and that answer costs
 -- one indexed lookup rather than loading the whole scan-target catalog.
 --
--- Disabled rows are excluded because MatchGatewayCaller skips a disabled
--- target, so a block recorded on one can never fire. Leaving it in kept the
--- fast path non-empty, which forces the catalog load below it, and a failure
--- there is answered with 503 rather than by allowing — so a stale block on a
--- switched-off tool turned a catalog outage into a refusal for the whole
--- organization.
+-- Status is the only predicate, and that is the point. There is no second
+-- column for the gateway to disagree with mid-write: a target is in the
+-- organization's inventory or it is not, and its decision is this one value.
 --
--- The matchers are deliberately NOT filtered here as well. A built-in stores
--- its choices only: its definition columns, gateway matchers included, are
--- empty by design because the matchers are compiled in. Requiring a non-empty
+-- The matchers are deliberately not filtered here. A built-in stores its
+-- decision only: its definition columns, gateway matchers included, are empty
+-- by design because the matchers are compiled in. Requiring a non-empty
 -- matcher column would silently drop every blocked built-in, which is most of
 -- the catalog.
 
@@ -413,7 +407,6 @@ SELECT id
 FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND status = 'blocked'
-  AND enabled
 ORDER BY id;
 
 -- Serializes an organization's scan target writes, definition and status
