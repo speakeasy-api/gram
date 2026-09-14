@@ -18,6 +18,8 @@ import (
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ragrepo "github.com/speakeasy-api/gram/server/internal/rag/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -222,6 +224,137 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		ToolsetVersion: 1,
 		DeploymentID:   newDeploymentID,
 	}}, targets)
+}
+
+func TestListToolsetsForIndexingSkipsBlockedOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "list_blocked_toolsets_for_indexing")
+	require.NoError(t, err)
+
+	organizationID := "org-" + uuid.NewString()[:8]
+	_, err = orgrepo.New(db).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Test Org",
+		Slug:        organizationID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	project, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Test Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	deploymentID := createCompletedDeployment(t, db, organizationID, project.ID)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", "valid-tool")
+	createHTTPToolDefinition(t, db, project.ID, deploymentID, toolURN)
+	toolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{toolURN})
+
+	orphanOrganizationID := "missing-" + uuid.NewString()[:8]
+	orphanProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Orphan Project",
+		Slug:           "orphan-" + uuid.NewString()[:8],
+		OrganizationID: orphanOrganizationID,
+	})
+	require.NoError(t, err)
+	orphanDeploymentID := createCompletedDeployment(t, db, orphanOrganizationID, orphanProject.ID)
+	createHTTPToolDefinition(t, db, orphanProject.ID, orphanDeploymentID, toolURN)
+	createMCPToolset(t, db, orphanOrganizationID, orphanProject.ID, "orphan", []urn.Tool{toolURN})
+
+	activity := activities.NewListToolsetsForIndexing(db)
+	assertEligible := func(want bool) {
+		t.Helper()
+
+		projectIDs, listErr := activity.ListProjects(ctx, activities.ListProjectsForToolsetIndexingInput{RotationSeed: 1, ProjectLimit: 100})
+		require.NoError(t, listErr)
+		targets, listErr := activity.Do(ctx, activities.ListToolsetsForIndexingInput{
+			RotationSeed: 1,
+			ScanLimit:    100,
+			ProjectIDs:   []uuid.UUID{project.ID, orphanProject.ID},
+		})
+		require.NoError(t, listErr)
+
+		if want {
+			require.Equal(t, []uuid.UUID{project.ID}, projectIDs)
+			require.Equal(t, []activities.ToolsetIndexTarget{{
+				ProjectID:      project.ID,
+				ToolsetID:      toolset.ID,
+				ToolsetSlug:    "valid",
+				ToolsetVersion: 1,
+				DeploymentID:   deploymentID,
+			}}, targets)
+		} else {
+			require.Empty(t, projectIDs)
+			require.Empty(t, targets)
+		}
+	}
+
+	// A missing chat key remains eligible so the first embedding can provision it.
+	assertEligible(true)
+
+	keyQueries := openrouterrepo.New(db)
+	_, err = keyQueries.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        "internal",
+		KeyEncrypted:   pgtype.Text{String: "fixture", Valid: true},
+		KeyHash:        uuid.NewString(),
+		MonthlyCredits: 0,
+	})
+	require.NoError(t, err)
+	fixtureQueries := testrepo.New(db)
+	require.NoError(t, fixtureQueries.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "internal",
+		Disabled:       true,
+		DisableCauses:  []string{"admin_lock"},
+	}))
+	assertEligible(true)
+
+	_, err = keyQueries.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        "chat",
+		KeyEncrypted:   pgtype.Text{String: "fixture", Valid: true},
+		KeyHash:        uuid.NewString(),
+		MonthlyCredits: 0,
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixtureQueries.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "chat",
+		Disabled:       false,
+		DisableCauses:  []string{"admin_lock"},
+	}))
+	assertEligible(false)
+
+	require.NoError(t, fixtureQueries.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "chat",
+		Disabled:       true,
+		DisableCauses:  []string{},
+	}))
+	assertEligible(true)
+
+	require.NoError(t, fixtureQueries.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "chat",
+		Disabled:       true,
+		DisableCauses:  nil,
+	}))
+	assertEligible(false)
+
+	require.NoError(t, fixtureQueries.SoftDeleteOpenRouterAPIKeyFixture(ctx, testrepo.SoftDeleteOpenRouterAPIKeyFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "chat",
+	}))
+	assertEligible(true)
+
+	_, err = projectsrepo.New(db).DeleteProject(ctx, project.ID)
+	require.NoError(t, err)
+	assertEligible(false)
 }
 
 func createHTTPToolDefinition(

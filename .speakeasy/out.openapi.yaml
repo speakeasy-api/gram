@@ -32706,6 +32706,102 @@ paths:
       x-speakeasy-name-override: removeFromMcpServer
       x-speakeasy-react-hook:
         name: RemoveOrganizationRemoteSessionClientFromMcpServer
+  /rpc/organizationRemoteSessionClients.rotate:
+    post:
+      description: Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The replacement is registered at the registration_endpoint the client's issuer publishes, so the issuer must publish one. Requires org:admin.
+      operationId: rotateOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: rotateClient organizationRemoteSessionClients
+      tags:
+        - organizationRemoteSessionClients
+      x-speakeasy-name-override: rotate
+      x-speakeasy-react-hook:
+        name: RotateOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionClients.update:
     post:
       description: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.
@@ -63835,6 +63931,121 @@ paths:
       x-speakeasy-name-override: getInferenceSpendCaps
       x-speakeasy-react-hook:
         name: getInferenceSpendCaps
+  /rpc/usage.getMeterUsage:
+    get:
+      description: Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
+      operationId: getMeterUsage
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: family
+          required: true
+          schema:
+            enum:
+              - agent_session_storage
+              - mcp_bandwidth
+              - risk_content_scans
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+          in: query
+          name: to
+          schema:
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Family-compatible reporting facet
+          in: query
+          name: breakdown
+          schema:
+            description: Family-compatible reporting facet
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterUsageResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getMeterUsage usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getMeterUsage
+      x-speakeasy-react-hook:
+        name: getMeterUsage
   /rpc/usage.getPaygBillingSummary:
     get:
       description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
@@ -71282,9 +71493,17 @@ components:
         client_id:
           type: string
           description: client_id supplied by the caller, e.g. from Dynamic Client Registration.
+        client_id_issued_at:
+          type: string
+          description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+          format: date-time
         client_secret:
           type: string
           description: Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
+        client_secret_expires_at:
+          type: string
+          description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+          format: date-time
         project_id:
           type: string
           description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
@@ -71542,9 +71761,17 @@ components:
         client_id:
           type: string
           description: client_id supplied by the caller.
+        client_id_issued_at:
+          type: string
+          description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+          format: date-time
         client_secret:
           type: string
           description: client_secret supplied by the caller. Gram encrypts before persisting.
+        client_secret_expires_at:
+          type: string
+          description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+          format: date-time
         remote_session_issuer_id:
           type: string
           description: The owning remote_session_issuer id.
@@ -80199,6 +80426,150 @@ components:
         - network_access_mode
         - created_at
         - updated_at
+    MeterUsageBreakdown:
+      type: object
+      properties:
+        dimension:
+          type: string
+          description: Selected family-compatible breakdown dimension
+          enum:
+            - total
+            - project
+            - model
+            - provider
+            - billing_mode
+            - assistant
+            - billing_user
+            - division
+            - department
+            - job_title
+            - employee_type
+            - cost_center
+            - directory_group_set
+            - direction
+            - mcp_server
+            - server_type
+            - scanner
+            - policy
+            - judge_model
+            - judge_provider
+            - tool_name
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageSeries'
+          description: At most six selected facet series plus a remainder
+      required:
+        - dimension
+        - series
+    MeterUsageBucket:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive bucket boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive bucket boundary
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+      required:
+        - from
+        - to
+        - total
+    MeterUsageResponse:
+      type: object
+      properties:
+        billing_cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageWindow'
+          description: Trailing twelve billing-cycle date windows
+        breakdown:
+          $ref: '#/components/schemas/MeterUsageBreakdown'
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageBucket'
+          description: Dense UTC daily ordinary usage buckets, including in-progress days
+        family:
+          type: string
+          enum:
+            - agent_session_storage
+            - mcp_bandwidth
+            - risk_content_scans
+        measurement_method:
+          type: string
+        queried_at:
+          type: string
+          description: Retrieval timestamp, not an ingestion watermark
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage period total as a decimal string
+        unit:
+          type: string
+          enum:
+            - stokens
+            - bytes
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      required:
+        - family
+        - window
+        - billing_cycles
+        - unit
+        - measurement_method
+        - total
+        - buckets
+        - breakdown
+        - queried_at
+    MeterUsageSeries:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Canonical identity; present for value series and omitted for unset and remainder
+        kind:
+          type: string
+          description: Identity kind for this series
+          enum:
+            - value
+            - unset
+            - remainder
+        label:
+          type: string
+          description: Display label, never chart identity
+        total:
+          type: string
+          description: Exact integer ordinary usage series total as a decimal string
+        values:
+          type: array
+          items:
+            type: string
+          description: Exact integer ordinary usage values aligned one-for-one with buckets
+      required:
+        - kind
+        - label
+        - total
+        - values
+    MeterUsageWindow:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive UTC midnight window boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive UTC midnight window boundary
+          format: date-time
+      required:
+        - from
+        - to
     MigrateIssuerRequestBody:
       type: object
       properties:
@@ -83294,6 +83665,10 @@ components:
             - none
         updated_at:
           type: string
+          format: date-time
+        upstream_rejected_at:
+          type: string
+          description: When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.
           format: date-time
         user_session_issuer_ids:
           type: array

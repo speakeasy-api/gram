@@ -344,9 +344,35 @@
                   <div class="bg-accent mt-2 flex w-fit max-w-[70%] flex-col gap-1 border px-3 py-3 max-sm:w-full max-sm:max-w-full" data-card-details-panel>
                     {{if $panel.ShowIdentity}}
                     <span
-                      class="text-xs text-muted-foreground break-words"
-                      title="{{.ConnectedAs}}"
-                      >Authenticated as {{.ConnectedAs}}</span
+                      class="text-xs text-muted-foreground break-words has-[[data-caveat-trigger]:hover]:[&_[data-identity-text]]:bg-destructive/20 has-[[data-caveat-trigger]:focus-visible]:[&_[data-identity-text]]:bg-destructive/20"
+                      >Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
+                      <span class="group/caveat relative inline-block" data-identity-caveat
+                        ><span
+                          class="text-destructive cursor-help inline-block"
+                          tabindex="0"
+                          role="img"
+                          aria-label="Identity caveat"
+                          aria-describedby="identity-caveat-{{.ClientID}}"
+                          data-caveat-trigger
+                          ><svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                            class="size-3 inline-block"
+                          >
+                            <circle cx="8" cy="8" r="6.5" />
+                            <path d="M8 4.75v3.75M8 11.25h.01" />
+                          </svg></span
+                        ><span
+                          id="identity-caveat-{{.ClientID}}"
+                          role="tooltip"
+                          class="bg-popover text-popover-foreground pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-64 -translate-x-1/2 border px-3 py-1.5 text-xs whitespace-normal shadow-md group-hover/caveat:block group-focus-within/caveat:block"
+                          >{{.IdentityCaveat}}</span
+                        ></span
+                      >{{end}}</span
                     >
                     {{end}} {{if $panel.ShowAccountContext}}
                     {{/* Each chip carries its own separator glued on with non-breaking spaces, so a

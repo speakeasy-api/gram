@@ -90,6 +90,9 @@ func IndexToolsetWorkflow(
 		if errors.As(err, &applicationErr) && applicationErr.Type() == activities.GenerateToolsetEmbeddingsSupersededErrorType {
 			return nil
 		}
+		if errors.As(err, &applicationErr) && applicationErr.Type() == activities.GenerateToolsetEmbeddingsKeyDisabledErrorType {
+			return err
+		}
 		if !errors.As(err, &applicationErr) || applicationErr.Type() != activities.GenerateToolsetEmbeddingsPermanentErrorType {
 			return err
 		}
