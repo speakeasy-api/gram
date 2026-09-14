@@ -143,6 +143,26 @@ describe("trusted support banner", () => {
 });
 
 describe("LoginCheck", () => {
+  it.each([
+    "/org/setup?task=enable-logging&projectSlug=selected",
+    "/org/setup?step=connect-idp&projectSlug=selected",
+    "/org/setup/idp?step=2&projectSlug=selected",
+  ])("preserves onboarding login return destination %s", (destination) => {
+    mocks.useSession.mockReturnValue({ ...baseSession, session: "" });
+    render(
+      <MemoryRouter initialEntries={[destination]}>
+        <Routes>
+          <Route element={<LoginCheck />}>
+            <Route path="/org/setup/*" element={<div>setup</div>} />
+          </Route>
+          <Route path="/login" element={<CurrentLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("location").textContent).toBe(
+      `/login?redirect=${encodeURIComponent(destination)}`,
+    );
+  });
   it("sends authenticated zero-org sessions to sign-up with their destination", () => {
     mocks.useSession.mockReturnValue({
       ...baseSession,

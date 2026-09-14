@@ -14,22 +14,22 @@ export function OnboardingHeader({
   children,
 }: OnboardingHeaderProps): JSX.Element {
   return (
-    <header className="border-border bg-background w-full border-b">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+    <header className="border-border bg-background w-full shrink-0 border-b px-4 sm:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-4 py-4 lg:flex-row lg:items-center">
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
-          <div className="bg-border hidden h-5 w-px sm:block" />
-          <span className="text-foreground hidden text-sm font-medium sm:block">
+          <div className="bg-border h-5 w-px" />
+          <span className="text-foreground text-sm font-medium">
             Setup organization
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
           {children}
           <Button
             asChild
             variant="tertiary"
             size="sm"
-            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
+            className="text-muted-foreground hover:text-foreground gap-1.5"
           >
             <a
               href="https://www.speakeasy.com/docs/mcp"
@@ -44,20 +44,23 @@ export function OnboardingHeader({
             variant="tertiary"
             size="sm"
             onClick={showPylonChat}
-            className="text-muted-foreground hover:text-foreground hidden gap-1.5 lg:inline-flex"
+            className="text-muted-foreground hover:text-foreground gap-1.5"
           >
-            <LifeBuoy className="h-4 w-4" />
-            Get support
+            <Button.LeftIcon>
+              <LifeBuoy />
+            </Button.LeftIcon>
+            <Button.Text>Get support</Button.Text>
           </Button>
           <Button
             variant="tertiary"
             size="sm"
             onClick={onLeave}
-            aria-label="Go to dashboard"
-            className="text-muted-foreground hover:text-foreground inline-flex gap-1.5"
+            className="text-muted-foreground hover:text-foreground gap-1.5"
           >
-            <span className="hidden lg:inline">Go to dashboard</span>
-            <ArrowRight className="h-4 w-4" />
+            <Button.Text>Go to dashboard</Button.Text>
+            <Button.RightIcon>
+              <ArrowRight />
+            </Button.RightIcon>
           </Button>
         </div>
       </div>
