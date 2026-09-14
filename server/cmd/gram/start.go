@@ -1211,6 +1211,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 				remotesessions.WithIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithSessionEnricher(remoteSessionEnricher),
+				remotesessions.WithRegistrationAuditLogger(auditLogger),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))

@@ -45,6 +45,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -209,6 +210,14 @@ type ChallengeManager struct {
 	issuerMetadata *IssuerMetadataRefresher
 	// enricher asks the issuer's userinfo and introspection endpoints about a grant.
 	enricher *SessionEnricher
+
+	// auditLogger records automatic registration rotations in the affected
+	// organization's audit feed, credited to the system principal.
+	auditLogger *audit.Logger
+
+	// rotator replaces a client registration the issuer no longer recognizes
+	// before the authorize redirect is minted.
+	rotator *ClientRotator
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -244,6 +253,12 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 	return func(m *ChallengeManager) {
 		m.privateAuthorityValidator = validator
 	}
+}
+
+// WithRegistrationAuditLogger records automatic client registration rotations
+// in the organization's audit feed, credited to the system principal.
+func WithRegistrationAuditLogger(auditLogger *audit.Logger) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.auditLogger = auditLogger }
 }
 
 // WithIDTokenVerifier enables identity capture from ID tokens on the exchange and the manager's refreshes.
@@ -296,6 +311,8 @@ func NewChallengeManager(
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
+		auditLogger:               audit.NewLogger(),
+		rotator:                   nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -305,6 +322,7 @@ func NewChallengeManager(
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher))
+	manager.rotator = NewClientRotator(logger, db, enc, policy, cacheImpl, serverURL, manager.revoker, manager.auditLogger)
 	return manager
 }
 
@@ -385,6 +403,40 @@ type Client struct {
 	// remote_sessions=true) so a client registered against the old
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
+
+	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
+	// client's issuer publishes, as discovery last refreshed it; empty when
+	// the issuer publishes none. A client whose issuer publishes no endpoint
+	// is never re-registered automatically, since Gram has nowhere to do it.
+	IssuerRegistrationEndpoint string
+
+	// ClientSecretExpiresAt is when the issuer said the client secret expires,
+	// nil when it reported no expiry or the value was never recorded.
+	ClientSecretExpiresAt *time.Time
+
+	// UpstreamRejectedAt is when the issuer's token endpoint last answered
+	// invalid_client for this client_id, nil while the registration is in good
+	// standing.
+	UpstreamRejectedAt *time.Time
+}
+
+// needsRegistrationRotation reports whether the client's upstream registration
+// should be replaced before sending a user to the authorize endpoint: the
+// issuer has rejected the client_id, or the secret it issued has expired. A
+// client whose issuer publishes no registration endpoint is never rotated
+// here, since Gram has nowhere to re-register it.
+func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
+	if c.IssuerRegistrationEndpoint == "" {
+		return "", false
+	}
+	switch {
+	case c.UpstreamRejectedAt != nil:
+		return RotationTriggerUpstreamRejected, true
+	case c.ClientSecretExpiresAt != nil && !c.ClientSecretExpiresAt.After(now):
+		return RotationTriggerSecretExpired, true
+	default:
+		return "", false
+	}
 }
 
 // standardScopes are appended when advertised: openid, email, profile for
@@ -474,6 +526,9 @@ func (m *ChallengeManager) ListClients(
 			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:                                      r.Passthrough,
 			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
+			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
+			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
 		})
 	}
 	return out, nil
@@ -762,6 +817,11 @@ func (m *ChallengeManager) mintAuthorization(
 	if client.TokenEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
+
+	// A registration the issuer has stopped recognizing would send the user to
+	// an authorize page that errors without ever redirecting back. Replace it
+	// first, so the login proceeds under a client_id the issuer knows.
+	client = m.rotateRejectedRegistration(ctx, parent.OrganizationID, client)
 
 	stateID, err := randomToken(32)
 	if err != nil {
