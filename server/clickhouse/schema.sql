@@ -1965,4 +1965,4 @@ PARTITION BY toYYYYMM(fromUnixTimestamp64Nano(occurred_at_unix_nano))
 ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, metric_id)
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles.';
+COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL or LIMIT 1 BY) and never sum raw rows.';
