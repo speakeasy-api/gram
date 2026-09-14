@@ -21,6 +21,8 @@ flowchart LR
   t_gram_metering_v1_meter_reading_ch_writer_dlq(["gram-metering-v1-meter-reading-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_networkingress_v1_reconcile_requested(["gram-networkingress-v1-reconcile-requested<br/>(topic)"]):::topic
   t_gram_networkingress_v1_reconciler_dlq(["gram-networkingress-v1-reconciler-dlq<br/>(dlq)"]):::dlq
+  t_gram_otel_v1_agent_event_log_ch_writer_dlq(["gram-otel-v1-agent-event-log-ch-writer-dlq<br/>(dlq)"]):::dlq
+  t_gram_otel_v1_agent_event_span_ch_writer_dlq(["gram-otel-v1-agent-event-span-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_log_record(["gram-otel-v1-inbound-log-record<br/>(topic)"]):::topic
   t_gram_otel_v1_inbound_log_record_transformer_dlq(["gram-otel-v1-inbound-log-record-transformer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_metric(["gram-otel-v1-inbound-metric<br/>(topic)"]):::topic
@@ -56,6 +58,8 @@ flowchart LR
   s_gram_metering_v1_meter_reading_ch_writer["gram-metering-v1-meter-reading-ch-writer<br/>(sub)"]:::sub
   s_gram_metering_v1_meter_reading_stripe_exporter["gram-metering-v1-meter-reading-stripe-exporter<br/>(sub)"]:::sub
   s_gram_networkingress_v1_reconciler["gram-networkingress-v1-reconciler<br/>(sub)"]:::sub
+  s_gram_otel_v1_agent_event_log_ch_writer["gram-otel-v1-agent-event-log-ch-writer<br/>(sub)"]:::sub
+  s_gram_otel_v1_agent_event_span_ch_writer["gram-otel-v1-agent-event-span-ch-writer<br/>(sub)"]:::sub
   s_gram_otel_v1_inbound_log_record_transformer["gram-otel-v1-inbound-log-record-transformer<br/>(sub)"]:::sub
   s_gram_otel_v1_inbound_metric_transformer["gram-otel-v1-inbound-metric-transformer<br/>(sub)"]:::sub
   s_gram_otel_v1_inbound_span_transformer["gram-otel-v1-inbound-span-transformer<br/>(sub)"]:::sub
@@ -119,6 +123,10 @@ flowchart LR
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_stripe_exporter
   t_gram_networkingress_v1_reconcile_requested --> s_gram_networkingress_v1_reconciler
   s_gram_networkingress_v1_reconciler -. dead-letter .-> t_gram_networkingress_v1_reconciler_dlq
+  t_gram_otel_v1_log_record --> s_gram_otel_v1_agent_event_log_ch_writer
+  s_gram_otel_v1_agent_event_log_ch_writer -. dead-letter .-> t_gram_otel_v1_agent_event_log_ch_writer_dlq
+  t_gram_otel_v1_span --> s_gram_otel_v1_agent_event_span_ch_writer
+  s_gram_otel_v1_agent_event_span_ch_writer -. dead-letter .-> t_gram_otel_v1_agent_event_span_ch_writer_dlq
   t_gram_otel_v1_inbound_log_record --> s_gram_otel_v1_inbound_log_record_transformer
   s_gram_otel_v1_inbound_log_record_transformer -. dead-letter .-> t_gram_otel_v1_inbound_log_record_transformer_dlq
   t_gram_otel_v1_inbound_metric --> s_gram_otel_v1_inbound_metric_transformer
@@ -216,6 +224,8 @@ flowchart LR
 | [`gram-metering-v1-meter-reading-ch-writer-dlq`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | DLQ | 31d | — |
 | [`gram-networkingress-v1-reconcile-requested`](../infra/proto/gram/networkingress/v1/reconcile_requested.proto) | topic | 7d | [`server/internal/networkingress/reconcile_requests.go`](../server/internal/networkingress/reconcile_requests.go) |
 | [`gram-networkingress-v1-reconciler-dlq`](../infra/proto/gram/networkingress/v1/reconciler.proto) | DLQ | 7d | — |
+| [`gram-otel-v1-agent-event-log-ch-writer-dlq`](../infra/proto/gram/otel/v1/agent_event_log_ch_writer.proto) | DLQ | 7d | — |
+| [`gram-otel-v1-agent-event-span-ch-writer-dlq`](../infra/proto/gram/otel/v1/agent_event_span_ch_writer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go) |
 | [`gram-otel-v1-inbound-log-record-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-inbound-metric`](../infra/proto/gram/otel/v1/inbound_metric.proto) | topic | 7d | — |
@@ -256,6 +266,8 @@ flowchart LR
 | [`gram-metering-v1-meter-reading-ch-writer`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | `gram-metering-v1-meter-reading` | 1m | `gram-metering-v1-meter-reading-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-metering-v1-meter-reading-stripe-exporter`](../infra/proto/gram/metering/v1/meter_reading_stripe_exporter.proto) | `gram-metering-v1-meter-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-networkingress-v1-reconciler`](../infra/proto/gram/networkingress/v1/reconciler.proto) | `gram-networkingress-v1-reconcile-requested` | 1m | `gram-networkingress-v1-reconciler-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-agent-event-log-ch-writer`](../infra/proto/gram/otel/v1/agent_event_log_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-agent-event-log-ch-writer-dlq` | — |
+| [`gram-otel-v1-agent-event-span-ch-writer`](../infra/proto/gram/otel/v1/agent_event_span_ch_writer.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-agent-event-span-ch-writer-dlq` | — |
 | [`gram-otel-v1-inbound-log-record-transformer`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | `gram-otel-v1-inbound-log-record` | 1m | `gram-otel-v1-inbound-log-record-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-otel-v1-inbound-metric-transformer`](../infra/proto/gram/otel/v1/inbound_metric_transformer.proto) | `gram-otel-v1-inbound-metric` | 1m | `gram-otel-v1-inbound-metric-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-otel-v1-inbound-span-transformer`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | `gram-otel-v1-inbound-span` | 1m | `gram-otel-v1-inbound-span-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -285,4 +297,6 @@ flowchart LR
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-otel-v1-agent-event-log-ch-writer` has no consumer in `server/` or `pystreams/`.
+- Subscription `gram-otel-v1-agent-event-span-ch-writer` has no consumer in `server/` or `pystreams/`.
 
