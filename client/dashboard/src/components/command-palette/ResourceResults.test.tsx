@@ -307,8 +307,34 @@ describe("ResourceResults MCP Catalog group", () => {
     expect(screen.getAllByText("io.github.acme/widgets")).toHaveLength(1);
   });
 
+  // The detail route is addressed by specifier alone and resolves the first
+  // match, so a second registry publishing the same server would otherwise add
+  // an identical-looking row that leads to the very same page.
+  it("offers one row per specifier when two registries publish the same server", () => {
+    mocks.catalogServers = [
+      { ...catalogServer("Datadog", "com.datadoghq/datadog") },
+      {
+        ...catalogServer("Datadog", "com.datadoghq/datadog"),
+        registryId: "registry-2",
+      },
+    ];
+    renderResults("datadog");
+
+    expect(screen.getAllByText("Datadog")).toHaveLength(1);
+  });
+
   it("stays hidden for a user without catalog access", () => {
     mocks.scopes = [];
+    mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
+    renderResults("datadog");
+
+    expect(screen.queryByText("MCP Catalog")).toBeNull();
+  });
+
+  // listCatalog requires project:read. Mounting the group for a writer who
+  // lacks it would fire a request the backend refuses.
+  it("stays hidden for a writer without project:read", () => {
+    mocks.scopes = ["mcp:write"];
     mocks.catalogServers = [catalogServer("Datadog", "com.datadoghq/datadog")];
     renderResults("datadog");
 

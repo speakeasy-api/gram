@@ -3,6 +3,7 @@ import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
+import { CATALOG_STALE_TIME_MS } from "@/pages/catalog/hooks";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
@@ -159,22 +160,43 @@ function McpServersGroup({ onNavigate }: GroupProps) {
  * runs, and the two legitimately share a name once an entry has been added. The
  * registry specifier rides along as the sublabel, so a row is never mistaken
  * for one of the project's own slugs.
+ *
+ * The typed query filters the fetched list here rather than being sent to
+ * listCatalog. Searching server-side would reach no further: the backend
+ * filters in memory over the same bounded crawl it returns unfiltered, so a
+ * search term buys an upstream round trip per keystroke and a cache entry the
+ * catalog page cannot share, without surfacing a single extra entry.
  */
 function McpCatalogGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const gramProject = useProjectSlugForRequests();
-  // Same request the catalog page makes, so the two share one cache entry
-  // rather than each paying for the registry round trip.
-  const { data } = useListMCPCatalogSuspense({ gramProject });
-  const servers = data.servers ?? [];
+  // Same request the catalog page makes, down to the freshness window: staleness
+  // is per-observer, so without it this reader would refetch the registry on
+  // every palette mount despite sharing a cache entry the page still considers
+  // fresh.
+  const { data } = useListMCPCatalogSuspense({ gramProject }, undefined, {
+    staleTime: CATALOG_STALE_TIME_MS,
+  });
+  // A specifier is unique within a registry but not across them, and the detail
+  // route is addressed by specifier alone — it resolves the first entry that
+  // matches. Two registries publishing one server would otherwise render as two
+  // identical rows that lead to the same page, so only the row that page
+  // actually opens is offered.
+  const servers = useMemo(() => {
+    const bySpecifier = new Map<string, (typeof data.servers)[number]>();
+    for (const server of data.servers ?? []) {
+      if (!bySpecifier.has(server.registrySpecifier)) {
+        bySpecifier.set(server.registrySpecifier, server);
+      }
+    }
+    return Array.from(bySpecifier.values());
+  }, [data]);
   if (!servers.length) return null;
   return (
     <CommandGroup heading="MCP Catalog">
       {servers.map((server) => (
-        // A specifier is unique within a registry but not across them, so the
-        // key carries both — the same server can be listed by two registries.
         <ResultItem
-          key={`${server.registryId ?? ""}-${server.registrySpecifier}`}
+          key={server.registrySpecifier}
           value={`catalog ${server.title ?? ""} ${server.registrySpecifier}`}
           label={server.title || server.registrySpecifier}
           // Dropped when it is standing in as the label: an untitled entry
@@ -519,8 +541,10 @@ export function ResourceResults({
   // Approval requests are an org-admin surface, matching the queue page's
   // own gate.
   const canReadApprovals = hasScope("org:admin");
-  // The catalog page's own gate.
-  const canBrowseCatalog = hasAnyScope(["project:read", "mcp:write"]);
+  // What listCatalog itself requires, rather than the looser any-of gate the
+  // catalog page renders behind: an mcp:write-only reader would pass that one
+  // and then have the request refused.
+  const canBrowseCatalog = hasScope("project:read");
   // Detection rules and the catalog are high-cardinality (dozens of built-ins;
   // hundreds of registry entries), so they'd flood the default view and fetch
   // on open. Make them search-only: render (and fetch) the group only once the
