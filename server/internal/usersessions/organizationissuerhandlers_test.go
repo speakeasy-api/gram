@@ -94,6 +94,20 @@ func TestOrganizationUserSessionIssuerTrustedRemoteSessionIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, globalTargetID, *loaded.TrustedRemoteSessionIssuerID)
 
+	whitespaceClearValue := "\t\n "
+	clearedWithWhitespace, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &whitespaceClearValue,
+	})
+	require.NoError(t, err)
+	require.Nil(t, clearedWithWhitespace.TrustedRemoteSessionIssuerID)
+
+	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
+		ID:                           created.ID,
+		TrustedRemoteSessionIssuerID: &globalTargetID,
+	})
+	require.NoError(t, err)
+
 	clearValue := ""
 	cleared, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
 		ID:                           created.ID,

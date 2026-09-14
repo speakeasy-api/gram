@@ -262,9 +262,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 			return nil, oops.E(oops.CodeUnexpected, err, "validate trusted remote session issuer").LogError(ctx, logger)
 		}
 	}
-	trustedIssuerIDParam := conv.PtrToPGText(payload.TrustedRemoteSessionIssuerID)
-	if payload.TrustedRemoteSessionIssuerID != nil && trustedIssuerID.Valid {
-		trustedIssuerIDParam = conv.ToPGText(trustedIssuerID.UUID.String())
+	var trustedIssuerIDParam pgtype.Text
+	if payload.TrustedRemoteSessionIssuerID != nil {
+		trustedIssuerIDParam = conv.ToPGText("")
+		if trustedIssuerID.Valid {
+			trustedIssuerIDParam = conv.ToPGText(trustedIssuerID.UUID.String())
+		}
 	}
 
 	updated, err := txRepo.UpdateOrganizationUserSessionIssuer(ctx, repo.UpdateOrganizationUserSessionIssuerParams{
