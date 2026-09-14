@@ -210,14 +210,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		attr.SlogReason(string(params.Trigger)),
 	)
 
-	if current.ClientIDMetadataUri.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {
-		return zero, ErrClientNotRotatable
-	}
-	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
-	if endpoint == "" {
-		return zero, ErrIssuerHasNoRegistrationEndpoint
-	}
-
 	// The caller decided to rotate on a snapshot taken before it held the
 	// lease. If the row moved in between, another rotation already replaced
 	// the registration, or a probe already found the issuer still recognizes
@@ -225,7 +217,10 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// contacted again. Rotating the replacement would revoke every session
 	// its users just re-established, and probing the replacement only to hand
 	// back the caller's snapshot would send its user out with the dead
-	// client_id.
+	// client_id. This runs before every refusal below: a row another caller
+	// already repaired is the one to use even when Gram could not rotate it
+	// again, such as an issuer whose metadata has since lost its registration
+	// endpoint.
 	if params.Trigger != RotationTriggerManual {
 		if params.ExpectedClientID != "" && current.ClientID != params.ExpectedClientID {
 			logger.InfoContext(ctx, "client registration was already replaced by a concurrent rotation; adopting the replacement")
@@ -235,6 +230,14 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			logger.InfoContext(ctx, "client registration no longer needs rotation; adopting the current row")
 			return current, nil
 		}
+	}
+
+	if current.ClientIDMetadataUri.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {
+		return zero, ErrClientNotRotatable
+	}
+	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
+	if endpoint == "" {
+		return zero, ErrIssuerHasNoRegistrationEndpoint
 	}
 
 	if params.ConfirmUpstreamRejection {

@@ -532,3 +532,31 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentExpiryRotation(t *testing.T) {
 	require.Zero(t, upstream.registrationAttempts.Load())
 	require.Zero(t, upstream.refreshAttempts.Load())
 }
+
+// The adoption check runs before the issuer is required to publish a
+// registration endpoint. A loser whose winner already replaced the
+// registration adopts it even if the issuer's metadata has since lost the
+// endpoint; refusing first would hand the caller its stale snapshot with the
+// dead client_id.
+func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementWhenIssuerLostRegistrationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	ctx, env := newSyntheticExpiryEnv(t, "rotate-endpoint-lost", upstream.handler())
+	rejectedAt := time.Now().Add(-time.Hour)
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
+
+	stale := listClient(t, env)
+	require.NoError(t, replaceAsWinner(ctx, env, loadClient(t, env)))
+	n, err := env.q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		RegistrationEndpoint: pgtype.Text{String: "", Valid: false},
+		ClientID:             env.clientID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	require.Equal(t, "rotated-by-winner", mintLoginFor(t, env, stale))
+
+	require.Zero(t, upstream.refreshAttempts.Load())
+	require.Zero(t, upstream.registrationAttempts.Load())
+}
