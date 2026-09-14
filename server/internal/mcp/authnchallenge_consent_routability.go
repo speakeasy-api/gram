@@ -65,6 +65,24 @@ func (r consentRouting) unroutable(client remotesessions.Client, resource string
 	}
 }
 
+// canValidate distinguishes an unused connection from a routable probe target.
+func (r consentRouting) canValidate(client remotesessions.Client, resource string) bool {
+	switch r.backend {
+	case consentBackendRemote:
+	case consentBackendTunneled:
+		if !r.issuer.Valid || r.issuer.UUID != client.RemoteSessionIssuerID {
+			return false
+		}
+	case consentBackendMeta:
+		if len(r.members[client.RemoteSessionIssuerID]) == 0 {
+			return false
+		}
+	case consentBackendNone:
+		return false
+	}
+	return !r.unroutable(client, resource)
+}
+
 func (r consentRouting) duplicated(upstream string) bool {
 	return r.grants[strings.TrimRight(upstream, "/")] > 1
 }

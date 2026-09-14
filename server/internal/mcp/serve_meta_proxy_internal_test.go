@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
+
+func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
+	t.Parallel()
+
+	rec := newMemberResponseRecorder()
+	require.Zero(t, rec.status)
+
+	rec.WriteHeader(http.StatusNoContent)
+	require.Equal(t, http.StatusNoContent, rec.status)
+}
 
 // The strict meta MCP router: exact resource match only, no lone-token
 // fallback for remote members; tunneled members route by their own derived
@@ -163,6 +174,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		_, err := routeMetaMemberToken(m, remoteMember, "https://a.example.com/mcp")
 		var memberErr *metaMemberError
 		require.ErrorAs(t, err, &memberErr)
+		require.ErrorIs(t, err, errAmbiguousMemberCredential, "callers can tell a configuration state from a probe or dispatch failure")
 	})
 }
 

@@ -832,6 +832,25 @@ type GetOnboardingGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "getOnboarding" endpoint HTTP response body for the "unavailable"
+// error.
+type GetOnboardingUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // StartOnboardingUnauthorizedResponseBody is the type of the "platformMcp"
 // service "startOnboarding" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1004,6 +1023,25 @@ type StartOnboardingUnexpectedResponseBody struct {
 // service "startOnboarding" endpoint HTTP response body for the
 // "gateway_error" error.
 type StartOnboardingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "startOnboarding" endpoint HTTP response body for the "unavailable"
+// error.
+type StartOnboardingUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1209,6 +1247,25 @@ type RecordDashboardCtaEventGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RecordDashboardCtaEventUnavailableResponseBody is the type of the
+// "platformMcp" service "recordDashboardCtaEvent" endpoint HTTP response body
+// for the "unavailable" error.
+type RecordDashboardCtaEventUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RecordInstallIntentUnauthorizedResponseBody is the type of the "platformMcp"
 // service "recordInstallIntent" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -1384,6 +1441,25 @@ type RecordInstallIntentUnexpectedResponseBody struct {
 // service "recordInstallIntent" endpoint HTTP response body for the
 // "gateway_error" error.
 type RecordInstallIntentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RecordInstallIntentUnavailableResponseBody is the type of the "platformMcp"
+// service "recordInstallIntent" endpoint HTTP response body for the
+// "unavailable" error.
+type RecordInstallIntentUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1589,6 +1665,25 @@ type RecordAgentConfigurationCopiedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RecordAgentConfigurationCopiedUnavailableResponseBody is the type of the
+// "platformMcp" service "recordAgentConfigurationCopied" endpoint HTTP
+// response body for the "unavailable" error.
+type RecordAgentConfigurationCopiedUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // StartOnboardingSetupUnauthorizedResponseBody is the type of the
 // "platformMcp" service "startOnboardingSetup" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -1764,6 +1859,25 @@ type StartOnboardingSetupUnexpectedResponseBody struct {
 // "platformMcp" service "startOnboardingSetup" endpoint HTTP response body for
 // the "gateway_error" error.
 type StartOnboardingSetupGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartOnboardingSetupUnavailableResponseBody is the type of the "platformMcp"
+// service "startOnboardingSetup" endpoint HTTP response body for the
+// "unavailable" error.
+type StartOnboardingSetupUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1969,6 +2083,25 @@ type RecheckOnboardingReadinessGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RecheckOnboardingReadinessUnavailableResponseBody is the type of the
+// "platformMcp" service "recheckOnboardingReadiness" endpoint HTTP response
+// body for the "unavailable" error.
+type RecheckOnboardingReadinessUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DistributeOnboardingCandidateUnauthorizedResponseBody is the type of the
 // "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2144,6 +2277,25 @@ type DistributeOnboardingCandidateUnexpectedResponseBody struct {
 // "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
 // body for the "gateway_error" error.
 type DistributeOnboardingCandidateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DistributeOnboardingCandidateUnavailableResponseBody is the type of the
+// "platformMcp" service "distributeOnboardingCandidate" endpoint HTTP response
+// body for the "unavailable" error.
+type DistributeOnboardingCandidateUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2349,6 +2501,25 @@ type RemoveOnboardingDistributionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RemoveOnboardingDistributionUnavailableResponseBody is the type of the
+// "platformMcp" service "removeOnboardingDistribution" endpoint HTTP response
+// body for the "unavailable" error.
+type RemoveOnboardingDistributionUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RepairOnboardingPublicationUnauthorizedResponseBody is the type of the
 // "platformMcp" service "repairOnboardingPublication" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2539,6 +2710,25 @@ type RepairOnboardingPublicationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RepairOnboardingPublicationUnavailableResponseBody is the type of the
+// "platformMcp" service "repairOnboardingPublication" endpoint HTTP response
+// body for the "unavailable" error.
+type RepairOnboardingPublicationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DismissOnboardingUnauthorizedResponseBody is the type of the "platformMcp"
 // service "dismissOnboarding" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2714,6 +2904,25 @@ type DismissOnboardingUnexpectedResponseBody struct {
 // service "dismissOnboarding" endpoint HTTP response body for the
 // "gateway_error" error.
 type DismissOnboardingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DismissOnboardingUnavailableResponseBody is the type of the "platformMcp"
+// service "dismissOnboarding" endpoint HTTP response body for the
+// "unavailable" error.
+type DismissOnboardingUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3148,6 +3357,20 @@ func NewGetOnboardingGatewayErrorResponseBody(res *goa.ServiceError) *GetOnboard
 	return body
 }
 
+// NewGetOnboardingUnavailableResponseBody builds the HTTP response body from
+// the result of the "getOnboarding" endpoint of the "platformMcp" service.
+func NewGetOnboardingUnavailableResponseBody(res *goa.ServiceError) *GetOnboardingUnavailableResponseBody {
+	body := &GetOnboardingUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewStartOnboardingUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "startOnboarding" endpoint of the "platformMcp"
 // service.
@@ -3282,6 +3505,20 @@ func NewStartOnboardingUnexpectedResponseBody(res *goa.ServiceError) *StartOnboa
 // service.
 func NewStartOnboardingGatewayErrorResponseBody(res *goa.ServiceError) *StartOnboardingGatewayErrorResponseBody {
 	body := &StartOnboardingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartOnboardingUnavailableResponseBody builds the HTTP response body from
+// the result of the "startOnboarding" endpoint of the "platformMcp" service.
+func NewStartOnboardingUnavailableResponseBody(res *goa.ServiceError) *StartOnboardingUnavailableResponseBody {
+	body := &StartOnboardingUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3442,6 +3679,21 @@ func NewRecordDashboardCtaEventGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewRecordDashboardCtaEventUnavailableResponseBody builds the HTTP response
+// body from the result of the "recordDashboardCtaEvent" endpoint of the
+// "platformMcp" service.
+func NewRecordDashboardCtaEventUnavailableResponseBody(res *goa.ServiceError) *RecordDashboardCtaEventUnavailableResponseBody {
+	body := &RecordDashboardCtaEventUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRecordInstallIntentUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "recordInstallIntent" endpoint of the "platformMcp"
 // service.
@@ -3582,6 +3834,21 @@ func NewRecordInstallIntentUnexpectedResponseBody(res *goa.ServiceError) *Record
 // service.
 func NewRecordInstallIntentGatewayErrorResponseBody(res *goa.ServiceError) *RecordInstallIntentGatewayErrorResponseBody {
 	body := &RecordInstallIntentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRecordInstallIntentUnavailableResponseBody builds the HTTP response body
+// from the result of the "recordInstallIntent" endpoint of the "platformMcp"
+// service.
+func NewRecordInstallIntentUnavailableResponseBody(res *goa.ServiceError) *RecordInstallIntentUnavailableResponseBody {
+	body := &RecordInstallIntentUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3742,6 +4009,21 @@ func NewRecordAgentConfigurationCopiedGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewRecordAgentConfigurationCopiedUnavailableResponseBody builds the HTTP
+// response body from the result of the "recordAgentConfigurationCopied"
+// endpoint of the "platformMcp" service.
+func NewRecordAgentConfigurationCopiedUnavailableResponseBody(res *goa.ServiceError) *RecordAgentConfigurationCopiedUnavailableResponseBody {
+	body := &RecordAgentConfigurationCopiedUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewStartOnboardingSetupUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "startOnboardingSetup" endpoint of the
 // "platformMcp" service.
@@ -3882,6 +4164,21 @@ func NewStartOnboardingSetupUnexpectedResponseBody(res *goa.ServiceError) *Start
 // "platformMcp" service.
 func NewStartOnboardingSetupGatewayErrorResponseBody(res *goa.ServiceError) *StartOnboardingSetupGatewayErrorResponseBody {
 	body := &StartOnboardingSetupGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartOnboardingSetupUnavailableResponseBody builds the HTTP response body
+// from the result of the "startOnboardingSetup" endpoint of the "platformMcp"
+// service.
+func NewStartOnboardingSetupUnavailableResponseBody(res *goa.ServiceError) *StartOnboardingSetupUnavailableResponseBody {
+	body := &StartOnboardingSetupUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4042,6 +4339,21 @@ func NewRecheckOnboardingReadinessGatewayErrorResponseBody(res *goa.ServiceError
 	return body
 }
 
+// NewRecheckOnboardingReadinessUnavailableResponseBody builds the HTTP
+// response body from the result of the "recheckOnboardingReadiness" endpoint
+// of the "platformMcp" service.
+func NewRecheckOnboardingReadinessUnavailableResponseBody(res *goa.ServiceError) *RecheckOnboardingReadinessUnavailableResponseBody {
+	body := &RecheckOnboardingReadinessUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDistributeOnboardingCandidateUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "distributeOnboardingCandidate"
 // endpoint of the "platformMcp" service.
@@ -4182,6 +4494,21 @@ func NewDistributeOnboardingCandidateUnexpectedResponseBody(res *goa.ServiceErro
 // endpoint of the "platformMcp" service.
 func NewDistributeOnboardingCandidateGatewayErrorResponseBody(res *goa.ServiceError) *DistributeOnboardingCandidateGatewayErrorResponseBody {
 	body := &DistributeOnboardingCandidateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDistributeOnboardingCandidateUnavailableResponseBody builds the HTTP
+// response body from the result of the "distributeOnboardingCandidate"
+// endpoint of the "platformMcp" service.
+func NewDistributeOnboardingCandidateUnavailableResponseBody(res *goa.ServiceError) *DistributeOnboardingCandidateUnavailableResponseBody {
+	body := &DistributeOnboardingCandidateUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4342,6 +4669,21 @@ func NewRemoveOnboardingDistributionGatewayErrorResponseBody(res *goa.ServiceErr
 	return body
 }
 
+// NewRemoveOnboardingDistributionUnavailableResponseBody builds the HTTP
+// response body from the result of the "removeOnboardingDistribution" endpoint
+// of the "platformMcp" service.
+func NewRemoveOnboardingDistributionUnavailableResponseBody(res *goa.ServiceError) *RemoveOnboardingDistributionUnavailableResponseBody {
+	body := &RemoveOnboardingDistributionUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRepairOnboardingPublicationUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "repairOnboardingPublication" endpoint
 // of the "platformMcp" service.
@@ -4492,6 +4834,21 @@ func NewRepairOnboardingPublicationGatewayErrorResponseBody(res *goa.ServiceErro
 	return body
 }
 
+// NewRepairOnboardingPublicationUnavailableResponseBody builds the HTTP
+// response body from the result of the "repairOnboardingPublication" endpoint
+// of the "platformMcp" service.
+func NewRepairOnboardingPublicationUnavailableResponseBody(res *goa.ServiceError) *RepairOnboardingPublicationUnavailableResponseBody {
+	body := &RepairOnboardingPublicationUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDismissOnboardingUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "dismissOnboarding" endpoint of the "platformMcp"
 // service.
@@ -4628,6 +4985,21 @@ func NewDismissOnboardingUnexpectedResponseBody(res *goa.ServiceError) *DismissO
 // service.
 func NewDismissOnboardingGatewayErrorResponseBody(res *goa.ServiceError) *DismissOnboardingGatewayErrorResponseBody {
 	body := &DismissOnboardingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDismissOnboardingUnavailableResponseBody builds the HTTP response body
+// from the result of the "dismissOnboarding" endpoint of the "platformMcp"
+// service.
+func NewDismissOnboardingUnavailableResponseBody(res *goa.ServiceError) *DismissOnboardingUnavailableResponseBody {
+	body := &DismissOnboardingUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -12,6 +12,7 @@ import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
+import { accessListIdentityAccess } from "../funcs/accessListIdentityAccess.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListResourceAudience } from "../funcs/accessListResourceAudience.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
@@ -32,6 +33,7 @@ import { ListAIDetectionsResult } from "../models/components/listaidetectionsres
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
 import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
@@ -84,6 +86,10 @@ import {
   ListGrantsRequest,
   ListGrantsSecurity,
 } from "../models/operations/listgrants.js";
+import {
+  ListIdentityAccessRequest,
+  ListIdentityAccessSecurity,
+} from "../models/operations/listidentityaccess.js";
 import {
   ListMembersRequest,
   ListMembersSecurity,
@@ -242,7 +248,7 @@ export class Access extends ClientSDK {
    * listAudienceOptions access
    *
    * @remarks
-   * List the principals that can be given access: everyone, roles, and people.
+   * List the principals that can be given access: everyone, roles, people, and agents.
    */
   async listAudienceOptions(
     request?: ListAudienceOptionsRequest | undefined,
@@ -326,6 +332,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListUserGrantsResult> {
     return unwrapAsync(accessListGrants(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listIdentityAccess access
+   *
+   * @remarks
+   * List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.
+   */
+  async listIdentityAccess(
+    request: ListIdentityAccessRequest,
+    security?: ListIdentityAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIdentityAccessResult> {
+    return unwrapAsync(accessListIdentityAccess(
       this,
       request,
       security,

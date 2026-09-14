@@ -46,7 +46,7 @@ func (s *Service) UploadOrganizationImage(ctx context.Context, payload *orggen.U
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,

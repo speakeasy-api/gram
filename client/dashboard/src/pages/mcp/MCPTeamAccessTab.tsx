@@ -11,13 +11,16 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
+import { TriangleAlert } from "lucide-react";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useMemo, type ReactElement } from "react";
 import { ManageAccess } from "./access/ManageAccess";
+import { RoleLink } from "./access/RoleLink";
 import {
+  blockingRules,
   effectiveReach,
   LEVEL_VERB,
   type AudienceLevel,
@@ -48,6 +51,23 @@ function getInitials(name: string) {
 interface MemberAccess {
   member: AccessMember;
   reach: EffectiveReach;
+}
+
+/** A rule named on a row, linked when it is a role someone can go and edit. */
+interface NamedRule {
+  principalUrn: string;
+  displayName: string;
+}
+
+/**
+ * Someone two rules disagree about: a role gives them the server and another
+ * role they are also in takes it away. A block outranks every grant, so the
+ * grant does nothing — which is invisible from either role's own page.
+ */
+interface MemberConflict {
+  member: AccessMember;
+  grantedBy: NamedRule[];
+  blockedBy: NamedRule[];
 }
 
 // MCPTeamAccessTab renders who can use one MCP server, for any server
@@ -123,36 +143,61 @@ export function MCPTeamAccessTab({
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
   }, [membersData?.members, entries, toolCatalog]);
 
+  // The people two rules disagree about. They are not in the list above —
+  // nothing they were given survives — and an absence explains nothing, so
+  // they get a section that names both rules and says how to resolve it.
+  const conflicts = useMemo((): MemberConflict[] => {
+    const members = membersData?.members ?? [];
+    const reaching = new Map<string, ResourceAudienceEntry[]>();
+    for (const entry of entries) {
+      for (const memberId of entry.memberIds ?? []) {
+        reaching.set(memberId, [...(reaching.get(memberId) ?? []), entry]);
+      }
+    }
+
+    const named = (rules: ResourceAudienceEntry[]): NamedRule[] => {
+      const byUrn = new Map<string, NamedRule>();
+      for (const rule of rules) {
+        byUrn.set(rule.principalUrn, {
+          principalUrn: rule.principalUrn,
+          displayName: rule.displayName,
+        });
+      }
+      return [...byUrn.values()];
+    };
+
+    return members
+      .map((member) => {
+        const rules = reaching.get(member.id) ?? [];
+        const blocks = blockingRules(rules);
+        // A grant they never had is not a conflict, it is just no access.
+        if (blocks.length === 0) return null;
+        const blockedBy = named(blocks);
+        const blocking = new Set(blockedBy.map((rule) => rule.principalUrn));
+        // Only the roles the conflict is with. A role that both grants the
+        // server organization-wide and blocks it here is arguing with itself,
+        // not with another role, and naming it on both sides of the row would
+        // read as a contradiction rather than a thing to go and fix.
+        const grantedBy = named(
+          rules.filter(
+            (rule) =>
+              !rule.level.startsWith("blocked") &&
+              !blocking.has(rule.principalUrn),
+          ),
+        );
+        if (grantedBy.length === 0) return null;
+        return { member, grantedBy, blockedBy };
+      })
+      .filter((row): row is MemberConflict => row !== null)
+      .sort((a, b) => a.member.name.localeCompare(b.member.name));
+  }, [membersData?.members, entries]);
+
   const memberColumns: Column<MemberAccess>[] = [
     {
       key: "member",
       header: "Person",
       width: "300px",
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            {row.member.photoUrl && (
-              <AvatarImage src={row.member.photoUrl} alt={row.member.name} />
-            )}
-            <AvatarFallback className="text-xs">
-              {getInitials(row.member.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <IdentityLink identifier={{ userId: row.member.id }}>
-              <Text variant="body" className="truncate font-medium">
-                {row.member.name}
-              </Text>
-            </IdentityLink>
-            <Text
-              variant="body"
-              className="text-muted-foreground truncate text-xs"
-            >
-              {row.member.email}
-            </Text>
-          </div>
-        </div>
-      ),
+      render: (row) => <PersonCell member={row.member} />,
     },
     {
       key: "platform",
@@ -176,56 +221,40 @@ export function MCPTeamAccessTab({
       // Tool access is about connect: view and manage are server-level, and
       // both satisfy a connect check, so an unnarrowed rule at any level
       // reaches every tool.
-      render: (row) => (
-        <div className="min-w-0 space-y-0.5">
-          {row.reach.reachableTools.length > 0 ? (
-            // The count is the answer; the names are what someone hovers to
-            // check, and there is no room for them in the cell.
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Text
-                  variant="body"
-                  className="cursor-help text-sm underline decoration-dotted underline-offset-4"
-                >
-                  {row.reach.toolsLabel}
-                </Text>
-              </TooltipTrigger>
-              <TooltipContent>
-                {row.reach.reachableTools.join(", ")}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <Text variant="body" className="text-sm">
-              {row.reach.toolsLabel}
-            </Text>
-          )}
-          {row.reach.scopedLevels.map((scoped) => (
-            <Text key={scoped.id} muted small>
-              {scoped.label}
-            </Text>
-          ))}
-          {row.reach.excluded.map((excluded) => (
-            <Text key={excluded.id} muted small>
-              except {excluded.label}
-            </Text>
-          ))}
-        </div>
-      ),
+      render: (row) => <MCPAccessCell reach={row.reach} />,
     },
     {
       key: "via",
       header: "Granted by",
       width: "200px",
-      render: (row) => {
-        const names = row.reach.grantedBy.join(", ");
-        // Roles wrap rather than truncate: which role opened a server is the
-        // answer someone came to this table for.
-        return (
-          <Text variant="body" className="text-sm break-words">
-            {names}
-          </Text>
-        );
-      },
+      // Roles wrap rather than truncate: which role opened a server is the
+      // answer someone came to this table for.
+      render: (row) => (
+        <Text variant="body" className="text-sm break-words">
+          {row.reach.grantedBy.join(", ")}
+        </Text>
+      ),
+    },
+  ];
+
+  const conflictColumns: Column<MemberConflict>[] = [
+    {
+      key: "member",
+      header: "Person",
+      width: "300px",
+      render: (row) => <PersonCell member={row.member} />,
+    },
+    {
+      key: "granted",
+      header: "Granted by",
+      width: "1fr",
+      render: (row) => <RuleNames rules={row.grantedBy} />,
+    },
+    {
+      key: "blocked",
+      header: "Blocked by",
+      width: "1fr",
+      render: (row) => <RuleNames rules={row.blockedBy} />,
     },
   ];
 
@@ -283,8 +312,126 @@ export function MCPTeamAccessTab({
             )}
           </Table>
         )}
+
+        {/* Two rules disagreeing about the same person. They are missing from
+            the list above and nothing there says why, so the pair is named
+            here along with the only place either can be changed. */}
+        {!audienceFailed && conflicts.length > 0 && (
+          <>
+            <div className="mt-10 mb-4">
+              {/* The one section on this page reporting something wrong
+                  rather than something configured, so it is marked as such
+                  before the heading is read. */}
+              <div className="flex items-center gap-2">
+                <TriangleAlert
+                  className="h-4 w-4 shrink-0 text-amber-500"
+                  aria-hidden
+                />
+                <Heading variant="h4">Conflicting roles</Heading>
+              </div>
+              <Text muted small className="mt-1">
+                These people are granted access through one rule and blocked by
+                another. A block outranks every grant, so they cannot reach this
+                server. To fix it, remove the block: on the blocking
+                role&rsquo;s page, or from the list above when it names the
+                person directly.
+              </Text>
+            </div>
+            <Table columns={conflictColumns}>
+              <Table.Header columns={conflictColumns} />
+              <Table.Body
+                columns={conflictColumns}
+                data={conflicts}
+                rowKey={(row) => row.member.id}
+              />
+            </Table>
+          </>
+        )}
       </Page.Section.Body>
     </Page.Section>
+  );
+}
+
+/** The person a row is about: avatar, name, and the address that identifies them. */
+function PersonCell({ member }: { member: AccessMember }): ReactElement {
+  return (
+    <div className="flex items-center gap-3">
+      <Avatar className="h-8 w-8">
+        {member.photoUrl && (
+          <AvatarImage src={member.photoUrl} alt={member.name} />
+        )}
+        <AvatarFallback className="text-xs">
+          {getInitials(member.name)}
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <IdentityLink identifier={{ userId: member.id }}>
+          <Text variant="body" className="truncate font-medium">
+            {member.name}
+          </Text>
+        </IdentityLink>
+        <Text variant="body" className="text-muted-foreground truncate text-xs">
+          {member.email}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+/** Rules named on a conflict row, linked when the rule lives on a role. */
+function RuleNames({ rules }: { rules: NamedRule[] }): ReactElement {
+  return (
+    <Text variant="body" className="text-sm break-words">
+      {rules.map((rule, index) => (
+        <span key={rule.principalUrn}>
+          {index > 0 && ", "}
+          {rule.principalUrn.startsWith("role:") ? (
+            <RoleLink principalUrn={rule.principalUrn}>
+              {rule.displayName}
+            </RoleLink>
+          ) : (
+            rule.displayName
+          )}
+        </span>
+      ))}
+    </Text>
+  );
+}
+
+/** How far one person's connect access reaches inside the server. */
+function MCPAccessCell({ reach }: { reach: EffectiveReach }): ReactElement {
+  return (
+    <div className="min-w-0 space-y-0.5">
+      {reach.reachableTools.length > 0 ? (
+        // The count is the answer; the names are what someone hovers to
+        // check, and there is no room for them in the cell.
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Text
+              variant="body"
+              className="cursor-help text-sm underline decoration-dotted underline-offset-4"
+            >
+              {reach.toolsLabel}
+            </Text>
+          </TooltipTrigger>
+          <TooltipContent>{reach.reachableTools.join(", ")}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <Text variant="body" className="text-sm">
+          {reach.toolsLabel}
+        </Text>
+      )}
+      {reach.scopedLevels.map((scoped) => (
+        <Text key={scoped.id} muted small>
+          {scoped.label}
+        </Text>
+      ))}
+      {reach.excluded.map((excluded) => (
+        <Text key={excluded.id} muted small>
+          except {excluded.label}
+        </Text>
+      ))}
+    </div>
   );
 }
 

@@ -8701,7 +8701,7 @@ func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken
 }
 
 // NewListPayload builds a skills service list endpoint payload.
-func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, tags []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
+func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, tags []string, accessibleBy []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
@@ -8709,6 +8709,7 @@ func NewListPayload(cursor *string, limit int, search *string, sourceKinds []str
 	v.SourceKinds = sourceKinds
 	v.Classifications = classifications
 	v.Tags = tags
+	v.AccessibleBy = accessibleBy
 	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

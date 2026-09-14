@@ -1,3 +1,5 @@
+import { catalogLogoClassName } from "./logo";
+import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -257,12 +259,15 @@ export default function CatalogDetail(): JSX.Element {
             <div className="space-y-6 @3xl:col-span-2">
               {/* Header */}
               <div className="flex items-start gap-6">
-                <div className="bg-primary/5 flex h-24 w-24 shrink-0 items-center justify-center dark:bg-neutral-800">
+                <div className="bg-card flex h-24 w-24 shrink-0 items-center justify-center border">
                   {server.iconUrl ? (
                     <img
                       src={server.iconUrl}
                       alt={displayName}
-                      className="h-16 w-16 object-contain"
+                      className={cn(
+                        "h-16 w-16 object-contain",
+                        catalogLogoClassName(server.registrySpecifier),
+                      )}
                     />
                   ) : (
                     <ServerIcon className="text-muted-foreground h-12 w-12" />

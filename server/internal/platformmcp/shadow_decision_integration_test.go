@@ -123,7 +123,7 @@ func TestShadowDecisionAllowsEveryoneAndReplaysAtomically(t *testing.T) {
 	policyID := uuid.New()
 	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID: policyID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "shadow policy", Sources: []string{"shadow_mcp"},
-		AnalyzerConfig: []byte(`{}`), DisabledRules: nil, ScopeExempt: pgtype.Text{}, Enabled: true, Action: "block", AudienceType: "everyone",
+		AnalyzerConfig: []byte(`{}`), DisabledRules: nil, Enabled: true, Action: "block", AudienceType: "everyone",
 		ShadowMcpDisposition: conv.ToPGTextEmpty("block_all"), UserMessage: pgtype.Text{},
 	})
 	require.NoError(t, err)

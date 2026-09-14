@@ -182,7 +182,7 @@ describe("useRearmTrial", () => {
     // rather than refetching.
     qc.setQueryData<ListOrganizationsResult>(
       organizationsListQuery({ trial_states: ["demoted"] }).queryKey,
-      { organizations: [DEMOTED_ORG] },
+      { total: 1, organizations: [DEMOTED_ORG] },
     );
     return qc;
   }
@@ -210,6 +210,7 @@ describe("useRearmTrial", () => {
     // stale, and the refetch behind that would drop the row out of a filter it
     // no longer matches, under the operator who just pressed the control.
     expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
       organizations: [REARMED_ORG],
     });
     expect(qc.getQueryState(listKey)?.isInvalidated).toBe(false);
@@ -251,6 +252,7 @@ describe("useRearmTrial", () => {
     });
     // Nothing was repainted, so the row still says what the server still says.
     expect(qc.getQueryData<ListOrganizationsResult>(listKey)).toEqual({
+      total: 1,
       organizations: [DEMOTED_ORG],
     });
   });

@@ -84,3 +84,47 @@ func (q *Queries) ListWorkloadIssuersByIssuerURL(ctx context.Context, arg ListWo
 	}
 	return items, nil
 }
+
+const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_identity_admissions
+  WHERE organization_id = $1
+    AND workload_issuer_id = $2
+    AND subject = $3
+    AND (project_id = $4 OR project_id IS NULL)
+    AND deleted IS FALSE
+)
+`
+
+type WorkloadIdentityIsAdmittedParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	ProjectID        uuid.NullUUID
+}
+
+// Whether this tenant recognises one workload: a subject vouched for by one
+// issuer row, admitted in the caller's own project or the organization above.
+//
+// EXISTS rather than the row, so a caller cannot read anything else off it and
+// widen the security boundary by accident.
+//
+// Tenancy matches ListWorkloadIssuersByIssuerURL: organization_id
+// unconditionally, so a project-tier row cannot answer outside its
+// organization, and the project arm is not true for a NULL @project_id, so an
+// organization-scoped caller sees only organization-tier rows.
+//
+// Exact equality on subject, compared as the platform minted it. No expression
+// around the column, which would make the lookup index unusable.
+func (q *Queries) WorkloadIdentityIsAdmitted(ctx context.Context, arg WorkloadIdentityIsAdmittedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, workloadIdentityIsAdmitted,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.ProjectID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

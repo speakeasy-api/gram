@@ -232,6 +232,21 @@ func TestTailscaleNetworkIngressProvisionerRefusesForeignBootstrapBinding(t *tes
 	require.ErrorContains(t, err, "refuse to adopt attestor manager RoleBinding")
 }
 
+func TestTailscaleNetworkIngressProxyPolicyOmitsIPv6InternetWithoutIPv6ClusterCIDRs(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.ClusterCIDRs = []string{"169.254.169.254/32", "10.0.0.0/8"}
+
+	policy := provisioner.proxyNetworkPolicy(desired)
+	for _, rule := range policy.Spec.Egress {
+		for _, peer := range rule.To {
+			if peer.IPBlock != nil {
+				require.NotEqual(t, "::/0", peer.IPBlock.CIDR)
+			}
+		}
+	}
+}
+
 func TestTailscaleNetworkIngressProxyPolicySeparatesAddressFamilies(t *testing.T) {
 	t.Parallel()
 	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
@@ -386,12 +401,16 @@ func TestTailscaleNetworkIngressDeleteWaitsForAcceptedDeletion(t *testing.T) {
 	})
 	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
 	_, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
 	require.NoError(t, err)
 }
 
 func TestTailscaleNetworkIngressDeleteWaitsForTerminatingDeployment(t *testing.T) {
 	t.Parallel()
-	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)
+	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
 	_, err := provisioner.Apply(t.Context(), desired)
 	require.NoError(t, err)
 	client := typed.AppsV1().Deployments(desired.Resources.Namespace)
@@ -406,6 +425,8 @@ func TestTailscaleNetworkIngressDeleteWaitsForTerminatingDeployment(t *testing.T
 	for _, action := range typed.Actions() {
 		require.False(t, action.GetVerb() == "delete" && action.GetResource().Resource == "deployments")
 	}
+	_, err = dynamicClient.Resource(proxyGroupPolicyGVR).Namespace(desired.Resources.Namespace).Get(t.Context(), desired.Resources.ProxyGroupPolicy, metav1.GetOptions{})
+	require.NoError(t, err)
 	_, err = typed.NetworkingV1().NetworkPolicies(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorNetworkPolicy, metav1.GetOptions{})
 	require.NoError(t, err)
 	_, err = typed.CoreV1().ServiceAccounts(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorServiceAccount, metav1.GetOptions{})

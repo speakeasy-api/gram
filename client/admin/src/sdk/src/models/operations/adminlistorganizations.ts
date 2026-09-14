@@ -38,7 +38,7 @@ export type AdminListOrganizationsRequest = {
    */
   includeDisabled?: boolean | undefined;
   /**
-   * Pagination cursor: id of the last item from the previous page. Ignored when sort or page is supplied.
+   * Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.
    */
   cursor?: string | undefined;
   /**
@@ -46,11 +46,11 @@ export type AdminListOrganizationsRequest = {
    */
   limit?: number | undefined;
   /**
-   * Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Any other value sorts by id. Supplying it selects offset paging.
+   * Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.
    */
   sort?: string | undefined;
   /**
-   * Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. On its own it does nothing: without sort there is no column to reverse, so it neither reorders the results nor selects offset paging.
+   * Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.
    */
   direction?: string | undefined;
   /**

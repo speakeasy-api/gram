@@ -1,5 +1,23 @@
 # admin
 
+## 0.4.0
+
+### Minor Changes
+
+- 496e62c: Add a Cmd+K command palette to the admin dashboard for jumping straight to an organization, to a record's own views, or to a top-level page.
+- e28870b: Expose standalone admin global issuer management and regenerate SDK metadata while preserving legacy internal SDK operation naming.
+- 7e1671c: Expose standalone admin image upload and public serving endpoints with a generated browser SDK.
+- 12d48b3: Make the global issuer catalog, configuration editor, and convergence views available in standalone admin navigation.
+- 8266e86: Give each organization matched in the admin command palette a nested "Open in Dashboard" row, so the dashboard handoff is reachable without first opening the record.
+
+### Patch Changes
+
+- 3f98bc4: Prepare issuer convergence controls with candidate preflights and migration feedback.
+- de99bbf: Prepare issuer form payload helpers that preserve discovery metadata and explicit clearing semantics.
+- b25b71c: Prepare issuer configuration rendering with safe documentation links and preserved stored metadata.
+- 55f744a: Prepare shared issuer queries and logo loading, evicting deleted issuer cache entries before refreshing lists.
+- 58470a1: Prepare shared metadata refresh and confirmed deletion actions with deletion-aware cache invalidation.
+
 ## 0.3.2
 
 ### Patch Changes

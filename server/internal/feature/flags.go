@@ -63,6 +63,15 @@ const (
 	// approval decisions exposed through Platform MCP. It is evaluated at
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
+	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
+	// behavior for direct-remote distribution. An enabled flag must carry a closed
+	// mode payload; missing or invalid configuration fails closed for expanding
+	// writes.
+	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
+	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
+	// expanding direct-remote distribution. Cleanup, audience narrowing, and
+	// disable paths remain available while it is enabled.
+	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

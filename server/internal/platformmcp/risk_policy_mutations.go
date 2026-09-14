@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -161,6 +162,9 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskPolicy, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy create: %w", err)
+		}
 		if err := riskrepo.New(tx).LockRiskPolicyMutations(ctx, project.ID.String()); err != nil {
 			return nil, fmt.Errorf("lock risk policy create convergence: %w", err)
 		}
@@ -233,6 +237,9 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		Operation: operationUpdateRiskPolicy, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
 	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
+			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
+		}
 		current, err := riskrepo.New(tx).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, riskPolicyNotFound()
@@ -245,7 +252,7 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 			return nil, err
 		}
 		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) (policycore.Policy, error) {
-			state, err := riskPolicyVersionState(ctx, tx, locked, true)
+			state, err := riskPolicyVersionState(ctx, tx, locked)
 			if err != nil {
 				return policycore.Policy{}, riskMutationUnavailableWithCause(err)
 			}
@@ -391,8 +398,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
 		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil,
 		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
-		// Legacy policy-level scope columns stay NULL; detection_scopes carry scope.
-		MessageTypes: nil, ScopeInclude: pgtype.Text{String: "", Valid: false}, ScopeExempt: pgtype.Text{String: "", Valid: false}, Enabled: input.Enabled, Action: action,
+		Enabled: input.Enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
 		UserMessage: conv.PtrToPGTextEmpty(input.UserMessage), Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
 		Score: pgtype.Float8{Float64: score, Valid: true},
@@ -468,8 +474,8 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
 		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig),
-		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds), MessageTypes: slices.Clone(current.MessageTypes),
-		ScopeInclude: current.ScopeInclude, ScopeExempt: current.ScopeExempt, Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
+		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds),
+		Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
 		UserMessage: current.UserMessage, Prompt: current.Prompt, ModelConfig: slices.Clone(current.ModelConfig), Score: pgtype.Float8{Float64: current.Score, Valid: true},
 	}
 	normalized := make(map[string]any, len(input.Patch))
@@ -791,9 +797,9 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 // narrowed by the legacy message_types column is a different, narrower policy
 // and must not satisfy the create.
 func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams, catalog policycatalog.Catalog) bool {
-	return !legacyMessageTypesNarrow(row.MessageTypes, catalog) && row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
+	return row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
 		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 &&
-		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ScopeInclude == desired.ScopeInclude && row.ScopeExempt == desired.ScopeExempt && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
+		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
 }
 
 func canonicalJSONEqual(a, b []byte) bool {
@@ -803,7 +809,7 @@ func canonicalJSONEqual(a, b []byte) bool {
 }
 
 func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string, matched bool) (CreateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return CreateRiskPolicyReceiptResult{}, err
 	}
@@ -819,7 +825,7 @@ func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db 
 }
 
 func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string) (UpdateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil), true)
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
 	if err != nil {
 		return UpdateRiskPolicyReceiptResult{}, err
 	}
