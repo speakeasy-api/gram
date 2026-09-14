@@ -55,6 +55,15 @@ type revocationSpy struct {
 	status int
 }
 
+type revocationAssertionSigner struct {
+	request remotesessions.ClientAssertionRequest
+}
+
+func (s *revocationAssertionSigner) SignClientAssertion(_ context.Context, request remotesessions.ClientAssertionRequest) (string, error) {
+	s.request = request
+	return "signed-revocation-assertion", nil
+}
+
 // snapshot returns the call count and the most recent request. The
 // single-session tests expect exactly one call, for which "most recent" and
 // "the one" are the same thing.
@@ -398,6 +407,57 @@ func TestRevokeRemoteSession_RevokesRefreshTokenUpstream(t *testing.T) {
 	require.Empty(t, authHdr)
 
 	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+func TestUpstreamRevoker_PrivateKeyJWTUsesTokenEndpointAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ti.enableCustomerManagedKeys(t, ctx, activeOrganizationID(t, ctx))
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+	fx := seedRevocableSession(t, ctx, ti, "revoke-private-key", upstream.URL+"/revoke", "retained-secret", true)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, fx.organizationID, "revoke-private-key-set")
+	_, err := ti.service.AttachKeySet(ctx, &clientsgen.AttachKeySetPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               fx.clientID.String(),
+		JSONWebKeySetID:  setID.String(),
+	})
+	require.NoError(t, err)
+	method := string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT)
+	audience := string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint)
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
+		ID:                              fx.clientID.String(),
+		ClientSecret:                    nil,
+		TokenEndpointAuthMethod:         &method,
+		TokenEndpointAuthAudienceFormat: &audience,
+		Scope:                           nil,
+		Audience:                        nil,
+	})
+	require.NoError(t, err)
+
+	signer := &revocationAssertionSigner{}
+	newTestUpstreamRevoker(t, ti, signer).RevokeUnstoredDetached(ctx, fx.clientID, fx.accessToken, fx.refreshToken)
+
+	calls, form, authHdr := spy.snapshot()
+	require.Equal(t, 1, calls)
+	require.Equal(t, fx.refreshToken, form.Get("token"))
+	require.Equal(t, "signed-revocation-assertion", form.Get("client_assertion"))
+	require.Equal(t, "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", form.Get("client_assertion_type"))
+	require.Empty(t, form.Get("client_secret"))
+	require.Empty(t, authHdr)
+	require.Equal(t, remotesessions.ClientAssertionRequest{
+		RemoteSessionClientID: fx.clientID,
+		OrganizationID:        fx.organizationID,
+		JSONWebKeySetID:       setID,
+		ClientID:              fx.externalCID,
+		Audience:              "https://idp.example.com/token",
+	}, signer.request)
 }
 
 // A session that never received a refresh token still has an access token worth

@@ -104,6 +104,9 @@ func (s *KMSClientAssertionSigner) SignClientAssertion(ctx context.Context, requ
 	if problem != "" {
 		return "", fmt.Errorf("client assertion credential is unusable: %s", detail)
 	}
+	if _, err := s.gcpIdentity.ResolvePrincipal(ctx, credential); err != nil {
+		return "", fmt.Errorf("authenticate as client assertion credential: %w", err)
+	}
 
 	tokenSource, err := s.gcpIdentity.TokenSource(ctx, credential)
 	if err != nil {

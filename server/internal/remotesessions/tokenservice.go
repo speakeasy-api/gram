@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -75,6 +76,9 @@ type tokenEndpointClientAuth struct {
 }
 
 func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, auth tokenEndpointClientAuth) (*http.Request, error) {
+	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return nil, fmt.Errorf("token endpoint must be an absolute https URL, or http on loopback")
+	}
 	switch auth.Method {
 	case TokenEndpointAuthMethodBasic:
 		// Credentials ride the Authorization header only, set below once req
@@ -600,7 +604,7 @@ func (s *RefreshService) refreshSessionTokens(
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)

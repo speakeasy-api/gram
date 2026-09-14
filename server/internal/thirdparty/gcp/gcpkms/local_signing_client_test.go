@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -58,4 +59,37 @@ func TestPersistentLocalSigningClient_ReusesKeyAcrossClients(t *testing.T) {
 	secondDER, err := x509.MarshalPKIXPublicKey(secondPublic.Key)
 	require.NoError(t, err)
 	require.Equal(t, firstDER, secondDER)
+}
+
+func TestPersistentLocalSigningClient_ConcurrentCreationConverges(t *testing.T) {
+	t.Parallel()
+
+	const clients = 8
+	path := filepath.Join(t.TempDir(), "local-kms.pem")
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	keys := make([][]byte, clients)
+	errs := make([]error, clients)
+	for i := range clients {
+		wg.Go(func() {
+			<-start
+			client, err := NewPersistentLocalSigningClient(jose.ES256, path)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			public, err := client.GetPublicKey(t.Context(), testResourceName)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			keys[i], errs[i] = x509.MarshalPKIXPublicKey(public.Key)
+		})
+	}
+	close(start)
+	wg.Wait()
+	for i := range clients {
+		require.NoError(t, errs[i])
+		require.Equal(t, keys[0], keys[i])
+	}
 }

@@ -1119,7 +1119,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
-		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
+		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		ID:                              clientID,

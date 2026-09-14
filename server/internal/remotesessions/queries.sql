@@ -1626,12 +1626,16 @@ WHERE s.id = @id
 -- request-supplied identifier.
 SELECT
     c.client_id                            AS external_client_id,
+    c.organization_id                      AS client_organization_id,
     c.client_secret_encrypted              AS client_secret_encrypted,
     c.token_endpoint_auth_method           AS token_endpoint_auth_method,
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
+    c.json_web_key_set_id                  AS json_web_key_set_id,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
+    i.metadata                             AS issuer_metadata,
+    i.token_endpoint                       AS token_endpoint,
     i.revocation_endpoint                  AS revocation_endpoint
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id

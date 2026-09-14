@@ -23,8 +23,9 @@ const (
 // method for token-endpoint requests. A client that explicitly declares a
 // confidential method must carry a secret: failing fast here surfaces the
 // misconfiguration instead of sending an unauthenticated request the upstream
-// rejects with an opaque 401. A client with no recognized stored method is
-// confidential (Basic) when it has a secret and public when it does not; CIMD
+// rejects with an opaque 401. A client with no stored method is confidential
+// (Basic) when it has a secret and public when it does not. A non-empty unknown
+// method is invalid. CIMD
 // clients store "none" explicitly and never carry a secret (enforced by the
 // remote_session_clients client_id_metadata_uri CHECK constraint), so it is
 // the absent secret, not method=none, that keeps legacy NULL-method public

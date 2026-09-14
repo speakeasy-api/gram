@@ -317,6 +317,7 @@ export function ClientCredentialsFields({
   clientId,
   clientSecret,
   tokenEndpointAuthMethod,
+  allowPrivateKeyJwt = false,
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
@@ -330,6 +331,7 @@ export function ClientCredentialsFields({
   tokenEndpointAuthMethod:
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | "";
+  allowPrivateKeyJwt?: boolean;
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
@@ -387,6 +389,7 @@ export function ClientCredentialsFields({
       <TokenEndpointAuthMethodField
         value={tokenEndpointAuthMethod}
         onChange={onTokenEndpointAuthMethodChange}
+        allowPrivateKeyJwt={allowPrivateKeyJwt}
       />
     </Stack>
   );

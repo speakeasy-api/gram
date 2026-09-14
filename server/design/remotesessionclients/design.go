@@ -12,12 +12,6 @@ func tokenEndpointAuthMethodEnum() {
 	Enum("client_secret_basic", "client_secret_post", "none", "private_key_jwt")
 }
 
-// TokenEndpointAuthMethodEnum applies the shared outbound-client auth-method
-// enumeration to design packages that cannot use this package's forms.
-func TokenEndpointAuthMethodEnum() {
-	tokenEndpointAuthMethodEnum()
-}
-
 func tokenEndpointAuthAudienceFormatEnum() {
 	Enum("issuer", "token_endpoint")
 }

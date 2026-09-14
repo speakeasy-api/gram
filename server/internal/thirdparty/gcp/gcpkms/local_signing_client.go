@@ -124,7 +124,7 @@ func NewPersistentLocalSigningClient(alg jose.SignatureAlgorithm, path string) (
 }
 
 func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
-	doc, err := os.ReadFile(path) //nolint:gosec // path is an application-selected local-development cache file, not request input.
+	doc, err := os.ReadFile(path) //nolint:gosec // path is an application-selected local-development config file, not request input.
 	if err != nil {
 		return nil, fmt.Errorf("read persistent local %s key: %w", alg, err)
 	}

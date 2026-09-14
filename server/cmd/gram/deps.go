@@ -1513,13 +1513,32 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
 
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve local kms signing key directory: %w", err)
+	}
+	keyName := strings.ToLower(string(alg)) + ".pem"
+	keyPath := filepath.Join(configDir, "gram", "local-kms", keyName)
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
-		return nil, fmt.Errorf("resolve local kms signing key cache: %w", err)
+		return nil, fmt.Errorf("resolve previous local kms signing key cache: %w", err)
+	}
+	// Existing local JWKS rows retain the old public key. Preserve its private
+	// counterpart when moving from the evictable cache to the config directory.
+	if _, err := os.Stat(keyPath); errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+			return nil, fmt.Errorf("create local kms signing key directory: %w", err)
+		}
+		legacyPath := filepath.Join(cacheDir, "gram", "local-kms", keyName)
+		if err := os.Link(legacyPath, keyPath); err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrExist) {
+			return nil, fmt.Errorf("preserve previous local kms signing key: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("inspect local kms signing key: %w", err)
 	}
 	client, err := gcpkms.NewPersistentLocalSigningClient(
 		alg,
-		filepath.Join(cacheDir, "gram", "local-kms", strings.ToLower(string(alg))+".pem"),
+		keyPath,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load local kms signing key: %w", err)

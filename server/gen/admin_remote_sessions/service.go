@@ -470,9 +470,6 @@ type UpdateGlobalClientPayload struct {
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
-	// Change the aud claim format used in private_key_jwt assertions. Omit to
-	// leave unchanged.
-	TokenEndpointAuthAudienceFormat *string
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string

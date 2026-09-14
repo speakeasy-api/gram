@@ -96,6 +96,27 @@ func TestNewTokenEndpointRequest_PrivateKeyJWT(t *testing.T) {
 	require.Equal(t, "assertion-2", secondForm.Get("client_assertion"))
 }
 
+func TestNewTokenEndpointRequest_RejectsPlaintextRemoteEndpointBeforeSigning(t *testing.T) {
+	t.Parallel()
+
+	signer := &recordingAssertionSigner{requests: nil}
+	_, err := newTokenEndpointRequest(t.Context(), "http://idp.example.com/token", url.Values{
+		"code":          {"authorization-code"},
+		"code_verifier": {"pkce-verifier"},
+	}, tokenEndpointClientAuth{
+		Method:                TokenEndpointAuthMethodPrivateKeyJWT,
+		RemoteSessionClientID: uuid.New(),
+		OrganizationID:        "org-test",
+		JSONWebKeySetID:       uuid.New(),
+		ClientID:              "oauth-client",
+		ClientSecret:          "",
+		AssertionAudience:     "http://idp.example.com",
+		AssertionSigner:       signer,
+	})
+	require.ErrorContains(t, err, "token endpoint must be an absolute https URL")
+	require.Empty(t, signer.requests)
+}
+
 func mustReadBody(t *testing.T, req *http.Request) string {
 	t.Helper()
 	body, err := io.ReadAll(req.Body)

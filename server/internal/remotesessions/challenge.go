@@ -329,6 +329,7 @@ func NewChallengeManager(
 	for _, option := range options {
 		option(manager)
 	}
+	manager.revoker.assertions = manager.assertions
 	if manager.enricher == nil {
 		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, manager.issuerMetadata)
 	}
@@ -1087,7 +1088,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	client := clientRow.RemoteSessionClient
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)

@@ -234,9 +234,6 @@ type UpdateGlobalClientRequestBody struct {
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
-	// Change the aud claim format used in private_key_jwt assertions. Omit to
-	// leave unchanged.
-	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -4262,11 +4259,10 @@ func NewCreateGlobalClientRequestBody(p *adminremotesessions.CreateGlobalClientP
 // service.
 func NewUpdateGlobalClientRequestBody(p *adminremotesessions.UpdateGlobalClientPayload) *UpdateGlobalClientRequestBody {
 	body := &UpdateGlobalClientRequestBody{
-		ID:                              p.ID,
-		ClientSecret:                    p.ClientSecret,
-		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
-		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
-		Audience:                        p.Audience,
+		ID:                      p.ID,
+		ClientSecret:            p.ClientSecret,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		Audience:                p.Audience,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
