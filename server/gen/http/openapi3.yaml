@@ -84913,7 +84913,7 @@ components:
             properties:
                 key:
                     type: string
-                    description: Canonical identity for value series; null for unset and remainder
+                    description: Canonical identity; present for value series and omitted for unset and remainder
                 kind:
                     type: string
                     description: Identity kind for this series

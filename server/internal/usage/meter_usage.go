@@ -51,7 +51,7 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 
 	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid meter usage window").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	result, err := chrepo.New(s.meterReadConn).GetUsage(ctx, chrepo.UsageParams{
@@ -73,7 +73,7 @@ func (s *Service) GetMeterUsage(ctx context.Context, payload *gen.GetMeterUsageP
 
 func resolveMeterUsageWindow(fromText, toText *string, activeCycle BillingCyclePeriod) (time.Time, time.Time, error) {
 	if (fromText == nil) != (toText == nil) {
-		return time.Time{}, time.Time{}, errors.New("from and to must be provided together")
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "from and to must be provided together")
 	}
 	if fromText == nil {
 		return activeCycle.Start.UTC(), activeCycle.End.UTC(), nil
@@ -81,23 +81,26 @@ func resolveMeterUsageWindow(fromText, toText *string, activeCycle BillingCycleP
 
 	from, err := time.Parse(time.RFC3339, *fromText)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("parse from: %w", err)
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, err, "invalid from: expected an RFC3339 timestamp")
 	}
 	to, err := time.Parse(time.RFC3339, *toText)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("parse to: %w", err)
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, err, "invalid to: expected an RFC3339 timestamp")
 	}
 	from = from.UTC()
 	to = to.UTC()
-	if !from.Equal(utcDay(from)) || !to.Equal(utcDay(to)) {
-		return time.Time{}, time.Time{}, errors.New("from and to must be UTC midnight boundaries")
+	if !from.Equal(utcDay(from)) {
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "from must be a UTC midnight boundary")
+	}
+	if !to.Equal(utcDay(to)) {
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "to must be a UTC midnight boundary")
 	}
 	if !from.Before(to) {
-		return time.Time{}, time.Time{}, errors.New("from must be before to")
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "from must be before to")
 	}
 	maxTo := anchoredCycleStart(from.Year(), from.Month()+maxMeterUsageMonths, from.Day())
 	if to.After(maxTo) {
-		return time.Time{}, time.Time{}, errors.New("meter usage window must not exceed three calendar months")
+		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "meter usage window must not exceed three calendar months")
 	}
 	return from, to, nil
 }

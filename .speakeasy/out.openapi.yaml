@@ -80380,8 +80380,7 @@ components:
       properties:
         key:
           type: string
-          description: Canonical identity for value series; null for unset and remainder
-          nullable: true
+          description: Canonical identity; present for value series and omitted for unset and remainder
         kind:
           type: string
           description: Identity kind for this series
@@ -80400,7 +80399,11 @@ components:
           items:
             type: string
           description: Exact integer ordinary usage values aligned one-for-one with buckets
-      required: [kind, key, label, total, values]
+      required:
+        - kind
+        - label
+        - total
+        - values
     MeterUsageWindow:
       type: object
       properties:

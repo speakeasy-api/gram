@@ -23,9 +23,9 @@ export type MeterUsageSeriesKind = ClosedEnum<typeof MeterUsageSeriesKind>;
 
 export type MeterUsageSeries = {
   /**
-   * Canonical identity for value series; null for unset and remainder
+   * Canonical identity; present for value series and omitted for unset and remainder
    */
-  key: string | null;
+  key?: string | undefined;
   /**
    * Identity kind for this series
    */
@@ -54,7 +54,7 @@ export const MeterUsageSeries$inboundSchema: z.ZodMiniType<
   MeterUsageSeries,
   unknown
 > = z.object({
-  key: z.nullable(z.string()),
+  key: z.optional(z.string()),
   kind: MeterUsageSeriesKind$inboundSchema,
   label: z.string(),
   total: z.string(),

@@ -2,13 +2,18 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	usageserver "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -57,6 +62,57 @@ func TestGetMeterUsageBuildsDenseDailyOrganizationReport(t *testing.T) {
 	require.Equal(t, "total", *result.Breakdown.Series[0].Key)
 }
 
+func TestMeterUsageResponseOmitsKeysForMarkerSeries(t *testing.T) {
+	t.Parallel()
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	result := chrepo.UsageResult{
+		Unit:              string(metering.UnitSTokens),
+		MeasurementMethod: string(metering.MeasurementTiktokenO200kBase),
+		Rows:              nil,
+	}
+	for _, kind := range []string{"value", "unset", "remainder"} {
+		key := ""
+		if kind == "value" {
+			key = "project-123"
+		}
+		result.Rows = append(result.Rows, chrepo.UsageRow{
+			Day:               from,
+			Unit:              result.Unit,
+			MeasurementMethod: result.MeasurementMethod,
+			Kind:              kind,
+			Key:               key,
+			Label:             kind,
+			Total:             "1",
+		})
+	}
+	response, err := buildMeterUsageResponse(&gen.GetMeterUsagePayload{
+		Family: string(metering.UsageFamilyAgentSessionStorage),
+	}, "project", from, from.AddDate(0, 0, 1), from, nil, result)
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	require.NoError(t, usageserver.EncodeGetMeterUsageResponse(goahttp.ResponseEncoder)(t.Context(), recorder, response))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var body struct {
+		Breakdown struct {
+			Series []struct {
+				Kind string          `json:"kind"`
+				Key  json.RawMessage `json:"key"`
+			} `json:"series"`
+		} `json:"breakdown"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	keys := make(map[string]json.RawMessage)
+	for _, series := range body.Breakdown.Series {
+		keys[series.Kind] = series.Key
+	}
+	require.Equal(t, map[string]json.RawMessage{
+		"value":     json.RawMessage(`"project-123"`),
+		"unset":     nil,
+		"remainder": nil,
+	}, keys)
+}
+
 func TestGetMeterUsageRequiresOrganizationRead(t *testing.T) {
 	t.Parallel()
 	organizationID := "org-" + uuid.NewString()
@@ -67,6 +123,33 @@ func TestGetMeterUsageRequiresOrganizationRead(t *testing.T) {
 		Family: string(metering.UsageFamilyAgentSessionStorage),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetMeterUsageWindowErrorsIdentifyInvalidBoundsWithoutLeakingInput(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+	valid := "2026-04-01T00:00:00Z"
+	invalid := "private-invalid-timestamp"
+	for _, field := range []string{"from", "to"} {
+		from, to := valid, valid
+		if field == "from" {
+			from = invalid
+		} else {
+			to = invalid
+		}
+		_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+			Family: string(metering.UsageFamilyAgentSessionStorage),
+			From:   &from,
+			To:     &to,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, field)
+		require.NotContains(t, err.Error(), invalid)
+		var parseError *time.ParseError
+		require.ErrorAs(t, err, &parseError)
+	}
 }
 
 func TestResolveMeterUsageWindowRejectsUnpairedAndOversizedRanges(t *testing.T) {

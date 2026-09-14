@@ -198,12 +198,7 @@ var MeterUsageSeries = Type("MeterUsageSeries", func() {
 	Attribute("kind", String, "Identity kind for this series", func() {
 		Enum("value", "unset", "remainder")
 	})
-	Attribute("key", String, "Canonical identity for value series; null for unset and remainder", func() {
-		// Goa has no required-nullable scalar. Keep the generated Go field
-		// pointer-shaped and force nil to serialize as JSON null; the OpenAPI
-		// overlay marks the field nullable and required for SDK generation.
-		Meta("struct:tag:json", "key")
-	})
+	Attribute("key", String, "Canonical identity; present for value series and omitted for unset and remainder")
 	Attribute("label", String, "Display label, never chart identity")
 	Attribute("total", String, "Exact integer ordinary usage series total as a decimal string")
 	Attribute("values", ArrayOf(String), "Exact integer ordinary usage values aligned one-for-one with buckets")

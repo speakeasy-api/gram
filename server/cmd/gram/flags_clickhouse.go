@@ -75,11 +75,11 @@ func clickHouseReadFlags() []cli.Flag {
 			Required: true,
 			EnvVars:  []string{"CLICKHOUSE_READ_NATIVE_PORT"},
 		},
-		&cli.BoolFlag{
-			Name:     "clickhouse-read-insecure",
-			Usage:    "Disable TLS certificate verification for the ClickHouse read replica",
-			Required: true,
-			EnvVars:  []string{"CLICKHOUSE_READ_INSECURE"},
+		&cli.PathFlag{
+			Name:     "clickhouse-read-ca-file",
+			Usage:    "Optional trusted CA certificate bundle for the ClickHouse read replica",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_READ_CA_FILE"},
 		},
 	}
 }

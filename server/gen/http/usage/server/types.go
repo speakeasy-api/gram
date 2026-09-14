@@ -3638,8 +3638,9 @@ type MeterUsageBreakdownResponseBody struct {
 type MeterUsageSeriesResponseBody struct {
 	// Identity kind for this series
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// Canonical identity for value series; null for unset and remainder
-	Key *string `json:"key"`
+	// Canonical identity; present for value series and omitted for unset and
+	// remainder
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
 	// Display label, never chart identity
 	Label string `form:"label" json:"label" xml:"label"`
 	// Exact integer ordinary usage series total as a decimal string

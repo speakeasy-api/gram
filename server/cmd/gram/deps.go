@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -171,6 +172,7 @@ type clickhouseClientOptions struct {
 	password     string
 	nativePort   string
 	insecure     bool
+	rootCAFile   string
 	maxOpenConns int
 	maxIdleConns int
 }
@@ -186,6 +188,7 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		insecure:     c.Bool("clickhouse-insecure"),
 		maxOpenConns: 32,
 		maxIdleConns: 16,
+		rootCAFile:   "",
 	})
 }
 
@@ -197,9 +200,10 @@ func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Co
 		username:     c.String("clickhouse-read-username"),
 		password:     c.String("clickhouse-read-password"),
 		nativePort:   c.String("clickhouse-read-native-port"),
-		insecure:     c.Bool("clickhouse-read-insecure"),
+		rootCAFile:   c.Path("clickhouse-read-ca-file"),
 		maxOpenConns: 8,
 		maxIdleConns: 4,
+		insecure:     false,
 	})
 }
 
@@ -221,6 +225,21 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
+	var rootCAs *x509.CertPool
+	if opts.rootCAFile != "" {
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("load system certificate pool: %w", err)
+		}
+		caPEM, err := os.ReadFile(opts.rootCAFile)
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("read clickhouse CA file: %w", err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, nilFunc, errors.New("clickhouse CA file contains no certificates")
+		}
+	}
+
 	driverOpts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
 		Addr:     []string{fmt.Sprintf("%s:%s", opts.host, opts.nativePort)},
@@ -236,7 +255,8 @@ func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickho
 		MaxIdleConns: opts.maxIdleConns,
 		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
-			// #nosec G402 -- we're reading the value from an environment variable.
+			RootCAs: rootCAs,
+			// #nosec G402 -- only the existing writer flag can enable this.
 			InsecureSkipVerify: opts.insecure,
 		},
 	}

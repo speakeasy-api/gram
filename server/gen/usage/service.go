@@ -227,8 +227,9 @@ type MeterUsageResponse struct {
 type MeterUsageSeries struct {
 	// Identity kind for this series
 	Kind string
-	// Canonical identity for value series; null for unset and remainder
-	Key *string `json:"key"`
+	// Canonical identity; present for value series and omitted for unset and
+	// remainder
+	Key *string
 	// Display label, never chart identity
 	Label string
 	// Exact integer ordinary usage series total as a decimal string

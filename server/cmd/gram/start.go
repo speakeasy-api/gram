@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -667,7 +668,9 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 	flags = append(flags, networkIngressProviderFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
-	flags = append(flags, clickHouseReadFlags()...)
+	if !privateOnly {
+		flags = append(flags, clickHouseReadFlags()...)
+	}
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
@@ -754,11 +757,14 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			}
 			clickhouseShutdown = shutdown
 
-			meterReadConn, shutdown, err := newClickhouseReadClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to clickhouse read replica: %w", err)
+			var meterReadConn clickhouse.Conn
+			if !privateOnly {
+				meterReadConn, shutdown, err = newClickhouseReadClient(ctx, logger, c)
+				if err != nil {
+					return fmt.Errorf("failed to connect to clickhouse read replica: %w", err)
+				}
+				meterClickhouseShutdown = shutdown
 			}
-			meterClickhouseShutdown = shutdown
 
 			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
 			if err != nil {
@@ -1950,7 +1956,9 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 				c.String("custom-domain-cname"),
 				customDomainARecords,
 			))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
+			if !privateOnly {
+				usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
+			}
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics))
