@@ -250,6 +250,28 @@ var AdminSession = Type("AdminSession", func() {
 	Required("email")
 })
 
+var AdminOnboardingTask = Type("AdminOnboardingTask", func() {
+	Attribute("key", String)
+	Attribute("title", String)
+	Attribute("description", String)
+	Attribute("hidden", Boolean)
+	Required("key", "title", "description", "hidden")
+})
+
+var AdminOnboardingPreset = Type("AdminOnboardingPreset", func() {
+	Attribute("key", String, func() { Enum("gateway", "security") })
+	Attribute("visible_task_keys", ArrayOf(String))
+	Required("key", "visible_task_keys")
+})
+
+var AdminOnboardingConfiguration = Type("AdminOnboardingConfiguration", func() {
+	Attribute("organization_id", String)
+	Attribute("preset", String, "Absent for legacy organizations.", func() { Enum("gateway", "security") })
+	Attribute("tasks", ArrayOf(AdminOnboardingTask))
+	Attribute("presets", ArrayOf(AdminOnboardingPreset))
+	Required("organization_id", "tasks", "presets")
+})
+
 var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {
 	Attribute("organization_id", String)
 	Attribute("work_units_enabled", Boolean)
@@ -998,6 +1020,28 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
+	})
+
+	Method("getOrganizationOnboarding", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminOnboardingConfiguration)
+		HTTP(func() { GET("/admin/organization.onboarding"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationOnboarding")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationOnboarding"}`)
+	})
+
+	Method("setOrganizationOnboarding", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
+			Attribute("preset", String, "Omit to preserve the saved preset. Null/reset is not supported.", func() { Enum("gateway", "security") })
+			Required("organization_id", "visible_task_keys")
+		})
+		Result(AdminOnboardingConfiguration)
+		HTTP(func() { POST("/admin/organization.onboarding"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationOnboarding")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationOnboarding"}`)
 	})
 	remoteSessionIssuerMethods()
 	platformAssetMethods()
