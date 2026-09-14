@@ -264,6 +264,83 @@ func TestProxy_Post_StripsCredentialsOnCrossOriginRedirect(t *testing.T) {
 	require.Empty(t, redirected.Get("X-Caller-Credential"), "the header a pass-through reads from leaks the same secret")
 }
 
+func TestProxy_Post_RejectsCrossOriginBodyReplayingRedirect(t *testing.T) {
+	t.Parallel()
+
+	var targetHits atomic.Int32
+	// 307 and 308 replay the method and body, so the JSON-RPC request itself
+	// would reach a host the upstream picked. Stripping credentials does not
+	// cover that, so the hop is refused outright.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(target.Close)
+
+	for _, status := range []int{http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target.URL, status)
+		}))
+		t.Cleanup(upstream.Close)
+
+		p := newProxyForTest(t, upstream.URL)
+		p.Identity.RemoteMCPServerID = "legacy-remote"
+		p.AuthorizationOverride = "user-token"
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+		req.Header.Set("Content-Type", "application/json")
+
+		err := p.Post(httptest.NewRecorder(), req)
+		require.ErrorIs(t, err, proxy.ErrCrossOriginRemoteMCPRedirect, "status %d", status)
+	}
+
+	require.Equal(t, int32(0), targetHits.Load(), "the request body must never reach the redirect target")
+}
+
+func TestProxy_Post_FollowsSameOriginBodyReplayingRedirect(t *testing.T) {
+	t.Parallel()
+
+	type replay struct {
+		method  string
+		body    string
+		headers http.Header
+	}
+	replayed := make(chan replay, 1)
+	// The same-origin case must keep working: 307 there is an ordinary
+	// canonicalization, and the body and credentials both belong on it.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/moved" {
+			body, _ := io.ReadAll(r.Body)
+			replayed <- replay{method: r.Method, body: string(body), headers: r.Header.Clone()}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18"}}`))
+			return
+		}
+		http.Redirect(w, r, "/moved", http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.Identity.RemoteMCPServerID = "legacy-remote"
+	p.AuthorizationOverride = "user-token"
+	p.Headers = []proxy.ConfiguredHeader{{
+		Name: "X-Agent-Credential", StaticValue: "agent-token", ValueFromRequestHeader: "", IsRequired: true,
+	}}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	got := <-replayed
+	require.Equal(t, http.MethodPost, got.method)
+	require.JSONEq(t, initializeRequest, got.body)
+	require.Equal(t, "Bearer user-token", got.headers.Get("Authorization"))
+	require.Equal(t, "agent-token", got.headers.Get("X-Agent-Credential"))
+}
+
 func TestProxy_Post_KeepsCredentialsOnSameOriginRedirect(t *testing.T) {
 	t.Parallel()
 

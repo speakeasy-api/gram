@@ -17,6 +17,9 @@ var (
 	ErrInsecureRemoteMCPTransport = errors.New("remote MCP URL must use https unless it targets explicit loopback")
 	// ErrRemoteMCPURLUserinfo indicates a Remote MCP URL containing embedded credentials.
 	ErrRemoteMCPURLUserinfo = errors.New("remote MCP URL must not contain userinfo")
+	// ErrCrossOriginRemoteMCPRedirect indicates a redirect that would replay the
+	// request body to an origin the server was not configured for.
+	ErrCrossOriginRemoteMCPRedirect = errors.New("remote MCP redirect must not carry the request body to another origin")
 )
 
 // ValidateRemoteMCPURL applies transport requirements and the Guardian policy.
