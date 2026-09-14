@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -27,7 +28,19 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	var op *bindingOperation
+	eligibleOnly := payload.PrincipalID != nil || payload.UserSessionIssuerID != nil
+	if eligibleOnly {
+		if payload.PrincipalID == nil || payload.UserSessionIssuerID == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "principal_id and user_session_issuer_id must be supplied together")
+		}
+		var err error
+		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = op.tx.Rollback(ctx) }()
+	} else if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 
@@ -45,14 +58,31 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, logger)
 	}
 
-	rows, err := repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
-		ProjectID:             *authCtx.ProjectID,
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		SubjectUrn:            subjectFilter,
-		RemoteSessionClientID: clientFilter,
-		Cursor:                cursor,
-		LimitValue:            limit,
-	})
+	var rows []repo.ListRemoteSessionsByProjectIDRow
+	if eligibleOnly {
+		candidates, err := op.queries.ListPrincipalRemoteSessionCandidates(ctx, repo.ListPrincipalRemoteSessionCandidatesParams{
+			ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject,
+			Cursor: cursor, ClientFilter: clientFilter, LimitValue: pgtype.Int4{Int32: limit, Valid: true},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list eligible remote sessions").LogError(ctx, logger)
+		}
+		for _, row := range candidates {
+			if subjectFilter.Valid && row.RemoteSession.SubjectUrn.String() != subjectFilter.String {
+				continue
+			}
+			rows = append(rows, repo.ListRemoteSessionsByProjectIDRow(row))
+		}
+	} else {
+		rows, err = repo.New(s.db).ListRemoteSessionsByProjectID(ctx, repo.ListRemoteSessionsByProjectIDParams{
+			ProjectID:             *authCtx.ProjectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			SubjectUrn:            subjectFilter,
+			RemoteSessionClientID: clientFilter,
+			Cursor:                cursor,
+			LimitValue:            limit,
+		})
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote sessions").LogError(ctx, logger)
 	}

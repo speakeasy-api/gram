@@ -18,10 +18,10 @@ import {
   useOrganization,
   useSession,
 } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -52,21 +52,29 @@ export default function AgentsPage(): JSX.Element {
   if (flag.status !== "enabled") {
     return (
       <FormPage
-        title="Agent Identity"
+        title={
+          flag.status === "loading"
+            ? "Loading agent management"
+            : "Agent management unavailable"
+        }
         description={
           flag.status === "loading"
-            ? "Loading agent management…"
-            : "Agent management is not enabled for this organization."
+            ? "Checking feature availability."
+            : flag.status === "disabled"
+              ? "Agent management is not enabled for this organization."
+              : "Unable to determine agent management availability. Try again later."
         }
       >
         {null}
       </FormPage>
     );
   }
-  return <AgentsPageContent />;
+
+  // Do not mount inventory, detail, or policy discovery until rollout is enabled.
+  return <AgentManagementPage />;
 }
 
-function AgentsPageContent(): JSX.Element {
+function AgentManagementPage(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const isPlatformAdmin = useIsPlatformAdmin();

@@ -187,6 +187,8 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session:attach",
+  "remote-session:detach",
   "remote-session:delete",
   "remote-session:refresh",
   "risk_exclusion:create",
@@ -646,6 +648,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-mcp-server-header:delete":
       return "removed a header from remote MCP server";
 
+    case "remote-session:attach":
+      return "attached a binding to";
+    case "remote-session:detach":
+      return "detached a binding from";
     case "remote-session:refresh":
       return "refreshed remote session";
     case "remote-session:delete":

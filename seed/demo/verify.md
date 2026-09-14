@@ -172,14 +172,15 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     target. Enable `agent-management` for inventory and
     `agent-identity-credentials` for API key management.
     - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
-      is Suspended, and **Retired documentation bot** is Revoked. List and detail
+      is Suspended, and **Retired documentation bot** is Revoked. Confirm
+      **Release notes assistant** is Active with its attachment-backed session. List and detail
       show Amara Okafor, Jonas Lindqvist, and Priya Raman respectively, with
       readable owner names and initials fallback rather than raw IDs or broken
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
       expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
       hash, and empty delegation: it must not authenticate or refresh. The
-      `gram-agent-mcp-authorization-m2` flag gates live MCP authorization, not
+      `agent-identity-credentials` flag gates live MCP authorization, not
       the inventory check; no live connection is promised by these fixtures.
     - API keys are empty after the shared SQL runs. With the credentials flag
       enabled, only the active agent permits key creation; suspended/revoked
@@ -251,7 +252,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       endpoint without a session issuer and a locally executable harmless tool.
       Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
       endpoint. Issuer-gated gateways require OAuth/session credentials instead;
-      `gram-agent-mcp-authorization-m2` controls OAuth agent selection, not
+      `agent-identity-credentials` controls OAuth agent selection, not
       standalone API-key admission. Display-only seeded tools cannot prove
       successful tool execution; filtered `tools/list` proves discovery only.
       Create a short-lived key from the UI's narrowed candidate. Confirm the

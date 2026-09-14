@@ -1,11 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import AgentsPage from "./Agents";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: mocks.flagStatus }),
-}));
 function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -40,7 +39,8 @@ vi.mock("./ManagedAgentSessions", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
-  flagStatus: "enabled",
+  managementFlag: "enabled" as FeatureFlagResult["status"],
+  sdkClient: vi.fn(),
   params: new URLSearchParams(),
   navigate: vi.fn(),
   list: vi.fn(),
@@ -92,8 +92,14 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
 vi.mock("react-router", () => ({
   useSearchParams: () => [mocks.params, mocks.navigate],
 }));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === FEATURE_FLAGS.agentManagement ? mocks.managementFlag : "enabled",
+  }),
+}));
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ agents: { list: mocks.list, get: mocks.detail } }),
+  useSdkClient: () => mocks.sdkClient(),
 }));
 vi.mock("@gram/client/react-query/createAgent.js", () => ({
   useCreateAgentMutation: () => ({ mutate: vi.fn() }),
@@ -169,7 +175,7 @@ vi.mock("@/components/page-templates", () => {
 
 afterEach(cleanup);
 beforeEach(() => {
-  mocks.flagStatus = "enabled";
+  mocks.managementFlag = "enabled";
   mocks.params = new URLSearchParams();
   mocks.unsupported = false;
   mocks.organizationId = "org_example";
@@ -178,15 +184,60 @@ beforeEach(() => {
   mocks.agents[0]!.ownerUserId = "user_owner";
   mocks.agents[0]!.ownerProfile = undefined;
   vi.clearAllMocks();
+  mocks.sdkClient.mockReturnValue({
+    agents: { list: mocks.list, get: mocks.detail },
+  });
   mocks.list.mockResolvedValue(mocks.agents);
   mocks.detail.mockResolvedValue(mocks.agents[0]);
 });
 
+describe("Agent management rollout gate", () => {
+  for (const status of ["loading", "disabled", "missing", "error"] as const) {
+    it.each(["", "create=true", "id=agent_example"])(
+      `blocks direct route %s while management is ${status}, even with credentials enabled`,
+      (query) => {
+        mocks.managementFlag = status;
+        mocks.params = new URLSearchParams(query);
+        setup();
+
+        expect(
+          screen.getByRole("heading", {
+            name:
+              status === "loading"
+                ? "Loading agent management"
+                : "Agent management unavailable",
+          }),
+        ).toBeTruthy();
+        expect(
+          screen.queryByRole("button", { name: "Create agent" }),
+        ).toBeNull();
+        expect(screen.queryByText("Example agent")).toBeNull();
+        expect(screen.queryByText("API keys")).toBeNull();
+        expect(screen.queryByText("Unable to load agents")).toBeNull();
+        // Cached inventory must not leak, and no SDK-backed child may mount
+        // (including creation's policy/server discovery).
+        expect(mocks.sdkClient).not.toHaveBeenCalled();
+        expect(mocks.list).not.toHaveBeenCalled();
+        expect(mocks.detail).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it("unmounts cached agent content when the management flag turns off", () => {
+    const view = setup();
+    expect(screen.getByRole("button", { name: "Example agent" })).toBeTruthy();
+    mocks.managementFlag = "disabled";
+    view.rerenderPage();
+    expect(screen.queryByRole("button", { name: "Example agent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create agent" })).toBeNull();
+  });
+});
+
 describe("Agent owner access", () => {
-  it.each(["loading", "disabled", "missing", "error"])(
+  it.each(["loading", "disabled", "missing", "error"] as const)(
     "does not request agents while the rollout is %s",
     (status) => {
-      mocks.flagStatus = status;
+      mocks.managementFlag = status;
       setup();
       expect(mocks.list).not.toHaveBeenCalled();
       expect(
