@@ -2491,6 +2491,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,

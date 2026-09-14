@@ -599,6 +599,88 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: MarkRemoteSessionClientUpstreamRejected :execrows
+-- Records that the issuer's token endpoint answered invalid_client for this
+-- client_id. Idempotent: the first rejection's timestamp is kept so the value
+-- dates the loss of the registration rather than the latest retry. Keyed on
+-- the client_id the rejection was observed for, so a refresh that raced a
+-- rotation cannot stamp the replacement. The row is not touched otherwise;
+-- the next remote login confirms the rejection against the token endpoint and
+-- re-registers when the issuer publishes a registration endpoint.
+UPDATE remote_session_clients
+SET upstream_rejected_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id = @client_id
+  AND deleted IS FALSE
+  AND upstream_rejected_at IS NULL;
+
+-- name: GetRemoteSessionClientForRotation :one
+-- The client row plus the issuer endpoints a re-registration needs: the token
+-- endpoint to probe and the registration endpoint to re-register at, both as
+-- discovery last refreshed them on the issuer. Not locked: the rotation talks
+-- to the issuer between this read and its write, and the write compares the
+-- client_id it read here so a concurrent rotation is detected rather than
+-- blocked.
+SELECT
+    sqlc.embed(c),
+    i.issuer                 AS issuer_url,
+    i.token_endpoint         AS issuer_token_endpoint,
+    i.registration_endpoint  AS issuer_registration_endpoint
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;
+
+-- name: ClearRemoteSessionClientUpstreamRejected :execrows
+-- The token endpoint authenticated the client (a probe, or a refresh that
+-- succeeded), so the rejection that was recorded did not mean the
+-- registration was lost. Keyed on the client_id that was authenticated, so a
+-- stale result for a replaced client cannot clear a genuine new rejection.
+UPDATE remote_session_clients
+SET upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id = @client_id
+  AND deleted IS FALSE
+  AND upstream_rejected_at IS NOT NULL;
+
+-- name: ListUserSessionIssuerIDsForRemoteSessionClient :many
+-- Every user_session_issuer the client is attached to, for rendering the
+-- client's API view outside a tenant-scoped handler.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = @remote_session_client_id
+ORDER BY link.user_session_issuer_id;
+
+-- name: ReplaceRemoteSessionClientRegistration :one
+-- Swaps the row onto a freshly registered upstream client in place, so the
+-- issuer bindings, MCP server attachments, and key set links that reference
+-- the row survive the rotation. The legacy callback flag is dropped because
+-- re-registration always sends the canonical redirect URIs, and the upstream
+-- rejection marker is cleared because the replacement is known to the issuer.
+-- Compare-and-swap on the client_id and updated_at the caller read: a row
+-- another rotation or an administrator's edit already moved is left alone and
+-- reported as no rows. CIMD-mode rows are
+-- excluded: their client_id is the metadata document URL and is never
+-- registered upstream.
+UPDATE remote_session_clients
+SET client_id = @client_id,
+    client_secret_encrypted = @client_secret_encrypted,
+    client_id_issued_at = @client_id_issued_at,
+    client_secret_expires_at = @client_secret_expires_at,
+    token_endpoint_auth_method = @token_endpoint_auth_method,
+    legacy_callback_url = FALSE,
+    upstream_rejected_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND client_id = @expected_client_id
+  AND updated_at = @expected_updated_at
+  AND deleted IS FALSE
+  AND client_id_metadata_uri IS NULL
+RETURNING *;
+
 -- name: AttachRemoteSessionClientToUserSessionIssuer :exec
 INSERT INTO remote_session_client_user_session_issuers (
     remote_session_client_id,
@@ -888,10 +970,22 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: UpdateRemoteSessionClient :one
+-- A rotated secret also clears the upstream rejection marker: the rejection
+-- may have been the old secret, and a client whose refreshes succeed again
+-- should not stay flagged for re-registration.
 UPDATE remote_session_clients
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), client_secret_encrypted),
-    client_secret_expires_at = COALESCE(sqlc.narg('client_secret_expires_at'), client_secret_expires_at),
+    upstream_rejected_at = CASE
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN upstream_rejected_at
+        ELSE NULL
+    END,
+    -- A replaced secret takes the expiry supplied with it, or none: keeping
+    -- the old secret's deadline would flag the new secret as expired.
+    client_secret_expires_at = CASE
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN client_secret_expires_at
+        ELSE sqlc.narg('client_secret_expires_at')
+    END,
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
     audience = COALESCE(sqlc.narg('audience'), audience),
@@ -1271,7 +1365,10 @@ WHERE subject_urn = @subject_urn
 -- A definitive upstream invalid_grant invalidates the refresh grant, not
 -- necessarily the current access token. Clear the dead grant so scheduled
 -- refresh does not retry it; a known-expired access token will then fail the
--- lazy gate and prompt for re-authentication.
+-- lazy gate and prompt for re-authentication. An upstream invalid_client
+-- clears the grant the same way: a grant issued to a client the issuer no
+-- longer recognizes can never be redeemed, and the client row is separately
+-- marked for re-registration.
 -- Compare-and-swap against the snapshot used for the refresh so a delayed
 -- failure cannot clear tokens that a concurrent refresh already rotated.
 -- Keyed by id + (subject, client) + CAS only: the session's
@@ -1452,6 +1549,7 @@ SELECT
     c.resource_documentation               AS resource_documentation,
     c.resource_policy_uri                  AS resource_policy_uri,
     c.resource_tos_uri                     AS resource_tos_uri,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
@@ -1551,9 +1649,12 @@ SELECT
     c.resource_documentation               AS resource_documentation,
     c.resource_policy_uri                  AS resource_policy_uri,
     c.resource_tos_uri                     AS resource_tos_uri,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
+    i.registration_endpoint                AS issuer_registration_endpoint,
     i.logo_asset_id                        AS issuer_logo_asset_id,
     i.service_documentation                AS issuer_service_documentation,
     i.op_policy_uri                        AS issuer_op_policy_uri,
@@ -2517,6 +2618,16 @@ RETURNING *;
 UPDATE remote_session_clients AS c
 SET
     client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
+    upstream_rejected_at = CASE
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.upstream_rejected_at
+        ELSE NULL
+    END,
+    -- A pasted-in replacement secret carries no issuer-reported expiry, and
+    -- keeping the old secret's deadline would flag the new one as expired.
+    client_secret_expires_at = CASE
+        WHEN sqlc.narg('client_secret_encrypted')::text IS NULL THEN c.client_secret_expires_at
+        ELSE NULL
+    END,
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), c.token_endpoint_auth_method),
     scope = COALESCE(sqlc.narg('scope')::text[], c.scope),
     audience = CASE
@@ -3276,3 +3387,24 @@ WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
   AND deleted IS FALSE;
+
+-- name: ForceRemoteSessionClientRegistrationFixture :execrows
+-- Test fixture: stamps the lifecycle columns a rotation reads, so a test can
+-- stage a client whose issuer has rejected it or whose secret has expired.
+UPDATE remote_session_clients
+SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
+    upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND deleted IS FALSE;
+
+-- name: ForceRemoteSessionIssuerRegistrationEndpointFixture :execrows
+-- Test fixture: sets the registration endpoint on a client's issuer, which is
+-- where a rotation re-registers the client. NULL stages an issuer that
+-- publishes none.
+UPDATE remote_session_issuers AS i
+SET registration_endpoint = sqlc.narg('registration_endpoint'),
+    updated_at = clock_timestamp()
+FROM remote_session_clients AS c
+WHERE c.id = @client_id
+  AND i.id = c.remote_session_issuer_id;

@@ -17,7 +17,7 @@ import (
 // upstream-refresh metric's outcome set. The ordering matters at three
 // points: an aborted POST also carries the transport marker, a deadline is
 // the caller's own only when the caller's context has expired, and
-// invalid_grant wins over the 429 and 5xx buckets because the grant is
+// invalid_grant and invalid_client win over the 429 and 5xx buckets because the grant is
 // cleared on any status.
 func TestRefreshOutcomeForError(t *testing.T) {
 	t.Parallel()
@@ -115,8 +115,23 @@ func TestRefreshOutcomeForError(t *testing.T) {
 			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
 		},
 		{
+			name: "invalid_client: the issuer no longer recognizes the client",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusUnauthorized, "401 Unauthorized", []byte(`{"error":"invalid_client","error_description":"Client not found"}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidClient,
+		},
+		{
+			name: "invalid_client on a 429 still marked the client",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"invalid_client"}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidClient,
+		},
+		{
+			name: "invalid_client on a 5xx still marked the client",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusBadGateway, "502 Bad Gateway", []byte(`{"error":"invalid_client"}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidClient,
+		},
+		{
 			name: "parsed non-invalid_grant code",
-			err:  newTokenRefreshErrorFromHTTP(http.StatusUnauthorized, "401 Unauthorized", []byte(`{"error":"invalid_client"}`)),
+			err:  newTokenRefreshErrorFromHTTP(http.StatusUnauthorized, "401 Unauthorized", []byte(`{"error":"unauthorized_client"}`)),
 			want: remotesessionmetrics.RefreshOutcomeRejected,
 		},
 		{
@@ -130,8 +145,13 @@ func TestRefreshOutcomeForError(t *testing.T) {
 			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
 		},
 		{
-			name: "2xx body carrying another code",
+			name: "2xx body carrying invalid_client",
 			err:  mustSuccessBodyError(t, http.StatusOK, "200 OK", []byte(`{"error":"invalid_client"}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidClient,
+		},
+		{
+			name: "2xx body carrying another code",
+			err:  mustSuccessBodyError(t, http.StatusOK, "200 OK", []byte(`{"error":"unauthorized_client"}`)),
 			want: remotesessionmetrics.RefreshOutcomeRejected,
 		},
 		{

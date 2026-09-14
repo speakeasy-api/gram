@@ -112,3 +112,7 @@ func (e *SessionEnricher) JWTAccessToken(ctx context.Context, target JWTAccessTo
 	}
 	return out
 }
+
+// ClientRotationLeaseKey exposes the rotation lease key so a test can hold
+// the lease and drive the waiting side of a concurrent rotation.
+func ClientRotationLeaseKey(clientID uuid.UUID) string { return clientRotationLeaseKey(clientID) }
