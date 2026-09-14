@@ -12,9 +12,12 @@ import type {
   AdminOrganization,
   ListOrganizationsParams,
 } from "@/lib/gramAdminApi";
+import { organizationDashboardUrl } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
+
+type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -55,7 +58,18 @@ const OTHER = anOrganization({
   disabled_at: "2026-02-01T00:00:00Z",
 });
 
-const RECORDS = [ORG, OTHER];
+// A second active record. Two handoffs at once cannot be ORG and OTHER: a
+// search matches OTHER perfectly well, but it is disabled and is deliberately
+// offered no handoff row. The term the two-handoff test types matches all three
+// records, so what it demonstrates is three results carrying two handoffs.
+const THIRD = anOrganization({
+  id: "org_01AA",
+  name: "Redwood Analytics",
+  slug: "redwood",
+  account_type: "payg",
+});
+
+const RECORDS = [ORG, OTHER, THIRD];
 
 // The one press that opens the palette, in the modifier this platform resolves
 // `Mod` to. Read from the library rather than hardcoded, because the hotkey the
@@ -70,6 +84,10 @@ function pressTheShortcut(): void {
 function palette(): HTMLElement {
   return screen.getByRole("dialog");
 }
+
+// Record rows are matched anchored throughout. Each one is followed by its own
+// "Open in Dashboard for <record>" row, so an unanchored name matches both and
+// every query for a record becomes ambiguous.
 
 function type(term: string): void {
   fireEvent.change(within(palette()).getByRole("combobox"), {
@@ -86,7 +104,34 @@ function searchedFor(): string[] {
     .flatMap((params) => (params.q ? [params.q] : []));
 }
 
+// The forms the palette built, in the order it submitted them. A real submit
+// would try to navigate the test document, and happy-dom has no tab to open, so
+// the call is captured instead of performed and the element read afterwards.
+let submitted: HTMLFormElement[] = [];
+// Whether each form was still in the document at the moment it was submitted.
+// A submit from a detached form does nothing at all, and Firefox abandons the
+// navigation when the form leaves before the submission task runs.
+let connectedAtSubmit: boolean[] = [];
+let router: Mounted["router"] | undefined;
+
+async function renderWithSubmitCaptured(): Promise<void> {
+  ({ router } = await renderRouteTree(routeTree, {
+    initialPath: "/organizations",
+  }));
+}
+
 beforeEach(() => {
+  submitted = [];
+  connectedAtSubmit = [];
+  router = undefined;
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
+    function (this: HTMLFormElement) {
+      // The helper detaches the form immediately after this returns, so the
+      // element is held rather than its attributes read later off the document.
+      submitted.push(this);
+      connectedAtSubmit.push(this.isConnected);
+    },
+  );
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",
@@ -146,6 +191,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("CommandPalette", () => {
@@ -184,7 +230,7 @@ describe("CommandPalette", () => {
     type("northwind");
 
     const result = await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
     fireEvent.click(result);
 
@@ -205,7 +251,7 @@ describe("CommandPalette", () => {
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Northwind Logistics/,
+        name: /^Northwind Logistics/,
       }),
     ).toBeTruthy();
   });
@@ -222,7 +268,7 @@ describe("CommandPalette", () => {
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Umbrella Freight/,
+        name: /^Umbrella Freight/,
       }),
     ).toBeTruthy();
 
@@ -242,7 +288,7 @@ describe("CommandPalette", () => {
     type("umbrella");
 
     const result = await within(palette()).findByRole("option", {
-      name: /Umbrella Freight/,
+      name: /^Umbrella Freight/,
     });
     expect(result.textContent).toContain("Disabled");
   });
@@ -259,12 +305,130 @@ describe("CommandPalette", () => {
     type("northwind");
 
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     // The keystrokes in between reached no request: each one supersedes the
     // debounce the one before it set.
     expect(searchedFor()).toEqual(["northwind"]);
+  });
+
+  it("offers each matched organization a direct dashboard handoff", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    await within(palette()).findByRole("option", {
+      name: /^Northwind Logistics/,
+    });
+
+    const handoff = within(palette()).getByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // The same request RecordHeader's button makes: a POST, so the admin origin
+    // check protects handoff issuance, opened in a tab of its own.
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0]?.method.toLowerCase()).toBe("post");
+    expect(submitted[0]?.getAttribute("action")).toBe(
+      organizationDashboardUrl(ORG.id),
+    );
+    expect(submitted[0]?.target).toBe("_blank");
+    // noreferrer would make Chromium send `Origin: null` for this POST, which
+    // the admin CSRF middleware correctly rejects.
+    expect(submitted[0]?.getAttribute("rel")).toBe("noopener");
+  });
+
+  it("submits the handoff from a form that is still in the document", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    const handoff = await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // Connected when it ran, and still connected afterwards. The second half is
+    // the regression guard: detaching the form synchronously after `submit()`
+    // leaves this passing in Chromium and silently opens nothing in Firefox,
+    // because the submission is processed in a later task.
+    expect(connectedAtSubmit).toEqual([true]);
+    expect(submitted[0]?.isConnected).toBe(true);
+  });
+
+  it("offers no dashboard handoff for a disabled organization", async () => {
+    // The endpoint refuses a disabled record outright, so the row would open a
+    // new tab onto a 404 — somewhere nothing on this page could explain it.
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("umbrella");
+
+    await within(palette()).findByRole("option", { name: /^Umbrella Freight/ });
+    expect(
+      within(palette()).queryByRole("option", {
+        name: /Open in Dashboard for Umbrella Freight/,
+      }),
+    ).toBeNull();
+  });
+
+  it("names the record each handoff belongs to", async () => {
+    // Every one of these rows reads "Open in Dashboard", so without the record
+    // in the accessible name a screen reader hears a run of identical options.
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    // A letter all three records carry. Two of them are active and get a
+    // handoff row; the disabled one is listed without one.
+    type("r");
+
+    await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    expect(
+      within(palette()).getByRole("option", {
+        name: /Open in Dashboard for Redwood Analytics/,
+      }),
+    ).toBeTruthy();
+
+    // Three records matched and two handoffs are drawn, which is the whole of
+    // what the fixtures above are arranged to show: the disabled record is
+    // listed like the others and offered no handoff of its own.
+    expect(
+      within(palette()).getAllByRole("option", {
+        name: /^Redwood Analytics|^Northwind Logistics|^Umbrella Freight/,
+      }),
+    ).toHaveLength(3);
+    expect(
+      within(palette()).getAllByRole("option", {
+        name: /Open in Dashboard for/,
+      }),
+    ).toHaveLength(2);
+  });
+
+  it("leaves the admin record open behind the handoff", async () => {
+    await renderWithSubmitCaptured();
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("northwind");
+    const handoff = await within(palette()).findByRole("option", {
+      name: /Open in Dashboard for Northwind Logistics/,
+    });
+    fireEvent.click(handoff);
+
+    // The palette closes, but nothing navigated: the dashboard opens in a tab
+    // of its own and the operator keeps the admin page they were on.
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(router?.state.location.pathname).toBe("/organizations");
   });
 
   it("says so when a term matches no organization", async () => {
@@ -319,7 +483,7 @@ describe("CommandPalette", () => {
     release?.({ organizations: [ORG] });
     expect(
       await within(palette()).findByRole("option", {
-        name: /Northwind Logistics/,
+        name: /^Northwind Logistics/,
       }),
     ).toBeTruthy();
   });
@@ -333,7 +497,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     type("northwind");
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     type("umbrella");
@@ -341,12 +505,12 @@ describe("CommandPalette", () => {
     // Gone in the same commit the term changed in, rather than when the request
     // for the new one lands.
     expect(
-      within(palette()).queryByRole("option", { name: /Northwind Logistics/ }),
+      within(palette()).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
 
     expect(
       await within(palette()).findByRole("option", {
-        name: /Umbrella Freight/,
+        name: /^Umbrella Freight/,
       }),
     ).toBeTruthy();
   });
@@ -420,7 +584,7 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
     type("northwind");
     await within(palette()).findByRole("option", {
-      name: /Northwind Logistics/,
+      name: /^Northwind Logistics/,
     });
 
     pressTheShortcut();
@@ -434,7 +598,7 @@ describe("CommandPalette", () => {
     // the palette was last dismissed.
     expect(within(reopened).getByRole("combobox")).toHaveProperty("value", "");
     expect(
-      within(reopened).queryByRole("option", { name: /Northwind Logistics/ }),
+      within(reopened).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
   });
 });

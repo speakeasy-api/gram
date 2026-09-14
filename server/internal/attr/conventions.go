@@ -418,6 +418,18 @@ const (
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
 
+	// OAuthValidationTriggerKey names which caller presented a stored remote
+	// session credential to its upstream: the consent page's Verify, the
+	// connect callback, or the idle keepalive re-check. Used as a metric
+	// dimension on gram.remote_session.validation.
+	OAuthValidationTriggerKey = attribute.Key("gram.oauth.validation_trigger")
+
+	// OAuthIssuerMetadataRefreshReasonKey names why a remote session issuer's
+	// metadata was refreshed: the on-use cadence or an upstream signal that the
+	// stored endpoints drifted. Used as a metric dimension on
+	// gram.remote_session_issuer.metadata_refresh.
+	OAuthIssuerMetadataRefreshReasonKey = attribute.Key("gram.oauth.issuer_metadata_refresh_reason")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -507,6 +519,8 @@ const (
 	RemoteSessionIDKey                  = attribute.Key("gram.remote_session.id")
 	RemoteSessionClientMigratedCountKey = attribute.Key("gram.remote_session_client.migrated_count")
 	RemoteSessionRevokeDroppedCountKey  = attribute.Key("gram.remote_session.revoke_dropped_count")
+	// RemoteSessionRecheckCountKey is how many grants one keepalive re-check pass actually probed; skipped and rate-limited claims are not counted.
+	RemoteSessionRecheckCountKey = attribute.Key("gram.remote_session.recheck_count")
 	// RemoteSessionAccessExpiresAtKey is the upstream-reported deadline of a
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
@@ -539,6 +553,7 @@ const (
 	RiskPathKey                    = attribute.Key("gram.risk.path")
 	RiskStartPosKey                = attribute.Key("gram.risk.start_pos")
 	RiskEndPosKey                  = attribute.Key("gram.risk.end_pos")
+	RiskEnforcementTruncatedKey    = attribute.Key("gram.risk.enforcement_truncated")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -1712,6 +1727,20 @@ func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
 }
 
+func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
+	return OAuthValidationTriggerKey.String(string(v))
+}
+func SlogOAuthValidationTrigger(v string) slog.Attr {
+	return slog.String(string(OAuthValidationTriggerKey), v)
+}
+
+func OAuthIssuerMetadataRefreshReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIssuerMetadataRefreshReasonKey.String(string(v))
+}
+func SlogOAuthIssuerMetadataRefreshReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIssuerMetadataRefreshReasonKey), string(v))
+}
+
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
@@ -2080,6 +2109,11 @@ func SlogRemoteSessionID(v string) slog.Attr {
 	return slog.String(string(RemoteSessionIDKey), v)
 }
 
+func RemoteSessionRecheckCount(v int) attribute.KeyValue { return RemoteSessionRecheckCountKey.Int(v) }
+func SlogRemoteSessionRecheckCount(v int) slog.Attr {
+	return slog.Int(string(RemoteSessionRecheckCountKey), v)
+}
+
 func RemoteSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return RemoteSessionClientMigratedCountKey.Int64(v)
 }
@@ -2214,6 +2248,10 @@ func SlogRiskScanBatchIndex(v int) slog.Attr      { return slog.Int(string(RiskS
 
 func RiskScanTextSize(v int) attribute.KeyValue { return RiskScanTextSizeKey.Int(v) }
 func SlogRiskScanTextSize(v int) slog.Attr      { return slog.Int(string(RiskScanTextSizeKey), v) }
+
+func RiskEnforcementTruncated(v bool) attribute.KeyValue {
+	return RiskEnforcementTruncatedKey.Bool(v)
+}
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }
 func SlogRiskScanRequestID(v string) slog.Attr {

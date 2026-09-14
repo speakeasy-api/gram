@@ -67,7 +67,8 @@ type Service interface {
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
 	// Lists activity belonging to an organization for admin operators.
 	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
-	// Lists organizations for admin operations with optional search and filters.
+	// Lists organizations for platform admin operations with optional search and
+	// filters. Defaults to created_at descending, with id ascending to break ties.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 	// Extends a running enterprise trial by adding days to its current end date.
 	// Only a running trial can be extended: one that has converted, has been
@@ -184,6 +185,12 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
+	// Starts a new enterprise trial for an organization that has never trialled,
+	// or restarts one that has expired without converting or being demoted. Sets
+	// the account type, whitelist flag, trial entitlements and a fresh runway
+	// counted from now. A running, demoted or converted trial is rejected: those
+	// are extend, re-arm and a contract.
+	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -206,7 +213,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage"}
+var MethodNames = [48]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -818,6 +825,9 @@ type GlobalRemoteSessionIssuer struct {
 	// project that are registered with this issuer. These block a delete but only
 	// their owning organization can remove them.
 	TenantClientCount int
+	// Number of active tenant-owned user_session_issuers that trust this issuer.
+	// These block deletion and must be unlinked by their owning organizations.
+	TrustedUserSessionIssuerCount int
 }
 
 // An organization- or project-level remote_session_issuer that names the same
@@ -865,8 +875,11 @@ type IssuerMigratePreflight struct {
 	// sides' values. The target issuer's values become authoritative for the
 	// migrated clients.
 	Warnings []*types.IssuerFieldMismatch
-	// TRUE when the migration would succeed: no endpoint mismatches and no
-	// conflicting MCP-server bindings.
+	// Number of user_session_issuers that trust the source. Any non-zero value
+	// blocks migration.
+	TrustedUserSessionIssuerCount int
+	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
+	// MCP-server bindings, or user-session issuers that trust the source.
 	CanMigrate bool
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -968,19 +981,21 @@ type ListOrganizationsPayload struct {
 	// Include organizations with disabled_at set. Defaults to false. Superseded by
 	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool
-	// Pagination cursor: id of the last item from the previous page. Ignored when
-	// sort or page is supplied.
+	// Pagination cursor: id of the last item from the previous page in created_at
+	// descending, id ascending order. The anchor is resolved regardless of
+	// filters; a deleted or unknown id returns an empty page. Ignored when sort or
+	// page is supplied.
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
 	// Column to sort by: name, slug, account_type, member_count, created_at,
-	// disabled_at or trial_ends_at. Any other value sorts by id. Supplying it
-	// selects offset paging.
+	// disabled_at or trial_ends_at. Omitted or unknown values use created_at
+	// descending. Ties always sort by id ascending. Supplying it selects offset
+	// paging.
 	Sort *string
 	// Sort direction, asc or desc, applied to the column named by sort. Any other
-	// value sorts ascending. On its own it does nothing: without sort there is no
-	// column to reverse, so it neither reorders the results nor selects offset
-	// paging.
+	// value sorts ascending. Ignored when sort is omitted or unknown, preserving
+	// the newest-first default. On its own it does not select offset paging.
 	Direction *string
 	// 1-based page number for offset paging (default 1). Supplying it selects
 	// offset paging.
@@ -1192,6 +1207,15 @@ type SetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+// StartTrialPayload is the payload type of the admin service startTrial method.
+type StartTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the trial runs for, counted from now.
+	Days int
 }
 
 // TriggerOrganizationChatAnalysisPayload is the payload type of the admin

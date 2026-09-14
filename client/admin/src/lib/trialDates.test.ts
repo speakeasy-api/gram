@@ -6,6 +6,7 @@ import {
   dayOf,
   formatTrialTimeRemaining,
   trialEndDay,
+  utcTodayDay,
 } from "./trialDates";
 import { fmtDateShort } from "./utils";
 
@@ -91,6 +92,28 @@ describe("the count of days between two dates", () => {
 
       expect(dayOf(new Date(2027, 4, 6)) - anchor).toBe(365);
     });
+  });
+});
+
+describe("utcTodayDay", () => {
+  it("reads the UTC day, not the reader's", () => {
+    inZone("America/Los_Angeles", () => {
+      const now = new Date("2026-01-16T03:00:00Z");
+      // The zone really moved: locally this instant is the 15th. Without this
+      // the assertion below passes on a UTC runner for the wrong reason.
+      expect(now.getDate()).toBe(15);
+
+      expect(utcTodayDay(now)).toBe(dayOf(new Date(2026, 0, 16)));
+    });
+  });
+
+  it("reads one instant as one day in every zone", () => {
+    const now = new Date("2026-01-16T03:00:00Z");
+    const zones = ["UTC", "America/Los_Angeles", "Asia/Tokyo", "Pacific/Apia"];
+
+    const read = new Set(zones.map((tz) => inZone(tz, () => utcTodayDay(now))));
+
+    expect(read.size).toBe(1);
   });
 });
 

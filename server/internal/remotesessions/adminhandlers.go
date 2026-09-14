@@ -249,9 +249,10 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
-			Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-			GlobalClientCount: int(row.GlobalClientCount),
-			TenantClientCount: int(row.TenantClientCount),
+			Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+			GlobalClientCount:             int(row.GlobalClientCount),
+			TenantClientCount:             int(row.TenantClientCount),
+			TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 		})
 	}
 
@@ -290,9 +291,10 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 	}
 
 	return &adminrsgen.GlobalRemoteSessionIssuer{
-		Issuer:            mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
-		GlobalClientCount: int(row.GlobalClientCount),
-		TenantClientCount: int(row.TenantClientCount),
+		Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
+		GlobalClientCount:             int(row.GlobalClientCount),
+		TenantClientCount:             int(row.TenantClientCount),
+		TrustedUserSessionIssuerCount: int(row.TrustedUserSessionIssuerCount),
 	}, nil
 }
 
@@ -496,6 +498,13 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 			return oops.E(oops.CodeConflict, nil, "global remote session issuer has active clients: %d global, %d tenant-owned; delete the global client(s) here, tenant-owned clients must be removed by their owning organizations", globalCount, tenantCount).LogError(ctx, logger)
 		}
 	}
+	trustedCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, issuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "count user session issuers that trust global issuer").LogError(ctx, logger)
+	}
+	if trustedCount > 0 {
+		return oops.E(oops.CodeConflict, nil, "global remote session issuer is trusted by %d active tenant-owned user session issuer(s); they must be unlinked by their owning organizations", trustedCount).LogError(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionIssuer(ctx, issuerID)
 	if err != nil {
@@ -571,7 +580,7 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -582,7 +591,19 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	updated, err := repo.New(dbtx).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	txRepo := repo.New(dbtx)
+	locked, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
+	}
+	if !sameMetadataRefreshSnapshot(locked, existing) {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
+
+	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
@@ -785,13 +806,14 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	}
 
 	return &adminrsgen.IssuerMigratePreflight{
-		ClientCount:               int(preflight.clientCount),
-		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
-		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
-		CanMigrate:                preflight.canMigrate(),
-		TargetTenantClientCount:   int(targetTenantClients),
+		ClientCount:                   int(preflight.clientCount),
+		McpServerNames:                preflight.mcpServerNames,
+		EndpointMismatches:            issuerFieldMismatchViews(preflight.endpointMismatches),
+		ConflictingMcpServerNames:     preflight.conflictingMcpServerNames,
+		Warnings:                      issuerFieldMismatchViews(preflight.warnings),
+		TrustedUserSessionIssuerCount: int(preflight.trustedUserSessionIssuerCount),
+		CanMigrate:                    preflight.canMigrate(),
+		TargetTenantClientCount:       int(targetTenantClients),
 	}, nil
 }
 

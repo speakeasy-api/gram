@@ -41,34 +41,7 @@ type RotateCredentialsRequestBody struct {
 // GetIngressResponseBody is the type of the "networkIngress" service
 // "getIngress" endpoint HTTP response body.
 type GetIngressResponseBody struct {
-	// Network ingress ID
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Owning organization ID
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Private-network provider
-	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
-	// Private DNS label advertised by the provider
-	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
-	// Pinned endpoint namespace
-	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
-	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
-	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
-	// Whether desired-state reconciliation may keep the ingress online
-	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Whether an attributable provider identity is required
-	IdentityRequired *bool `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
-	// Whether provider credentials are stored; credential values are never returned
-	CredentialsConfigured *bool `form:"credentials_configured,omitempty" json:"credentials_configured,omitempty" xml:"credentials_configured,omitempty"`
-	// Latest redacted lifecycle status
-	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Observed private DNS name
-	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
-	// Latest redacted error code
-	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
-	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
-	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
-	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	Ingress *NetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
 }
 
 // CreateIngressResponseBody is the type of the "networkIngress" service
@@ -1544,6 +1517,38 @@ type CheckHealthGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// NetworkIngressResponseBody is used to define fields on response body types.
+type NetworkIngressResponseBody struct {
+	// Network ingress ID
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Owning organization ID
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Private-network provider
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Private DNS label advertised by the provider
+	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Pinned endpoint namespace
+	EndpointNamespaceKind *string `form:"endpoint_namespace_kind,omitempty" json:"endpoint_namespace_kind,omitempty" xml:"endpoint_namespace_kind,omitempty"`
+	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// Whether desired-state reconciliation may keep the ingress online
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+	// Whether an attributable provider identity is required
+	IdentityRequired *bool `form:"identity_required,omitempty" json:"identity_required,omitempty" xml:"identity_required,omitempty"`
+	// Whether provider credentials are stored; credential values are never returned
+	CredentialsConfigured *bool `form:"credentials_configured,omitempty" json:"credentials_configured,omitempty" xml:"credentials_configured,omitempty"`
+	// Latest redacted lifecycle status
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Observed private DNS name
+	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
+	// Latest redacted error code
+	LastError       *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	ConnectedSince  *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
+	CreatedAt       *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt       *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // NewCreateIngressRequestBody builds the HTTP request body from the payload of
 // the "createIngress" endpoint of the "networkIngress" service.
 func NewCreateIngressRequestBody(p *networkingress.CreateIngressPayload) *CreateIngressRequestBody {
@@ -1578,26 +1583,12 @@ func NewRotateCredentialsRequestBody(p *networkingress.RotateCredentialsPayload)
 	return body
 }
 
-// NewGetIngressNetworkIngressOK builds a "networkIngress" service "getIngress"
-// endpoint result from a HTTP "OK" response.
-func NewGetIngressNetworkIngressOK(body *GetIngressResponseBody) *networkingress.NetworkIngress {
-	v := &networkingress.NetworkIngress{
-		ID:                    *body.ID,
-		OrganizationID:        *body.OrganizationID,
-		Provider:              *body.Provider,
-		Hostname:              *body.Hostname,
-		EndpointNamespaceKind: *body.EndpointNamespaceKind,
-		CustomDomainID:        body.CustomDomainID,
-		Enabled:               *body.Enabled,
-		IdentityRequired:      *body.IdentityRequired,
-		CredentialsConfigured: *body.CredentialsConfigured,
-		Status:                *body.Status,
-		DNSName:               body.DNSName,
-		LastError:             body.LastError,
-		HealthCheckedAt:       body.HealthCheckedAt,
-		ConnectedSince:        body.ConnectedSince,
-		CreatedAt:             *body.CreatedAt,
-		UpdatedAt:             *body.UpdatedAt,
+// NewGetIngressNetworkIngressResultOK builds a "networkIngress" service
+// "getIngress" endpoint result from a HTTP "OK" response.
+func NewGetIngressNetworkIngressResultOK(body *GetIngressResponseBody) *networkingress.NetworkIngressResult {
+	v := &networkingress.NetworkIngressResult{}
+	if body.Ingress != nil {
+		v.Ingress = unmarshalNetworkIngressResponseBodyToNetworkingressNetworkIngress(body.Ingress)
 	}
 
 	return v
@@ -2784,66 +2775,10 @@ func NewCheckHealthGatewayError(body *CheckHealthGatewayErrorResponseBody) *goa.
 // ValidateGetIngressResponseBody runs the validations defined on
 // GetIngressResponseBody
 func ValidateGetIngressResponseBody(body *GetIngressResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Provider == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
-	}
-	if body.Hostname == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
-	}
-	if body.EndpointNamespaceKind == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
-	}
-	if body.Enabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
-	}
-	if body.IdentityRequired == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("identity_required", "body"))
-	}
-	if body.CredentialsConfigured == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("credentials_configured", "body"))
-	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.Provider != nil {
-		if !(*body.Provider == "tailscale") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+	if body.Ingress != nil {
+		if err2 := ValidateNetworkIngressResponseBody(body.Ingress); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
-	}
-	if body.EndpointNamespaceKind != nil {
-		if !(*body.EndpointNamespaceKind == "platform" || *body.EndpointNamespaceKind == "custom_domain") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.endpoint_namespace_kind", *body.EndpointNamespaceKind, []any{"platform", "custom_domain"}))
-		}
-	}
-	if body.CustomDomainID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", *body.CustomDomainID, goa.FormatUUID))
-	}
-	if body.HealthCheckedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
-	}
-	if body.ConnectedSince != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.connected_since", *body.ConnectedSince, goa.FormatDateTime))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4834,6 +4769,73 @@ func ValidateCheckHealthGatewayErrorResponseBody(body *CheckHealthGatewayErrorRe
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateNetworkIngressResponseBody runs the validations defined on
+// NetworkIngressResponseBody
+func ValidateNetworkIngressResponseBody(body *NetworkIngressResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Hostname == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
+	}
+	if body.EndpointNamespaceKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_namespace_kind", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	if body.IdentityRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("identity_required", "body"))
+	}
+	if body.CredentialsConfigured == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credentials_configured", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "tailscale") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"tailscale"}))
+		}
+	}
+	if body.EndpointNamespaceKind != nil {
+		if !(*body.EndpointNamespaceKind == "platform" || *body.EndpointNamespaceKind == "custom_domain") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.endpoint_namespace_kind", *body.EndpointNamespaceKind, []any{"platform", "custom_domain"}))
+		}
+	}
+	if body.CustomDomainID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.custom_domain_id", *body.CustomDomainID, goa.FormatUUID))
+	}
+	if body.HealthCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.health_checked_at", *body.HealthCheckedAt, goa.FormatDateTime))
+	}
+	if body.ConnectedSince != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.connected_since", *body.ConnectedSince, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

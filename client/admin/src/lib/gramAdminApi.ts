@@ -165,6 +165,57 @@ export function organizationDashboardUrl(organizationId: string): string {
   return `/admin/organization.open-dashboard?${query.toString()}`;
 }
 
+// The same handoff `RecordHeader` renders, for a caller that has no form to
+// render it in.
+//
+// A real <form> around a submit button is the better shape wherever there is a
+// button, and RecordHeader keeps it. The command palette has no button: the row
+// that triggers this unmounts with the dialog in the commit that follows a
+// selection, so a form inside that row can be gone before it submits. This one
+// lives on `document.body`, where closing the dialog cannot reach it.
+//
+// Every attribute is load-bearing, and each is the one RecordHeader gives its
+// reason for:
+//   - POST, so the admin origin check protects handoff issuance.
+//   - `_blank`, so the admin record stays open in the tab the operator is in.
+//   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
+//     send `Origin: null` for this POST, which the admin CSRF middleware
+//     correctly rejects.
+//
+// One element, reused, and never detached. Creating one per handoff and
+// removing it after `submit()` is the obvious shape and it is a bug: submission
+// is processed in a later task, and Firefox abandons the navigation when the
+// form has left the document before that task runs. Keeping one settles the
+// timing question without a timer to reason about, and leaves nothing
+// accumulating behind it.
+let handoffForm: HTMLFormElement | undefined;
+
+function dashboardHandoffForm(): HTMLFormElement {
+  handoffForm ??= (() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.target = "_blank";
+    form.setAttribute("rel", "noopener");
+    // It carries no controls and so draws nothing, but a form is still a block
+    // box. Said outright rather than left to the user agent's margins.
+    form.hidden = true;
+    return form;
+  })();
+
+  // Re-attached rather than assumed attached: a submit from a form outside the
+  // document does nothing at all, and a test harness that resets the document
+  // between cases takes it back out.
+  if (!handoffForm.isConnected) document.body.append(handoffForm);
+
+  return handoffForm;
+}
+
+export function openOrganizationDashboard(organizationId: string): void {
+  const form = dashboardHandoffForm();
+  form.action = organizationDashboardUrl(organizationId);
+  form.submit();
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
@@ -258,6 +309,7 @@ export function setStripeCustomer(
 }
 
 export type ListOrganizationsResult = {
+  total: number;
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
@@ -271,6 +323,9 @@ export type ListOrganizationsResult = {
 // Nothing here sends them, and nothing should: two ways to say the same filter
 // is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
   q?: string;
   account_types?: string[];
   trial_states?: string[];
@@ -402,28 +457,6 @@ export function markEnterpriseTrialConverted(
   );
 }
 
-// Both answer the organization in its new state, so a caller updates its cache
-// from the response rather than reading the record back.
-export function disableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function enableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds, mirrored so a value it would reject never leaves the
 // browser. See MinTrialExtensionDays and MaxTrialExtensionDays in
 // server/internal/constants/trials.go: zero moves nothing but updated_at, a
@@ -431,23 +464,6 @@ export function enableOrganization(
 // where a trial becomes a contract.
 export const MIN_TRIAL_EXTENSION_DAYS = 1;
 export const MAX_TRIAL_EXTENSION_DAYS = 365;
-
-export type ExtendTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// The days are added to the trial's current end date, not to today, so an
-// extension applied early does not shorten the trial.
-export function extendTrial(
-  body: ExtendTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
 
 // The server's own bounds for a re-arm, mirrored the way the extension bounds
 // above are. See MinTrialRearmDays and MaxTrialRearmDays in
@@ -457,24 +473,11 @@ export function extendTrial(
 export const MIN_TRIAL_REARM_DAYS = 1;
 export const MAX_TRIAL_REARM_DAYS = 365;
 
-export type RearmTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Not an extension with a different verb. The days are the whole length of a
-// fresh run counted from now, and the write also restores the organization's
-// account type and whitelist flag and revives its model provider keys. Only a
-// demoted trial can be re-armed; anything else is refused with a conflict.
-export function rearmTrial(
-  body: RearmTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+// The server's own bounds for a start, mirrored the way the re-arm bounds
+// above are. See MinTrialStartDays and MaxTrialStartDays in
+// server/internal/constants/trials.go.
+export const MIN_TRIAL_START_DAYS = 1;
+export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
   name: string;

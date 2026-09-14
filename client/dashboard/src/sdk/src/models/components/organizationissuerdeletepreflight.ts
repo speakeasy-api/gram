@@ -7,9 +7,13 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  TrustedUserSessionIssuerReference,
+  TrustedUserSessionIssuerReference$inboundSchema,
+} from "./trustedusersessionissuerreference.js";
 
 /**
- * Authoritative impact summary for deleting a remote_session_issuer: how many clients reference it and the names of the MCP servers those clients are attached to.
+ * Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.
  */
 export type OrganizationIssuerDeletePreflight = {
   /**
@@ -20,6 +24,10 @@ export type OrganizationIssuerDeletePreflight = {
    * Display names of MCP servers attached to this issuer's clients.
    */
   mcpServerNames: Array<string>;
+  /**
+   * Organization-owned user_session_issuers that trust this issuer and block deletion.
+   */
+  trustedUserSessionIssuers: Array<TrustedUserSessionIssuerReference>;
 };
 
 /** @internal */
@@ -30,11 +38,15 @@ export const OrganizationIssuerDeletePreflight$inboundSchema: z.ZodMiniType<
   z.object({
     client_count: z.int(),
     mcp_server_names: z.array(z.string()),
+    trusted_user_session_issuers: z.array(
+      TrustedUserSessionIssuerReference$inboundSchema,
+    ),
   }),
   z.transform((v) => {
     return remap$(v, {
       "client_count": "clientCount",
       "mcp_server_names": "mcpServerNames",
+      "trusted_user_session_issuers": "trustedUserSessionIssuers",
     });
   }),
 );

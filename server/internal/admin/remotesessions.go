@@ -194,7 +194,7 @@ func convertGlobalRemoteSessionIssuer(v *adminrsgen.GlobalRemoteSessionIssuer) *
 	if v == nil {
 		return nil
 	}
-	out := &gen.GlobalRemoteSessionIssuer{Issuer: v.Issuer, GlobalClientCount: v.GlobalClientCount, TenantClientCount: v.TenantClientCount}
+	out := &gen.GlobalRemoteSessionIssuer{Issuer: v.Issuer, GlobalClientCount: v.GlobalClientCount, TenantClientCount: v.TenantClientCount, TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount}
 	return out
 }
 
@@ -232,7 +232,7 @@ func convertIssuerMigratePreflight(v *adminrsgen.IssuerMigratePreflight) *gen.Is
 	if v == nil {
 		return nil
 	}
-	out := &gen.IssuerMigratePreflight{ClientCount: v.ClientCount, McpServerNames: v.McpServerNames, EndpointMismatches: v.EndpointMismatches, ConflictingMcpServerNames: v.ConflictingMcpServerNames, Warnings: v.Warnings, CanMigrate: v.CanMigrate, TargetTenantClientCount: v.TargetTenantClientCount}
+	out := &gen.IssuerMigratePreflight{ClientCount: v.ClientCount, McpServerNames: v.McpServerNames, EndpointMismatches: v.EndpointMismatches, ConflictingMcpServerNames: v.ConflictingMcpServerNames, Warnings: v.Warnings, TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount, CanMigrate: v.CanMigrate, TargetTenantClientCount: v.TargetTenantClientCount}
 	return out
 }
 

@@ -68,8 +68,11 @@ type CreateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -97,8 +100,11 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -134,8 +140,11 @@ type GetUserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1113,8 +1122,11 @@ type UserSessionIssuerResponseBody struct {
 	// legacy value that admits exactly what 'open' admits, and no issuer is
 	// created with it.
 	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
-	CreatedAt                     string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                     string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1129,6 +1141,7 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1147,6 +1160,7 @@ func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Updat
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1187,6 +1201,7 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 		AuthnChallengeMode:            res.AuthnChallengeMode,
 		SessionDurationHours:          res.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}

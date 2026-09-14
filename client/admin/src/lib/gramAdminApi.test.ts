@@ -3,10 +3,7 @@ import {
   GramAdminError,
   bulkUpdateAccountType,
   cancelStripeSubscription,
-  disableOrganization,
-  enableOrganization,
   errorMessage,
-  extendTrial,
   getStripeCustomer,
   getInferenceKeys,
   getInferenceSpendHistory,
@@ -19,9 +16,10 @@ import {
   organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
+  MAX_TRIAL_START_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
-  rearmTrial,
+  MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
   setStripeCustomer,
@@ -90,6 +88,28 @@ describe("listOrganizations", () => {
         "&trial_states=running&trial_states=ending_soon" +
         "&disabled_states=active&disabled_states=disabled",
     );
+  });
+
+  it("sends Created direction and page to the admin API", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ organizations: [], total: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const result = await listOrganizations({
+      sort: "created_at",
+      direction: "asc",
+      page: 2,
+      limit: 50,
+    });
+
+    expect(fetch.mock.calls.at(-1)?.[0]).toBe(
+      "/admin/organizations.list?sort=created_at&direction=asc&page=2&limit=50",
+    );
+    expect(result.total).toBe(0);
   });
 
   it("asks for the unfiltered list with no query string at all", async () => {
@@ -330,9 +350,11 @@ describe("errorMessage", () => {
   });
 });
 
-// The admin API is stripped from both generated SDKs, so nothing checks these
-// paths against the design. A test naming each one is the only thing between a
-// disable that enables and a review that reads two identical-looking calls.
+// The writes that still leave through this hand-written client: enterprise
+// conversion and the bulk account-type update. A test naming each path is what
+// keeps a review from reading two identical-looking calls as the same one. The
+// trial day-count bounds are checked here too, because the browser mirrors them
+// by hand rather than reading them from the design.
 describe("the organization write endpoints", () => {
   const ORG = {
     id: "org_placeholder_one",
@@ -344,17 +366,6 @@ describe("the organization write endpoints", () => {
     created_at: "2026-01-02T00:00:00Z",
     updated_at: "2026-01-07T00:00:00Z",
   } satisfies AdminOrganization;
-
-  function stubFetch(): ReturnType<typeof vi.fn> {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(ORG), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetch);
-    return fetch;
-  }
 
   function requestOf(fetch: ReturnType<typeof vi.fn>): {
     path: unknown;
@@ -442,45 +453,6 @@ describe("the organization write endpoints", () => {
     expect(window.location.href).toBe(before);
   });
 
-  it("posts the id to the disable path", async () => {
-    const fetch = stubFetch();
-
-    await expect(disableOrganization({ id: ORG.id })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/organization.disable",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id },
-    });
-  });
-
-  it("posts the id to the enable path", async () => {
-    const fetch = stubFetch();
-
-    await expect(enableOrganization({ id: ORG.id })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/organization.enable",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id },
-    });
-  });
-
-  it("posts the id and the day count to the trial path", async () => {
-    const fetch = stubFetch();
-
-    await expect(extendTrial({ id: ORG.id, days: 30 })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/trial.extend",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id, days: 30 },
-    });
-  });
-
   // MinTrialRearmDays and MaxTrialRearmDays in
   // server/internal/constants/trials.go, which alias the extension bounds there
   // today. Written out rather than compared to the extension constants: the two
@@ -491,20 +463,9 @@ describe("the organization write endpoints", () => {
     expect(MAX_TRIAL_REARM_DAYS).toBe(365);
   });
 
-  // A different path and a different action from extend: this one restores the
-  // account type and the whitelist flag and revives the model provider keys,
-  // and its days are the whole length of a fresh run rather than an addition.
-  it("posts the id and the day count to the re-arm path", async () => {
-    const fetch = stubFetch();
-
-    await expect(rearmTrial({ id: ORG.id, days: 14 })).resolves.toEqual(ORG);
-
-    expect(requestOf(fetch)).toEqual({
-      path: "/admin/trial.rearm",
-      method: "POST",
-      contentType: "application/json",
-      body: { id: ORG.id, days: 14 },
-    });
+  it("mirrors the server's start bounds exactly", () => {
+    expect(MIN_TRIAL_START_DAYS).toBe(1);
+    expect(MAX_TRIAL_START_DAYS).toBe(365);
   });
 
   it("posts the ids and one account type to the bulk path", async () => {
@@ -538,33 +499,6 @@ describe("the organization write endpoints", () => {
         account_type: "enterprise",
       },
     });
-  });
-
-  // The 409 the server answers when a trial has converted, been demoted or
-  // already expired. The body carries the sentence the operator has to read,
-  // and it only survives if the call goes through gramAdminFetch.
-  it("carries the conflict the server sends back", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            name: "conflict",
-            message: "organization has no running enterprise trial to extend",
-          }),
-          { status: 409, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
-    );
-
-    const failure = await extendTrial({ id: ORG.id, days: 30 }).catch(
-      (e: unknown) => e,
-    );
-
-    expect(failure).toBeInstanceOf(GramAdminError);
-    expect(errorMessage(failure)).toBe(
-      "organization has no running enterprise trial to extend",
-    );
   });
 });
 

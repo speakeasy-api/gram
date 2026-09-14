@@ -29,6 +29,7 @@ type Server struct {
 	UpdateClient              http.Handler
 	AttachClientKeySet        http.Handler
 	DetachClientKeySet        http.Handler
+	RotateClient              http.Handler
 	DeleteClient              http.Handler
 	RemoveClientFromMcpServer http.Handler
 }
@@ -69,6 +70,7 @@ func New(
 			{"UpdateClient", "POST", "/rpc/organizationRemoteSessionClients.update"},
 			{"AttachClientKeySet", "POST", "/rpc/organizationRemoteSessionClients.attachKeySet"},
 			{"DetachClientKeySet", "DELETE", "/rpc/organizationRemoteSessionClients.detachKeySet"},
+			{"RotateClient", "POST", "/rpc/organizationRemoteSessionClients.rotate"},
 			{"DeleteClient", "DELETE", "/rpc/organizationRemoteSessionClients.delete"},
 			{"RemoveClientFromMcpServer", "POST", "/rpc/organizationRemoteSessionClients.removeFromMcpServer"},
 		},
@@ -81,6 +83,7 @@ func New(
 		UpdateClient:              NewUpdateClientHandler(e.UpdateClient, mux, decoder, encoder, errhandler, formatter),
 		AttachClientKeySet:        NewAttachClientKeySetHandler(e.AttachClientKeySet, mux, decoder, encoder, errhandler, formatter),
 		DetachClientKeySet:        NewDetachClientKeySetHandler(e.DetachClientKeySet, mux, decoder, encoder, errhandler, formatter),
+		RotateClient:              NewRotateClientHandler(e.RotateClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteClient:              NewDeleteClientHandler(e.DeleteClient, mux, decoder, encoder, errhandler, formatter),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerHandler(e.RemoveClientFromMcpServer, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -100,6 +103,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateClient = m(s.UpdateClient)
 	s.AttachClientKeySet = m(s.AttachClientKeySet)
 	s.DetachClientKeySet = m(s.DetachClientKeySet)
+	s.RotateClient = m(s.RotateClient)
 	s.DeleteClient = m(s.DeleteClient)
 	s.RemoveClientFromMcpServer = m(s.RemoveClientFromMcpServer)
 }
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateClientHandler(mux, h.UpdateClient)
 	MountAttachClientKeySetHandler(mux, h.AttachClientKeySet)
 	MountDetachClientKeySetHandler(mux, h.DetachClientKeySet)
+	MountRotateClientHandler(mux, h.RotateClient)
 	MountDeleteClientHandler(mux, h.DeleteClient)
 	MountRemoveClientFromMcpServerHandler(mux, h.RemoveClientFromMcpServer)
 }
@@ -592,6 +597,60 @@ func NewDetachClientKeySetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "detachClientKeySet")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRotateClientHandler configures the mux to serve the
+// "organizationRemoteSessionClients" service "rotateClient" endpoint.
+func MountRotateClientHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionClients.rotate", f)
+}
+
+// NewRotateClientHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizationRemoteSessionClients" service "rotateClient"
+// endpoint.
+func NewRotateClientHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRotateClientRequest(mux, decoder)
+		encodeResponse = EncodeRotateClientResponse(encoder)
+		encodeError    = EncodeRotateClientError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "rotateClient")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

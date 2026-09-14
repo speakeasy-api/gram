@@ -78,6 +78,10 @@ export type RemoteSessionClient = {
     | undefined;
   updatedAt: Date;
   /**
+   * When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.
+   */
+  upstreamRejectedAt?: Date | undefined;
+  /**
    * The user_session_issuers this client is attached to via the join table. Empty for a standalone client with no attachments.
    */
   userSessionIssuerIds: Array<string>;
@@ -122,6 +126,9 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    upstream_rejected_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     user_session_issuer_ids: z.array(z.string()),
   }),
   z.transform((v) => {
@@ -137,6 +144,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "remote_session_issuer_id": "remoteSessionIssuerId",
       "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
+      "upstream_rejected_at": "upstreamRejectedAt",
       "user_session_issuer_ids": "userSessionIssuerIds",
     });
   }),

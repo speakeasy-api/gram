@@ -630,6 +630,19 @@ func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx contex
 	return err
 }
 
+const forceSoftDeletePlatformMCPCatalogRegistrationFixture = `-- name: ForceSoftDeletePlatformMCPCatalogRegistrationFixture :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Test-only fixture for durable-provenance reads after registration lifecycle
+// state changes while the registered MCP and its plugin attachment remain live.
+func (q *Queries) ForceSoftDeletePlatformMCPCatalogRegistrationFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceSoftDeletePlatformMCPCatalogRegistrationFixture, id)
+	return err
+}
+
 const forceSoftDeleteRemoteSessionIssuerFixture = `-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
