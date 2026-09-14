@@ -1870,7 +1870,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     text String COMMENT 'The record in words. Empty where the producer put everything in attributes, in which case raw_event_name is the readable headline.' CODEC(ZSTD),
 
     -- How it went, and how long it took
-    outcome LowCardinality(String) COMMENT 'Agent-vocabulary outcome: ok | error | empty when not stated. Not a protocol status code.',
+    outcome LowCardinality(String) COMMENT 'Agent-vocabulary outcome: ok | error | rejected (a tool call the user or a policy refused to run) | refused (a model declining to answer) | empty when not stated. Not a protocol status code.',
     outcome_message String COMMENT 'Producer-stated message accompanying an error outcome. Empty otherwise.' CODEC(ZSTD),
     duration_nano Int64 COMMENT 'Duration in nanoseconds when the producer states one (span duration, tool call duration). 0 when not stated.' CODEC(Delta, ZSTD),
 

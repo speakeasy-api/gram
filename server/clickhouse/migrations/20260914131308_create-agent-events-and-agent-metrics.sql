@@ -35,7 +35,7 @@ CREATE TABLE `gram`.`agent_events` (
   `mcp_tool_name` String COMMENT 'MCP tool involved, when the record says so. Empty otherwise.' CODEC(ZSTD(1)),
   `tool_name` String COMMENT 'Tool the record concerns, when the record says so. Empty otherwise.' CODEC(ZSTD(1)),
   `text` String COMMENT 'The record in words. Empty where the producer put everything in attributes, in which case raw_event_name is the readable headline.' CODEC(ZSTD(1)),
-  `outcome` LowCardinality(String) COMMENT 'Agent-vocabulary outcome: ok | error | empty when not stated. Not a protocol status code.',
+  `outcome` LowCardinality(String) COMMENT 'Agent-vocabulary outcome: ok | error | rejected (a tool call the user or a policy refused to run) | refused (a model declining to answer) | empty when not stated. Not a protocol status code.',
   `outcome_message` String COMMENT 'Producer-stated message accompanying an error outcome. Empty otherwise.' CODEC(ZSTD(1)),
   `duration_nano` Int64 COMMENT 'Duration in nanoseconds when the producer states one (span duration, tool call duration). 0 when not stated.' CODEC(Delta(8), ZSTD(1)),
   `input_content` String COMMENT 'Normalized input message JSON. Empty when the record carries none.' CODEC(ZSTD(1)),
