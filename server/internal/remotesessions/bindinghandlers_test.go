@@ -166,13 +166,17 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, locked, 1)
+	// A client deadline can race with server-side completion. Keep the
+	// contender rollback-only so releasing the admission lock cannot commit it.
+	competingTx := testenv.BeginTx(t, ctx, ti.conn)
 	blockedCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
-	_, err = repo.New(ti.conn).DetachPrincipalRemoteSessionBinding(blockedCtx, repo.DetachPrincipalRemoteSessionBindingParams{
+	_, err = repo.New(competingTx).DetachPrincipalRemoteSessionBinding(blockedCtx, repo.DetachPrincipalRemoteSessionBindingParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
 		UserSessionIssuerID: config, SubjectUrn: mine.SubjectUrn.String(), ID: uuid.MustParse(binding.ID),
 	})
 	require.ErrorIs(t, err, context.DeadlineExceeded, "session admission must serialize attachment revocation")
+	_ = competingTx.Rollback(ctx) // Cancellation may already have closed the connection.
 	require.NoError(t, tx.Rollback(ctx))
 
 	list, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
