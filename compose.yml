@@ -60,7 +60,6 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
     restart: unless-stopped
-    mem_limit: ${CLICKHOUSE_CONTAINER_MEMORY_LIMIT:-0}
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
       - "${CLICKHOUSE_NATIVE_PORT}:9440"
@@ -70,7 +69,6 @@ services:
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: 1
-      CLICKHOUSE_SERVER_MEMORY_USAGE: ${CLICKHOUSE_SERVER_MEMORY_USAGE:-1073741824}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./local/clickhouse/config.d/config.xml:/etc/clickhouse-server/config.d/config.xml:ro
