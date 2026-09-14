@@ -10,7 +10,6 @@ import (
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -51,8 +50,8 @@ func TestShadowAIListToolsProjectsTheAccessVerdict(t *testing.T) {
 		DisplayName: "Codex",
 		Category:    "harness",
 		Signals:     []string{"installed"},
-		UserCount:   conv.Ptr(int64(3)),
-		DeviceCount: conv.Ptr(int64(4)),
+		UserCount:   3,
+		DeviceCount: 4,
 		LastSeen:    "2026-09-11T00:00:00Z",
 		Access:      &accessgen.AIToolAccessSummary{State: "blocked", Enforceable: true},
 	}}}}
@@ -69,9 +68,6 @@ func TestShadowAIListToolsProjectsTheAccessVerdict(t *testing.T) {
 
 	require.Equal(t, "org_1", detections.lastInput.OrganizationID)
 	require.Equal(t, "harness", detections.lastInput.Category)
-	// The counts are attribution. They are only passed through because admit
-	// rechecked org:admin live on this very call.
-	require.True(t, detections.lastInput.Attributed)
 }
 
 // The dashboard withholds per-tool user and device counts below org:admin, so

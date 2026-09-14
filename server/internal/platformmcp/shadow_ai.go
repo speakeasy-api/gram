@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var ErrShadowAIUnavailable = errors.New("platform mcp shadow ai unavailable")
@@ -117,9 +116,6 @@ func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, in
 	result, err := s.detections.ReadAIDetections(ctx, access.AIDetectionsReadInput{
 		OrganizationID: principal.OrganizationID,
 		Category:       strings.TrimSpace(input.Category),
-		// admit cleared the live org:admin check, the same grant the
-		// dashboard requires to see who and how many.
-		Attributed: true,
 	})
 	if err != nil {
 		return ListShadowAIToolsOutput{}, fmt.Errorf("read shadow ai detections: %w", err)
@@ -136,8 +132,8 @@ func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, in
 			State:       "",
 			Enforceable: false,
 			Signals:     detection.Signals,
-			UserCount:   conv.PtrValOr(detection.UserCount, 0),
-			DeviceCount: conv.PtrValOr(detection.DeviceCount, 0),
+			UserCount:   detection.UserCount,
+			DeviceCount: detection.DeviceCount,
 			LastSeen:    detection.LastSeen,
 		}
 		if detection.Access != nil {
