@@ -461,7 +461,7 @@ export interface TimeRangePickerProps {
   availablePresets?: readonly DateRangePreset[];
   /** Disabled state */
   disabled?: boolean;
-  /** Timezone display (e.g., "UTC-08:00") */
+  /** Timezone display; "UTC" also bounds the calendar by the current UTC day. */
   timezone?: string;
   /** API URL for AI parsing (defaults to window.location.origin) */
   apiUrl?: string;
@@ -506,6 +506,15 @@ function TimeRangePicker({
   );
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLDivElement>(null);
+  const now = new Date();
+  let maxCalendarDate = now;
+  if (timezone === "UTC") {
+    maxCalendarDate = new Date(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+  }
 
   // Sync custom label from props (e.g., when URL changes)
   React.useEffect(() => {
@@ -673,7 +682,7 @@ function TimeRangePicker({
             "relative inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all outline-none",
             "border-border hover:border-border/80",
             disabled && "cursor-not-allowed opacity-50",
-            timezone && "pt-4",
+            timezone && "py-1.5",
             className,
           )}
         >
@@ -781,7 +790,7 @@ function TimeRangePicker({
                   end: currentRange?.to ?? null,
                 }}
                 onSelect={handleCalendarSelect}
-                maxDate={new Date()}
+                maxDate={maxCalendarDate}
               />
               {customRange && onClearCustomRange && (
                 <div className="border-t border-border/50 p-2">

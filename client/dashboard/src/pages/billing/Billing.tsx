@@ -30,12 +30,12 @@ import {
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
-import { PaygCycleEstimate } from "@/components/billing/payg-cycle-estimate";
+import { BillingPositionSection } from "@/components/billing/billing-position-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
-import { TumUsageSection } from "@/components/billing/tum-section";
+import { MeterUsageSection } from "@/components/billing/meter-usage-section";
 
 export default function Billing(): JSX.Element {
   return (
@@ -63,17 +63,13 @@ function BillingInner() {
   const productTier = useProductTier();
   const isPlatformAdmin = useIsPlatformAdmin();
 
-  // Enterprise and pay as you go both bill on tokens under management, so they
-  // share one usage view: the TUM section, with the PAYG invoice estimate at
-  // its head for the tier Stripe is billing. Trials run on both tiers, so the
-  // pay-as-you-go price list and payment section sit on this shared path too —
-  // each owns its own trial rule.
+  // Billing estimates and the meter explorer intentionally have independent
+  // data/error boundaries: neither is a source of truth for the other.
   if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
-        {/* The PAYG invoice estimate renders at the section's head; the
-            estimate owns its own tier rule and renders nothing elsewhere. */}
-        <TumUsageSection estimate={<PaygCycleEstimate />} />
+        <BillingPositionSection />
+        <MeterUsageSection />
         {/* Renders for pay as you go, and for enterprise only during an
             active trial — the section owns that rule. */}
         <InferenceCapsSection />
