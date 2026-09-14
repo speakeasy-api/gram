@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"math"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -237,6 +238,11 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 // function is the authorization-time gate and rejects the `*` a catalog
 // pattern needs, and importing the OAuth surface into the scan-target model to
 // borrow four line-noise checks is the wrong dependency to take on.
+//
+// Restating them means they have to stay in step. Anything this accepts and
+// that gate rejects stores as a matcher an administrator is told is
+// enforceable, on a target the gateway can never resolve, so the block reads
+// as active and silently never fires.
 func validateClientIDURLShape(id string) error {
 	if strings.Contains(id, "#") {
 		return errors.New("must not contain a fragment")
@@ -249,14 +255,27 @@ func validateClientIDURLShape(id string) error {
 	if slash < 0 {
 		return errors.New("must include a path component; a bare origin is not a client id")
 	}
-	host, path := rest[:slash], rest[slash:]
+	host := rest[:slash]
 	if host == "" {
 		return errors.New("must include a host")
 	}
 	if strings.Contains(host, "@") {
 		return errors.New("must not contain a userinfo component")
 	}
-	for segment := range strings.SplitSeq(path, "/") {
+	// Percent-escapes are judged by parsing rather than by eye. A malformed
+	// one such as "%gh" passes every string test above, but url.Parse rejects
+	// it, and so does the authorization-time gate when a client presents the
+	// same id. The wildcard a catalog pattern carries is stubbed out first,
+	// the way validatePattern does it, so a legal pattern still parses.
+	parsed, err := url.Parse(strings.ReplaceAll(id, "*", "x"))
+	if err != nil {
+		return errors.New("must be a parseable https URL")
+	}
+	// Dot segments are checked on the DECODED path. url.Parse leaves "%2e%2e"
+	// alone in the raw path, and the authorization-time gate compares the
+	// decoded form, so checking the raw string alone would accept a matcher
+	// that gate rejects.
+	for segment := range strings.SplitSeq(parsed.Path, "/") {
 		if segment == "." || segment == ".." {
 			return errors.New(`must not contain "." or ".." path segments`)
 		}
