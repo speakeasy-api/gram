@@ -54,3 +54,79 @@ func (e ClaudeCodeSpan) ResponseID(span *otelv1.InboundSpan) (key string, val st
 	key, val = getOneAttr(span, "gen_ai.response.id")
 	return key, val, nil
 }
+
+// Claude Code spans follow the gen_ai semantic conventions, so every
+// record-content answer is the semconv reading; only the producer is
+// Claude's own.
+
+func (ClaudeCodeSpan) Provider(*otelv1.InboundSpan) (string, string, error) {
+	return scopeNameKey, claudeCodeProvider, nil
+}
+
+func (ClaudeCodeSpan) Surface(*otelv1.InboundSpan) (string, string, error) {
+	return scopeNameKey, claudeCodeSurface, nil
+}
+
+func (ClaudeCodeSpan) EventName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.EventName(span)
+}
+func (ClaudeCodeSpan) EventType(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.EventType(span)
+}
+func (ClaudeCodeSpan) SubjectID(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.SubjectID(span)
+}
+func (ClaudeCodeSpan) TurnID(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.TurnID(span)
+}
+func (ClaudeCodeSpan) Model(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.Model(span)
+}
+func (ClaudeCodeSpan) ToolName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.ToolName(span)
+}
+func (ClaudeCodeSpan) Outcome(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.Outcome(span)
+}
+func (ClaudeCodeSpan) OutcomeMessage(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.OutcomeMessage(span)
+}
+func (ClaudeCodeSpan) Text(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.Text(span)
+}
+func (ClaudeCodeSpan) QuerySource(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.QuerySource(span)
+}
+func (ClaudeCodeSpan) SkillName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.SkillName(span)
+}
+func (ClaudeCodeSpan) AgentName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.AgentName(span)
+}
+func (ClaudeCodeSpan) MCPServerName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.MCPServerName(span)
+}
+func (ClaudeCodeSpan) MCPToolName(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.MCPToolName(span)
+}
+func (ClaudeCodeSpan) ExternalOrgID(span *otelv1.InboundSpan) (string, string, error) {
+	return SemconvSpan{}.ExternalOrgID(span)
+}
+func (ClaudeCodeSpan) DurationNano(span *otelv1.InboundSpan) (string, int64, error) {
+	return SemconvSpan{}.DurationNano(span)
+}
+func (ClaudeCodeSpan) InputTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return SemconvSpan{}.InputTokens(span)
+}
+func (ClaudeCodeSpan) OutputTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return SemconvSpan{}.OutputTokens(span)
+}
+func (ClaudeCodeSpan) CacheReadTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return SemconvSpan{}.CacheReadTokens(span)
+}
+func (ClaudeCodeSpan) CacheWriteTokens(span *otelv1.InboundSpan) (string, int64, error) {
+	return SemconvSpan{}.CacheWriteTokens(span)
+}
+func (ClaudeCodeSpan) CostUSD(span *otelv1.InboundSpan) (string, float64, error) {
+	return SemconvSpan{}.CostUSD(span)
+}
