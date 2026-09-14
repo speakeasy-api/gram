@@ -74,7 +74,7 @@ export type AdminListOrganizationsQueryError =
  * listOrganizations admin
  *
  * @remarks
- * Lists organizations for admin operations with optional search and filters.
+ * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
  */
 export function useAdminListOrganizations(
   request?: AdminListOrganizationsRequest | undefined,
@@ -101,7 +101,7 @@ export function useAdminListOrganizations(
  * listOrganizations admin
  *
  * @remarks
- * Lists organizations for admin operations with optional search and filters.
+ * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
  */
 export function useAdminListOrganizationsSuspense(
   request?: AdminListOrganizationsRequest | undefined,
@@ -128,7 +128,7 @@ export function useAdminListOrganizationsSuspense(
  * listOrganizations admin
  *
  * @remarks
- * Lists organizations for admin operations with optional search and filters.
+ * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
  */
 export function useAdminListOrganizationsInfinite(
   request?: AdminListOrganizationsRequest | undefined,
@@ -169,7 +169,7 @@ export function useAdminListOrganizationsInfinite(
  * listOrganizations admin
  *
  * @remarks
- * Lists organizations for admin operations with optional search and filters.
+ * Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.
  */
 export function useAdminListOrganizationsInfiniteSuspense(
   request?: AdminListOrganizationsRequest | undefined,

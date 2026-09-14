@@ -11,6 +11,7 @@ features:
     core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
+    downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
@@ -18,21 +19,29 @@ features:
     ignores: 2.81.1
     methodArguments: 0.1.2
     nameOverrides: 2.81.4
+    nullables: 0.1.1
     pagination: 2.83.2
     reactQueryHooks: 0.3.0
     responseFormat: 0.3.0
     retries: 2.83.1
     sdkHooks: 0.4.0
+    uploadStreams: 0.1.1
 trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
+  src/funcs/adminCreateGlobalIssuer.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
+  src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDisableOrganization.ts: {}
   src/funcs/adminEnableOrganization.ts: {}
   src/funcs/adminExtendTrial.ts: {}
+  src/funcs/adminFetchGlobalIssuerMetadata.ts: {}
+  src/funcs/adminGetGlobalIssuer.ts: {}
+  src/funcs/adminGetGlobalIssuerDuplicatePreflight.ts: {}
+  src/funcs/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminGetInferenceKeys.ts: {}
   src/funcs/adminGetInferenceSpendHistory.ts: {}
   src/funcs/adminGetOrganization.ts: {}
@@ -44,20 +53,27 @@ trackedFiles:
   src/funcs/adminGetSession.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
   src/funcs/adminGetStripeSubscription.ts: {}
+  src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
+  src/funcs/adminListGlobalIssuers.ts: {}
   src/funcs/adminListOrganizationActivity.ts: {}
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
+  src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminRearmTrial.ts: {}
+  src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
+  src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/funcs/adminUpdateGlobalIssuer.ts: {}
   src/funcs/adminUpdateOrganization.ts: {}
+  src/funcs/adminUploadPlatformImage.ts: {}
   src/hooks/hooks.ts: {}
   src/hooks/types.ts: {}
   src/index.ts: {}
@@ -94,30 +110,53 @@ trackedFiles:
   src/models/components/adminsession.ts: {}
   src/models/components/adminstripecustomer.ts: {}
   src/models/components/adminstripesubscription.ts: {}
+  src/models/components/asset.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/createorganizationrequestbody.ts: {}
+  src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
   src/models/components/enableorganizationrequestbody.ts: {}
   src/models/components/extendtrialrequestbody.ts: {}
+  src/models/components/fetchissuermetadatarequestbody.ts: {}
+  src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/issuerconvergencecandidate.ts: {}
+  src/models/components/issuerfieldmismatch.ts: {}
+  src/models/components/issuermigratepreflight.ts: {}
+  src/models/components/listglobalremotesessionissuersresult.ts: {}
+  src/models/components/listissuerconvergencecandidatesresult.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
+  src/models/components/migrateremotesessionissuerrequestbody.ts: {}
+  src/models/components/migrateremotesessionissuerresult.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
+  src/models/components/remotesessionissuer.ts: {}
+  src/models/components/remotesessionissuerdraft.ts: {}
+  src/models/components/remotesessionissuerduplicatematch.ts: {}
+  src/models/components/remotesessionissuerduplicatepreflight.ts: {}
+  src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
+  src/models/components/riskidrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
   src/models/components/updateorganizationrequestbody.ts: {}
+  src/models/components/updateremotesessionissuerform.ts: {}
+  src/models/components/uploadimageresult.ts: {}
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
   src/models/errors/responsevalidationerror.ts: {}
   src/models/errors/sdkvalidationerror.ts: {}
   src/models/errors/serviceerror.ts: {}
+  src/models/operations/admindeleteglobalissuer.ts: {}
+  src/models/operations/admingetglobalissuer.ts: {}
+  src/models/operations/admingetglobalissuerduplicatepreflight.ts: {}
+  src/models/operations/admingetglobalissuermigratepreflight.ts: {}
   src/models/operations/admingetinferencekeys.ts: {}
   src/models/operations/admingetinferencespendhistory.ts: {}
   src/models/operations/admingetorganization.ts: {}
@@ -127,18 +166,30 @@ trackedFiles:
   src/models/operations/admingetproject.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
+  src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
+  src/models/operations/adminlistglobalissuers.ts: {}
   src/models/operations/adminlistorganizationactivity.ts: {}
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
+  src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
+  src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDisableOrganization.ts: {}
   src/react-query/adminEnableOrganization.ts: {}
   src/react-query/adminExtendTrial.ts: {}
+  src/react-query/adminFetchGlobalIssuerMetadata.ts: {}
+  src/react-query/adminGetGlobalIssuer.core.ts: {}
+  src/react-query/adminGetGlobalIssuer.ts: {}
+  src/react-query/adminGetGlobalIssuerDuplicatePreflight.core.ts: {}
+  src/react-query/adminGetGlobalIssuerDuplicatePreflight.ts: {}
+  src/react-query/adminGetGlobalIssuerMigratePreflight.core.ts: {}
+  src/react-query/adminGetGlobalIssuerMigratePreflight.ts: {}
   src/react-query/adminGetInferenceKeys.core.ts: {}
   src/react-query/adminGetInferenceKeys.ts: {}
   src/react-query/adminGetInferenceSpendHistory.core.ts: {}
@@ -159,6 +210,10 @@ trackedFiles:
   src/react-query/adminGetStripeCustomer.ts: {}
   src/react-query/adminGetStripeSubscription.core.ts: {}
   src/react-query/adminGetStripeSubscription.ts: {}
+  src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
+  src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
+  src/react-query/adminListGlobalIssuers.core.ts: {}
+  src/react-query/adminListGlobalIssuers.ts: {}
   src/react-query/adminListOrganizationActivity.core.ts: {}
   src/react-query/adminListOrganizationActivity.ts: {}
   src/react-query/adminListOrganizationMembers.core.ts: {}
@@ -169,15 +224,21 @@ trackedFiles:
   src/react-query/adminListOrganizations.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
+  src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOrganizationFeatures.core.ts: {}
   src/react-query/adminOrganizationFeatures.ts: {}
   src/react-query/adminRearmTrial.ts: {}
+  src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
+  src/react-query/adminServeImage.core.ts: {}
+  src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
+  src/react-query/adminUpdateGlobalIssuer.ts: {}
   src/react-query/adminUpdateOrganization.ts: {}
+  src/react-query/adminUploadPlatformImage.ts: {}
   src/react-query/index.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
   src/sdk/admin.ts: {}
@@ -214,6 +275,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminCreateGlobalIssuer:
+    speakeasy-default-admin-create-global-issuer:
+      requestBody:
+        application/json: {"issuer": "jcb", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-05-24T04:24:27.363Z", "id": "0ff63ecc-f6b4-4404-9c51-f535e26a4212", "issuer": "jcb", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-29T18:01:26.651Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminCreateGlobalRemoteSessionIssuer:
+    speakeasy-default-admin-create-global-remote-session-issuer:
+      requestBody:
+        application/json: {"issuer": "discover", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2025-08-10T15:10:19.901Z", "id": "65b608b4-236c-423a-8e17-2136e55d0f27", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-26T22:37:29.682Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminCreateOrganization:
     speakeasy-default-admin-create-organization:
       requestBody:
@@ -225,6 +308,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminDeleteGlobalIssuer:
+    speakeasy-default-admin-delete-global-issuer:
+      parameters:
+        query:
+          id: "3d2c4d45-0018-4bea-9a51-e775ed0fafe8"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminDeleteGlobalRemoteSessionIssuer:
+    speakeasy-default-admin-delete-global-remote-session-issuer:
+      parameters:
+        query:
+          id: "b86aa04e-0f1c-4c0b-b02d-961f8f7f181d"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminDisableOrganization:
     speakeasy-default-admin-disable-organization:
       requestBody:
@@ -258,6 +361,96 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminFetchGlobalIssuerMetadata:
+    speakeasy-default-admin-fetch-global-issuer-metadata:
+      requestBody:
+        application/json: {"issuer": "visa"}
+      responses:
+        "200":
+          application/json: {"authorization_response_iss_parameter_supported": true, "backchannel_logout_supported": false, "client_id_metadata_document_supported": true, "discovery_warnings": [], "issuer": "visa", "oidc": true, "passthrough": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminFetchGlobalRemoteSessionIssuerMetadata:
+    speakeasy-default-admin-fetch-global-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"issuer": "jcb"}
+      responses:
+        "200":
+          application/json: {"authorization_response_iss_parameter_supported": false, "backchannel_logout_supported": true, "client_id_metadata_document_supported": true, "discovery_warnings": [], "issuer": "jcb", "oidc": true, "passthrough": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetGlobalIssuer:
+    speakeasy-default-admin-get-global-issuer:
+      parameters:
+        query:
+          id: "887a6721-cc2b-4734-a60c-fea5320bb908"
+      responses:
+        "200":
+          application/json: {"global_client_count": 162286, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-12-22T04:27:24.743Z", "id": "0388e02f-c4a5-4551-aa64-72dedf0f5622", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-12-23T04:43:32.628Z"}, "tenant_client_count": 965841}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetGlobalIssuerDuplicatePreflight:
+    speakeasy-default-admin-get-global-issuer-duplicate-preflight:
+      responses:
+        "200":
+          application/json: {"matches": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetGlobalIssuerMigratePreflight:
+    speakeasy-default-admin-get-global-issuer-migrate-preflight:
+      parameters:
+        query:
+          source_id: "788d6af8-1661-4fc9-8e4f-75735f3c9a30"
+          target_id: "6e6e7d42-1a46-4050-9c7d-d0b99fa8ace3"
+      responses:
+        "200":
+          application/json: {"can_migrate": false, "client_count": 589058, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>"], "target_tenant_client_count": 373762, "warnings": [{"field": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetGlobalRemoteSessionIssuer:
+    speakeasy-default-admin-get-global-remote-session-issuer:
+      parameters:
+        query:
+          id: "5faa94d5-ed9c-4be3-a80d-e278e557ee31"
+      responses:
+        "200":
+          application/json: {"global_client_count": 394078, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-04-28T16:13:26.590Z", "id": "21072e2e-f861-4982-a27b-6c9668c7d782", "issuer": "visa", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-05-20T17:48:51.016Z"}, "tenant_client_count": 94879}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetGlobalRemoteSessionIssuerDuplicatePreflight:
+    speakeasy-default-admin-get-global-remote-session-issuer-duplicate-preflight:
+      responses:
+        "200":
+          application/json: {"matches": [{"id": "462463e3-7e42-4bbd-9dec-9b58216624e5", "issuer": "american_express", "name": "<value>", "project_name": "<value>", "slug": "<value>", "tier": "project-specific"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetGlobalRemoteSessionIssuerMigratePreflight:
+    speakeasy-default-admin-get-global-remote-session-issuer-migrate-preflight:
+      parameters:
+        query:
+          source_id: "a811b636-3c69-4f5e-bb2c-f03c03b430b7"
+          target_id: "7773285c-ae2e-418f-ba3e-63e53ce40c01"
+      responses:
+        "200":
+          application/json: {"can_migrate": false, "client_count": 226254, "conflicting_mcp_server_names": ["<value 1>", "<value 2>"], "endpoint_mismatches": [], "mcp_server_names": [], "target_tenant_client_count": 966146, "warnings": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminGetInferenceKeys:
     speakeasy-default-admin-get-inference-keys:
       parameters:
@@ -385,6 +578,48 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListGlobalIssuerConvergenceCandidates:
+    speakeasy-default-admin-list-global-issuer-convergence-candidates:
+      parameters:
+        query:
+          target_id: "53cdb96d-f120-4a9c-a988-b600f8fb18be"
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListGlobalIssuers:
+    speakeasy-default-admin-list-global-issuers:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminListGlobalRemoteSessionIssuerConvergenceCandidates:
+    speakeasy-default-admin-list-global-remote-session-issuer-convergence-candidates:
+      parameters:
+        query:
+          target_id: "789af4f3-3d72-439b-9e3d-ec476ce4d82f"
+      responses:
+        "200":
+          application/json: {"items": [{"client_count": 976595, "endpoint_mismatches": [{"field": "<value>"}], "issuer": {"client_id_metadata_document_supported": true, "created_at": "2025-12-06T18:38:28.573Z", "id": "8ce3d950-6e89-4d62-acd2-88632ee6e575", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-10-02T06:09:13.038Z"}, "organization_id": "<id>", "organization_name": "<value>", "warnings": [{"field": "<value>"}]}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListGlobalRemoteSessionIssuers:
+    speakeasy-default-admin-list-global-remote-session-issuers:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListOrganizationActivity:
     speakeasy-default-admin-list-organization-activity:
       parameters:
@@ -448,6 +683,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminMigrateToGlobalIssuer:
+    speakeasy-default-admin-migrate-to-global-issuer:
+      requestBody:
+        application/json: {"source_id": "754515d3-2097-463b-a114-de73644af43f", "target_id": "f021e92d-8474-4eba-ba48-f89bbcb0a039"}
+      responses:
+        "200":
+          application/json: {"clients_migrated": 27728, "issuer": {"client_id_metadata_document_supported": false, "created_at": "2026-04-25T03:07:07.383Z", "id": "1f02fb2a-ed57-434a-934d-e1e100566dbd", "issuer": "jcb", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-03-29T17:58:07.648Z"}, "source_deleted": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminMigrateToGlobalRemoteSessionIssuer:
+    speakeasy-default-admin-migrate-to-global-remote-session-issuer:
+      requestBody:
+        application/json: {"source_id": "b04dcfdf-2a5e-438b-8634-8165f17f3301", "target_id": "4a269a4a-6458-442d-8459-9c00c2323f3b"}
+      responses:
+        "200":
+          application/json: {"clients_migrated": 642022, "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-08-19T21:52:40.909Z", "id": "9fda252a-a61f-422a-9d68-9419fd1614c1", "issuer": "american_express", "oidc": true, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-12-25T11:40:50.277Z"}, "source_deleted": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminRearmTrial:
     speakeasy-default-admin-rearm-trial:
       requestBody:
@@ -459,6 +716,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminRefreshGlobalIssuerMetadata:
+    speakeasy-default-admin-refresh-global-issuer-metadata:
+      requestBody:
+        application/json: {"id": "249d7170-bea2-4fe3-82d8-36cdcd305326"}
+      responses:
+        "200":
+          application/json: {"discovery_warnings": ["<value 1>"], "issuer": {"client_id_metadata_document_supported": true, "created_at": "2026-08-25T07:44:28.258Z", "id": "5c296246-675a-4f0c-b460-7afb267812b9", "issuer": "jcb", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2025-12-11T12:55:16.102Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminRefreshGlobalRemoteSessionIssuerMetadata:
+    speakeasy-default-admin-refresh-global-remote-session-issuer-metadata:
+      requestBody:
+        application/json: {"id": "928487e2-f649-469b-9529-c01bc2d9a947"}
+      responses:
+        "200":
+          application/json: {"discovery_warnings": ["<value 1>", "<value 2>"], "issuer": {"client_id_metadata_document_supported": false, "created_at": "2024-12-29T16:32:57.496Z", "id": "e95f06e4-ced4-433d-83ac-b75f19c33f2a", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-22T00:08:32.529Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminResumeStripeSubscription:
     speakeasy-default-admin-resume-stripe-subscription:
       requestBody:
@@ -470,6 +749,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminServeImage:
+    speakeasy-default-admin-serve-image:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          image/*: "x-file: example.file"
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminSetInferenceKeyMonthlyLimit:
     speakeasy-default-admin-set-inference-key-monthly-limit:
       requestBody:
@@ -525,6 +816,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminUpdateGlobalIssuer:
+    speakeasy-default-admin-update-global-issuer:
+      requestBody:
+        application/json: {"id": "b954238e-442b-4325-b349-f92fb9a208a2"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": true, "created_at": "2026-04-10T18:21:24.042Z", "id": "5fbbee99-e55e-44f5-9ad0-1e6ce8c4b5b4", "issuer": "diners_club", "oidc": true, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-02-08T05:22:21.898Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminUpdateGlobalRemoteSessionIssuer:
+    speakeasy-default-admin-update-global-remote-session-issuer:
+      requestBody:
+        application/json: {"id": "3c519a17-169b-4a0a-83f9-708fae065ed1"}
+      responses:
+        "200":
+          application/json: {"client_id_metadata_document_supported": false, "created_at": "2025-08-29T12:47:58.567Z", "id": "12e9ed2b-f722-4aa5-a6d9-f12d10746468", "issuer": "jcb", "oidc": false, "organization_id": "<id>", "passthrough": false, "project_id": "<id>", "slug": "<value>", "updated_at": "2026-04-30T09:24:24.839Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminUpdateOrganization:
     speakeasy-default-admin-update-organization:
       requestBody:
@@ -536,5 +849,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminUploadPlatformImage:
+    speakeasy-default-admin-upload-platform-image:
+      requestBody:
+        application/octet-stream: "x-file: example.file"
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 801867, "content_type": "<value>", "created_at": "2025-06-15T00:28:30.271Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-07-05T09:52:13.346Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -16,6 +16,7 @@ import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   retryFailed,
+  useIdentityAccessibleResources,
   useIdentityChallenges,
   useIdentityMember,
   useIdentityPrincipalUrn,
@@ -23,6 +24,33 @@ import {
 } from "./useIdentityQueries";
 
 const RECENT_CHALLENGES = 5;
+
+/** How many reachable resources a panel lists before deferring to its page. */
+const REACHABLE_SHOWN = 8;
+
+/**
+ * The listing that continues a reach panel, filtered to the same person.
+ *
+ * A panel shows the first few of what can be hundreds, so its handoff has to
+ * land on the same question rather than on the unfiltered catalogue. Without a
+ * resolved Gram user id there is nothing to filter by, so the link falls back
+ * to the plain listing.
+ */
+function reachHandoff(
+  href: string,
+  userId: string | undefined,
+  /** The window the reader has open, carried on like the other handoffs. */
+  window: URLSearchParams,
+): string {
+  const search = new URLSearchParams();
+  for (const key of ["range", "from", "to", "label"]) {
+    const value = window.get(key);
+    if (value) search.set(key, value);
+  }
+  if (userId) search.set("accessibleBy", userId);
+  const encoded = search.toString();
+  return encoded ? `${href}?${encoded}` : href;
+}
 
 /**
  * Whether a scope slug is an exception rather than a permission.
@@ -124,12 +152,25 @@ export default function IdentityAccess(): JSX.Element {
   const challengeTotal = challengesQuery.data?.total ?? 0;
   const deniedTotal = deniedQuery.data?.total ?? 0;
 
+  // What the permissions panel beside this one states in the abstract, named:
+  // a scope family says this person may read MCP servers, these are the
+  // servers that reach reaches.
+  const reachQuery = useIdentityAccessibleResources(identity);
+  const servers = reachQuery.data?.servers ?? [];
+  const skills = reachQuery.data?.skills ?? [];
+  const retryReach = retryFailed(reachQuery);
+  // The same id the reach reads used, so the handoff filters the listing to
+  // the person the panel counted rather than to a different resolution of them.
+  const reachUserId = member?.id ?? identity.userIds[0];
+
   return (
     <IdentitySection
       title="Access"
       meta={sectionMeta([
         { count: roles.length, singular: "role" },
         { count: scopeCount, singular: "permission" },
+        { count: servers.length, singular: "server" },
+        { count: skills.length, singular: "skill" },
         { count: deniedTotal, singular: "denied", plural: "denied" },
       ])}
     >
@@ -235,6 +276,87 @@ export default function IdentityAccess(): JSX.Element {
                 </div>
               )}
             </>
+          )}
+        </IdentityPanel>
+
+        {/* The two panels above say what this person may do in the abstract.
+            These name the resources that reach actually lands on, which is
+            the question a reviewer arrives with. Both span every project in
+            the organization, so each row carries the project it belongs to. */}
+        <IdentityPanel
+          title="MCP servers they can reach"
+          handoffLabel="MCP"
+          handoffHref={reachHandoff(
+            routes.mcp.href(),
+            reachUserId,
+            new URLSearchParams(location.search),
+          )}
+          loading={reachQuery.isLoading}
+          error={reachQuery.isError && servers.length === 0}
+          refreshFailed={reachQuery.isError && servers.length > 0}
+          onRetry={retryReach}
+          footer={
+            servers.length > REACHABLE_SHOWN
+              ? `${REACHABLE_SHOWN} of ${servers.length.toLocaleString()} servers`
+              : undefined
+          }
+        >
+          {servers.length === 0 ? (
+            <IdentityPanelEmpty>
+              {reachUserId
+                ? "No MCP servers are reachable by this identity."
+                : // The read is held off without a Gram user id, so there is no
+                  // answer to report — saying none would be a claim about
+                  // someone's access made from a request never sent.
+                  "This identity resolves to no Gram user, so its reach cannot be read."}
+            </IdentityPanelEmpty>
+          ) : (
+            servers
+              .slice(0, REACHABLE_SHOWN)
+              .map((server) => (
+                <IdentityPanelRow
+                  key={server.id}
+                  title={server.name || server.slug}
+                  detail={server.projectSlug}
+                />
+              ))
+          )}
+        </IdentityPanel>
+
+        <IdentityPanel
+          title="Skills they can reach"
+          handoffLabel="Skills"
+          handoffHref={reachHandoff(
+            routes.skills.href(),
+            reachUserId,
+            new URLSearchParams(location.search),
+          )}
+          loading={reachQuery.isLoading}
+          error={reachQuery.isError && skills.length === 0}
+          refreshFailed={reachQuery.isError && skills.length > 0}
+          onRetry={retryReach}
+          footer={
+            skills.length > REACHABLE_SHOWN
+              ? `${REACHABLE_SHOWN} of ${skills.length.toLocaleString()} skills`
+              : undefined
+          }
+        >
+          {skills.length === 0 ? (
+            <IdentityPanelEmpty>
+              {reachUserId
+                ? "No skills are reachable by this identity."
+                : "This identity resolves to no Gram user, so its reach cannot be read."}
+            </IdentityPanelEmpty>
+          ) : (
+            skills
+              .slice(0, REACHABLE_SHOWN)
+              .map((skill) => (
+                <IdentityPanelRow
+                  key={skill.id}
+                  title={skill.displayName || skill.name}
+                  detail={skill.projectSlug}
+                />
+              ))
           )}
         </IdentityPanel>
 

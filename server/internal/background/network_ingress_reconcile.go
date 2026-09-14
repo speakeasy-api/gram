@@ -22,6 +22,7 @@ const (
 	networkIngressReconcileActivityTimeout     = 5*time.Minute + 30*time.Second
 	networkIngressReconcileActivityRetryBudget = 29 * time.Minute
 	networkIngressReconcileWorkflowRunTimeout  = 35 * time.Minute
+	networkIngressReconcileExecutionTimeout    = 6 * time.Hour
 )
 
 // NetworkIngressReconcileParams deliberately excludes provider state and secrets.
@@ -57,7 +58,7 @@ func (c *NetworkIngressClient) start(ctx context.Context, organizationID string,
 		ID: workflowID, TaskQueue: c.Queue,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowExecutionTimeout: networkIngressReconcileWorkflowRunTimeout,
+		WorkflowExecutionTimeout: networkIngressReconcileExecutionTimeout,
 		WorkflowRunTimeout:       networkIngressReconcileWorkflowRunTimeout,
 	}, NetworkIngressReconcileWorkflow, NetworkIngressReconcileParams{OrganizationID: organizationID, IngressID: id})
 	if err != nil {
@@ -84,6 +85,9 @@ func (c *NetworkIngressClient) RefreshNetworkIngress(ctx context.Context, organi
 	}
 	if _, ok := errors.AsType[*workflow.ContinueAsNewError](err); ok {
 		return nil
+	}
+	if applicationErr, ok := errors.AsType[*temporal.ApplicationError](err); ok && applicationErr.NonRetryable() && applicationErr.Type() == "network_ingress" {
+		return nil // The activity already persisted this bounded terminal observation.
 	}
 	return fmt.Errorf("wait for network ingress observation: %w", err)
 }

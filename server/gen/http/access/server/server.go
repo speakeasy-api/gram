@@ -43,6 +43,7 @@ type Server struct {
 	ListChallenges                       http.Handler
 	ListChallengeBuckets                 http.Handler
 	ResolveChallenge                     http.Handler
+	ListIdentityAccess                   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -96,6 +97,7 @@ func New(
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
+			{"ListIdentityAccess", "GET", "/rpc/access.listIdentityAccess"},
 		},
 		ListRoles:                            NewListRolesHandler(e.ListRoles, mux, decoder, encoder, errhandler, formatter),
 		GetRole:                              NewGetRoleHandler(e.GetRole, mux, decoder, encoder, errhandler, formatter),
@@ -121,6 +123,7 @@ func New(
 		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
 		ResolveChallenge:                     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
+		ListIdentityAccess:                   NewListIdentityAccessHandler(e.ListIdentityAccess, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -153,6 +156,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
+	s.ListIdentityAccess = m(s.ListIdentityAccess)
 }
 
 // MethodNames returns the methods served.
@@ -184,6 +188,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
+	MountListIdentityAccessHandler(mux, h.ListIdentityAccess)
 }
 
 // Mount configures the mux to serve the access endpoints.
@@ -1446,6 +1451,59 @@ func NewResolveChallengeHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "resolveChallenge")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListIdentityAccessHandler configures the mux to serve the "access"
+// service "listIdentityAccess" endpoint.
+func MountListIdentityAccessHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listIdentityAccess", f)
+}
+
+// NewListIdentityAccessHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listIdentityAccess" endpoint.
+func NewListIdentityAccessHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListIdentityAccessRequest(mux, decoder)
+		encodeResponse = EncodeListIdentityAccessResponse(encoder)
+		encodeError    = EncodeListIdentityAccessError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listIdentityAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

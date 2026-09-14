@@ -31,5 +31,7 @@ func newTestClickhouse(t *testing.T) clickhouse.Conn {
 	t.Helper()
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
+	// Keep redeliveries unmerged so reads exercise FINAL, not background convergence.
+	require.NoError(t, conn.Exec(t.Context(), "SYSTEM STOP MERGES billing_meter_readings_by_time"))
 	return conn
 }

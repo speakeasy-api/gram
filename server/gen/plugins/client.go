@@ -70,6 +70,7 @@ func NewClient(listPlugins, getPlugin, createPlugin, updatePlugin, deletePlugin,
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListPlugins(ctx context.Context, p *ListPluginsPayload) (res *ListPluginsResult, err error) {
 	var ires any
@@ -92,6 +93,7 @@ func (c *Client) ListPlugins(ctx context.Context, p *ListPluginsPayload) (res *L
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetPlugin(ctx context.Context, p *GetPluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -114,6 +116,7 @@ func (c *Client) GetPlugin(ctx context.Context, p *GetPluginPayload) (res *Plugi
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -136,6 +139,7 @@ func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdatePlugin(ctx context.Context, p *UpdatePluginPayload) (res *Plugin, err error) {
 	var ires any
@@ -158,6 +162,7 @@ func (c *Client) UpdatePlugin(ctx context.Context, p *UpdatePluginPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DeletePlugin(ctx context.Context, p *DeletePluginPayload) (err error) {
 	_, err = c.DeletePluginEndpoint(ctx, p)
@@ -177,6 +182,7 @@ func (c *Client) DeletePlugin(ctx context.Context, p *DeletePluginPayload) (err 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) AddPluginServer(ctx context.Context, p *AddPluginServerPayload) (res *PluginServer, err error) {
 	var ires any
@@ -200,6 +206,7 @@ func (c *Client) AddPluginServer(ctx context.Context, p *AddPluginServerPayload)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdatePluginServer(ctx context.Context, p *UpdatePluginServerPayload) (res *PluginServer, err error) {
 	var ires any
@@ -223,6 +230,7 @@ func (c *Client) UpdatePluginServer(ctx context.Context, p *UpdatePluginServerPa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) RemovePluginServer(ctx context.Context, p *RemovePluginServerPayload) (err error) {
 	_, err = c.RemovePluginServerEndpoint(ctx, p)
@@ -242,6 +250,7 @@ func (c *Client) RemovePluginServer(ctx context.Context, p *RemovePluginServerPa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmentsPayload) (res *SetPluginAssignmentsResult, err error) {
 	var ires any
@@ -264,6 +273,7 @@ func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmen
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) ListAudiences(ctx context.Context, p *ListAudiencesPayload) (res *ListAudiencesResult, err error) {
 	var ires any
@@ -288,6 +298,7 @@ func (c *Client) ListAudiences(ctx context.Context, p *ListAudiencesPayload) (re
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -312,6 +323,7 @@ func (c *Client) DownloadPluginPackage(ctx context.Context, p *DownloadPluginPac
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadObservabilityPlugin(ctx context.Context, p *DownloadObservabilityPluginPayload) (res *DownloadObservabilityPluginResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -336,6 +348,7 @@ func (c *Client) DownloadObservabilityPlugin(ctx context.Context, p *DownloadObs
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) DownloadCodexInstallScript(ctx context.Context, p *DownloadCodexInstallScriptPayload) (res *DownloadCodexInstallScriptResult, resp io.ReadCloser, err error) {
 	var ires any
@@ -360,6 +373,7 @@ func (c *Client) DownloadCodexInstallScript(ctx context.Context, p *DownloadCode
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetPublishStatus(ctx context.Context, p *GetPublishStatusPayload) (res *PublishStatusResult, err error) {
 	var ires any
@@ -382,6 +396,7 @@ func (c *Client) GetPublishStatus(ctx context.Context, p *GetPublishStatusPayloa
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) PublishPlugins(ctx context.Context, p *PublishPluginsPayload) (res *PublishPluginsResult, err error) {
 	var ires any
@@ -405,6 +420,7 @@ func (c *Client) PublishPlugins(ctx context.Context, p *PublishPluginsPayload) (
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) GetMarketplaceSettings(ctx context.Context, p *GetMarketplaceSettingsPayload) (res *MarketplaceSettingsResult, err error) {
 	var ires any
@@ -428,6 +444,7 @@ func (c *Client) GetMarketplaceSettings(ctx context.Context, p *GetMarketplaceSe
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) UpdateMarketplaceSettings(ctx context.Context, p *UpdateMarketplaceSettingsPayload) (res *UpdateMarketplaceSettingsResult, err error) {
 	var ires any

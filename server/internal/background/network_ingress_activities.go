@@ -75,7 +75,7 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 
 		for _, row := range rows {
 			if err := requester.Enqueue(ctx, tx, row.OrganizationID, row.ID); err != nil {
-				o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+				rollbackNetworkIngressSweep(ctx, tx.Rollback)
 				return fmt.Errorf("enqueue network ingress redrive")
 			}
 			if row.DeletedAt.Valid && time.Since(row.DeletedAt.Time) > 24*time.Hour {
@@ -83,7 +83,7 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 			}
 		}
 		if err := tx.Commit(ctx); err != nil {
-			o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+			rollbackNetworkIngressSweep(ctx, tx.Rollback)
 			return fmt.Errorf("commit network ingress redrive")
 		}
 		after = rows[len(rows)-1].ID
@@ -92,6 +92,12 @@ func (a *networkIngressActivities) sweep(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func rollbackNetworkIngressSweep(ctx context.Context, rollback func(context.Context) error) {
+	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	o11y.NoLogDefer(func() error { return rollback(rollbackCtx) })
 }
 
 func (a *networkIngressActivities) findOrphans(ctx context.Context) error {

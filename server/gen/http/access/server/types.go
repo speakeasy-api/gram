@@ -25,6 +25,9 @@ type CreateRoleRequestBody struct {
 	Grants []*RoleGrantRequestBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Optional member IDs to additionally assign to this role on creation.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Optional agent IDs to assign to this role on creation. Scopes an agent
+	// cannot hold at runtime are simply not granted to it.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateRoleRequestBody is the type of the "access" service "updateRole"
@@ -43,6 +46,10 @@ type UpdateRoleRequestBody struct {
 	// Optional member IDs to additionally assign to this role. Existing
 	// assignments are preserved.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// The complete set of agent IDs assigned to this role. Unlike member_ids this
+	// replaces the role's agent membership, because agents have no other surface
+	// to be removed from a role on. Omit to leave agent membership untouched.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 }
 
 // UpdateMemberRolesRequestBody is the type of the "access" service
@@ -144,9 +151,11 @@ type GetRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateRoleResponseBody is the type of the "access" service "createRole"
@@ -167,9 +176,11 @@ type CreateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRoleResponseBody is the type of the "access" service "updateRole"
@@ -190,9 +201,11 @@ type UpdateRoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListScopesResponseBody is the type of the "access" service "listScopes"
@@ -393,6 +406,15 @@ type ListChallengeBucketsResponseBody struct {
 type ResolveChallengeResponseBody struct {
 	// The created resolution records.
 	Resolutions []*ChallengeResolutionResponseBody `form:"resolutions" json:"resolutions" xml:"resolutions"`
+}
+
+// ListIdentityAccessResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body.
+type ListIdentityAccessResponseBody struct {
+	// MCP servers accessible to this identity.
+	Servers []*AccessibleMCPServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Skills accessible to this identity.
+	Skills []*AccessibleSkillResponseBody `form:"skills" json:"skills" xml:"skills"`
 }
 
 // ListRolesUnauthorizedResponseBody is the type of the "access" service
@@ -4824,6 +4846,190 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListIdentityAccessUnauthorizedResponseBody is the type of the "access"
+// service "listIdentityAccess" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListIdentityAccessUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessForbiddenResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "forbidden" error.
+type ListIdentityAccessForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessBadRequestResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "bad_request" error.
+type ListIdentityAccessBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessNotFoundResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "not_found" error.
+type ListIdentityAccessNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessConflictResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "conflict" error.
+type ListIdentityAccessConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessUnsupportedMediaResponseBody is the type of the "access"
+// service "listIdentityAccess" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListIdentityAccessUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessInvalidResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "invalid" error.
+type ListIdentityAccessInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessInvariantViolationResponseBody is the type of the "access"
+// service "listIdentityAccess" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListIdentityAccessInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessUnexpectedResponseBody is the type of the "access" service
+// "listIdentityAccess" endpoint HTTP response body for the "unexpected" error.
+type ListIdentityAccessUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListIdentityAccessGatewayErrorResponseBody is the type of the "access"
+// service "listIdentityAccess" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListIdentityAccessGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RoleResponseBody is used to define fields on response body types.
 type RoleResponseBody struct {
 	// Unique role identifier.
@@ -4841,9 +5047,11 @@ type RoleResponseBody struct {
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
-	MemberCount int    `form:"member_count" json:"member_count" xml:"member_count"`
-	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// IDs of the agent principals assigned to this role.
+	AgentIds  []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RoleGrantResponseBody is used to define fields on response body types.
@@ -4883,6 +5091,10 @@ type ScopeDefinitionResponseBody struct {
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// Whether an agent principal can hold this scope. Roles may carry scopes
+	// agents cannot hold; those are ignored for the role's agent members rather
+	// than granted.
+	AgentEligible bool `form:"agent_eligible" json:"agent_eligible" xml:"agent_eligible"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -5087,6 +5299,9 @@ type ResourceAudienceEntryResponseBody struct {
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// User ids of the organization members this rule currently reaches.
 	MemberIds []string `form:"member_ids,omitempty" json:"member_ids,omitempty" xml:"member_ids,omitempty"`
+	// Ids of the agents this rule currently reaches, whether it names them or a
+	// role they hold.
+	AgentIds []string `form:"agent_ids,omitempty" json:"agent_ids,omitempty" xml:"agent_ids,omitempty"`
 	// Tool annotations the rule is narrowed to, when it is not the whole resource.
 	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
 }
@@ -5222,6 +5437,35 @@ type ChallengeResolutionResponseBody struct {
 	CreatedAt  string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
+// AccessibleMCPServerResponseBody is used to define fields on response body
+// types.
+type AccessibleMCPServerResponseBody struct {
+	// Unique server identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Display name of the server.
+	Name string `form:"name" json:"name" xml:"name"`
+	// URL-safe server slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Project the server belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Slug of the project the server belongs to.
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+}
+
+// AccessibleSkillResponseBody is used to define fields on response body types.
+type AccessibleSkillResponseBody struct {
+	// Unique skill identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Internal name of the skill.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable display name, when set.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Project the skill belongs to.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Slug of the project the skill belongs to.
+	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+}
+
 // RoleGrantRequestBody is used to define fields on request body types.
 type RoleGrantRequestBody struct {
 	// The scope slug this grant applies to.
@@ -5310,6 +5554,12 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
 	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5339,6 +5589,12 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
 	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -5367,6 +5623,12 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 		}
 	} else {
 		body.Grants = []*RoleGrantResponseBody{}
+	}
+	if res.AgentIds != nil {
+		body.AgentIds = make([]string, len(res.AgentIds))
+		for i, val := range res.AgentIds {
+			body.AgentIds[i] = val
+		}
 	}
 	return body
 }
@@ -5778,6 +6040,37 @@ func NewResolveChallengeResponseBody(res *access.ResolveChallengesResult) *Resol
 		}
 	} else {
 		body.Resolutions = []*ChallengeResolutionResponseBody{}
+	}
+	return body
+}
+
+// NewListIdentityAccessResponseBody builds the HTTP response body from the
+// result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessResponseBody(res *access.ListIdentityAccessResult) *ListIdentityAccessResponseBody {
+	body := &ListIdentityAccessResponseBody{}
+	if res.Servers != nil {
+		body.Servers = make([]*AccessibleMCPServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalAccessAccessibleMCPServerToAccessibleMCPServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*AccessibleMCPServerResponseBody{}
+	}
+	if res.Skills != nil {
+		body.Skills = make([]*AccessibleSkillResponseBody, len(res.Skills))
+		for i, val := range res.Skills {
+			if val == nil {
+				body.Skills[i] = nil
+				continue
+			}
+			body.Skills[i] = marshalAccessAccessibleSkillToAccessibleSkillResponseBody(val)
+		}
+	} else {
+		body.Skills = []*AccessibleSkillResponseBody{}
 	}
 	return body
 }
@@ -9257,6 +9550,148 @@ func NewResolveChallengeGatewayErrorResponseBody(res *goa.ServiceError) *Resolve
 	return body
 }
 
+// NewListIdentityAccessUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessUnauthorizedResponseBody(res *goa.ServiceError) *ListIdentityAccessUnauthorizedResponseBody {
+	body := &ListIdentityAccessUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessForbiddenResponseBody builds the HTTP response body
+// from the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessForbiddenResponseBody(res *goa.ServiceError) *ListIdentityAccessForbiddenResponseBody {
+	body := &ListIdentityAccessForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessBadRequestResponseBody builds the HTTP response body
+// from the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessBadRequestResponseBody(res *goa.ServiceError) *ListIdentityAccessBadRequestResponseBody {
+	body := &ListIdentityAccessBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessNotFoundResponseBody builds the HTTP response body from
+// the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessNotFoundResponseBody(res *goa.ServiceError) *ListIdentityAccessNotFoundResponseBody {
+	body := &ListIdentityAccessNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessConflictResponseBody builds the HTTP response body from
+// the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessConflictResponseBody(res *goa.ServiceError) *ListIdentityAccessConflictResponseBody {
+	body := &ListIdentityAccessConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listIdentityAccess" endpoint of the "access"
+// service.
+func NewListIdentityAccessUnsupportedMediaResponseBody(res *goa.ServiceError) *ListIdentityAccessUnsupportedMediaResponseBody {
+	body := &ListIdentityAccessUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessInvalidResponseBody builds the HTTP response body from
+// the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessInvalidResponseBody(res *goa.ServiceError) *ListIdentityAccessInvalidResponseBody {
+	body := &ListIdentityAccessInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listIdentityAccess" endpoint of the "access"
+// service.
+func NewListIdentityAccessInvariantViolationResponseBody(res *goa.ServiceError) *ListIdentityAccessInvariantViolationResponseBody {
+	body := &ListIdentityAccessInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessUnexpectedResponseBody(res *goa.ServiceError) *ListIdentityAccessUnexpectedResponseBody {
+	body := &ListIdentityAccessUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListIdentityAccessGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listIdentityAccess" endpoint of the "access" service.
+func NewListIdentityAccessGatewayErrorResponseBody(res *goa.ServiceError) *ListIdentityAccessGatewayErrorResponseBody {
+	body := &ListIdentityAccessGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRolesPayload builds a access service listRoles endpoint payload.
 func NewListRolesPayload(apikeyToken *string, sessionToken *string) *access.ListRolesPayload {
 	v := &access.ListRolesPayload{}
@@ -9296,6 +9731,12 @@ func NewCreateRolePayload(body *CreateRoleRequestBody, apikeyToken *string, sess
 			v.MemberIds[i] = val
 		}
 	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
@@ -9333,6 +9774,12 @@ func NewUpdateRolePayload(body *UpdateRoleRequestBody, apikeyToken *string, sess
 		v.MemberIds = make([]string, len(body.MemberIds))
 		for i, val := range body.MemberIds {
 			v.MemberIds[i] = val
+		}
+	}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -9615,6 +10062,16 @@ func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *
 	return v
 }
 
+// NewListIdentityAccessPayload builds a access service listIdentityAccess
+// endpoint payload.
+func NewListIdentityAccessPayload(userID string, sessionToken *string) *access.ListIdentityAccessPayload {
+	v := &access.ListIdentityAccessPayload{}
+	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateCreateRoleRequestBody runs the validations defined on
 // CreateRoleRequestBody
 func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
@@ -9630,6 +10087,9 @@ func ValidateCreateRoleRequestBody(body *CreateRoleRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }
@@ -9653,6 +10113,9 @@ func ValidateUpdateRoleRequestBody(body *UpdateRoleRequestBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	for _, e := range body.AgentIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

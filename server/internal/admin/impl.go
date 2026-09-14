@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"io"
 	"log/slog"
 	"math"
@@ -55,6 +57,8 @@ import (
 )
 
 type Service struct {
+	remoteSessions       *remotesessions.Service
+	assets               *assets.Service
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -200,7 +204,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{
+	return &Service{remoteSessions: nil, assets: nil,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -358,7 +362,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	// Goa lazily assigns a nil error formatter inside a shared request closure.
+	// Supply its default eagerly so concurrent error responses do not race.
+	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
@@ -368,6 +374,18 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
+	server.CreateGlobalIssuer = service.strictAdminJSON(server.CreateGlobalIssuer, func() any { return new(adminserver.CreateGlobalIssuerRequestBody) })
+	server.GetGlobalIssuerDuplicatePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerDuplicatePreflight)
+	server.ListGlobalIssuers = service.preauthorizeAdmin(server.ListGlobalIssuers)
+	server.GetGlobalIssuer = service.preauthorizeAdmin(server.GetGlobalIssuer)
+	server.UpdateGlobalIssuer = service.strictAdminJSON(server.UpdateGlobalIssuer, func() any { return new(adminserver.UpdateGlobalIssuerRequestBody) })
+	server.DeleteGlobalIssuer = service.preauthorizeAdmin(server.DeleteGlobalIssuer)
+	server.FetchGlobalIssuerMetadata = service.strictAdminJSON(server.FetchGlobalIssuerMetadata, func() any { return new(adminserver.FetchGlobalIssuerMetadataRequestBody) })
+	server.RefreshGlobalIssuerMetadata = service.strictAdminJSON(server.RefreshGlobalIssuerMetadata, func() any { return new(adminserver.RefreshGlobalIssuerMetadataRequestBody) })
+	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
+	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
+	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
+	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	adminserver.Mount(mux, server)
 
 }
@@ -655,8 +673,8 @@ const (
 // ids are absent on purpose: an order built from them tells an operator nothing.
 //
 // This map cannot widen what the ladder accepts. The ladder matches these seven
-// literals and nothing else, so an unrecognised sort key collapses to the
-// tiebreaker with or without the check here. It is defense in depth, and the one
+// literals and nothing else. Unknown keys use the newest-first default below.
+// This is defense in depth, and the one
 // place a reader can see the accepted set without reading the SQL.
 var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
@@ -718,15 +736,15 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	// An unknown sort key falls back to the default order instead of failing: the
 	// value comes from a URL operators paste to each other, and a typo should not
 	// break the page.
-	sortBy := ""
+	sortBy, sortDir := "created_at", "desc"
 	if payload.Sort != nil {
 		if key := strings.ToLower(*payload.Sort); listOrganizationsSortColumns[key] {
 			sortBy = key
+			sortDir = "asc"
+			if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
+				sortDir = "desc"
+			}
 		}
-	}
-	sortDir := "asc"
-	if payload.Direction != nil && strings.EqualFold(*payload.Direction, "desc") {
-		sortDir = "desc"
 	}
 
 	var afterID pgtype.Text

@@ -37,7 +37,7 @@ describe("organizationsListQuery", () => {
   it("invalidates every filtered page from the unfiltered key", () => {
     const qc = new QueryClient();
     const filtered = organizationsListQuery({ q: "x", cursor: "page-2" });
-    qc.setQueryData(filtered.queryKey, { organizations: [] });
+    qc.setQueryData(filtered.queryKey, { total: 0, organizations: [] });
     qc.setQueryData(["gram-admin-project", "p"], {});
 
     void qc.invalidateQueries({ queryKey: organizationsListQuery().queryKey });
@@ -135,6 +135,7 @@ describe("writeOrganizationToCache", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "x" });
     qc.setQueryData(page.queryKey, {
+      total: 3,
       organizations: [org("org-b"), LIVE],
       next_cursor: "cursor_page_two",
     });
@@ -159,6 +160,7 @@ describe("writeOrganizationToCache", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "x" });
     qc.setQueryData(page.queryKey, {
+      total: 1,
       organizations: [{ ...LIVE, slug: "placeholder-a-as-it-was" }],
     });
 
@@ -257,7 +259,10 @@ describe("writeOrganizationToCache", () => {
   it("leaves a page that never held the record exactly as it was", () => {
     const qc = new QueryClient();
     const page = organizationsListQuery({ q: "other" });
-    const before: ListOrganizationsResult = { organizations: [org("org-b")] };
+    const before: ListOrganizationsResult = {
+      total: 1,
+      organizations: [org("org-b")],
+    };
     qc.setQueryData(page.queryKey, before);
 
     writeOrganizationToCache(qc, DISABLED);
@@ -277,7 +282,7 @@ describe("writeOrganizationToCache", () => {
   it("survives a read that was already in flight when it landed", async () => {
     const qc = new QueryClient();
     const page = organizationsListQuery();
-    qc.setQueryData(page.queryKey, { organizations: [LIVE] });
+    qc.setQueryData(page.queryKey, { total: 1, organizations: [LIVE] });
 
     let land: (result: ListOrganizationsResult) => void = () => {};
     const stale = new Promise<ListOrganizationsResult>((resolve) => {
@@ -291,7 +296,7 @@ describe("writeOrganizationToCache", () => {
     writeOrganizationToCache(qc, DISABLED);
 
     // The stale answer arrives late, carrying the row in its pre-write state.
-    land({ organizations: [LIVE] });
+    land({ total: 1, organizations: [LIVE] });
     await inFlight;
 
     const after = qc.getQueryData<ListOrganizationsResult>(page.queryKey);

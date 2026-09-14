@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
 
-const mocks = vi.hoisted(() => ({ active: "agents" }));
+const mocks = vi.hoisted(() => ({ active: "agents", isPlatformAdmin: false }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
     new Proxy(
@@ -20,7 +20,7 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
-  useIsPlatformAdmin: () => false,
+  useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
 vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
@@ -72,7 +72,19 @@ vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/scope-gated-nav-group", () => ({
-  ScopeGatedNavGroup: () => null,
+  ScopeGatedNavGroup: ({
+    items,
+  }: {
+    items: { item: { title: string; href: () => string } }[];
+  }) => (
+    <>
+      {items.map(({ item }) => (
+        <a key={item.title} href={item.href()}>
+          {item.title}
+        </a>
+      ))}
+    </>
+  ),
 }));
 vi.mock("./sidebar-footer-action", () => ({ SidebarFooterAction: () => null }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
@@ -92,3 +104,22 @@ it.each([
     active,
   );
 });
+
+it.each([false, true])(
+  "omits platform issuer management for platform admin=%s",
+  (isPlatformAdmin) => {
+    mocks.isPlatformAdmin = isPlatformAdmin;
+    mocks.active = "remoteIdentityProviders";
+    render(<OrgSidebar />);
+    expect(
+      screen.queryByRole("link", { name: "platformRemoteIdentityProviders" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "remoteIdentityProviders" }),
+    ).toBeTruthy();
+    if (isPlatformAdmin)
+      expect(
+        screen.getByRole("link", { name: "platformAdminOpenRouterKeys" }),
+      ).toBeTruthy();
+  },
+);
