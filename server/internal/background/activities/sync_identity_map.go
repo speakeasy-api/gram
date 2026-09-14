@@ -73,21 +73,6 @@ type SyncIdentityMapResult struct {
 }
 
 func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error) {
-	rows, err := s.store.ListIdentityMapEntries(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list identity map entries: %w", err)
-	}
-
-	entries := make([]telemetryrepo.IdentityMapEntry, 0, len(rows))
-	for _, row := range rows {
-		entries = append(entries, telemetryrepo.IdentityMapEntry{
-			OrgID:           row.OrganizationID,
-			EmailLower:      row.EmailLower,
-			CanonicalUserID: row.CanonicalUserID,
-			CanonicalEmail:  row.CanonicalEmail,
-		})
-	}
-
 	// Single-writer claim across the whole replacement. Losing the race is
 	// not a failure: the holder or the next tick delivers the refresh, and
 	// retrying here only adds activity failures. A claim leaked by a crashed
@@ -102,6 +87,23 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		return &SyncIdentityMapResult{Entries: 0, Deferred: true}, nil
 	}
 
+	rows, err := s.store.ListIdentityMapEntries(ctx)
+	if err != nil {
+		// Nothing has reached ClickHouse yet, so the claim is safe to release.
+		s.releaseLock(ctx)
+		return nil, fmt.Errorf("list identity map entries: %w", err)
+	}
+
+	entries := make([]telemetryrepo.IdentityMapEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, telemetryrepo.IdentityMapEntry{
+			OrgID:           row.OrganizationID,
+			EmailLower:      row.EmailLower,
+			CanonicalUserID: row.CanonicalUserID,
+			CanonicalEmail:  row.CanonicalEmail,
+		})
+	}
+
 	if err := s.telemetry.ReplaceIdentityMap(ctx, entries); err != nil {
 		// Deliberately keep the claim: this attempt may have statements in
 		// flight, and the TTL is what guarantees they are dead before the
@@ -109,16 +111,20 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		return nil, fmt.Errorf("replace identity map: %w", err)
 	}
 
-	// Release on success only, so the schedule and link-event triggers are
-	// not blocked for the remainder of the TTL. Best effort: a leaked claim
-	// merely delays the next refresh.
-	if err := s.cache.Delete(context.WithoutCancel(ctx), identityMapReplaceLockKey); err != nil {
-		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
-	}
+	// Release on success so the schedule and link-event triggers are not
+	// blocked for the remainder of the TTL.
+	s.releaseLock(ctx)
 
 	// This success line is the staleness signal: a quiet component means the
 	// map is drifting from Postgres until the next successful pass.
 	s.logger.InfoContext(ctx, "identity map synced", attr.SlogIdentityMapEntryCount(len(entries)))
 
 	return &SyncIdentityMapResult{Entries: len(entries), Deferred: false}, nil
+}
+
+// releaseLock is best effort: a leaked claim merely delays the next refresh.
+func (s *SyncIdentityMap) releaseLock(ctx context.Context) {
+	if err := s.cache.Delete(context.WithoutCancel(ctx), identityMapReplaceLockKey); err != nil {
+		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
+	}
 }
