@@ -1,0 +1,254 @@
+package usage
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
+
+	usageserver "github.com/speakeasy-api/gram/server/gen/http/usage/server"
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+func TestGetMeterUsageBuildsDenseDailyOrganizationReport(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	otherOrganizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	service.meterReadConn = newIsolatedMeterClickhouse(t)
+	service.now = func() time.Time { return time.Date(2026, time.April, 15, 10, 0, 0, 0, time.UTC) }
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, time.April, 4, 0, 0, 0, 0, time.UTC)
+
+	rows := []chrepo.ReadingRow{
+		apiMeterUsageReading(organizationID, 9_007_199_254_740_993, from.Add(time.Hour)),
+		apiMeterUsageReading(organizationID, 7, from.Add(25*time.Hour)),
+		apiMeterUsageReading(otherOrganizationID, 1_000_000, from.Add(time.Hour)),
+	}
+	require.NoError(t, chrepo.New(service.meterReadConn).InsertReadings(t.Context(), rows))
+
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
+	result, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+		Family:    string(metering.UsageFamilyAgentSessionStorage),
+		From:      &fromText,
+		To:        &toText,
+		Breakdown: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "9007199254741000", result.Total)
+	require.Equal(t, "total", result.Breakdown.Dimension)
+	require.Len(t, result.BillingCycles, 12)
+	require.Len(t, result.Buckets, 3)
+	require.Equal(t, fromText, result.Buckets[0].From)
+	require.Equal(t, "2026-04-02T00:00:00Z", result.Buckets[0].To)
+	require.Equal(t, "0", result.Buckets[2].Total)
+	require.Len(t, result.Breakdown.Series, 1)
+	require.Equal(t, []string{"9007199254740993", "7", "0"}, result.Breakdown.Series[0].Values)
+	require.NotNil(t, result.Breakdown.Series[0].Key)
+	require.Equal(t, "total", *result.Breakdown.Series[0].Key)
+}
+
+func TestMeterUsageResponseOmitsKeysForMarkerSeries(t *testing.T) {
+	t.Parallel()
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	result := chrepo.UsageResult{
+		Unit:              string(metering.UnitSTokens),
+		MeasurementMethod: string(metering.MeasurementTiktokenO200kBase),
+		Rows:              nil,
+	}
+	for _, kind := range []string{"value", "unset", "remainder"} {
+		key := ""
+		if kind == "value" {
+			key = "project-123"
+		}
+		result.Rows = append(result.Rows, chrepo.UsageRow{
+			Day:               from,
+			Unit:              result.Unit,
+			MeasurementMethod: result.MeasurementMethod,
+			Kind:              kind,
+			Key:               key,
+			Label:             kind,
+			Total:             "1",
+		})
+	}
+	response, err := buildMeterUsageResponse(&gen.GetMeterUsagePayload{
+		Family: string(metering.UsageFamilyAgentSessionStorage),
+	}, "project", from, from.AddDate(0, 0, 1), from, nil, result)
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	require.NoError(t, usageserver.EncodeGetMeterUsageResponse(goahttp.ResponseEncoder)(t.Context(), recorder, response))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var body struct {
+		Breakdown struct {
+			Series []struct {
+				Kind string          `json:"kind"`
+				Key  json.RawMessage `json:"key"`
+			} `json:"series"`
+		} `json:"breakdown"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	keys := make(map[string]json.RawMessage)
+	for _, series := range body.Breakdown.Series {
+		keys[series.Kind] = series.Key
+	}
+	require.Equal(t, map[string]json.RawMessage{
+		"value":     json.RawMessage(`"project-123"`),
+		"unset":     nil,
+		"remainder": nil,
+	}, keys)
+}
+
+func TestGetMeterUsageRequiresActiveOrganization(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.ActiveOrganizationID = ""
+
+	_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+		Family: string(metering.UsageFamilyAgentSessionStorage),
+	})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestGetMeterUsageRequiresOrganizationRead(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID))
+
+	_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+		Family: string(metering.UsageFamilyAgentSessionStorage),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetMeterUsageWindowErrorsIdentifyInvalidBoundsWithoutLeakingInput(t *testing.T) {
+	t.Parallel()
+	organizationID := "org-" + uuid.NewString()
+	service := newTestService(t, &mockBillingRepo{}, organizationID, 0)
+	var logs bytes.Buffer
+	service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	ctx := authztest.WithExactGrants(t, billingEmailAdminContext(t, organizationID), authz.NewGrant(authz.ScopeOrgRead, organizationID))
+	valid := "2026-04-01T00:00:00Z"
+	invalid := "private-invalid-timestamp"
+	for _, field := range []string{"from", "to"} {
+		logs.Reset()
+		from, to := valid, valid
+		if field == "from" {
+			from = invalid
+		} else {
+			to = invalid
+		}
+		_, err := service.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+			Family: string(metering.UsageFamilyAgentSessionStorage),
+			From:   &from,
+			To:     &to,
+		})
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, field)
+		require.NotContains(t, err.Error(), invalid)
+		var parseError *time.ParseError
+		require.ErrorAs(t, err, &parseError)
+		var entry struct {
+			Level string `json:"level"`
+		}
+		require.NoError(t, json.NewDecoder(&logs).Decode(&entry))
+		require.Equal(t, "WARN", entry.Level)
+	}
+}
+
+func TestResolveMeterUsageWindowRejectsUnpairedAndOversizedRanges(t *testing.T) {
+	t.Parallel()
+	active := BillingCyclePeriod{
+		Start: time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC),
+	}
+	from := active.Start.Format(time.RFC3339)
+	_, _, err := resolveMeterUsageWindow(&from, nil, active)
+	require.Error(t, err)
+
+	to := active.Start.AddDate(0, 3, 1).Format(time.RFC3339)
+	_, _, err = resolveMeterUsageWindow(&from, &to, active)
+	require.Error(t, err)
+}
+
+func TestResolveMeterUsageWindowClampsThreeCalendarMonths(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		from string
+		to   string
+	}{
+		{name: "month end", from: "2026-01-31T00:00:00Z", to: "2026-04-30T00:00:00Z"},
+		{name: "leap year and UTC normalization", from: "2023-11-30T02:00:00+02:00", to: "2024-02-29T00:00:00Z"},
+		{name: "long quarter", from: "2026-07-01T00:00:00Z", to: "2026-10-01T00:00:00Z"},
+	} {
+		_, to, err := resolveMeterUsageWindow(&test.from, &test.to, BillingCyclePeriod{})
+		require.NoError(t, err, test.name)
+		require.Equal(t, test.to, to.Format(time.RFC3339), test.name)
+		beyond := to.AddDate(0, 0, 1).Format(time.RFC3339)
+		_, _, err = resolveMeterUsageWindow(&test.from, &beyond, BillingCyclePeriod{})
+		require.Error(t, err, test.name)
+	}
+}
+
+func TestResolveMeterUsageWindowRejectsPartialUTCDays(t *testing.T) {
+	t.Parallel()
+	from, to := "2026-04-01T12:00:00Z", "2026-04-02T00:00:00Z"
+	_, _, err := resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	require.Error(t, err)
+	from, to = "2026-04-01T00:00:00Z", "2026-04-02T00:00:00.000000001Z"
+	_, _, err = resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	require.Error(t, err)
+}
+
+func newIsolatedMeterClickhouse(t *testing.T) clickhouse.Conn {
+	t.Helper()
+	container, factory, err := testenv.NewTestClickhouse(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, container.Terminate(context.Background()))
+	})
+	conn, err := factory(t)
+	require.NoError(t, err)
+	return conn
+}
+
+func apiMeterUsageReading(organizationID string, value int64, occurredAt time.Time) chrepo.ReadingRow {
+	return chrepo.ReadingRow{
+		ID:                uuid.New(),
+		OrganizationID:    organizationID,
+		ProjectID:         uuid.New(),
+		MeterID:           string(metering.MeterAgentSessionStorage),
+		OperationID:       "api-usage-test:" + uuid.NewString(),
+		Unit:              string(metering.UnitSTokens),
+		MeasurementMethod: string(metering.MeasurementTiktokenO200kBase),
+		Value:             value,
+		OccurredAt:        occurredAt,
+		ProducedAt:        occurredAt,
+		InsertedAt:        occurredAt,
+		CorrectsReadingID: nil,
+		Attributes:        map[string]string{"codec": string(metering.MeasurementTiktokenO200kBase)},
+	}
+}

@@ -114,6 +114,21 @@ describe("RecordHeader", () => {
     expect(
       screen.queryByRole("button", { name: `Extend trial ${org.name}` }),
     ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${org.name}` }),
+    ).toBeNull();
+  });
+
+  it("puts no Start trial action in a never-trialled organization's header", async () => {
+    const org = anOrganization({ trial_state: "none" });
+    await renderWithApp(<RecordHeader org={org} />);
+
+    expect(
+      screen.getByRole("button", { name: /Open in Dashboard/ }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${org.name}` }),
+    ).toBeNull();
   });
 
   it("puts no Re-enable action in a disabled organization's header", async () => {

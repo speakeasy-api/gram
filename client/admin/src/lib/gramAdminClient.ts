@@ -27,6 +27,18 @@ import {
   type AdminCreateGlobalIssuerMutationVariables,
 } from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
 import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
+import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
+import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
+import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
+import { buildAdminStartTrialMutation } from "@gram/admin-client/react-query/adminStartTrial";
+import type { AdminOrganization as SdkAdminOrganization } from "@gram/admin-client/models/components/adminorganization";
+import type { DisableOrganizationRequestBody } from "@gram/admin-client/models/components/disableorganizationrequestbody";
+import type { EnableOrganizationRequestBody } from "@gram/admin-client/models/components/enableorganizationrequestbody";
+import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
+import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
+import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
 import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
 import { buildAdminListGlobalIssuerConvergenceCandidatesQuery } from "@gram/admin-client/react-query/adminListGlobalIssuerConvergenceCandidates.core";
@@ -189,6 +201,97 @@ export function useSetAdminOrganizationFeatureMutation(
     mutationKey: ["@gram/admin-client", "admin", "adminSetOrganizationFeature"],
     mutationFn: setAdminOrganizationFeature,
   });
+}
+
+// The organization list, peek and overview all read the hand-written
+// snake_case record with ISO-string dates, so every write that answers with
+// the organization in its new state is reduced to that shape before it reaches
+// the cache. Dates come back from the generated model as Date instances and go
+// out as ISO strings; a field the server left out stays absent.
+export function organizationFromSdk(
+  org: SdkAdminOrganization,
+): AdminOrganization {
+  return {
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+    account_type: org.accountType,
+    workos_id: org.workosId,
+    stripe_customer_id: org.stripeCustomerId,
+    stripe_subscription_id: org.stripeSubscriptionId,
+    whitelisted: org.whitelisted,
+    disabled_at: org.disabledAt?.toISOString(),
+    trial_state: org.trialState,
+    trial_ends_at: org.trialEndsAt?.toISOString(),
+    trial_tier: org.trialTier,
+    trial_converted_at: org.trialConvertedAt?.toISOString(),
+    trial_demoted_at: org.trialDemotedAt?.toISOString(),
+    member_count: org.memberCount,
+    created_at: org.createdAt.toISOString(),
+    updated_at: org.updatedAt.toISOString(),
+  };
+}
+
+// The organization lifecycle and trial writes below all answer with the record
+// in its new state, so a caller updates its cache from the response rather
+// than reading the record back. Disable, enable, extend and re-arm take the
+// login redirect on a 401 like every other read and write of the record.
+const disableOrganizationMutation =
+  buildAdminDisableOrganizationMutation(redirectingClient);
+const enableOrganizationMutation =
+  buildAdminEnableOrganizationMutation(redirectingClient);
+const extendTrialMutation = buildAdminExtendTrialMutation(redirectingClient);
+const rearmTrialMutation = buildAdminRearmTrialMutation(redirectingClient);
+
+export async function disableOrganization(
+  request: DisableOrganizationRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(disableOrganizationMutation.mutationFn({ request })),
+  );
+}
+
+export async function enableOrganization(
+  request: EnableOrganizationRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(enableOrganizationMutation.mutationFn({ request })),
+  );
+}
+
+// The days are added to the trial's current end date, not to today, so an
+// extension applied early does not shorten the trial.
+export async function extendTrial(
+  request: ExtendTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(extendTrialMutation.mutationFn({ request })),
+  );
+}
+
+// Not an extension with a different verb. The days are the whole length of a
+// fresh run counted from now, and the write also restores the organization's
+// account type and whitelist flag and revives its model provider keys. Only a
+// demoted trial can be re-armed; anything else is refused with a conflict.
+export async function rearmTrial(
+  request: RearmTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(rearmTrialMutation.mutationFn({ request })),
+  );
+}
+
+// Grants a new enterprise trial counted from now. Only an organization that
+// has never trialled, or whose trial has expired without converting or being
+// demoted, can be started; anything else is refused with a conflict. A start
+// reports its own 401 in place rather than taking the login redirect, which
+// would sign the operator back in behind the action they just took.
+const startTrialMutation = buildAdminStartTrialMutation(mutationClient);
+
+export async function startTrial(
+  request: StartTrialRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(await startTrialMutation.mutationFn({ request }));
 }
 
 function createAdminGetGlobalIssuerQuery(

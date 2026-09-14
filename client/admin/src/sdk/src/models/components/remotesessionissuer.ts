@@ -63,6 +63,14 @@ export type RemoteSessionIssuer = {
    */
   issuer: string;
   /**
+   * When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.
+   */
+  jwksCacheExpiresAt?: Date | undefined;
+  /**
+   * When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+   */
+  jwksFetchedAt?: Date | undefined;
+  /**
    * Upstream JWKS URI; null when not advertised.
    */
   jwksUri?: string | undefined;
@@ -165,6 +173,12 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       z.nullable(z.array(z.string())),
     ),
     issuer: z.string(),
+    jwks_cache_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    jwks_fetched_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     jwks_uri: z.optional(z.string()),
     logo_asset_id: z.optional(z.string()),
     name: z.optional(z.string()),
@@ -208,6 +222,8 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "introspection_endpoint": "introspectionEndpoint",
       "introspection_endpoint_auth_methods_supported":
         "introspectionEndpointAuthMethodsSupported",
+      "jwks_cache_expires_at": "jwksCacheExpiresAt",
+      "jwks_fetched_at": "jwksFetchedAt",
       "jwks_uri": "jwksUri",
       "logo_asset_id": "logoAssetId",
       "op_policy_uri": "opPolicyUri",

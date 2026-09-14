@@ -1,20 +1,22 @@
-import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { useEffect } from "react";
-import { useLocation } from "react-router";
 import {
-  MCP_AUTHENTICATION_SECTION_ID,
   AuthenticationSection,
+  MCP_AUTHENTICATION_SECTION_ID,
 } from "./sections/authentication/AuthenticationSection";
-import { BrandingSection } from "./sections/BrandingSection";
-import { DangerZoneSection } from "./sections/DangerZoneSection";
-import { HeadersSection } from "./sections/HeadersSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
+
+import { BrandingSection } from "./sections/BrandingSection";
+import { DangerZoneSection } from "./sections/DangerZoneSection";
+import { HeadersSection } from "./sections/HeadersSection";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import { PublicRateLimitsSection } from "./sections/PublicRateLimitsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
+import { useEffect } from "react";
+import { useLocation } from "react-router";
 
 function useScrollToSettingsHash() {
   const location = useLocation();
@@ -55,11 +57,14 @@ export function SettingsTab({
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <BrandingSection mcpServer={mcpServer} />
       {isUnproxied ? null : (
-        <ServerUrlSection
-          backend={{ mcpServerId: mcpServer.id }}
-          endpoints={endpoints}
-          isLoadingEndpoints={isLoadingEndpoints}
-        />
+        <>
+          <ServerUrlSection
+            backend={{ mcpServerId: mcpServer.id }}
+            endpoints={endpoints}
+            isLoadingEndpoints={isLoadingEndpoints}
+          />
+          <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
+        </>
       )}
       <AuthenticationSection mcpServer={mcpServer} />
       {mcpServer.remoteMcpServerId ? (

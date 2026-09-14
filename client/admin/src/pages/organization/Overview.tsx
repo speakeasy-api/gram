@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
+import { canStartTrial } from "@/pages/organizations/rowActions";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
 import {
   Select,
@@ -328,7 +329,8 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     org.trial_state === "running" ||
     org.trial_state === "ending_soon" ||
     org.trial_state === "expired" ||
-    org.trial_state === "demoted";
+    org.trial_state === "demoted" ||
+    canStartTrial(org);
 
   return (
     <div

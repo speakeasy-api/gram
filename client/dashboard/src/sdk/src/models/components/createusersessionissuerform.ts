@@ -9,14 +9,16 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How multi-remote authn challenges are presented: chain | interactive.
  */
-export const AuthnChallengeMode = {
+export const CreateUserSessionIssuerFormAuthnChallengeMode = {
   Chain: "chain",
   Interactive: "interactive",
 } as const;
 /**
  * How multi-remote authn challenges are presented: chain | interactive.
  */
-export type AuthnChallengeMode = ClosedEnum<typeof AuthnChallengeMode>;
+export type CreateUserSessionIssuerFormAuthnChallengeMode = ClosedEnum<
+  typeof CreateUserSessionIssuerFormAuthnChallengeMode
+>;
 
 /**
  * Form for creating a user_session_issuer.
@@ -25,7 +27,7 @@ export type CreateUserSessionIssuerForm = {
   /**
    * How multi-remote authn challenges are presented: chain | interactive.
    */
-  authnChallengeMode: AuthnChallengeMode;
+  authnChallengeMode: CreateUserSessionIssuerFormAuthnChallengeMode;
   /**
    * Maximum issued user session lifetime, in hours.
    */
@@ -37,9 +39,10 @@ export type CreateUserSessionIssuerForm = {
 };
 
 /** @internal */
-export const AuthnChallengeMode$outboundSchema: z.ZodMiniEnum<
-  typeof AuthnChallengeMode
-> = z.enum(AuthnChallengeMode);
+export const CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema:
+  z.ZodMiniEnum<typeof CreateUserSessionIssuerFormAuthnChallengeMode> = z.enum(
+    CreateUserSessionIssuerFormAuthnChallengeMode,
+  );
 
 /** @internal */
 export type CreateUserSessionIssuerForm$Outbound = {
@@ -54,7 +57,8 @@ export const CreateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
   CreateUserSessionIssuerForm
 > = z.pipe(
   z.object({
-    authnChallengeMode: AuthnChallengeMode$outboundSchema,
+    authnChallengeMode:
+      CreateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
     sessionDurationHours: z.int(),
     slug: z.string(),
   }),
