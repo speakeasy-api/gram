@@ -207,6 +207,7 @@ export function AppSidebar({
               // these pages measure.
               { item: routes.identities, ...accessFor(routes.identities) },
               { item: routes.costs, ...accessFor(routes.costs) },
+              { item: routes.explore, ...accessFor(routes.explore) },
               { item: routes.insights, ...accessFor(routes.insights) },
               {
                 item: routes.agentSessions,
