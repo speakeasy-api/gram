@@ -7,6 +7,9 @@ var Sessions = &Dataset{
 	Grain:       "session",
 	Description: "One row per agent session, collapsed from observed events. count counts sessions.",
 	TimeExpr:    "started_at",
+	// A session's headline is who was in it: text lives on events, not on
+	// the collapsed session row.
+	SummaryField: "user",
 	Fields: []Field{
 		{Name: "session", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id"},
 		{Name: "user", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "user_email"},
@@ -23,11 +26,12 @@ var Sessions = &Dataset{
 
 // ToolCalls is one row per tool call, resolved to its terminal observation.
 var ToolCalls = &Dataset{
-	Name:        "tool_calls",
-	Kind:        KindEvent,
-	Grain:       "tool call",
-	Description: "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter.",
-	TimeExpr:    "started_at",
+	Name:         "tool_calls",
+	Kind:         KindEvent,
+	Grain:        "tool call",
+	Description:  "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter.",
+	TimeExpr:     "started_at",
+	SummaryField: "tool_name",
 	Fields: []Field{
 		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id"},
 		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_name"},

@@ -37,6 +37,10 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, "s", *byName["duration_seconds"].Unit)
 	require.Equal(t, []string{"sum", "avg", "p95"}, byName["duration_seconds"].Aggregations)
 	require.NotContains(t, byName, "project")
+	require.NotNil(t, sessions.SummaryField)
+	require.Equal(t, "user", *sessions.SummaryField)
+	require.NotNil(t, result.Datasets[1].SummaryField)
+	require.Equal(t, "tool_name", *result.Datasets[1].SummaryField, "the catalog names the headline, not the client")
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()

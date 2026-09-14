@@ -124,7 +124,12 @@ type Dataset struct {
 	// TimeExpr is the column of the source query's output that carries the
 	// row's event time, used for bucketing and for ordering row lists.
 	TimeExpr string
-	Fields   []Field
+	// SummaryField names the dimension a row list shows as its headline
+	// beside time. Declared here rather than guessed by the client, so a new
+	// dataset ships with no client change. Empty when the dataset has no
+	// natural headline.
+	SummaryField string
+	Fields       []Field
 	// Source builds the dataset's source query for one tenancy and window.
 	Source SourceQuery
 }
@@ -236,6 +241,12 @@ func (d *Dataset) validate() error {
 	}
 	if len(d.Fields) == 0 {
 		return fmt.Errorf("catalog: dataset %q declares no fields", d.Name)
+	}
+	if d.SummaryField != "" {
+		summary, ok := d.Field(d.SummaryField)
+		if !ok || summary.Role != RoleDimension {
+			return fmt.Errorf("catalog: dataset %q summary field %q is not a declared dimension", d.Name, d.SummaryField)
+		}
 	}
 	names := make(map[string]struct{}, len(d.Fields))
 	for _, f := range d.Fields {

@@ -100,6 +100,7 @@ var DatasetType = Type("AnalyticsDataset", func() {
 	Attribute("kind", String, func() { Enum("event", "metric") })
 	Attribute("grain", String, "What one row represents, as a noun", func() { Example("session") })
 	Attribute("description", String)
+	Attribute("summary_field", String, "The field a row list shows as its headline beside time, when the dataset nominates one", func() { Example("tool_name") })
 	Attribute("fields", ArrayOf(FieldType))
 	Required("name", "kind", "grain", "description", "fields")
 })
