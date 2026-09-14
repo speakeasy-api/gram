@@ -468,7 +468,7 @@ The auto-generated `README.md` contains:
 - Per-platform installation instructions (Claude, Cursor, Codex)
 - A table of all plugins with server counts and descriptions
 - A note that the observability plugin must be installed alongside MCP plugins
-- A notice that the repo is auto-managed by Gram and that collaborators hold admin on it
+- A notice that the repo is auto-managed by Gram and that collaborators added through Gram hold admin on it (collaborators added before admin became the default keep their original permission until they are re-added)
 
 ## Single-plugin ZIP download
 
