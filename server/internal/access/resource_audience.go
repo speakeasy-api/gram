@@ -58,6 +58,24 @@ var audienceLevelScopes = map[string]authz.Scope{
 // connect or manage leaves the page readable, so neither needs a guard.
 var audienceLockoutLevels = []string{audienceLevelBlockedView}
 
+// Every block level. Blocking the administrator role is guarded at all three:
+// the caller guard above only protects whoever is writing, and an administrator
+// is not usually the one restricting a server. Blocking the role that exists to
+// undo such a rule leaves nobody who can, so it is refused whichever capability
+// it names.
+var audienceBlockLevels = []string{
+	audienceLevelBlocked,
+	audienceLevelBlockedView,
+	audienceLevelBlockedManage,
+}
+
+// agentAudienceLevels are the levels an agent principal can hold. The "blocked_"
+// scopes are registered for parsing but are not agent-runtime-safe, so a block
+// written against an agent is dropped the moment its policy loads. Refusing
+// them here keeps the surface honest rather than storing a rule nothing
+// enforces; an agent is taken off a server by removing its rule.
+var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage}
+
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
 var audienceLevelOrder = []string{
@@ -156,6 +174,19 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, err
 	}
 
+	// A suspended or revoked agent keeps the access it already has but must not
+	// be given more, and ValidatePrincipal only rejects deleted agents. The
+	// rules already stored for this resource are therefore the exception set:
+	// re-saving the audience may retain them, but no new one may be added.
+	retainableAgents, err := s.storedAgentRules(ctx, ac.ActiveOrganizationID, payload.ResourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	assignableAgents, err := s.assignableAgentPrincipals(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
 	for _, entry := range payload.Entries {
@@ -168,6 +199,26 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		principal, err := parseAudiencePrincipal(entry.PrincipalUrn)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid principal %q", entry.PrincipalUrn)
+		}
+		if principal.Type == urn.PrincipalTypeAgent {
+			if !slices.Contains(agentAudienceLevels, entry.Level) {
+				return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
+			}
+			if _, assignable := assignableAgents[principal.String()]; !assignable {
+				// A suspended or revoked agent may keep the access it already
+				// has, which has to mean the identical rule: matching on the
+				// principal alone would let a tool-limited grant be rewritten
+				// as an unrestricted one, widening what the agent gets back
+				// when it resumes. Removing the rule is always allowed, since
+				// that is just leaving it out of the payload.
+				rules, known := retainableAgents[principal.String()]
+				if !known {
+					return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked and cannot be given access", entry.PrincipalUrn)
+				}
+				if _, unchanged := rules[audienceRuleKey(entry.Level, entry.Tools, entry.Dispositions)]; !unchanged {
+					return nil, oops.E(oops.CodeInvalid, nil, "agent %q is suspended or revoked; its access can be kept as it is or removed, but not changed", entry.PrincipalUrn)
+				}
+			}
 		}
 		// A principal may appear once per level — "connect to the server" and
 		// "never connect to its destructive tools" are different rules, and
@@ -191,6 +242,14 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			Principal: principal,
 			Selectors: selectors,
 		})
+	}
+
+	// Lockout guardrail: the administrator role is what undoes a rule written
+	// here, so a block naming it takes the server's access away from everyone
+	// who could give it back. The caller guard below does not catch this — the
+	// person restricting a server is rarely an administrator themselves.
+	if err := s.rejectAdminRoleBlocks(ctx, ac.ActiveOrganizationID, principalsByLevel); err != nil {
+		return nil, err
 	}
 
 	// Lockout guardrail: a block on view subtracts the read that renders this
@@ -321,6 +380,22 @@ func (s *Service) ListAudienceOptions(ctx context.Context, _ *gen.ListAudienceOp
 		})
 	}
 
+	// Suspended and revoked agents keep the access they already have but cannot
+	// be given more, so the picker lists only the assignable ones.
+	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		options = append(options, &gen.AudienceOption{
+			PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(),
+			Kind:         "agent",
+			DisplayName:  agent.Name,
+			Description:  audienceDescription("agent", nil),
+			MemberCount:  nil,
+		})
+	}
+
 	return &gen.ListAudienceOptionsResult{Options: options}, nil
 }
 
@@ -423,6 +498,11 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		return nil, "", err
 	}
 
+	agentReach, err := s.agentAudienceReach(ctx, organizationID)
+	if err != nil {
+		return nil, "", err
+	}
+
 	entries := make([]*gen.ResourceAudienceEntry, 0, len(rules))
 	for key, rule := range rules {
 		name := names[key.principalURN]
@@ -440,6 +520,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			Tools:        rule.tools,
 			Dispositions: rule.dispositions,
 			MemberIds:    reach[key.principalURN],
+			AgentIds:     agentReach[key.principalURN],
 		})
 	}
 
@@ -483,6 +564,121 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 	}
 
 	return selectors, nil
+}
+
+// rejectAdminRoleBlocks refuses a save that would block the administrator role
+// on this resource. Restricting a server to one team is normally written as
+// "everyone else: no access", which stores a block — and a block outranks every
+// grant, so naming the administrator role there locks every administrator out
+// of the page that could undo it. Roles other than admin are left alone: taking
+// a team off a server is the point of this surface.
+func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
+	blocked := make(map[string]struct{})
+	for _, level := range audienceBlockLevels {
+		for _, entry := range principalsByLevel[level] {
+			if entry.Principal.Type == urn.PrincipalTypeRole {
+				blocked[entry.Principal.String()] = struct{}{}
+			}
+		}
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+
+	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list roles for lockout guard").LogError(ctx, s.logger)
+	}
+	for _, role := range roles {
+		if role.WorkosSlug != authz.SystemRoleAdmin {
+			continue
+		}
+		if _, ok := blocked[role.RoleUrn]; ok {
+			return oops.E(oops.CodeInvalid, nil, "blocking the %s role would take this server away from every administrator, including the ones who could give it back; remove its access instead of blocking it", role.WorkosName)
+		}
+	}
+	return nil
+}
+
+// agentAudienceReach maps every principal an audience row can name to the
+// agents it currently reaches. It is the agent counterpart to audienceReach:
+// a rule naming a role authorizes that role's agent members at runtime, so a
+// surface that resolved only people would report no access while the role
+// still granted it.
+func (s *Service) agentAudienceReach(ctx context.Context, organizationID string) (map[string][]string, error) {
+	assignments, err := accessrepo.New(s.db).ListAgentRoleAssignments(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agent role assignments for audience reach").LogError(ctx, s.logger)
+	}
+
+	reach := make(map[string][]string, len(assignments))
+	for _, assignment := range assignments {
+		reach[assignment.PrincipalUrn] = append(reach[assignment.PrincipalUrn], assignment.AgentID.String())
+	}
+
+	// An agent principal reaches itself, so a rule naming one reports its own
+	// agent the way a rule naming a person reports that person.
+	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience reach").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+		reach[principal] = append(reach[principal], agent.ID.String())
+	}
+
+	return reach, nil
+}
+
+// storedAgentRules maps each agent principal this resource's own rules name to
+// the exact rules it holds. Retaining access for a suspended or revoked agent
+// is checked against these rather than against the principal alone, so the
+// rule has to come back unchanged.
+//
+// Only rules naming this resource count: the payload replaces those and leaves
+// organization-wide rules to the surface that owns them.
+func (s *Service) storedAgentRules(ctx context.Context, organizationID, resourceID, projectID string) (map[string]map[string]struct{}, error) {
+	entries, _, err := s.resourceAudienceEntries(ctx, organizationID, resourceID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	stored := make(map[string]map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		if entry.Kind != "agent" || entry.AppliesTo != audienceAppliesToResource {
+			continue
+		}
+		if stored[entry.PrincipalUrn] == nil {
+			stored[entry.PrincipalUrn] = make(map[string]struct{}, 1)
+		}
+		stored[entry.PrincipalUrn][audienceRuleKey(entry.Level, entry.Tools, entry.Dispositions)] = struct{}{}
+	}
+	return stored, nil
+}
+
+// audienceRuleKey identifies one rule by everything that decides how much it
+// grants: the level, and the narrowing that limits it. Order within the
+// narrowing is not part of the rule, so it is sorted out of the key.
+func audienceRuleKey(level string, tools, dispositions []string) string {
+	sortedTools := slices.Clone(tools)
+	slices.Sort(sortedTools)
+	sortedDispositions := slices.Clone(dispositions)
+	slices.Sort(sortedDispositions)
+	return level + "|" + strings.Join(sortedTools, ",") + "|" + strings.Join(sortedDispositions, ",")
+}
+
+// assignableAgentPrincipals returns the agents that may be given new access.
+func (s *Service) assignableAgentPrincipals(ctx context.Context, organizationID string) (map[string]struct{}, error) {
+	agents, err := accessrepo.New(s.db).ListAssignableAgents(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list assignable agents").LogError(ctx, s.logger)
+	}
+
+	assignable := make(map[string]struct{}, len(agents))
+	for _, agent := range agents {
+		assignable[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = struct{}{}
+	}
+	return assignable, nil
 }
 
 // audienceReach maps every principal an audience row can name to the
@@ -566,6 +762,22 @@ func (s *Service) audienceNames(ctx context.Context, organizationID string) (map
 		}
 	}
 
+	// Every non-deleted agent, not only the assignable ones: a suspended or
+	// revoked agent keeps the rules it holds, and rendering it as deleted
+	// would misreport access that is still enforced.
+	agents, err := accessrepo.New(s.db).ListAgentNames(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list agents for audience names").LogError(ctx, s.logger)
+	}
+	for _, agent := range agents {
+		names[urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()] = audienceName{
+			kind:        "agent",
+			displayName: agent.Name,
+			description: audienceDescription("agent", nil),
+			memberCount: nil,
+		}
+	}
+
 	names[urn.PrincipalWildcard] = audienceName{
 		kind:        "everyone",
 		displayName: "Everyone",
@@ -586,6 +798,8 @@ func describeUnknownPrincipal(principalURN string) audienceName {
 		return audienceName{kind: "role", displayName: "Deleted role", description: nil, memberCount: nil}
 	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeUser)+":"):
 		return audienceName{kind: "user", displayName: "Former member", description: nil, memberCount: nil}
+	case strings.HasPrefix(principalURN, string(urn.PrincipalTypeAgent)+":"):
+		return audienceName{kind: "agent", displayName: "Deleted agent", description: nil, memberCount: nil}
 	default:
 		return audienceName{kind: "unknown", displayName: principalURN, description: nil, memberCount: nil}
 	}
@@ -595,6 +809,8 @@ func audienceDescription(kind string, memberCount *int64) *string {
 	switch kind {
 	case "everyone":
 		return conv.PtrEmpty("All members of this organization")
+	case "agent":
+		return conv.PtrEmpty("Agent")
 	case "role":
 		if memberCount == nil {
 			return conv.PtrEmpty("Role")
@@ -681,9 +897,6 @@ func parseAudiencePrincipal(value string) (urn.Principal, error) {
 	principal, err := urn.ParsePrincipal(value)
 	if err != nil {
 		return urn.Principal{}, fmt.Errorf("parse principal: %w", err)
-	}
-	if principal.Type == urn.PrincipalTypeAgent {
-		return urn.Principal{}, errors.New("agent principals cannot be given resource access here")
 	}
 	return principal, nil
 }

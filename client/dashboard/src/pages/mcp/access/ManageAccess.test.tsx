@@ -105,7 +105,9 @@ function savedEntries() {
 
 /** Open a collapsed row so its per-scope lines become reachable. */
 function expandFirstRow() {
-  fireEvent.click(screen.getAllByRole("button", { expanded: false })[0]!);
+  // Named rather than taken by position: the "Grant access" menu is also a
+  // collapsed button, and it comes first in the DOM.
+  fireEvent.click(screen.getAllByRole("button", { name: "Edit access" })[0]!);
 }
 
 /**

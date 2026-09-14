@@ -1,3 +1,5 @@
+import { catalogLogoClassName } from "./logo";
+import { cn } from "@/lib/utils";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/Card";
 import { useIconConfetti } from "@/components/icon-confetti";
@@ -60,7 +62,10 @@ export function ServerCard({
             <img
               src={server.iconUrl}
               alt={displayName}
-              className="h-12 w-12 object-contain"
+              className={cn(
+                "h-12 w-12 object-contain",
+                catalogLogoClassName(server.registrySpecifier),
+              )}
             />
           ) : undefined
         }

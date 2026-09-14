@@ -92,6 +92,13 @@ UPDATE chats
 SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: ForceSoftDeletePlatformMCPCatalogRegistrationFixture :exec
+-- Test-only fixture for durable-provenance reads after registration lifecycle
+-- state changes while the registered MCP and its plugin attachment remain live.
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: UpdateChatMessageCreatedAt :exec
 UPDATE chat_messages
 SET created_at = @created_at
@@ -822,60 +829,6 @@ RETURNING id;
 INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
 VALUES (@project_id, @organization_id, @name, @sources, 1)
 RETURNING id;
-
--- name: SeedLegacyScopeRiskPolicyFixture :one
--- Test-only fixture: inserts a risk policy still carrying the legacy
--- policy-level scope, for exercising the legacy-policy-scope fold.
-INSERT INTO risk_policies (
-    project_id,
-    organization_id,
-    name,
-    sources,
-    action,
-    message_types,
-    scope_include,
-    scope_exempt,
-    version
-) VALUES (
-    @project_id,
-    @organization_id,
-    @name,
-    @sources,
-    @action,
-    sqlc.narg('message_types')::text[],
-    sqlc.narg('scope_include')::text,
-    sqlc.narg('scope_exempt')::text,
-    1
-)
-RETURNING id;
-
--- name: SetRiskPolicyAnalyzerConfigFixture :exec
--- Test-only fixture: seeds analyzer_config on a risk policy, for exercising
--- how the legacy-policy-scope fold rewrites it.
-UPDATE risk_policies
-SET analyzer_config = @analyzer_config::jsonb
-WHERE id = @id;
-
--- name: LockRiskPolicyFixture :one
--- Test-only fixture: takes a row lock on a risk policy so a test can hold it
--- while another session runs, exercising FOR UPDATE SKIP LOCKED paths.
-SELECT id
-FROM risk_policies
-WHERE id = @id
-FOR UPDATE;
-
--- name: LockRiskPoliciesTableFixture :exec
--- Test-only fixture: takes an ACCESS EXCLUSIVE lock on risk_policies so a test
--- can verify that readers elsewhere fail fast under their configured timeouts
--- instead of blocking indefinitely.
-LOCK TABLE risk_policies IN ACCESS EXCLUSIVE MODE;
-
--- name: ReadRiskPolicyScopeFixture :one
--- Test-only fixture: reads back the columns the legacy-policy-scope fold
--- rewrites, so a test can assert on the folded row.
-SELECT analyzer_config, message_types, scope_include, scope_exempt, version
-FROM risk_policies
-WHERE id = @id;
 
 -- name: SeedRiskResultFixture :one
 -- Test-only fixture: records one open finding against a chat message, with the

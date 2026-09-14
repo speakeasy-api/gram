@@ -165,6 +165,57 @@ export function organizationDashboardUrl(organizationId: string): string {
   return `/admin/organization.open-dashboard?${query.toString()}`;
 }
 
+// The same handoff `RecordHeader` renders, for a caller that has no form to
+// render it in.
+//
+// A real <form> around a submit button is the better shape wherever there is a
+// button, and RecordHeader keeps it. The command palette has no button: the row
+// that triggers this unmounts with the dialog in the commit that follows a
+// selection, so a form inside that row can be gone before it submits. This one
+// lives on `document.body`, where closing the dialog cannot reach it.
+//
+// Every attribute is load-bearing, and each is the one RecordHeader gives its
+// reason for:
+//   - POST, so the admin origin check protects handoff issuance.
+//   - `_blank`, so the admin record stays open in the tab the operator is in.
+//   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
+//     send `Origin: null` for this POST, which the admin CSRF middleware
+//     correctly rejects.
+//
+// One element, reused, and never detached. Creating one per handoff and
+// removing it after `submit()` is the obvious shape and it is a bug: submission
+// is processed in a later task, and Firefox abandons the navigation when the
+// form has left the document before that task runs. Keeping one settles the
+// timing question without a timer to reason about, and leaves nothing
+// accumulating behind it.
+let handoffForm: HTMLFormElement | undefined;
+
+function dashboardHandoffForm(): HTMLFormElement {
+  handoffForm ??= (() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.target = "_blank";
+    form.setAttribute("rel", "noopener");
+    // It carries no controls and so draws nothing, but a form is still a block
+    // box. Said outright rather than left to the user agent's margins.
+    form.hidden = true;
+    return form;
+  })();
+
+  // Re-attached rather than assumed attached: a submit from a form outside the
+  // document does nothing at all, and a test harness that resets the document
+  // between cases takes it back out.
+  if (!handoffForm.isConnected) document.body.append(handoffForm);
+
+  return handoffForm;
+}
+
+export function openOrganizationDashboard(organizationId: string): void {
+  const form = dashboardHandoffForm();
+  form.action = organizationDashboardUrl(organizationId);
+  form.submit();
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
@@ -258,6 +309,7 @@ export function setStripeCustomer(
 }
 
 export type ListOrganizationsResult = {
+  total: number;
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
@@ -271,6 +323,9 @@ export type ListOrganizationsResult = {
 // Nothing here sends them, and nothing should: two ways to say the same filter
 // is how the browser and the server end up disagreeing about what is on.
 export type ListOrganizationsParams = {
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
   q?: string;
   account_types?: string[];
   trial_states?: string[];

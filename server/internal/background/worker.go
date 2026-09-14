@@ -117,6 +117,10 @@ type WorkerOptions struct {
 	PluginPublisher          *plugins.Service
 	Publishers               *Publishers
 
+	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
+	// the constructing caller owns it and must call Wait after those producers stop.
+	IssuerMetadataRefresher *remotesessions.IssuerMetadataRefresher
+
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
 
@@ -183,6 +187,7 @@ func ForDeploymentProcessing(
 		TelemetryRepo:            nil,
 		TriggersApp:              nil,
 		CacheAdapter:             nil,
+		IssuerMetadataRefresher:  nil,
 		EmailService:             nil,
 		AssistantsCore:           nil,
 		TemporalEnv:              nil,
@@ -252,6 +257,7 @@ func NewTemporalWorker(
 		TelemetryRepo:             nil,
 		TriggersApp:               nil,
 		CacheAdapter:              nil,
+		IssuerMetadataRefresher:   nil,
 		EmailService:              nil,
 		AssistantsCore:            nil,
 		TemporalEnv:               env,
@@ -302,6 +308,7 @@ func NewTemporalWorker(
 			TelemetryRepo:             conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:               conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:              conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:   conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			EmailService:              conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:            conv.Default(o.AssistantsCore, opts.AssistantsCore),
 			TemporalEnv:               conv.Default(o.TemporalEnv, opts.TemporalEnv),
@@ -420,6 +427,7 @@ func NewTemporalWorker(
 		opts.DisableRiskRetroReconcile,
 		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
+		opts.IssuerMetadataRefresher,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -463,6 +471,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
+	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
@@ -590,6 +600,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
@@ -773,6 +784,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {

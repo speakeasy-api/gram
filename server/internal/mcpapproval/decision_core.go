@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -94,7 +95,7 @@ func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input Deci
 	// Every transaction that can change a standing decision takes the project
 	// enforcement lock before a request row lock. Policy URL edits use the same
 	// order, preventing a decision/edit race from deadlocking on reversed locks.
-	if err := queries.LockProjectEnforcementState(ctx, input.ProjectID.String()); err != nil {
+	if err := shadowadmission.LockProject(ctx, tx, input.ProjectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking project enforcement state").LogError(ctx, s.logger)
 	}
 	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: input.RequestID, ProjectID: input.ProjectID})

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/client"
 	temporalmocks "go.temporal.io/sdk/mocks"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,9 @@ func TestNetworkIngressHealthTimeoutLeavesRefreshRunning(t *testing.T) {
 	clientMock.On("SignalWithStartWorkflow", mock.Anything,
 		"v1:network-ingress-reconcile:"+id.String(), "reconcile", "enqueue",
 		mock.MatchedBy(func(options client.StartWorkflowOptions) bool {
-			return options.TaskQueue == "authoritative" && options.StartDelay == 0 && options.WorkflowExecutionTimeout > 0
+			return options.TaskQueue == "authoritative" && options.StartDelay == 0 &&
+				options.WorkflowExecutionTimeout == networkIngressReconcileExecutionTimeout &&
+				options.WorkflowRunTimeout == networkIngressReconcileWorkflowRunTimeout
 		}), mock.Anything, params).Return(run, nil).Once()
 	refresher := NetworkIngressClient{Client: clientMock, Queue: "authoritative"}
 	require.NoError(t, refresher.RefreshNetworkIngress(t.Context(), organizationID, id))
@@ -39,6 +42,22 @@ func TestNetworkIngressHealthTimeoutLeavesRefreshRunning(t *testing.T) {
 	require.NotContains(t, string(payload), "authoritative")
 	require.NotContains(t, string(payload), "credentials")
 	require.NotContains(t, string(payload), "provider")
+}
+
+func TestNetworkIngressHealthReturnsPersistedNonRetryableObservation(t *testing.T) {
+	t.Parallel()
+	const organizationID = "org_test"
+	id := uuid.New()
+	params := NetworkIngressReconcileParams{OrganizationID: organizationID, IngressID: id}
+	clientMock := &temporalmocks.Client{}
+	run := &stubWorkflowRun{err: temporal.NewNonRetryableApplicationError("invalid_credentials", "network_ingress", nil)}
+	clientMock.On("SignalWithStartWorkflow", mock.Anything,
+		"v1:network-ingress-reconcile:"+id.String(), "reconcile", "enqueue", mock.Anything, mock.Anything, params).
+		Return(run, nil).Once()
+
+	refresher := NetworkIngressClient{Client: clientMock, Queue: "authoritative"}
+	require.NoError(t, refresher.RefreshNetworkIngress(t.Context(), organizationID, id))
+	clientMock.AssertExpectations(t)
 }
 
 func TestNetworkIngressWorkflowCoalescesSignalsDuringActivity(t *testing.T) {
@@ -76,6 +95,7 @@ func TestNetworkIngressWorkflowPassesTrustedScopeWithinActivityBudget(t *testing
 		require.Equal(t, networkIngressReconcileActivityRetryBudget, info.ScheduleToCloseTimeout)
 		require.Greater(t, networkIngressReconcileActivityRetryBudget, networkIngressReconcileActivityTimeout)
 		require.Greater(t, networkIngressReconcileWorkflowRunTimeout, networkIngressReconcileActivityRetryBudget)
+		require.Greater(t, networkIngressReconcileExecutionTimeout, networkIngressReconcileWorkflowRunTimeout)
 		calls++
 		return NetworkIngressReconcileResult{Requeue: false}, nil
 	}, activity.RegisterOptions{Name: NetworkIngressReconcileActivityName})

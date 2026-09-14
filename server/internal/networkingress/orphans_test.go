@@ -38,7 +38,7 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 	id := uuid.MustParse(ti.create(t, ctx).ID)
 	row := loadRow(t, ctx, ti)
 	persisted := append([]byte(nil), row.ProviderResources...)
-	_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: []byte(`{}`), ID: id})
+	_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: []byte(`{}`), ID: id, OrganizationID: row.OrganizationID})
 	require.NoError(t, err)
 
 	calls := 0
@@ -47,7 +47,7 @@ func TestNetworkIngressExecutorOrphanScanRetriesWhenDesiredIdentitiesAppearDurin
 		switch calls {
 		case 1:
 			require.Empty(t, known)
-			_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: persisted, ID: id})
+			_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: persisted, ID: id, OrganizationID: row.OrganizationID})
 			require.NoError(t, err)
 			return []k8s.NetworkIngressOrphan{{OwnerID: id, Kind: "tailnets"}}, nil
 		case 2:
@@ -97,7 +97,7 @@ func TestNetworkIngressExecutorOrphanScanBoundsUnstableDesiredIdentities(t *test
 		if calls%2 == 1 {
 			resources = []byte(`{}`)
 		}
-		_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: resources, ID: id})
+		_, err := repo.New(ti.conn).SetNetworkIngressProviderResourcesForTest(ctx, repo.SetNetworkIngressProviderResourcesForTestParams{ProviderResources: resources, ID: id, OrganizationID: row.OrganizationID})
 		require.NoError(t, err)
 		return []k8s.NetworkIngressOrphan{{OwnerID: id, Kind: "tailnets"}}, nil
 	}}

@@ -23,7 +23,7 @@ import (
 
 const toolSearchUnavailableMessage = "tool search is temporarily unavailable; try again later"
 
-func TestMCPWithoutTemporalServesStaticRequestsAndRejectsDynamicIndexing(t *testing.T) {
+func TestMCPWithoutTemporalServesStaticRequestsAndFailsFastOnStaleDynamicIndex(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithoutTemporal(t)

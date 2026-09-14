@@ -7,24 +7,16 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
-	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-const (
-	searchToolsToolName        = "search_tools"
-	toolSearchIndexWaitTimeout = 10 * time.Second
-)
+const searchToolsToolName = "search_tools"
 
 var errToolSearchIndexUnavailable = errors.New("tool search index is unavailable")
 
@@ -67,10 +59,9 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) ([]*toolListEntry, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
-		return nil, fmt.Errorf("index toolset: %w", err)
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
+		return nil, fmt.Errorf("check tool search index: %w", err)
 	}
 
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
@@ -153,10 +144,6 @@ type searchToolsArguments struct {
 	NumResults int           `json:"num_results"`
 }
 
-type workflowResult interface {
-	Get(context.Context, any) error
-}
-
 func handleSearchToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -164,9 +151,8 @@ func handleSearchToolsCall(
 	argsRaw json.RawMessage,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
-	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
-	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
+	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
 		if errors.Is(err, errToolSearchIndexUnavailable) {
 			return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
 		}
@@ -283,46 +269,18 @@ func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.Tool
 	return results, nil
 }
 
-func waitForIndexing(ctx context.Context, logger *slog.Logger, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore, temporalEnv *temporal.Environment) error {
+func requireToolSearchIndex(ctx context.Context, toolset *types.Toolset, vectorToolStore *rag.ToolsetVectorStore) error {
+	if len(toolset.Tools) == 0 {
+		return nil
+	}
+
 	indexed, err := vectorToolStore.ToolsetToolsAreIndexed(ctx, *toolset)
 	if err != nil {
 		return fmt.Errorf("failed to check toolset indexing status: %w", err)
 	}
 
 	if !indexed {
-		wr, indexErr := background.ExecuteIndexToolset(
-			ctx,
-			temporalEnv,
-			background.IndexToolsetParams{
-				ProjectID:   uuid.MustParse(toolset.ProjectID),
-				ToolsetSlug: toolset.Slug,
-			},
-		)
-
-		if indexErr != nil {
-			if errors.Is(indexErr, background.ErrTemporalUnavailable) {
-				return fmt.Errorf("%w: prepare tool search index: %w", errToolSearchIndexUnavailable, indexErr)
-			}
-			return fmt.Errorf("failed to prepare tool search index: %w", indexErr)
-		}
-
-		if err := waitForToolSearchIndex(ctx, wr, toolSearchIndexWaitTimeout); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func waitForToolSearchIndex(ctx context.Context, result workflowResult, timeout time.Duration) error {
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	if err := result.Get(waitCtx, nil); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-			return fmt.Errorf("%w: wait for tool search index: %w", errToolSearchIndexUnavailable, err)
-		}
-		return fmt.Errorf("build tool search index: %w", err)
+		return errToolSearchIndexUnavailable
 	}
 
 	return nil
