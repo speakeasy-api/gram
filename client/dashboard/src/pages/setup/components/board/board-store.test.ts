@@ -26,13 +26,26 @@ describe("server task projection", () => {
       });
     });
   });
-  it("retains suggested owners and the optional platform task badge", () => {
-    expect(
-      ONBOARDING_TASKS.every((task) => task.suggestedOwner.length > 0),
-    ).toBe(true);
-    expect(
-      ONBOARDING_TASKS.find((task) => task.id === "platform-mcp")?.badge,
-    ).toBe("Optional");
+  it("retains suggested owners and the optional platform task badge in the projection", () => {
+    const tasks = resolveBoardTasks(
+      ONBOARDING_TASKS.map(({ id }) => ({
+        key: id,
+        title: `Server ${id}`,
+        description: "Server copy",
+        status: "todo" as const,
+        completedByFact: false,
+        hidden: false,
+        blockedBy: [],
+      })),
+    );
+    expect(tasks).toHaveLength(ONBOARDING_TASKS.length);
+    tasks.forEach((task, index) => {
+      expect(task.suggestedOwner).toBe(ONBOARDING_TASKS[index]!.suggestedOwner);
+      expect(task.suggestedOwner.length).toBeGreaterThan(0);
+    });
+    expect(tasks.find((task) => task.id === "platform-mcp")?.badge).toBe(
+      "Optional",
+    );
   });
   it("does not silently omit unknown keys", () => {
     expect(() =>
