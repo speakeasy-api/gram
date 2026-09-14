@@ -279,6 +279,13 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	code := r.URL.Query().Get("code")
 	switch {
 	case oauthErr != "":
+		if oauthErr == "invalid_client" || oauthErr == "unauthorized_client" {
+			// The authorization server refused the client itself, not the
+			// grant. Retire the registration so the next flow re-registers
+			// or falls back from CIMD to DCR instead of repeating the
+			// same refusal.
+			s.invalidateMCPAuthClient(ctx, projectID, assistantID, claims.OAuthServerIssuer, claims.ClientID)
+		}
 		payload.Status = mcpAuthStatusFailed
 		payload.Error = oauthErr
 		payload.ErrorDescription = r.URL.Query().Get("error_description")
@@ -439,6 +446,13 @@ func (s *Service) getOrRegisterMCPAuthClient(
 			ClaimLease:        claimLease,
 		})
 		if err == nil && existing.Usable.Bool {
+			if !useCIMD && existing.ClientIDMetadataUri.Valid {
+				// CIMD was switched off, or the authorization server stopped
+				// advertising it. A public client_id it no longer accepts
+				// is retired so the row becomes claimable for DCR below.
+				s.invalidateMCPAuthClient(coordinationCtx, projectID, assistantID, oauthServerIssuer, existing.ClientID.String)
+				continue
+			}
 			return mcpAuthClientCredentials{
 				ClientID:              existing.ClientID.String,
 				ClientSecretEncrypted: existing.ClientSecretEncrypted.String,
@@ -454,8 +468,14 @@ func (s *Service) getOrRegisterMCPAuthClient(
 			noRow := errors.Is(err, pgx.ErrNoRows)
 			isCIMD := err == nil && existing.ClientIDMetadataUri.Valid
 			invalidatedCIMD := isCIMD && existing.Invalidated.Bool
-			if (noRow || isCIMD) && !invalidatedCIMD {
-				credentials, cimdErr := s.upsertMCPAuthCIMDClient(coordinationCtx, queries, projectID, assistantID, oauthServerIssuer, redirectURI)
+			// A live DCR registration is kept; anything else (no row, a
+			// CIMD row, or a DCR row that expired, was invalidated, or was
+			// registered for another redirect) moves to CIMD. An invalidated
+			// CIMD row falls back to DCR, except when there is no
+			// registration endpoint to fall back to: then it is refreshed
+			// and CIMD retried instead of failing every flow from here on.
+			if (noRow || isCIMD || existing.Claimable.Bool) && (!invalidatedCIMD || registrationEndpoint == "") {
+				credentials, cimdErr := s.upsertMCPAuthCIMDClient(coordinationCtx, queries, projectID, assistantID, oauthServerIssuer, redirectURI, usableAfter, claimLease)
 				if cimdErr == nil {
 					return credentials, nil
 				}
@@ -602,6 +622,8 @@ func (s *Service) upsertMCPAuthCIMDClient(
 	assistantID uuid.UUID,
 	oauthServerIssuer string,
 	redirectURI string,
+	usableAfter pgtype.Timestamptz,
+	claimLease pgtype.Interval,
 ) (mcpAuthClientCredentials, error) {
 	if s.core.serverURL == nil {
 		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
@@ -616,6 +638,8 @@ func (s *Service) upsertMCPAuthCIMDClient(
 		RedirectUri:         redirectURI,
 		ClientID:            pgtype.Text{String: clientID, Valid: true},
 		ClientIDMetadataUri: pgtype.Text{String: clientID, Valid: true},
+		UsableAfter:         usableAfter,
+		ClaimLease:          claimLease,
 	})
 	if err != nil {
 		return mcpAuthClientCredentials{}, fmt.Errorf("upsert assistant mcp oauth cimd client: %w", err)

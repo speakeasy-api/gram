@@ -1520,9 +1520,10 @@ WHERE project_id = @project_id
 
 -- name: UpsertAssistantMCPOAuthClientCIMD :one
 -- Records a public CIMD client whose client_id is the document URL. Does not
--- replace a live confidential DCR registration: that reuse path stays on the
--- secret-bearing row until it expires, is invalidated, or the assistant is
--- deleted. Intentionally project-scoped.
+-- replace a live confidential DCR registration or an in-progress claim: that
+-- reuse path stays on the secret-bearing row until it expires, is
+-- invalidated, or was registered for another redirect. Intentionally
+-- project-scoped.
 INSERT INTO assistant_mcp_oauth_clients AS clients (
   project_id,
   assistant_id,
@@ -1552,9 +1553,20 @@ DO UPDATE SET
   registration_started_at = NULL,
   updated_at = clock_timestamp()
 WHERE
-  -- Only rewrite existing CIMD rows (redirect refresh). Never steal a live
-  -- confidential DCR client or an in-progress / abandoned DCR claim.
   clients.client_id_metadata_uri IS NOT NULL
+  OR (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - @claim_lease::interval
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= @usable_after
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
 RETURNING client_id, client_secret_encrypted, client_id_metadata_uri;
 
 -- name: GetAssistantForClientMetadataDocument :one

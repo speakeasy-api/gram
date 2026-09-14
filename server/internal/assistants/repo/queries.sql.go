@@ -4007,9 +4007,20 @@ DO UPDATE SET
   registration_started_at = NULL,
   updated_at = clock_timestamp()
 WHERE
-  -- Only rewrite existing CIMD rows (redirect refresh). Never steal a live
-  -- confidential DCR client or an in-progress / abandoned DCR claim.
   clients.client_id_metadata_uri IS NOT NULL
+  OR (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - $7::interval
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= $8
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
 RETURNING client_id, client_secret_encrypted, client_id_metadata_uri
 `
 
@@ -4020,6 +4031,8 @@ type UpsertAssistantMCPOAuthClientCIMDParams struct {
 	RedirectUri         string
 	ClientID            pgtype.Text
 	ClientIDMetadataUri pgtype.Text
+	ClaimLease          pgtype.Interval
+	UsableAfter         pgtype.Timestamptz
 }
 
 type UpsertAssistantMCPOAuthClientCIMDRow struct {
@@ -4029,9 +4042,10 @@ type UpsertAssistantMCPOAuthClientCIMDRow struct {
 }
 
 // Records a public CIMD client whose client_id is the document URL. Does not
-// replace a live confidential DCR registration: that reuse path stays on the
-// secret-bearing row until it expires, is invalidated, or the assistant is
-// deleted. Intentionally project-scoped.
+// replace a live confidential DCR registration or an in-progress claim: that
+// reuse path stays on the secret-bearing row until it expires, is
+// invalidated, or was registered for another redirect. Intentionally
+// project-scoped.
 func (q *Queries) UpsertAssistantMCPOAuthClientCIMD(ctx context.Context, arg UpsertAssistantMCPOAuthClientCIMDParams) (UpsertAssistantMCPOAuthClientCIMDRow, error) {
 	row := q.db.QueryRow(ctx, upsertAssistantMCPOAuthClientCIMD,
 		arg.ProjectID,
@@ -4040,6 +4054,8 @@ func (q *Queries) UpsertAssistantMCPOAuthClientCIMD(ctx context.Context, arg Ups
 		arg.RedirectUri,
 		arg.ClientID,
 		arg.ClientIDMetadataUri,
+		arg.ClaimLease,
+		arg.UsableAfter,
 	)
 	var i UpsertAssistantMCPOAuthClientCIMDRow
 	err := row.Scan(&i.ClientID, &i.ClientSecretEncrypted, &i.ClientIDMetadataUri)

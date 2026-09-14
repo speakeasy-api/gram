@@ -48,6 +48,26 @@ func AssistantClientMetadataDocumentURL(serverURL *url.URL, assistantID uuid.UUI
 	return strings.TrimRight(serverURL.String(), "/") + assistantClientMetadataDocumentPath + assistantID.String()
 }
 
+// ParseAssistantClientMetadataDocumentURL reports whether clientID is a CIMD
+// document URL this deployment publishes for one of its assistants: the
+// platform-canonical prefix followed by exactly one assistant id, which is
+// returned. It says nothing about whether that assistant exists.
+func ParseAssistantClientMetadataDocumentURL(serverURL *url.URL, clientID string) (uuid.UUID, bool) {
+	if serverURL == nil {
+		return uuid.Nil, false
+	}
+	prefix := strings.TrimRight(serverURL.String(), "/") + assistantClientMetadataDocumentPath
+	rest, ok := strings.CutPrefix(clientID, prefix)
+	if !ok || len(rest) != len(uuid.Nil.String()) {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(rest)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 // assistantClientMetadataDocument is the JSON body served at the assistant
 // CIMD endpoint. Fields follow RFC 7591 client metadata as referenced by the
 // CIMD draft. client_uri smart-links the consent screen back to the assistant
@@ -71,7 +91,9 @@ func assistantClientName(assistantName string) string {
 }
 
 func assistantDashboardURI(siteURL *url.URL, orgSlug, projectSlug, assistantID string) string {
-	if siteURL == nil || orgSlug == "" || projectSlug == "" || assistantID == "" {
+	// The document is public and client_uri is rendered as a link on the
+	// consent screen, so only an absolute HTTPS dashboard origin is emitted.
+	if siteURL == nil || siteURL.Scheme != "https" || siteURL.Host == "" || siteURL.User != nil || orgSlug == "" || projectSlug == "" || assistantID == "" {
 		return ""
 	}
 	return siteURL.JoinPath(orgSlug, "projects", projectSlug, "assistants", assistantID).String()
@@ -100,7 +122,10 @@ func issuerSupportsAssistantCIMD(metadata *externalmcp.OAuthDiscoveryResult) boo
 }
 
 func (s *Service) assistantCIMDAllowed(ctx context.Context, orgID, orgSlug string) bool {
-	if s.core.featureFlags == nil || orgID == "" {
+	// A CIMD client_id must be an HTTPS URL, so a deployment served over
+	// plain HTTP stays on DCR rather than minting a client_id every
+	// authorization server rejects.
+	if s.core.serverURL == nil || s.core.serverURL.Scheme != "https" || s.core.featureFlags == nil || orgID == "" {
 		return false
 	}
 	on, err := s.core.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantOAuthCIMD, orgID, feature.OrgProjectGroups(orgSlug, ""))

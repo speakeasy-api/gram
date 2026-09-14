@@ -22,7 +22,7 @@ import (
 // OAuthVersion represents the detected OAuth version/capability level.
 const (
 	OAuthVersionNone = "none" // No OAuth required
-	OAuthVersion21   = "2.1"  // MCP OAuth with RFC 8414 discovery + DCR and/or CIMD
+	OAuthVersion21   = "2.1"  // MCP OAuth with RFC 8414 discovery + dynamic registration
 	OAuthVersion20   = "2.0"  // Legacy OAuth 2.0 (no AS discovery, requires static client config)
 )
 
@@ -280,9 +280,10 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 			result.ScopesSupported = resourceMeta.ScopesSupported
 		}
 
-		// If we have a registration endpoint or CIMD support, it's MCP
-		// OAuth 2.1. CIMD-capable servers may omit dynamic registration.
-		if authServerMeta.RegistrationEndpoint != "" || authServerMeta.ClientIDMetadataDocumentSupported {
+		// If we have a registration endpoint, it's full MCP OAuth (2.1)
+		// Otherwise it's legacy OAuth 2.0. CIMD support is reported on its
+		// own field; callers that can act on it check that directly.
+		if authServerMeta.RegistrationEndpoint != "" {
 			result.Version = OAuthVersion21
 		} else {
 			result.Version = OAuthVersion20

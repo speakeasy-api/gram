@@ -140,7 +140,7 @@ func TestDiscoverOAuthMetadataCIMDWithoutRegistration(t *testing.T) {
 		server.URL+"/mcp",
 	)
 	require.NoError(t, err)
-	require.Equal(t, OAuthVersion21, result.Version)
+	require.Equal(t, OAuthVersion20, result.Version)
 	require.True(t, result.ClientIDMetadataDocumentSupported)
 	require.Equal(t, []string{"none"}, result.TokenEndpointAuthMethodsSupported)
 	require.Empty(t, result.RegistrationEndpoint)
