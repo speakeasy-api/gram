@@ -11,10 +11,10 @@ import {
   CreateRemoteSessionIssuerForm$outboundSchema,
 } from "./createremotesessionissuerform.js";
 import {
-  ServerUserIdentityClientConfiguration,
-  ServerUserIdentityClientConfiguration$Outbound,
-  ServerUserIdentityClientConfiguration$outboundSchema,
-} from "./serveruseridentityclientconfiguration.js";
+  ServerIdentityClientConfiguration,
+  ServerIdentityClientConfiguration$Outbound,
+  ServerIdentityClientConfiguration$outboundSchema,
+} from "./serveridentityclientconfiguration.js";
 
 /**
  * How to provide the OAuth client.
@@ -30,13 +30,13 @@ export const ClientMode = {
 export type ClientMode = ClosedEnum<typeof ClientMode>;
 
 /**
- * A complete plan for configuring user identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.
+ * A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.
  */
-export type CommitServerUserIdentityConfigurationForm = {
+export type CommitServerIdentityConfigurationForm = {
   /**
    * Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
    */
-  clientConfiguration?: ServerUserIdentityClientConfiguration | undefined;
+  clientConfiguration?: ServerIdentityClientConfiguration | undefined;
   /**
    * How to provide the OAuth client.
    */
@@ -64,10 +64,8 @@ export const ClientMode$outboundSchema: z.ZodMiniEnum<typeof ClientMode> = z
   .enum(ClientMode);
 
 /** @internal */
-export type CommitServerUserIdentityConfigurationForm$Outbound = {
-  client_configuration?:
-    | ServerUserIdentityClientConfiguration$Outbound
-    | undefined;
+export type CommitServerIdentityConfigurationForm$Outbound = {
+  client_configuration?: ServerIdentityClientConfiguration$Outbound | undefined;
   client_mode: string;
   create_provider?: CreateRemoteSessionIssuerForm$Outbound | undefined;
   existing_client_id?: string | undefined;
@@ -76,14 +74,14 @@ export type CommitServerUserIdentityConfigurationForm$Outbound = {
 };
 
 /** @internal */
-export const CommitServerUserIdentityConfigurationForm$outboundSchema:
+export const CommitServerIdentityConfigurationForm$outboundSchema:
   z.ZodMiniType<
-    CommitServerUserIdentityConfigurationForm$Outbound,
-    CommitServerUserIdentityConfigurationForm
+    CommitServerIdentityConfigurationForm$Outbound,
+    CommitServerIdentityConfigurationForm
   > = z.pipe(
     z.object({
       clientConfiguration: z.optional(
-        ServerUserIdentityClientConfiguration$outboundSchema,
+        ServerIdentityClientConfiguration$outboundSchema,
       ),
       clientMode: ClientMode$outboundSchema,
       createProvider: z.optional(CreateRemoteSessionIssuerForm$outboundSchema),
@@ -103,13 +101,12 @@ export const CommitServerUserIdentityConfigurationForm$outboundSchema:
     }),
   );
 
-export function commitServerUserIdentityConfigurationFormToJSON(
-  commitServerUserIdentityConfigurationForm:
-    CommitServerUserIdentityConfigurationForm,
+export function commitServerIdentityConfigurationFormToJSON(
+  commitServerIdentityConfigurationForm: CommitServerIdentityConfigurationForm,
 ): string {
   return JSON.stringify(
-    CommitServerUserIdentityConfigurationForm$outboundSchema.parse(
-      commitServerUserIdentityConfigurationForm,
+    CommitServerIdentityConfigurationForm$outboundSchema.parse(
+      commitServerIdentityConfigurationForm,
     ),
   );
 }

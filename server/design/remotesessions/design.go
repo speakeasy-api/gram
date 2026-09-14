@@ -10,36 +10,36 @@ import (
 )
 
 var _ = Service("remoteSessions", func() {
-	Description("Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
 
-	Method("commitServerUserIdentityConfiguration", func() {
-		Description("Atomically configure user identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
+	Method("commitServerIdentityConfiguration", func() {
+		Description("Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.")
 
 		Payload(func() {
-			Extend(CommitServerUserIdentityConfigurationForm)
+			Extend(CommitServerIdentityConfigurationForm)
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
 
-		Result(CommitServerUserIdentityConfigurationResult)
+		Result(CommitServerIdentityConfigurationResult)
 
 		HTTP(func() {
-			POST("/rpc/remoteSessions.commitServerUserIdentityConfiguration")
+			POST("/rpc/remoteSessions.commitServerIdentityConfiguration")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "commitServerUserIdentityConfiguration")
-		Meta("openapi:extension:x-speakeasy-name-override", "commitServerUserIdentityConfiguration")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerUserIdentityConfiguration"}`)
+		Meta("openapi:operationId", "commitServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-name-override", "commitServerIdentityConfiguration")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerIdentityConfiguration"}`)
 	})
 
 	Method("listRemoteSessions", func() {
@@ -105,8 +105,8 @@ var _ = Service("remoteSessions", func() {
 	})
 })
 
-var CommitServerUserIdentityConfigurationForm = Type("CommitServerUserIdentityConfigurationForm", func() {
-	Description("A complete plan for configuring user identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.")
+var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurationForm", func() {
+	Description("A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.")
 
 	Attribute("mcp_server_id", String, "The target MCP server. It must be backed directly by a Remote MCP source.", func() {
 		Format(FormatUUID)
@@ -121,12 +121,12 @@ var CommitServerUserIdentityConfigurationForm = Type("CommitServerUserIdentityCo
 	Attribute("existing_client_id", String, "An existing visible remote-session client to link. Required only for existing mode.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_configuration", ServerUserIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
+	Attribute("client_configuration", ServerIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
 
 	Required("mcp_server_id", "client_mode")
 })
 
-var ServerUserIdentityClientConfiguration = Type("ServerUserIdentityClientConfiguration", func() {
+var ServerIdentityClientConfiguration = Type("ServerIdentityClientConfiguration", func() {
 	Description("Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.")
 
 	Attribute("client_id", String, "The out-of-band OAuth client identifier. Manual mode only.")
@@ -140,7 +140,7 @@ var ServerUserIdentityClientConfiguration = Type("ServerUserIdentityClientConfig
 	Attribute("audience", String, "Optional upstream OAuth audience.", remotesessionclients.AudienceAttribute)
 })
 
-var ServerUserIdentityRegistrationFailure = Type("ServerUserIdentityRegistrationFailure", func() {
+var ServerIdentityRegistrationFailure = Type("ServerIdentityRegistrationFailure", func() {
 	Description("A completed automatic registration failure using the bounded OAuth registration taxonomy.")
 
 	Attribute("outcome", String, func() {
@@ -156,7 +156,7 @@ var ServerUserIdentityRegistrationFailure = Type("ServerUserIdentityRegistration
 	Required("outcome", "reason", "retryable")
 })
 
-var CommitServerUserIdentityConfigurationResult = Type("CommitServerUserIdentityConfigurationResult", func() {
+var CommitServerIdentityConfigurationResult = Type("CommitServerIdentityConfigurationResult", func() {
 	Description("The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.")
 
 	Attribute("status", String, "Successful commit status. Present only after local commit.", func() {
@@ -176,7 +176,7 @@ var CommitServerUserIdentityConfigurationResult = Type("CommitServerUserIdentity
 	})
 	Attribute("provider_path", String, "Organization-relative dashboard path to the Remote Identity Provider detail surface.")
 	Attribute("client_path", String, "Organization-relative dashboard path to the client detail surface.")
-	Attribute("failure", ServerUserIdentityRegistrationFailure, "Completed DCR failure. Mutually exclusive with status and manual_setup_required=true.")
+	Attribute("failure", ServerIdentityRegistrationFailure, "Completed DCR failure. Mutually exclusive with status and manual_setup_required=true.")
 
 	Required("manual_setup_required")
 })

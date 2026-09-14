@@ -1,3 +1,9 @@
+// dashboard.go holds composite operations built for a specific dashboard flow:
+// one atomic call that internally performs what several management API methods
+// would otherwise do in sequence. They live in this package rather than a
+// subpackage because they reach package-local helpers across clienthandlers.go,
+// cimd.go, proxyregister.go and mcpserverissuersync.go.
+
 package remotesessions
 
 import (
@@ -33,40 +39,40 @@ import (
 )
 
 const (
-	serverUserIdentityClientModeAuto     = "auto"
-	serverUserIdentityClientModeExisting = "existing"
-	serverUserIdentityClientModeManual   = "manual"
+	serverIdentityClientModeAuto     = "auto"
+	serverIdentityClientModeExisting = "existing"
+	serverIdentityClientModeManual   = "manual"
 
-	serverUserIdentityStatusRegistered = "registered"
-	serverUserIdentityStatusLinked     = "linked"
+	serverIdentityStatusRegistered = "registered"
+	serverIdentityStatusLinked     = "linked"
 )
 
-type serverUserIdentityPlan struct {
+type serverIdentityPlan struct {
 	mcpServerID         uuid.UUID
 	providerID          uuid.UUID
 	createProvider      *gen.CreateRemoteSessionIssuerForm
 	logoAssetID         uuid.NullUUID
 	existingClientID    uuid.UUID
 	clientMode          string
-	clientConfiguration *gen.ServerUserIdentityClientConfiguration
+	clientConfiguration *gen.ServerIdentityClientConfiguration
 }
 
-type serverUserIdentityProviderCapabilities struct {
+type serverIdentityProviderCapabilities struct {
 	registrationEndpoint              pgtype.Text
 	tokenEndpointAuthMethodsSupported []string
 	clientIDMetadataDocumentSupported bool
 }
 
-func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, payload *gen.CommitServerUserIdentityConfigurationPayload) (_ *gen.CommitServerUserIdentityConfigurationResult, retErr error) {
+func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload *gen.CommitServerIdentityConfigurationPayload) (_ *gen.CommitServerIdentityConfigurationResult, retErr error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-	plan, err := validateServerUserIdentityPlan(payload)
+	plan, err := validateServerIdentityPlan(payload)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user identity configuration").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid identity configuration").LogError(ctx, logger)
 	}
 
 	mcpRepo := mcpserversrepo.New(s.db)
@@ -82,8 +88,27 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	}
 
 	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
-	if plan.createProvider != nil || plan.clientMode != serverUserIdentityClientModeExisting {
+	if plan.createProvider != nil || plan.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
+	// A user session issuer is not unique to one MCP server. The client binding
+	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
+	// re-stamps every server carrying that issuer, so write access to the named
+	// target alone would let a caller repoint its siblings.
+	if target.UserSessionIssuerID.Valid {
+		sharing, err := mcpRepo.ListMCPServerIDsByUserSessionIssuerID(ctx, mcpserversrepo.ListMCPServerIDsByUserSessionIssuerIDParams{
+			ProjectID:           *authCtx.ProjectID,
+			UserSessionIssuerID: target.UserSessionIssuerID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list MCP servers sharing the user session issuer").LogError(ctx, logger)
+		}
+		for _, id := range sharing {
+			if id == target.ID {
+				continue
+			}
+			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {
 		return nil, err
@@ -115,9 +140,9 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	}
 
 	var provider repo.RemoteSessionIssuer
-	var providerCapabilities serverUserIdentityProviderCapabilities
+	var providerCapabilities serverIdentityProviderCapabilities
 	if plan.createProvider != nil {
-		if err := validateServerUserIdentityProviderForm(plan.createProvider); err != nil {
+		if err := validateServerIdentityProviderForm(plan.createProvider); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid Remote Identity Provider configuration").LogError(ctx, logger)
 		}
 		logoAssetID, err := conv.PtrToNullUUID(plan.createProvider.LogoAssetID)
@@ -160,7 +185,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		providerCapabilities = providerCapabilitiesFromRow(provider)
 	}
 
-	if plan.clientMode == serverUserIdentityClientModeExisting {
+	if plan.clientMode == serverIdentityClientModeExisting {
 		existing, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -176,13 +201,13 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 			return nil, oops.E(oops.CodeBadRequest, nil, "existing client does not belong to the selected provider").LogError(ctx, logger)
 		}
 		if !target.RemoteSessionIssuerID.Valid || target.RemoteSessionIssuerID.UUID != provider.ID {
-			if err := preflightServerUserIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, existing.RemoteSessionClient.ID); err != nil {
-				return nil, serverUserIdentityPreflightError(err)
+			if err := preflightServerIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, existing.RemoteSessionClient.ID); err != nil {
+				return nil, serverIdentityPreflightError(err)
 			}
 		}
 	} else if plan.createProvider == nil && (!target.RemoteSessionIssuerID.Valid || target.RemoteSessionIssuerID.UUID != provider.ID) {
-		if err := preflightServerUserIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, uuid.Nil); err != nil {
-			return nil, serverUserIdentityPreflightError(err)
+		if err := preflightServerIdentityClientBinding(ctx, q, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.UserSessionIssuerID.UUID, provider.ID, uuid.Nil); err != nil {
+			return nil, serverIdentityPreflightError(err)
 		}
 	}
 
@@ -198,8 +223,8 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		}
 	}()
 
-	if plan.clientMode == serverUserIdentityClientModeAuto {
-		if supportsServerUserIdentityCIMD(providerCapabilities) {
+	if plan.clientMode == serverIdentityClientModeAuto {
+		if supportsServerIdentityCIMD(providerCapabilities) {
 			registrationMethod = string(registration.MethodCIMD)
 		} else if providerCapabilities.registrationEndpoint.Valid && strings.TrimSpace(providerCapabilities.registrationEndpoint.String) != "" {
 			if !urls.IsAbsoluteHTTPSOrLoopback(providerCapabilities.registrationEndpoint.String) {
@@ -217,17 +242,17 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 					return nil, err
 				}
 				failure := registration.ClassifyDCR(err)
-				return serverUserIdentityFailureResult(provider, registrationMethod, failure), nil
+				return serverIdentityFailureResult(provider, registrationMethod, failure), nil
 			}
 			dcrSucceeded = true
 			if method, failure, ok := validateRegisteredClient(registered, plan.clientConfiguration.TokenEndpointAuthMethod); !ok {
 				s.registrationTelemetry.RecordFailure(ctx, registration.MethodDCR, failure)
-				return serverUserIdentityFailureResult(provider, registrationMethod, failure), nil
+				return serverIdentityFailureResult(provider, registrationMethod, failure), nil
 			} else {
 				registered.TokenEndpointAuthMethod = method
 			}
 		} else {
-			return serverUserIdentityManualSetupResult(provider), nil
+			return serverIdentityManualSetupResult(provider), nil
 		}
 	}
 
@@ -235,7 +260,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	clientSecret := ""
 	if registrationMethod == string(registration.MethodDCR) {
 		clientSecret = registered.ClientSecret
-	} else if plan.clientMode == serverUserIdentityClientModeManual {
+	} else if plan.clientMode == serverIdentityClientModeManual {
 		clientSecret = conv.PtrValOr(plan.clientConfiguration.ClientSecret, "")
 	}
 	if clientSecret != "" {
@@ -288,7 +313,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 
 	providerCreated := false
 	if plan.createProvider != nil {
-		provider, err = txRepo.CreateRemoteSessionIssuer(ctx, createServerUserIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, plan.createProvider, plan.logoAssetID))
+		provider, err = txRepo.CreateRemoteSessionIssuer(ctx, createServerIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, plan.createProvider, plan.logoAssetID))
 		if err != nil {
 			if isRemoteSessionIssuerSlugConflict(err) {
 				return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
@@ -352,7 +377,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 			return nil, oops.E(oops.CodeInvariantViolation, nil, "MCP server has multiple clients for its current Remote Identity Provider").LogError(ctx, logger)
 		}
 		for _, current := range bound {
-			if plan.clientMode == serverUserIdentityClientModeExisting && current.RemoteSessionClient.ID == plan.existingClientID {
+			if plan.clientMode == serverIdentityClientModeExisting && current.RemoteSessionClient.ID == plan.existingClientID {
 				continue
 			}
 			affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
@@ -382,7 +407,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 
 	var client repo.RemoteSessionClient
 	var userIssuerIDs []uuid.UUID
-	if plan.clientMode == serverUserIdentityClientModeExisting {
+	if plan.clientMode == serverIdentityClientModeExisting {
 		existing, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -491,7 +516,7 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 		return nil, oops.E(oops.CodeUnexpected, err, "update MCP server identity configuration").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit user identity configuration").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit identity configuration").LogError(ctx, logger)
 	}
 	localCommitCompleted = true
 
@@ -505,13 +530,13 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	if client.ProjectID.Valid {
 		clientTier = "project-specific"
 	}
-	status := serverUserIdentityStatusRegistered
-	if plan.clientMode == serverUserIdentityClientModeExisting {
-		status = serverUserIdentityStatusLinked
+	status := serverIdentityStatusRegistered
+	if plan.clientMode == serverIdentityClientModeExisting {
+		status = serverIdentityStatusLinked
 	}
-	providerPath := serverUserIdentityProviderPath(provider.ID)
-	clientPath := serverUserIdentityClientPath(provider.ID, client.ID)
-	return &gen.CommitServerUserIdentityConfigurationResult{
+	providerPath := serverIdentityProviderPath(provider.ID)
+	clientPath := serverIdentityClientPath(provider.ID, client.ID)
+	return &gen.CommitServerIdentityConfigurationResult{
 		Status:              &status,
 		RegistrationMethod:  &registrationMethod,
 		ManualSetupRequired: false,
@@ -525,8 +550,8 @@ func (s *Service) CommitServerUserIdentityConfiguration(ctx context.Context, pay
 	}, nil
 }
 
-func validateServerUserIdentityPlan(payload *gen.CommitServerUserIdentityConfigurationPayload) (serverUserIdentityPlan, error) {
-	plan := serverUserIdentityPlan{
+func validateServerIdentityPlan(payload *gen.CommitServerIdentityConfigurationPayload) (serverIdentityPlan, error) {
+	plan := serverIdentityPlan{
 		mcpServerID:         uuid.Nil,
 		providerID:          uuid.Nil,
 		createProvider:      payload.CreateProvider,
@@ -538,56 +563,56 @@ func validateServerUserIdentityPlan(payload *gen.CommitServerUserIdentityConfigu
 	var err error
 	plan.mcpServerID, err = uuid.Parse(payload.McpServerID)
 	if err != nil {
-		return serverUserIdentityPlan{}, fmt.Errorf("parse mcp_server_id: %w", err)
+		return serverIdentityPlan{}, fmt.Errorf("parse mcp_server_id: %w", err)
 	}
 	if (payload.ProviderID == nil) == (payload.CreateProvider == nil) {
-		return serverUserIdentityPlan{}, errors.New("exactly one of provider_id or create_provider is required")
+		return serverIdentityPlan{}, errors.New("exactly one of provider_id or create_provider is required")
 	}
 	if payload.ProviderID != nil {
 		plan.providerID, err = uuid.Parse(*payload.ProviderID)
 		if err != nil {
-			return serverUserIdentityPlan{}, fmt.Errorf("parse provider_id: %w", err)
+			return serverIdentityPlan{}, fmt.Errorf("parse provider_id: %w", err)
 		}
 	}
 	switch payload.ClientMode {
-	case serverUserIdentityClientModeExisting:
+	case serverIdentityClientModeExisting:
 		if payload.CreateProvider != nil {
-			return serverUserIdentityPlan{}, errors.New("existing client mode requires an existing provider")
+			return serverIdentityPlan{}, errors.New("existing client mode requires an existing provider")
 		}
 		if payload.ExistingClientID == nil || payload.ClientConfiguration != nil {
-			return serverUserIdentityPlan{}, errors.New("existing client mode requires existing_client_id and forbids client_configuration")
+			return serverIdentityPlan{}, errors.New("existing client mode requires existing_client_id and forbids client_configuration")
 		}
 		plan.existingClientID, err = uuid.Parse(*payload.ExistingClientID)
 		if err != nil {
-			return serverUserIdentityPlan{}, fmt.Errorf("parse existing_client_id: %w", err)
+			return serverIdentityPlan{}, fmt.Errorf("parse existing_client_id: %w", err)
 		}
-	case serverUserIdentityClientModeAuto:
+	case serverIdentityClientModeAuto:
 		if payload.ExistingClientID != nil || payload.ClientConfiguration == nil {
-			return serverUserIdentityPlan{}, errors.New("auto client mode requires client_configuration and forbids existing_client_id")
+			return serverIdentityPlan{}, errors.New("auto client mode requires client_configuration and forbids existing_client_id")
 		}
 		if payload.ClientConfiguration.ClientID != nil || payload.ClientConfiguration.ClientSecret != nil {
-			return serverUserIdentityPlan{}, errors.New("auto client mode forbids client_id and client_secret")
+			return serverIdentityPlan{}, errors.New("auto client mode forbids client_id and client_secret")
 		}
-	case serverUserIdentityClientModeManual:
+	case serverIdentityClientModeManual:
 		if payload.ExistingClientID != nil || payload.ClientConfiguration == nil {
-			return serverUserIdentityPlan{}, errors.New("manual client mode requires client_configuration and forbids existing_client_id")
+			return serverIdentityPlan{}, errors.New("manual client mode requires client_configuration and forbids existing_client_id")
 		}
 		clientID := strings.TrimSpace(conv.PtrValOr(payload.ClientConfiguration.ClientID, ""))
 		if clientID == "" {
-			return serverUserIdentityPlan{}, errors.New("manual client mode requires client_id")
+			return serverIdentityPlan{}, errors.New("manual client mode requires client_id")
 		}
 		secret := conv.PtrValOr(payload.ClientConfiguration.ClientSecret, "")
 		method := conv.PtrValOr(payload.ClientConfiguration.TokenEndpointAuthMethod, "")
 		if (method == string(TokenEndpointAuthMethodBasic) || method == string(TokenEndpointAuthMethodPost)) && secret == "" {
-			return serverUserIdentityPlan{}, fmt.Errorf("%s requires client_secret", method)
+			return serverIdentityPlan{}, fmt.Errorf("%s requires client_secret", method)
 		}
 	default:
-		return serverUserIdentityPlan{}, fmt.Errorf("unsupported client_mode %q", payload.ClientMode)
+		return serverIdentityPlan{}, fmt.Errorf("unsupported client_mode %q", payload.ClientMode)
 	}
 	return plan, nil
 }
 
-func validateServerUserIdentityProviderForm(form *gen.CreateRemoteSessionIssuerForm) error {
+func validateServerIdentityProviderForm(form *gen.CreateRemoteSessionIssuerForm) error {
 	if strings.TrimSpace(form.Slug) == "" {
 		return errors.New("slug is required")
 	}
@@ -620,23 +645,23 @@ func validateServerUserIdentityProviderForm(form *gen.CreateRemoteSessionIssuerF
 	return nil
 }
 
-func providerCapabilitiesFromForm(form *gen.CreateRemoteSessionIssuerForm) serverUserIdentityProviderCapabilities {
-	return serverUserIdentityProviderCapabilities{
+func providerCapabilitiesFromForm(form *gen.CreateRemoteSessionIssuerForm) serverIdentityProviderCapabilities {
+	return serverIdentityProviderCapabilities{
 		registrationEndpoint:              conv.PtrToPGText(form.RegistrationEndpoint),
 		tokenEndpointAuthMethodsSupported: form.TokenEndpointAuthMethodsSupported,
 		clientIDMetadataDocumentSupported: conv.PtrValOr(form.ClientIDMetadataDocumentSupported, false),
 	}
 }
 
-func providerCapabilitiesFromRow(provider repo.RemoteSessionIssuer) serverUserIdentityProviderCapabilities {
-	return serverUserIdentityProviderCapabilities{
+func providerCapabilitiesFromRow(provider repo.RemoteSessionIssuer) serverIdentityProviderCapabilities {
+	return serverIdentityProviderCapabilities{
 		registrationEndpoint:              provider.RegistrationEndpoint,
 		tokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
 		clientIDMetadataDocumentSupported: provider.ClientIDMetadataDocumentSupported,
 	}
 }
 
-func supportsServerUserIdentityCIMD(provider serverUserIdentityProviderCapabilities) bool {
+func supportsServerIdentityCIMD(provider serverIdentityProviderCapabilities) bool {
 	if !provider.clientIDMetadataDocumentSupported {
 		return false
 	}
@@ -644,7 +669,7 @@ func supportsServerUserIdentityCIMD(provider serverUserIdentityProviderCapabilit
 	return len(methods) == 0 || slices.Contains(methods, string(TokenEndpointAuthMethodNone))
 }
 
-func createServerUserIdentityProviderParams(projectID uuid.UUID, organizationID string, form *gen.CreateRemoteSessionIssuerForm, logoAssetID uuid.NullUUID) repo.CreateRemoteSessionIssuerParams {
+func createServerIdentityProviderParams(projectID uuid.UUID, organizationID string, form *gen.CreateRemoteSessionIssuerForm, logoAssetID uuid.NullUUID) repo.CreateRemoteSessionIssuerParams {
 	return repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         conv.ToNullUUID(projectID),
 		OrganizationID:                    conv.ToPGText(organizationID),
@@ -685,7 +710,7 @@ func createServerUserIdentityProviderParams(projectID uuid.UUID, organizationID 
 	}
 }
 
-func preflightServerUserIdentityClientBinding(ctx context.Context, q *repo.Queries, projectID uuid.UUID, organizationID string, userIssuerID, providerID, excludedClientID uuid.UUID) error {
+func preflightServerIdentityClientBinding(ctx context.Context, q *repo.Queries, projectID uuid.UUID, organizationID string, userIssuerID, providerID, excludedClientID uuid.UUID) error {
 	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		UserSessionIssuerID:   userIssuerID,
 		ProjectID:             projectID,
@@ -699,16 +724,16 @@ func preflightServerUserIdentityClientBinding(ctx context.Context, q *repo.Queri
 	}
 	for _, candidate := range bound {
 		if candidate.RemoteSessionClient.ID != excludedClientID {
-			return errServerUserIdentityClientConflict
+			return errServerIdentityClientConflict
 		}
 	}
 	return nil
 }
 
-var errServerUserIdentityClientConflict = errors.New("a remote session client is already bound to this user session issuer for the same remote session issuer")
+var errServerIdentityClientConflict = errors.New("a remote session client is already bound to this user session issuer for the same remote session issuer")
 
-func serverUserIdentityPreflightError(err error) error {
-	if errors.Is(err, errServerUserIdentityClientConflict) {
+func serverIdentityPreflightError(err error) error {
+	if errors.Is(err, errServerIdentityClientConflict) {
 		return oops.E(oops.CodeConflict, err, "a remote session client is already bound to this user session issuer for the same remote session issuer")
 	}
 	return oops.E(oops.CodeUnexpected, err, "validate remote session client binding")
@@ -736,18 +761,18 @@ func validateRegisteredClient(registered ProxyRegisterResponse, preferredMethod 
 	return method, registration.Failure{Outcome: "", Reason: "", Retryable: false, HTTPStatus: nil, ProviderMessage: nil}, true
 }
 
-func serverUserIdentityFailureResult(provider repo.RemoteSessionIssuer, method string, failure registration.Failure) *gen.CommitServerUserIdentityConfigurationResult {
+func serverIdentityFailureResult(provider repo.RemoteSessionIssuer, method string, failure registration.Failure) *gen.CommitServerIdentityConfigurationResult {
 	var providerView *types.RemoteSessionIssuer
 	var providerTier *string
 	var providerPath *string
 	if provider.ID != uuid.Nil {
 		providerView = mv.BuildRemoteSessionIssuerView(provider)
 		tier := scopeOf(provider).String()
-		path := serverUserIdentityProviderPath(provider.ID)
+		path := serverIdentityProviderPath(provider.ID)
 		providerTier = &tier
 		providerPath = &path
 	}
-	return &gen.CommitServerUserIdentityConfigurationResult{
+	return &gen.CommitServerIdentityConfigurationResult{
 		Status:              nil,
 		RegistrationMethod:  &method,
 		ManualSetupRequired: false,
@@ -757,7 +782,7 @@ func serverUserIdentityFailureResult(provider repo.RemoteSessionIssuer, method s
 		ClientTier:          nil,
 		ProviderPath:        providerPath,
 		ClientPath:          nil,
-		Failure: &gen.ServerUserIdentityRegistrationFailure{
+		Failure: &gen.ServerIdentityRegistrationFailure{
 			Outcome:         string(failure.Outcome),
 			Reason:          string(failure.Reason),
 			Retryable:       failure.Retryable,
@@ -767,19 +792,19 @@ func serverUserIdentityFailureResult(provider repo.RemoteSessionIssuer, method s
 	}
 }
 
-func serverUserIdentityManualSetupResult(provider repo.RemoteSessionIssuer) *gen.CommitServerUserIdentityConfigurationResult {
+func serverIdentityManualSetupResult(provider repo.RemoteSessionIssuer) *gen.CommitServerIdentityConfigurationResult {
 	providerView := mv.BuildRemoteSessionIssuerView(provider)
 	var providerTier *string
 	var providerPath *string
 	if provider.ID != uuid.Nil {
 		tier := scopeOf(provider).String()
-		path := serverUserIdentityProviderPath(provider.ID)
+		path := serverIdentityProviderPath(provider.ID)
 		providerTier = &tier
 		providerPath = &path
 	} else {
 		providerView = nil
 	}
-	return &gen.CommitServerUserIdentityConfigurationResult{
+	return &gen.CommitServerIdentityConfigurationResult{
 		Status:              nil,
 		RegistrationMethod:  nil,
 		ManualSetupRequired: true,
@@ -793,10 +818,10 @@ func serverUserIdentityManualSetupResult(provider repo.RemoteSessionIssuer) *gen
 	}
 }
 
-func serverUserIdentityProviderPath(providerID uuid.UUID) string {
+func serverIdentityProviderPath(providerID uuid.UUID) string {
 	return "/remote-identity-providers/" + providerID.String()
 }
 
-func serverUserIdentityClientPath(providerID, clientID uuid.UUID) string {
-	return serverUserIdentityProviderPath(providerID) + "/clients/" + clientID.String()
+func serverIdentityClientPath(providerID, clientID uuid.UUID) string {
+	return serverIdentityProviderPath(providerID) + "/clients/" + clientID.String()
 }

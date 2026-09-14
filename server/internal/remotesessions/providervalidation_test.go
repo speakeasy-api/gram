@@ -197,7 +197,7 @@ func TestProviderCreateAndUpdateValidateThePersistedTrimmedIssuer(t *testing.T) 
 	require.Equal(t, "https://identity.example.com/update", updated.Issuer)
 }
 
-func TestCommitServerUserIdentityCreateProviderValidatesURLs(t *testing.T) {
+func TestCommitServerIdentityCreateProviderValidatesURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -214,12 +214,12 @@ func TestCommitServerUserIdentityCreateProviderValidatesURLs(t *testing.T) {
 			form.TokenEndpoint = &insecure
 		}
 
-		_, err := ti.service.CommitServerUserIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
+		_, err := ti.service.CommitServerIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 }
 
-func TestCommitServerUserIdentityCreateProviderAcceptsLoopbackAndNormalizesArrays(t *testing.T) {
+func TestCommitServerIdentityCreateProviderAcceptsLoopbackAndNormalizesArrays(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -238,7 +238,7 @@ func TestCommitServerUserIdentityCreateProviderAcceptsLoopbackAndNormalizesArray
 	form.ResponseTypesSupported = nil
 	form.TokenEndpointAuthMethodsSupported = nil
 
-	result, err := ti.service.CommitServerUserIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, manualServerIdentityPayload(targetID, form))
 	require.NoError(t, err)
 	require.Equal(t, issuer, result.Provider.Issuer)
 	require.NotNil(t, result.Provider.ScopesSupported)
@@ -251,8 +251,8 @@ func TestCommitServerUserIdentityCreateProviderAcceptsLoopbackAndNormalizesArray
 	require.Empty(t, result.Provider.TokenEndpointAuthMethodsSupported)
 }
 
-func manualServerIdentityPayload(targetID uuid.UUID, form *sessionsgen.CreateRemoteSessionIssuerForm) *sessionsgen.CommitServerUserIdentityConfigurationPayload {
-	return &sessionsgen.CommitServerUserIdentityConfigurationPayload{
+func manualServerIdentityPayload(targetID uuid.UUID, form *sessionsgen.CreateRemoteSessionIssuerForm) *sessionsgen.CommitServerIdentityConfigurationPayload {
+	return &sessionsgen.CommitServerIdentityConfigurationPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -261,7 +261,7 @@ func manualServerIdentityPayload(targetID uuid.UUID, form *sessionsgen.CreateRem
 		CreateProvider:   form,
 		ClientMode:       "manual",
 		ExistingClientID: nil,
-		ClientConfiguration: &sessionsgen.ServerUserIdentityClientConfiguration{
+		ClientConfiguration: &sessionsgen.ServerIdentityClientConfiguration{
 			ClientID:                conv.PtrEmpty("manual-client"),
 			ClientSecret:            nil,
 			TokenEndpointAuthMethod: conv.PtrEmpty("none"),

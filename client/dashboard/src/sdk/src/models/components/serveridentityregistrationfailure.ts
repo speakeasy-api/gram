@@ -9,15 +9,15 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const ServerUserIdentityRegistrationFailureOutcome = {
+export const ServerIdentityRegistrationFailureOutcome = {
   Unreachable: "unreachable",
   Refused: "refused",
 } as const;
-export type ServerUserIdentityRegistrationFailureOutcome = ClosedEnum<
-  typeof ServerUserIdentityRegistrationFailureOutcome
+export type ServerIdentityRegistrationFailureOutcome = ClosedEnum<
+  typeof ServerIdentityRegistrationFailureOutcome
 >;
 
-export const ServerUserIdentityRegistrationFailureReason = {
+export const ServerIdentityRegistrationFailureReason = {
   DnsError: "dns_error",
   TlsError: "tls_error",
   Timeout: "timeout",
@@ -27,49 +27,49 @@ export const ServerUserIdentityRegistrationFailureReason = {
   AuthorizationRejected: "authorization_rejected",
   InvalidSuccessResponse: "invalid_success_response",
 } as const;
-export type ServerUserIdentityRegistrationFailureReason = ClosedEnum<
-  typeof ServerUserIdentityRegistrationFailureReason
+export type ServerIdentityRegistrationFailureReason = ClosedEnum<
+  typeof ServerIdentityRegistrationFailureReason
 >;
 
 /**
  * A completed automatic registration failure using the bounded OAuth registration taxonomy.
  */
-export type ServerUserIdentityRegistrationFailure = {
+export type ServerIdentityRegistrationFailure = {
   /**
    * Optional upstream HTTP status.
    */
   httpStatus?: number | undefined;
-  outcome: ServerUserIdentityRegistrationFailureOutcome;
+  outcome: ServerIdentityRegistrationFailureOutcome;
   /**
    * Optional sanitized and truncated provider-controlled message.
    */
   providerMessage?: string | undefined;
-  reason: ServerUserIdentityRegistrationFailureReason;
+  reason: ServerIdentityRegistrationFailureReason;
   retryable: boolean;
 };
 
 /** @internal */
-export const ServerUserIdentityRegistrationFailureOutcome$inboundSchema:
-  z.ZodMiniEnum<typeof ServerUserIdentityRegistrationFailureOutcome> = z.enum(
-    ServerUserIdentityRegistrationFailureOutcome,
+export const ServerIdentityRegistrationFailureOutcome$inboundSchema:
+  z.ZodMiniEnum<typeof ServerIdentityRegistrationFailureOutcome> = z.enum(
+    ServerIdentityRegistrationFailureOutcome,
   );
 
 /** @internal */
-export const ServerUserIdentityRegistrationFailureReason$inboundSchema:
-  z.ZodMiniEnum<typeof ServerUserIdentityRegistrationFailureReason> = z.enum(
-    ServerUserIdentityRegistrationFailureReason,
+export const ServerIdentityRegistrationFailureReason$inboundSchema:
+  z.ZodMiniEnum<typeof ServerIdentityRegistrationFailureReason> = z.enum(
+    ServerIdentityRegistrationFailureReason,
   );
 
 /** @internal */
-export const ServerUserIdentityRegistrationFailure$inboundSchema: z.ZodMiniType<
-  ServerUserIdentityRegistrationFailure,
+export const ServerIdentityRegistrationFailure$inboundSchema: z.ZodMiniType<
+  ServerIdentityRegistrationFailure,
   unknown
 > = z.pipe(
   z.object({
     http_status: z.optional(z.int()),
-    outcome: ServerUserIdentityRegistrationFailureOutcome$inboundSchema,
+    outcome: ServerIdentityRegistrationFailureOutcome$inboundSchema,
     provider_message: z.optional(z.string()),
-    reason: ServerUserIdentityRegistrationFailureReason$inboundSchema,
+    reason: ServerIdentityRegistrationFailureReason$inboundSchema,
     retryable: z.boolean(),
   }),
   z.transform((v) => {
@@ -80,13 +80,12 @@ export const ServerUserIdentityRegistrationFailure$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function serverUserIdentityRegistrationFailureFromJSON(
+export function serverIdentityRegistrationFailureFromJSON(
   jsonString: string,
-): SafeParseResult<ServerUserIdentityRegistrationFailure, SDKValidationError> {
+): SafeParseResult<ServerIdentityRegistrationFailure, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) =>
-      ServerUserIdentityRegistrationFailure$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ServerUserIdentityRegistrationFailure' from JSON`,
+    (x) => ServerIdentityRegistrationFailure$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ServerIdentityRegistrationFailure' from JSON`,
   );
 }

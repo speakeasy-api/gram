@@ -21,27 +21,27 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeCommitServerUserIdentityConfigurationResponse returns an encoder for
-// responses returned by the remoteSessions
-// commitServerUserIdentityConfiguration endpoint.
-func EncodeCommitServerUserIdentityConfigurationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeCommitServerIdentityConfigurationResponse returns an encoder for
+// responses returned by the remoteSessions commitServerIdentityConfiguration
+// endpoint.
+func EncodeCommitServerIdentityConfigurationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*remotesessions.CommitServerUserIdentityConfigurationResult)
+		res, _ := v.(*remotesessions.CommitServerIdentityConfigurationResult)
 		enc := encoder(ctx, w)
-		body := NewCommitServerUserIdentityConfigurationResponseBody(res)
+		body := NewCommitServerIdentityConfigurationResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeCommitServerUserIdentityConfigurationRequest returns a decoder for
-// requests sent to the remoteSessions commitServerUserIdentityConfiguration
+// DecodeCommitServerIdentityConfigurationRequest returns a decoder for
+// requests sent to the remoteSessions commitServerIdentityConfiguration
 // endpoint.
-func DecodeCommitServerUserIdentityConfigurationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessions.CommitServerUserIdentityConfigurationPayload, error) {
-	return func(r *http.Request) (*remotesessions.CommitServerUserIdentityConfigurationPayload, error) {
-		var payload *remotesessions.CommitServerUserIdentityConfigurationPayload
+func DecodeCommitServerIdentityConfigurationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessions.CommitServerIdentityConfigurationPayload, error) {
+	return func(r *http.Request) (*remotesessions.CommitServerIdentityConfigurationPayload, error) {
+		var payload *remotesessions.CommitServerIdentityConfigurationPayload
 		var (
-			body CommitServerUserIdentityConfigurationRequestBody
+			body CommitServerIdentityConfigurationRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -55,7 +55,7 @@ func DecodeCommitServerUserIdentityConfigurationRequest(mux goahttp.Muxer, decod
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateCommitServerUserIdentityConfigurationRequestBody(&body)
+		err = ValidateCommitServerIdentityConfigurationRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -77,7 +77,7 @@ func DecodeCommitServerUserIdentityConfigurationRequest(mux goahttp.Muxer, decod
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewCommitServerUserIdentityConfigurationPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewCommitServerIdentityConfigurationPayload(&body, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -104,10 +104,9 @@ func DecodeCommitServerUserIdentityConfigurationRequest(mux goahttp.Muxer, decod
 	}
 }
 
-// EncodeCommitServerUserIdentityConfigurationError returns an encoder for
-// errors returned by the commitServerUserIdentityConfiguration remoteSessions
-// endpoint.
-func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeCommitServerIdentityConfigurationError returns an encoder for errors
+// returned by the commitServerIdentityConfiguration remoteSessions endpoint.
+func EncodeCommitServerIdentityConfigurationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -124,7 +123,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationUnauthorizedResponseBody(res)
+				body = NewCommitServerIdentityConfigurationUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -138,7 +137,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationForbiddenResponseBody(res)
+				body = NewCommitServerIdentityConfigurationForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -152,7 +151,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationBadRequestResponseBody(res)
+				body = NewCommitServerIdentityConfigurationBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -166,7 +165,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationNotFoundResponseBody(res)
+				body = NewCommitServerIdentityConfigurationNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -180,7 +179,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationConflictResponseBody(res)
+				body = NewCommitServerIdentityConfigurationConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -194,7 +193,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationUnsupportedMediaResponseBody(res)
+				body = NewCommitServerIdentityConfigurationUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -208,7 +207,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationInvalidResponseBody(res)
+				body = NewCommitServerIdentityConfigurationInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -222,7 +221,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationInvariantViolationResponseBody(res)
+				body = NewCommitServerIdentityConfigurationInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -236,7 +235,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationUnexpectedResponseBody(res)
+				body = NewCommitServerIdentityConfigurationUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -250,7 +249,7 @@ func EncodeCommitServerUserIdentityConfigurationError(encoder func(context.Conte
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCommitServerUserIdentityConfigurationGatewayErrorResponseBody(res)
+				body = NewCommitServerIdentityConfigurationGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -825,14 +824,14 @@ func unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemo
 	return res
 }
 
-// unmarshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration
-// builds a value of type *remotesessions.ServerUserIdentityClientConfiguration
-// from a value of type *ServerUserIdentityClientConfigurationRequestBody.
-func unmarshalServerUserIdentityClientConfigurationRequestBodyToRemotesessionsServerUserIdentityClientConfiguration(v *ServerUserIdentityClientConfigurationRequestBody) *remotesessions.ServerUserIdentityClientConfiguration {
+// unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration
+// builds a value of type *remotesessions.ServerIdentityClientConfiguration
+// from a value of type *ServerIdentityClientConfigurationRequestBody.
+func unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(v *ServerIdentityClientConfigurationRequestBody) *remotesessions.ServerIdentityClientConfiguration {
 	if v == nil {
 		return nil
 	}
-	res := &remotesessions.ServerUserIdentityClientConfiguration{
+	res := &remotesessions.ServerIdentityClientConfiguration{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
@@ -981,14 +980,14 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 	return res
 }
 
-// marshalRemotesessionsServerUserIdentityRegistrationFailureToServerUserIdentityRegistrationFailureResponseBody
-// builds a value of type *ServerUserIdentityRegistrationFailureResponseBody
-// from a value of type *remotesessions.ServerUserIdentityRegistrationFailure.
-func marshalRemotesessionsServerUserIdentityRegistrationFailureToServerUserIdentityRegistrationFailureResponseBody(v *remotesessions.ServerUserIdentityRegistrationFailure) *ServerUserIdentityRegistrationFailureResponseBody {
+// marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegistrationFailureResponseBody
+// builds a value of type *ServerIdentityRegistrationFailureResponseBody from a
+// value of type *remotesessions.ServerIdentityRegistrationFailure.
+func marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegistrationFailureResponseBody(v *remotesessions.ServerIdentityRegistrationFailure) *ServerIdentityRegistrationFailureResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &ServerUserIdentityRegistrationFailureResponseBody{
+	res := &ServerIdentityRegistrationFailureResponseBody{
 		Outcome:         v.Outcome,
 		Reason:          v.Reason,
 		Retryable:       v.Retryable,
