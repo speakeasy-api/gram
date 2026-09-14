@@ -226,7 +226,8 @@ func TestJWTAccessTokenRefreshOrchestration(t *testing.T) {
 				require.Contains(t, string(stored.Enrichment), "jwt_access_token")
 			} else {
 				require.False(t, stored.IdentitySource.Valid)
-				require.False(t, stored.UpstreamSubject.Valid)
+				require.Equal(t, "user-123", stored.UpstreamSubject.String, "the subject binding outlives the retired display identity")
+				require.False(t, stored.UpstreamEmail.Valid)
 			}
 		})
 	}
