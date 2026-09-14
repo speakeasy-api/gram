@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -36,17 +37,16 @@ var openapiDoc []byte
 const (
 	clickHouseDeleteVisibilityTimeout = 30 * time.Second
 	clickHouseDeleteVisibilityPoll    = 250 * time.Millisecond
+	demoSeedLockCleanupTimeout        = 5 * time.Second
 )
 
-// Run applies the seed for spec's tenant: Postgres first (installs and
-// executes demo.ensure_demo_org(), whose pre/postflight asserts abort the
-// transaction on any isolation violation), then ClickHouse (scoped deletes +
-// inserts with throwIf postflights). Both halves are idempotent; ordering
-// matters only because ClickHouse rows reference Postgres ids.
+// Run replaces the data for spec's tenant while holding the shared advisory
+// lock. The ClickHouse script deletes both source rows and materialized-view
+// targets before its inserts incrementally repopulate the summaries.
 //
 // Pass DefaultSpec() for the shared production demo org — the scripts are
 // written against its literals, so they run through unmodified.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) error {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) (retErr error) {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -57,27 +57,41 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err != nil {
 		return fmt.Errorf("acquire postgres connection: %w", err)
 	}
-	defer conn.Release()
 
-	// Serialize whole runs (Postgres AND ClickHouse) behind one advisory
-	// lock: two overlapping runs would interleave the ClickHouse
-	// delete+insert phases and leave duplicated telemetry/summaries. The
-	// session lock is held on this pooled connection, so it must be released
-	// explicitly before the connection returns to the pool.
-	// The lock is scoped to the tenant: distinct Specs write disjoint rows, so
-	// only same-tenant runs need to exclude each other.
-	lockName := "gram-demo-seed:" + spec.OrgID
+	const lockName = "gram-demo-seed"
 	var locked bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
+		// Cancellation can surface after PostgreSQL acquired the session lock.
+		// Destroy the uncertain session instead of returning it to the pool.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
+		defer cancel()
+		if closeErr := conn.Hijack().Close(cleanupCtx); closeErr != nil {
+			logger.ErrorContext(cleanupCtx, "close uncertain demo seed lock session", attr.SlogError(closeErr))
+		}
 		return fmt.Errorf("acquire demo seed advisory lock: %w", err)
 	}
 	if !locked {
-		return fmt.Errorf("another demo seed run holds the advisory lock; refusing to run concurrently")
+		conn.Release()
+		return errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
 	}
 	defer func() {
-		if _, err := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock(hashtext($1))", lockName); err != nil {
-			logger.ErrorContext(ctx, "release demo seed advisory lock", attr.SlogError(err))
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
+		defer cancel()
+
+		var unlocked bool
+		unlockErr := conn.QueryRow(unlockCtx, "SELECT pg_advisory_unlock(hashtext($1))", lockName).Scan(&unlocked)
+		if unlockErr == nil && unlocked {
+			conn.Release()
+			return
 		}
+		if unlockErr == nil {
+			unlockErr = errors.New("demo seed advisory lock was not held by this session")
+		}
+		logger.ErrorContext(unlockCtx, "release demo seed advisory lock", attr.SlogError(unlockErr))
+		if closeErr := conn.Hijack().Close(unlockCtx); closeErr != nil {
+			logger.ErrorContext(unlockCtx, "close demo seed lock session", attr.SlogError(closeErr))
+		}
+		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
 	// The script is multi-statement (CREATE SCHEMA / CREATE FUNCTION with a
@@ -133,18 +147,20 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		if strings.HasPrefix(upperStmt, "DELETE ") {
 			deleted = true
 		} else if deleted && !deleteVisible {
-			if err := waitForClickHouseTelemetryDelete(
+			if err := waitForClickHouseDelete(
 				chCtx,
 				clickHouseDeleteVisibilityTimeout,
 				clickHouseDeleteVisibilityPoll,
 				func(queryCtx context.Context) (uint64, error) {
 					var remaining uint64
 					err := ch.QueryRow(queryCtx, `
-						SELECT count()
-						FROM telemetry_logs
-						WHERE gram_project_id = toUUID(?)`, spec.ProjectID()).Scan(&remaining)
+						SELECT
+							(SELECT count() FROM telemetry_logs WHERE gram_project_id = toUUID(?))
+							+ (SELECT count() FROM billing_meter_readings_by_time WHERE organization_id = ?)
+							+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
+					`, spec.ProjectID(), spec.OrgID, spec.OrgID).Scan(&remaining)
 					if err != nil {
-						return 0, fmt.Errorf("count demo telemetry rows: %w", err)
+						return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, and summary rows: %w", err)
 					}
 					return remaining, nil
 				},
@@ -157,12 +173,12 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 			return fmt.Errorf("apply demo seed to clickhouse: %w: %.120s", err, stmt)
 		}
 	}
-	logger.InfoContext(ctx, "demo seed applied to clickhouse")
 
+	logger.InfoContext(ctx, "demo seed applied to clickhouse")
 	return nil
 }
 
-func waitForClickHouseTelemetryDelete(
+func waitForClickHouseDelete(
 	ctx context.Context,
 	timeout time.Duration,
 	pollInterval time.Duration,
@@ -177,7 +193,7 @@ func waitForClickHouseTelemetryDelete(
 	for {
 		remaining, err := countRows(waitCtx)
 		if err != nil {
-			return fmt.Errorf("check demo telemetry delete visibility: %w", err)
+			return fmt.Errorf("check demo delete visibility: %w", err)
 		}
 		if remaining == 0 {
 			return nil
@@ -185,7 +201,7 @@ func waitForClickHouseTelemetryDelete(
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("wait for demo telemetry delete visibility with %d rows remaining: %w", remaining, context.Cause(waitCtx))
+			return fmt.Errorf("wait for demo delete visibility with %d rows remaining: %w", remaining, context.Cause(waitCtx))
 		case <-ticker.C:
 		}
 	}

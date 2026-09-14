@@ -14,7 +14,15 @@ export const OTHER_STACK_LABEL = "Other";
 // its label, so a real group that happens to display as "Other" can't be
 // mistaken for it.
 export type TimeSeriesStack = {
+  /** Stable chart identity. Falls back to label for existing callers. */
+  key?: string;
   label: string;
   series: number[];
+  /**
+   * Exact decimal integers aligned to series. Meter callers use these for
+   * rollups, cumulative values, and tooltips; Number values remain chart
+   * coordinates only.
+   */
+  exactSeries?: string[];
   rollup?: boolean;
 };

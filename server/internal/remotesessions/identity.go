@@ -47,6 +47,15 @@ var errIDTokenVerificationDisabled = errors.New("id token verification is disabl
 // errJWTKeySetUnavailable marks a key-set failure that says nothing about the token: source, cache, fetch, or budget.
 var errJWTKeySetUnavailable = errors.New("issuer key set unavailable")
 
+// errUnknownSigningKey marks an ID token whose named kid the key set lacks; a kid-less token against several keys is not this.
+var errUnknownSigningKey = errors.New("id token names a kid the key set lacks")
+
+// unknownSigningKeyError keeps the resolver's text while also matching errUnknownSigningKey.
+type unknownSigningKeyError struct{ err error }
+
+func (e *unknownSigningKeyError) Error() string   { return e.err.Error() }
+func (e *unknownSigningKeyError) Unwrap() []error { return []error{e.err, errUnknownSigningKey} }
+
 // maxEnrichmentBytes caps the provider-controlled enrichment document; larger
 // ones are dropped. UpdateRemoteSessionIdentity repeats it as the 16384 literal.
 const maxEnrichmentBytes = 16 << 10
@@ -271,6 +280,9 @@ func verifyIssuerSignedJWTWithKeyPolicy(ctx context.Context, keys *jwks.KeyResol
 	key, err := keys.VerificationKeyForAlgorithm(ctx, source.WithFetchScope(fetchScope), header.KeyID, jose.SignatureAlgorithm(header.Algorithm))
 	if err != nil {
 		if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrKeyAlgorithmMismatch) {
+			if header.KeyID != "" && errors.Is(err, jwks.ErrKeyNotFound) {
+				err = &unknownSigningKeyError{err: err}
+			}
 			return none, fmt.Errorf("resolve jwt signing key: %w", err)
 		}
 		return none, fmt.Errorf("resolve jwt signing key: %w: %w", errJWTKeySetUnavailable, err)

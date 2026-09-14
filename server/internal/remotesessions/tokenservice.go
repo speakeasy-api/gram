@@ -730,6 +730,7 @@ func (s *RefreshService) restateIdentity(
 		case err != nil:
 			idTokenRejected = true
 			logIdentityFailure(ctx, s.logger, "refresh id token rejected; stored identity kept", err, attrs...)
+			noteUnknownSigningKey(ctx, s.issuerMetadata, client, err)
 		default:
 			// A verified ID token supersedes an exchange-time rejection for this grant.
 			if idTokenRejected {

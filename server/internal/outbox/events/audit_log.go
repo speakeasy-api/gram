@@ -54,7 +54,7 @@ var (
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
-	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, extended, demoted, re-armed, or converted")
+	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationSetupTaskV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_setup_task_event_v1", "Emitted when an organization setup task is changed")
