@@ -61,7 +61,7 @@ func (e *VerificationError) Unwrap() error { return e.Err }
 
 // VerificationKeys resolves a public key under a profile's storage policy.
 type VerificationKeys interface {
-	VerificationKey(ctx context.Context, source jwks.Source, kid string) (*jose.JSONWebKey, error)
+	VerificationKeyForAlgorithm(ctx context.Context, source jwks.Source, kid string, algorithm jose.SignatureAlgorithm) (*jose.JSONWebKey, error)
 }
 
 // VerifiedClaims resolves a key under the caller's storage and rate-limit
@@ -70,7 +70,7 @@ func VerifiedClaims(ctx context.Context, keys VerificationKeys, source jwks.Sour
 	if len(token.Headers) != 1 {
 		return &VerificationError{Stage: VerificationSignature, Err: fmt.Errorf("assertion has %d signature headers", len(token.Headers))}
 	}
-	key, err := keys.VerificationKey(ctx, source, token.Headers[0].KeyID)
+	key, err := keys.VerificationKeyForAlgorithm(ctx, source, token.Headers[0].KeyID, jose.SignatureAlgorithm(token.Headers[0].Algorithm))
 	if err != nil {
 		return &VerificationError{Stage: VerificationKeyResolution, Err: err}
 	}

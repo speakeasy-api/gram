@@ -23,8 +23,8 @@ type Cache interface {
 	// Put replaces the stored state for a source key.
 	Put(ctx context.Context, key string, state CacheState) error
 
-	// PutIfUnchanged atomically stores a result only if its starting document
-	// and timestamps are still current. A slower pre-rotation fetch must not
+	// PutIfUnchanged atomically stores a result only if its starting state
+	// and storage revision are still current. A slower pre-rotation fetch must not
 	// replace keys written by a later fetch.
 	PutIfUnchanged(ctx context.Context, key string, prior, next CacheState) (bool, error)
 }
@@ -33,7 +33,7 @@ type Cache interface {
 // with an atomic comparison against the state that was consulted. Without
 // it, a late failure marker could overwrite a newer successful rotation.
 type ConsultFailureMarker interface {
-	MarkConsultFailure(ctx context.Context, key string, prior CacheState, consultedAt time.Time) error
+	MarkConsultFailure(ctx context.Context, key string, prior CacheState, consultedAt time.Time, reason string) error
 }
 
 const (
@@ -105,7 +105,7 @@ func (c *MemoryCache) PutIfUnchanged(_ context.Context, key string, prior, next 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	current := c.entries[key]
-	if !bytes.Equal(current.Document, prior.Document) || !current.ExpiresAt.Equal(prior.ExpiresAt) || !current.RefreshedAt.Equal(prior.RefreshedAt) {
+	if !bytes.Equal(current.Document, prior.Document) || !current.ExpiresAt.Equal(prior.ExpiresAt) || !current.RefreshedAt.Equal(prior.RefreshedAt) || !current.LastErrorAt.Equal(prior.LastErrorAt) || current.LastError != prior.LastError || current.Revision != prior.Revision {
 		return false, nil
 	}
 	c.putLocked(key, next)

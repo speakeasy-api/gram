@@ -311,10 +311,14 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 // transientFetchError is deliberately narrow: a guardian policy denial or
 // certificate failure must not let callers accept stale issuer keys.
 func transientFetchError(ctx context.Context, status int, err error) bool {
-	if status == http.StatusTooManyRequests || status >= http.StatusInternalServerError {
+	if status == http.StatusTooManyRequests || status == http.StatusInternalServerError ||
+		status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout {
 		return true
 	}
-	if status != 0 || ctx.Err() != nil || errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
+	// A 200 can still fail while reading the response body. Treat its
+	// transport error like one that happened before response headers.
+	if (status != 0 && status != http.StatusOK) || ctx.Err() != nil ||
+		errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
 		return false
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
@@ -336,6 +340,13 @@ func (r *Resolver) cacheTTL(header http.Header) time.Duration {
 		Max:     maxCacheTTL,
 	}
 	return policy.TTL(header, time.Now())
+}
+
+// keySetHTTPError retains only an HTTP status, safe for a persisted summary.
+type keySetHTTPError struct{ status int }
+
+func (e *keySetHTTPError) Error() string {
+	return fmt.Sprintf("key set endpoint returned status %d", e.status)
 }
 
 // fetchedKeySet is one HTTP exchange with a key set host.
@@ -390,7 +401,7 @@ func (r *Resolver) fetchKeySet(ctx context.Context, source Source, etag string) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fetchedKeySet{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, fmt.Errorf("key set endpoint returned status %d", resp.StatusCode)
+		return fetchedKeySet{body: nil, status: resp.StatusCode, notModified: false, header: resp.Header}, &keySetHTTPError{status: resp.StatusCode}
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxKeySetBytes))

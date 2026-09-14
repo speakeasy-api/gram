@@ -40,6 +40,9 @@ func primeRotatable(t *testing.T, cache *MemoryCache, source Source, document []
 		ETag:        "",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 }
 
@@ -230,6 +233,9 @@ func TestVerificationKey_FetchScopeBudgetCoversRescreenFailure(t *testing.T) {
 		ETag:        "",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now(),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 	_, err = kr.VerificationKey(t.Context(), source, "a")
 	require.ErrorIs(t, err, ErrFetchRateLimited)
@@ -375,6 +381,58 @@ func TestVerificationKey_FailedConsultEntersCooldown(t *testing.T) {
 	require.Equal(t, 1, server.Fetches(), "a failed consult negative-caches like a successful one")
 }
 
+func TestVerificationKey_ExpiredCacheFailureUsesBoundedRetryCooldown(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	lastSuccess := time.Now().Add(-time.Hour)
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), CacheState{
+		Document: keySetJSON(t, testKey(t, "a")), ETag: "", ExpiresAt: time.Now().Add(-time.Minute),
+		RefreshedAt: lastSuccess, LastErrorAt: time.Time{}, LastError: "", Revision: "",
+	}))
+	server.SetStatus(503)
+	_, err := kr.VerificationKey(t.Context(), source, "a")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+	require.Equal(t, 1, server.Fetches())
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, lastSuccess, stored.RefreshedAt)
+	require.WithinDuration(t, time.Now(), stored.LastErrorAt, time.Minute)
+	require.Equal(t, "JWKS endpoint temporarily unavailable (HTTP 503)", stored.LastError)
+
+	_, err = kr.VerificationKey(t.Context(), source, "a")
+	require.ErrorIs(t, err, ErrKeySetUnavailable)
+	require.Equal(t, 1, server.Fetches(), "the failed refresh is not repeated during the cooldown")
+
+	stored.LastErrorAt = time.Now().Add(-refreshCooldown - time.Second)
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), stored))
+	server.SetStatus(0)
+	_, err = kr.VerificationKey(t.Context(), source, "a")
+	require.NoError(t, err)
+	require.Equal(t, 2, server.Fetches())
+	stored, err = cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Empty(t, stored.LastError)
+	require.True(t, stored.LastErrorAt.IsZero())
+}
+
+func TestVerificationKey_RefreshNamespacesHaveSeparateBudgets(t *testing.T) {
+	t.Parallel()
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, ratelimit.PerMinute(1))
+	client := remoteSourceFor(t, server).WithCacheKey("client")
+	issuer := remoteSourceFor(t, server).WithCacheKey("issuer").WithRefreshNamespace("idjag")
+	document := keySetJSON(t, testKey(t, "a"))
+	primeRotatable(t, cache, client, document)
+	primeRotatable(t, cache, issuer, document)
+	_, err := kr.VerificationKey(t.Context(), client, "unknown")
+	require.ErrorIs(t, err, ErrKeyNotFound)
+	_, err = kr.VerificationKey(t.Context(), issuer, "unknown")
+	require.ErrorIs(t, err, ErrKeyNotFound)
+	require.Equal(t, 2, server.Fetches())
+}
+
 func TestVerificationKey_UnusableStoredValidatorIsDropped(t *testing.T) {
 	t.Parallel()
 
@@ -391,6 +449,9 @@ func TestVerificationKey_UnusableStoredValidatorIsDropped(t *testing.T) {
 		ETag:        "unquoted-validator",
 		ExpiresAt:   time.Now().Add(time.Hour),
 		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "",
 	}))
 
 	// An unknown kid forces a consult; failing it exercises the cooldown
@@ -468,7 +529,7 @@ var _ Cache = (*failingCache)(nil)
 
 func (c *failingCache) Get(ctx context.Context, key string) (CacheState, error) {
 	if c.getErr != nil {
-		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, c.getErr
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, c.getErr
 	}
 	state, err := c.inner.Get(ctx, key)
 	if err != nil {

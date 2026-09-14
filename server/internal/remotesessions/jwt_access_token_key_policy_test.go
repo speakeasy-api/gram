@@ -35,7 +35,7 @@ func newRSAKeyPolicyFixture(t *testing.T, bits int) (*rsa.PrivateKey, *jwks.KeyR
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	cache := jwks.NewMemoryCache()
 	now := time.Now()
-	require.NoError(t, cache.Put(t.Context(), rsaKeyPolicyJWKSURI, jwks.CacheState{Document: document, RefreshedAt: now, ExpiresAt: now.Add(time.Hour)}))
+	require.NoError(t, cache.Put(t.Context(), rsaKeyPolicyJWKSURI, jwks.CacheState{Document: document, ETag: "", RefreshedAt: now, ExpiresAt: now.Add(time.Hour), LastErrorAt: time.Time{}, LastError: "", Revision: ""}))
 	keys, err := jwks.NewKeyResolver(jwks.NewResolver(policy, testenv.NewMeterProvider(t), logger), cache, ratelimit.New(nil, "access-key-policy-test", ratelimit.PerMinute(1)), nil, logger)
 	require.NoError(t, err)
 	return key, keys, policy

@@ -227,7 +227,7 @@ func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, jwksURI s
 		return zero, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises an invalid jwks_uri: %v", err)}
 	}
 
-	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}
+	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}
 	if issuer.JwksUri.Valid && issuer.JwksUri.String == jwksURI {
 		cache.Document = json.RawMessage(issuer.Jwks)
 		cache.ETag = conv.FromPGTextOrEmpty[string](issuer.JwksEtag)

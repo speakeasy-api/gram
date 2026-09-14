@@ -576,6 +576,7 @@ func TestVerify_ClientWithUnreadableUTIStillAccepted(t *testing.T) {
 	_, err := newVerifier(t).Verify(t.Context(), assertion, expectationFor(t, s))
 	require.NoError(t, err, "a non-string uti is not this client's problem")
 }
+
 // keySourceWithOps republishes s's single key with an explicit key_ops member.
 func keySourceWithOps(t *testing.T, s *signer, ops string) jwks.Source {
 	t.Helper()
@@ -608,4 +609,18 @@ func TestVerify_KeyOpsMustIncludeVerify(t *testing.T) {
 	expect.KeySource = keySourceWithOps(t, s, `["sign"]`)
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
 	requireRejected(t, err, clientauth.ReasonKeyUnknown)
+}
+
+func TestVerify_SelectsMatchingAlgorithmWhenKidIsShared(t *testing.T) {
+	t.Parallel()
+	ec := newSigner(t, "shared")
+	rsa := newRSASigner(t, "shared", jose.PS256)
+	var ecSet, rsaSet jose.JSONWebKeySet
+	require.NoError(t, json.Unmarshal(ec.jwks, &ecSet))
+	require.NoError(t, json.Unmarshal(rsa.jwks, &rsaSet))
+	combined, err := json.Marshal(jose.JSONWebKeySet{Keys: append(rsaSet.Keys, ecSet.Keys...)})
+	require.NoError(t, err)
+	ec.jwks = combined
+	_, err = newVerifier(t).Verify(t.Context(), assertionFor(ec.sign(t, validClaims())), expectationFor(t, ec))
+	require.NoError(t, err)
 }

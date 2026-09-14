@@ -29,7 +29,7 @@ type testKeys struct {
 	key *jose.JSONWebKey
 }
 
-func (k *testKeys) VerificationKey(_ context.Context, _ jwks.Source, _ string) (*jose.JSONWebKey, error) {
+func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source, _ string, _ jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
 	return k.key, nil
 }
 

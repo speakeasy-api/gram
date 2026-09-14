@@ -34,12 +34,12 @@ func NewIssuerVerificationKeys(keys assertioncore.VerificationKeys, cache jwks.C
 
 var _ assertioncore.VerificationKeys = (*IssuerVerificationKeys)(nil)
 
-// VerificationKey uses a stale stored key only for a transient fetch error,
-// within a fixed window, and when the assertion names a key already present
-// in the currently stored set. Successful refreshes replace that set, so a
-// removed key cannot be resurrected by an older in-process copy.
-func (k *IssuerVerificationKeys) VerificationKey(ctx context.Context, source jwks.Source, kid string) (*jose.JSONWebKey, error) {
-	key, err := k.keys.VerificationKey(ctx, source, kid)
+// VerificationKeyForAlgorithm uses a stored key after a transient fetch error
+// only when it is still fresh or inside the bounded stale window and matches
+// the assertion's kid and algorithm. A newer successful refresh replaces the
+// set, so an older in-process copy cannot resurrect a removed key.
+func (k *IssuerVerificationKeys) VerificationKeyForAlgorithm(ctx context.Context, source jwks.Source, kid string, algorithm jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
+	key, err := k.keys.VerificationKeyForAlgorithm(ctx, source, kid, algorithm)
 	if err == nil {
 		return key, nil
 	}
@@ -51,10 +51,10 @@ func (k *IssuerVerificationKeys) VerificationKey(ctx context.Context, source jwk
 		return nil, fmt.Errorf("read stale issuer keys: %w", cacheErr)
 	}
 	now := time.Now()
-	if len(state.Document) == 0 || state.ExpiresAt.IsZero() || now.Before(state.ExpiresAt) || !now.Before(state.ExpiresAt.Add(MaxStaleKeys)) {
+	if len(state.Document) == 0 || state.ExpiresAt.IsZero() || !now.Before(state.ExpiresAt.Add(MaxStaleKeys)) {
 		return nil, fmt.Errorf("resolve issuer verification key: %w", err)
 	}
-	stale, staleErr := jwks.VerificationKeyFromDocument(state.Document, kid)
+	stale, staleErr := jwks.VerificationKeyFromDocument(state.Document, kid, algorithm)
 	if staleErr != nil {
 		return nil, fmt.Errorf("resolve issuer verification key: %w", err)
 	}

@@ -191,7 +191,8 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if err != nil {
 		return nil, reject(ReasonVerifierMisconfigured, err)
 	}
-	source = source.WithFetchScope(request.UserSessionIssuerID.String()).WithCacheKey(issuerCacheKey(trusted.ID, trusted.JWKSURI))
+	source = source.WithFetchScope("idjag:" + request.UserSessionIssuerID.String()).
+		WithRefreshNamespace("idjag").WithCacheKey(issuerCacheKey(request.OrganizationID, trusted.ID, trusted.Issuer, trusted.JWKSURI))
 	var payload json.RawMessage
 	if err := assertioncore.VerifiedClaims(ctx, v.keys, source, token, &payload); err != nil {
 		if verificationErr, ok := errors.AsType[*assertioncore.VerificationError](err); ok && verificationErr.Stage == assertioncore.VerificationKeyResolution {

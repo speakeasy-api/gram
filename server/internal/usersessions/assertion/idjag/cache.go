@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 )
 
 // IssuerKeyCache persists issuer keys on the trusted remote issuer row. Its
-// key contains both row id and URI, so an endpoint change cannot reuse an
-// older endpoint's cached key set.
+// key binds the row, organization, issuer, and URI, so configuration changes
+// cannot reuse an older endpoint's cached key set.
 type IssuerKeyCache struct {
 	repo *remotesessionsrepo.Queries
 }
@@ -33,35 +34,62 @@ func NewIssuerKeyCache(db *pgxpool.Pool) (*IssuerKeyCache, error) {
 var _ jwks.Cache = (*IssuerKeyCache)(nil)
 var _ jwks.ConsultFailureMarker = (*IssuerKeyCache)(nil)
 
-func issuerCacheKey(id uuid.UUID, uri string) string { return id.String() + "|" + uri }
+func issuerCacheKey(organizationID string, id uuid.UUID, issuer, uri string) string {
+	return url.QueryEscape(organizationID) + "|" + id.String() + "|" + url.QueryEscape(issuer) + "|" + uri
+}
 
-func splitIssuerCacheKey(key string) (uuid.UUID, string, error) {
-	idText, uri, ok := strings.Cut(key, "|")
+type issuerCacheIdentity struct {
+	organizationID string
+	id             uuid.UUID
+	issuer         string
+	uri            string
+}
+
+func splitIssuerCacheKey(key string) (issuerCacheIdentity, error) {
+	organizationText, rest, ok := strings.Cut(key, "|")
+	if !ok {
+		return issuerCacheIdentity{}, errors.New("idjag: invalid issuer cache key")
+	}
+	idText, rest, ok := strings.Cut(rest, "|")
+	if !ok {
+		return issuerCacheIdentity{}, errors.New("idjag: invalid issuer cache key")
+	}
+	issuerText, uri, ok := strings.Cut(rest, "|")
 	if !ok || uri == "" {
-		return uuid.Nil, "", errors.New("idjag: invalid issuer cache key")
+		return issuerCacheIdentity{}, errors.New("idjag: invalid issuer cache key")
 	}
 	id, err := uuid.Parse(idText)
 	if err != nil {
-		return uuid.Nil, "", fmt.Errorf("idjag: invalid issuer cache row id: %w", err)
+		return issuerCacheIdentity{}, fmt.Errorf("idjag: invalid issuer cache row id: %w", err)
 	}
-	return id, uri, nil
+	organizationID, err := url.QueryUnescape(organizationText)
+	if err != nil || organizationID == "" {
+		return issuerCacheIdentity{}, errors.New("idjag: invalid issuer cache organization")
+	}
+	issuer, err := url.QueryUnescape(issuerText)
+	if err != nil || issuer == "" {
+		return issuerCacheIdentity{}, errors.New("idjag: invalid issuer cache issuer")
+	}
+	return issuerCacheIdentity{organizationID: organizationID, id: id, issuer: issuer, uri: uri}, nil
 }
 
 // Get returns even expired keys for conditional refresh and bounded stale
 // use. The URI must still match the trusted issuer's current configuration.
 func (c *IssuerKeyCache) Get(ctx context.Context, key string) (jwks.CacheState, error) {
-	id, uri, err := splitIssuerCacheKey(key)
+	identity, err := splitIssuerCacheKey(key)
 	if err != nil {
-		return jwks.CacheState{}, err
+		return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, err
 	}
-	row, err := c.repo.GetTrustedIssuerJWKSCache(ctx, id)
+	row, err := c.repo.GetTrustedIssuerJWKSCache(ctx, remotesessionsrepo.GetTrustedIssuerJWKSCacheParams{
+		ID: identity.id, OrganizationID: identity.organizationID, Issuer: identity.issuer, JwksUri: identity.uri,
+	})
 	if err != nil {
-		return jwks.CacheState{}, fmt.Errorf("read trusted issuer key cache: %w", err)
+		return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, fmt.Errorf("read trusted issuer key cache: %w", err)
 	}
-	if !row.JwksUri.Valid || row.JwksUri.String != uri {
-		return jwks.CacheState{}, errors.New("idjag: trusted issuer jwks_uri changed")
+	if !row.JwksUri.Valid || row.JwksUri.String != identity.uri {
+		return jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, errors.New("idjag: trusted issuer jwks_uri changed")
 	}
-	state := jwks.CacheState{Document: row.Jwks, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}
+	state := jwks.CacheState{Document: row.Jwks, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: row.Revision}
 	if row.JwksEtag.Valid {
 		state.ETag = row.JwksEtag.String
 	}
@@ -70,6 +98,12 @@ func (c *IssuerKeyCache) Get(ctx context.Context, key string) (jwks.CacheState, 
 	}
 	if row.JwksFetchedAt.Valid {
 		state.RefreshedAt = row.JwksFetchedAt.Time
+	}
+	if row.JwksLastErrorAt.Valid {
+		state.LastErrorAt = row.JwksLastErrorAt.Time
+	}
+	if row.JwksLastError.Valid {
+		state.LastError = row.JwksLastError.String
 	}
 	return state, nil
 }
@@ -94,7 +128,7 @@ func (c *IssuerKeyCache) Put(ctx context.Context, key string, state jwks.CacheSt
 // PutIfUnchanged writes only if the cache row still matches the state that
 // preceded the fetch. PostgreSQL performs the comparison and update atomically.
 func (c *IssuerKeyCache) PutIfUnchanged(ctx context.Context, key string, prior, state jwks.CacheState) (bool, error) {
-	id, uri, err := splitIssuerCacheKey(key)
+	identity, err := splitIssuerCacheKey(key)
 	if err != nil {
 		return false, err
 	}
@@ -106,8 +140,11 @@ func (c *IssuerKeyCache) PutIfUnchanged(ctx context.Context, key string, prior, 
 		FetchedAt:           pgtype.Timestamptz{Time: state.RefreshedAt, InfinityModifier: pgtype.Finite, Valid: true},
 		CacheExpiresAt:      pgtype.Timestamptz{Time: state.ExpiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 		Etag:                state.ETag,
-		ID:                  id,
-		JwksUri:             pgtype.Text{String: uri, Valid: true},
+		ID:                  identity.id,
+		OrganizationID:      identity.organizationID,
+		Issuer:              identity.issuer,
+		JwksUri:             pgtype.Text{String: identity.uri, Valid: true},
+		PriorRevision:       prior.Revision,
 		PriorJwks:           prior.Document,
 		PriorFetchedAt:      pgtype.Timestamptz{Time: prior.RefreshedAt, InfinityModifier: pgtype.Finite, Valid: !prior.RefreshedAt.IsZero()},
 		PriorCacheExpiresAt: pgtype.Timestamptz{Time: prior.ExpiresAt, InfinityModifier: pgtype.Finite, Valid: !prior.ExpiresAt.IsZero()},
@@ -118,23 +155,24 @@ func (c *IssuerKeyCache) PutIfUnchanged(ctx context.Context, key string, prior, 
 	return rows == 1, nil
 }
 
-// MarkConsultFailure advances only the negative-cache timestamp and only if
-// the key document still matches the failed attempt's starting state.
-func (c *IssuerKeyCache) MarkConsultFailure(ctx context.Context, key string, prior jwks.CacheState, consultedAt time.Time) error {
-	id, uri, err := splitIssuerCacheKey(key)
+// MarkConsultFailure records a safe reason and attempt time without changing
+// the last successful fetch time or a newer concurrent cache state.
+func (c *IssuerKeyCache) MarkConsultFailure(ctx context.Context, key string, prior jwks.CacheState, consultedAt time.Time, reason string) error {
+	identity, err := splitIssuerCacheKey(key)
 	if err != nil {
 		return err
 	}
-	if len(prior.Document) == 0 || prior.ExpiresAt.IsZero() || prior.RefreshedAt.IsZero() {
-		return nil
-	}
 	_, err = c.repo.MarkTrustedIssuerJWKSConsultFailure(ctx, remotesessionsrepo.MarkTrustedIssuerJWKSConsultFailureParams{
+		Reason:              reason,
 		ConsultedAt:         pgtype.Timestamptz{Time: consultedAt, InfinityModifier: pgtype.Finite, Valid: true},
-		ID:                  id,
-		JwksUri:             pgtype.Text{String: uri, Valid: true},
+		ID:                  identity.id,
+		OrganizationID:      identity.organizationID,
+		Issuer:              identity.issuer,
+		JwksUri:             pgtype.Text{String: identity.uri, Valid: true},
+		PriorRevision:       prior.Revision,
 		PriorJwks:           prior.Document,
-		PriorFetchedAt:      pgtype.Timestamptz{Time: prior.RefreshedAt, InfinityModifier: pgtype.Finite, Valid: true},
-		PriorCacheExpiresAt: pgtype.Timestamptz{Time: prior.ExpiresAt, InfinityModifier: pgtype.Finite, Valid: true},
+		PriorFetchedAt:      pgtype.Timestamptz{Time: prior.RefreshedAt, InfinityModifier: pgtype.Finite, Valid: !prior.RefreshedAt.IsZero()},
+		PriorCacheExpiresAt: pgtype.Timestamptz{Time: prior.ExpiresAt, InfinityModifier: pgtype.Finite, Valid: !prior.ExpiresAt.IsZero()},
 	})
 	if err != nil {
 		return fmt.Errorf("mark trusted issuer key consult failure: %w", err)
