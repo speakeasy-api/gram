@@ -1,0 +1,19 @@
+server/internal/risk/enforcereply/dispatch.go
+  s_3caededc838c21::t_bdb612c8c92efd 180-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d7d7e94f5b99d0d67e7fc583ce6b4597e89a4432",
+  "prompts": {},
+  "sessions": {
+    "s_3caededc838c21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb59aef5-e16c-4af8-ae00-4263295544f0",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
