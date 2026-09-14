@@ -33,7 +33,30 @@ function setup() {
       ),
   };
 }
-vi.mock("./AgentAPIKeys", () => ({ AgentAPIKeys: () => <div>API keys</div> }));
+vi.mock("./AgentAPIKeys", () => ({
+  AgentAPIKeys: ({
+    creation,
+    onCreate,
+    onDone,
+    onBusy,
+  }: {
+    creation?: boolean;
+    onCreate?: () => void;
+    onDone?: () => void;
+    onBusy?: (busy: boolean) => void;
+  }) =>
+    creation ? (
+      <>
+        <button onClick={onDone}>Wizard done</button>
+        <button onClick={() => onBusy?.(true)}>Start issuing</button>
+        <button onClick={() => onBusy?.(false)}>Finish issuing</button>
+      </>
+    ) : (
+      <div>
+        API keys<button onClick={onCreate}>Create API key</button>
+      </div>
+    ),
+}));
 vi.mock("./ManagedAgentSessions", () => ({
   ManagedAgentSessions: () => <div>Sessions</div>,
 }));
@@ -293,6 +316,32 @@ describe("Agent owner access", () => {
     fireEvent.click(screen.getByRole("button", { name: "Example agent" }));
     expect(mocks.navigate).toHaveBeenCalledWith({ id: "agent_example" });
   });
+  it("provides an independent exit from a direct credential creation URL", () => {
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ id: "agent_example" });
+  });
+  it("disables the creation page header while the wizard reports busy", () => {
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Start issuing" }));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Back to agent" }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish issuing" }));
+    expect(
+      screen.getByRole("button", { name: "Back to agent" }),
+    ).toHaveProperty("disabled", false);
+  });
   it("keeps creation separate from the inventory", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
@@ -333,5 +382,30 @@ describe("Agent owner access", () => {
     mocks.scopeOverride = "agent:read";
     setup();
     expect(mocks.list).not.toHaveBeenCalled();
+  });
+  it("routes key creation to a dedicated page and returns to the agent", async () => {
+    mocks.params = new URLSearchParams({ id: "agent_example" });
+    const view = setup();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create API key" }),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      id: "agent_example",
+      credential: "new",
+    });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      credential: "new",
+    });
+    view.rerenderPage();
+    expect(
+      screen.getByRole("heading", { name: "Create API key" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Choose what Example agent can access."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Identity")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Wizard done" }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith({ id: "agent_example" });
   });
 });
