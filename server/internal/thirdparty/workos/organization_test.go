@@ -2,6 +2,7 @@ package workos_test
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,6 +106,7 @@ func TestVerifiedOrganizationRejectsUnexpectedResponses(t *testing.T) {
 		})
 		created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
 		require.Error(t, err, response)
+		require.NotErrorIs(t, err, workos.ErrOrganizationCreationRejected)
 		require.Empty(t, created, response)
 		require.EqualValues(t, 1, calls.Load(), "no update, retry, or cleanup: %s", response)
 	}
@@ -113,7 +115,7 @@ func TestVerifiedOrganizationRejectsUnexpectedResponses(t *testing.T) {
 func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 	t.Parallel()
 	for _, failingMethod := range []string{http.MethodPost, http.MethodPut} {
-		for _, status := range []int{http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusTooManyRequests, http.StatusInternalServerError} {
 			var creates, updates, other atomic.Int32
 			client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
 				switch r.Method {
@@ -128,7 +130,7 @@ func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 				if r.Method == failingMethod {
 					w.Header().Set("X-Request-ID", "request_example")
 					w.WriteHeader(status)
-					_, _ = io.WriteString(w, `{"message":"provider failure"}`)
+					_, _ = io.WriteString(w, `{"message":"private provider detail","code":"unrecognized_code","unknown":"private field"}`)
 					return
 				}
 				_, _ = io.WriteString(w, verifiedOrganizationResponse)
@@ -139,6 +141,10 @@ func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 			var providerError workos_errors.HTTPError
 			require.ErrorAs(t, err, &providerError)
 			require.Equal(t, status, providerError.Code)
+			require.Equal(t, "request_example", providerError.RequestID)
+			require.Contains(t, err.Error(), "request_example")
+			require.Contains(t, providerError.RawBody, "private field")
+			require.Equal(t, failingMethod == http.MethodPost && (status == http.StatusBadRequest || status == http.StatusUnprocessableEntity), errors.Is(err, workos.ErrOrganizationCreationRejected))
 			require.EqualValues(t, 1, creates.Load())
 			if failingMethod == http.MethodPost {
 				require.Zero(t, updates.Load())

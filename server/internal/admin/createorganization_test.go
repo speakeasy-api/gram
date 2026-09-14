@@ -1,12 +1,17 @@
 package admin
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -398,8 +403,12 @@ func TestCreateOrganization_WorkOSRejectionLeavesNoGramRow(t *testing.T) {
 	fake.createErr = errors.New("workos said no")
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rejected.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rejected.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Nil(t, res)
+	require.EqualError(t, err, organizationCreationUncertain)
+	require.ErrorIs(t, err, fake.createErr)
+	require.Len(t, fake.names(), 1)
 
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 
@@ -409,9 +418,8 @@ func TestCreateOrganization_WorkOSRejectionLeavesNoGramRow(t *testing.T) {
 }
 
 // TestCreateOrganization_ExternalIDBackFillFailureLeavesNoGramRow covers the
-// half-created state: WorkOS accepted the organization and then refused the
-// external_id write. Gram must still store nothing, because a row whose WorkOS
-// counterpart does not point back at it is worse than no row at all.
+// half-created state: this request stores nothing after an external_id failure,
+// but a later webhook can still provision the remote organization.
 func TestCreateOrganization_ExternalIDBackFillFailureLeavesNoGramRow(t *testing.T) {
 	t.Parallel()
 
@@ -420,11 +428,16 @@ func TestCreateOrganization_ExternalIDBackFillFailureLeavesNoGramRow(t *testing.
 	fake.updateErr = errors.New("workos said no")
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 
-	_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "half.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "half.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Nil(t, res)
+	require.EqualError(t, err, organizationCreationUncertain)
+	require.ErrorIs(t, err, fake.updateErr)
 
 	require.Equal(t, []string{"half.example.com"}, fake.names(), "the WorkOS organization really was created")
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
+	runOrganizationWebhook(t, ctx, conn, workosOrgID, organizationEvent("event_backfill_failure", "organization.created", workosOrgID, "example.com", ""))
+	require.EqualValues(t, 1, countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID))
 }
 
 // TestCreateOrganization_FailureAfterTheUpsertLeavesNothing is the only test
@@ -447,8 +460,11 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // no generated query can drop a table, and this database is a per-test clone
 	require.NoError(t, err)
 
-	_, err = svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Error(t, err, "a failure seeding default entitlements must fail the request")
+	require.Nil(t, res)
+	require.EqualError(t, err, organizationCreationUncertain)
+	require.Contains(t, oops.Detail(err), "seed organization default entitlements")
 
 	require.Equal(t, []string{"rollback.example.com"}, fake.names(),
 		"WorkOS accepted the organization, so the failure really did happen after the upsert")
@@ -492,6 +508,89 @@ func TestCreateOrganization_WithoutWorkOSConfiguration(t *testing.T) {
 	list, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
 	require.NoError(t, err)
 	require.Empty(t, list.Organizations, "an unconfigured server must not mint a local-only organization")
+}
+
+func TestCreateOrganization_PostCommitReadFailureIsUncertain(t *testing.T) {
+	t.Parallel()
+	const workosOrgID = "org_read_failure"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	// Billing is read only by the response query, not the creation transaction.
+	_, err := conn.Exec(ctx, "ALTER TABLE billing_metadata RENAME TO unavailable_billing_metadata") //nolint:glint // DDL fault injection in an isolated per-test database; SQLc cannot rename a table.
+	require.NoError(t, err)
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
+	require.Nil(t, res)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.EqualError(t, err, organizationCreationUncertain)
+	require.Contains(t, oops.Detail(err), "fetch organization after create")
+	require.Equal(t, []string{"example.com"}, fake.names())
+	require.EqualValues(t, 1, countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID), "the transaction committed despite the failed response")
+}
+
+func TestCreateOrganization_HTTPProviderFailuresAreSanitized(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, orgprovision.Unavailable{})
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	handler := SessionMiddleware(mux)
+	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
+	for _, tc := range []struct {
+		status     int
+		body       string
+		failUpdate bool
+		refusal    bool
+	}{
+		{status: 400, body: `{"message":"private provider detail","code":"unknown_code","unknown":"private field"}`, failUpdate: false, refusal: true},
+		{status: 422, body: `{"message":"private provider detail","errors":[{"field":"domain_data","code":"unknown_code"}]}`, failUpdate: false, refusal: true},
+		{status: 409, body: `{"message":"private provider detail","code":"unknown_code"}`, failUpdate: false, refusal: false},
+		{status: 429, body: `{"message":"private provider detail"}`, failUpdate: false, refusal: false},
+		{status: 500, body: `{"message":"private provider detail"}`, failUpdate: false, refusal: false},
+		{status: 502, body: `private provider detail`, failUpdate: false, refusal: false},
+		{status: 200, body: `private provider detail`, failUpdate: false, refusal: false},
+		{status: 200, body: `{"id":"org_http_failure","domains":[{"domain":"example.com","state":"pending"}]}`, failUpdate: false, refusal: false},
+		{status: 200, body: `{"id":"org_http_failure","domains":[{"domain":"example.com","state":"failed"}]}`, failUpdate: false, refusal: false},
+		{status: 422, body: `{"message":"private provider detail"}`, failUpdate: true, refusal: false},
+		{status: 500, body: `{"message":"private provider detail"}`, failUpdate: true, refusal: false},
+	} {
+		var calls atomic.Int32
+		svc.workos = newAdminWorkOSHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Request-ID", "request_example")
+			if tc.failUpdate && r.Method == http.MethodPost {
+				_, _ = io.WriteString(w, `{"id":"org_http_failure","domains":[{"domain":"example.com","state":"verified"}]}`)
+				return
+			}
+			w.WriteHeader(tc.status)
+			_, _ = io.WriteString(w, tc.body)
+		})
+		var logs bytes.Buffer
+		svc.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+		req := httptest.NewRequest(http.MethodPost, "/admin/organization.create", strings.NewReader(`{"url":"https://example.com","ownership_confirmed":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		var body struct {
+			Message string `json:"message"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		if tc.refusal {
+			require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+			require.Equal(t, "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.", body.Message)
+		} else {
+			require.Equal(t, http.StatusBadGateway, rec.Code)
+			require.Equal(t, organizationCreationUncertain, body.Message)
+		}
+		for _, private := range []string{"private provider detail", "private field", "unknown_code", "request_example"} {
+			require.NotContains(t, rec.Body.String(), private)
+		}
+		if tc.status != http.StatusOK {
+			require.Contains(t, logs.String(), "request_example")
+		}
+		require.EqualValues(t, conv.Ternary(tc.failUpdate, 2, 1), calls.Load(), "no retry, tenant lookup, transfer, or cleanup")
+		requireNoOrganizationRow(t, ctx, conn, "org_http_failure")
+	}
 }
 
 func TestCreateOrganization_RejectsInvalidURLsBeforeWorkOS(t *testing.T) {

@@ -2,10 +2,13 @@ package workos
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 )
 
 // Organization represents a WorkOS organization with the fields used by Gram.
@@ -87,6 +90,10 @@ func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string
 	return o.ID, nil
 }
 
+// ErrOrganizationCreationRejected marks a provider validation refusal of the
+// initial create, never a failure after the remote organization was created.
+var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization creation")
+
 // CreateOrganizationWithVerifiedDomain asserts prior administrator verification
 // of hostname. It does not retry because creation has no idempotency key.
 func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, hostname string) (string, error) {
@@ -99,6 +106,12 @@ func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, host
 		Metadata:       nil,
 	})
 	if err != nil {
+		// WorkOS documents 400 as malformed parameters and 422 as validation
+		// failure. No duplicate-domain-specific code or 409 contract is assumed.
+		var providerError workos_errors.HTTPError
+		if errors.As(err, &providerError) && (providerError.Code == http.StatusBadRequest || providerError.Code == http.StatusUnprocessableEntity) {
+			return "", fmt.Errorf("%w: %w", ErrOrganizationCreationRejected, err)
+		}
 		return "", fmt.Errorf("create organization with verified domain: %w", err)
 	}
 	if o.ID == "" {

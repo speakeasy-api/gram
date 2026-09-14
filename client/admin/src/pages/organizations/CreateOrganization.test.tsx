@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -405,6 +405,23 @@ describe("a refusal", () => {
   const REASON =
     "this server has no WorkOS configuration, so it cannot create organizations";
 
+  it("shows the sanitized provider refusal without uncertainty or success", async () => {
+    const reason =
+      "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.";
+    mocks.createOrganization.mockRejectedValue(refusal(reason));
+    await open();
+    fillConfirmedURL("https://example.com");
+    submitForm();
+
+    expect((await screen.findByRole("alert")).textContent).toBe(reason);
+    expect(nameField().value).toBe("https://example.com");
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(announce).not.toHaveBeenCalled();
+    expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
+  });
+
   it("stays open holding the reason and the URL", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
@@ -562,6 +579,11 @@ describe("domain ownership", () => {
 
   it.each([
     new GramAdminError(
+      500,
+      { message: "private database detail" },
+      "Internal Server Error",
+    ),
+    new GramAdminError(
       502,
       { message: "private provider detail" },
       "Bad Gateway",
@@ -580,4 +602,51 @@ describe("domain ownership", () => {
     expect(announce).not.toHaveBeenCalled();
     expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    refusal(
+      "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.",
+    ),
+    new GramAdminError(
+      502,
+      { message: "private provider detail" },
+      "Bad Gateway",
+    ),
+    new GramAdminError(
+      500,
+      { message: "private database detail" },
+      "Internal Server Error",
+    ),
+    new TypeError("Failed to fetch"),
+  ])(
+    "does not retry %s even when application defaults enable retries",
+    async (error) => {
+      const retry = vi.fn(() => true);
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry, retryDelay: 0 },
+        },
+      });
+      mocks.createOrganization.mockRejectedValue(error);
+      await renderWithApp(<CreateOrganization reporter={REPORTER} />, {
+        queryClient,
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create organization" }),
+      );
+      await screen.findByRole("dialog");
+      fillConfirmedURL();
+      submitForm();
+
+      await screen.findByRole("alert");
+      expect(retry).not.toHaveBeenCalled();
+      expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
+      expect(announce).not.toHaveBeenCalled();
+      expect(screen.queryByText(/^Created /)).toBeNull();
+      expect(nameField().value).toBe("example.com");
+      expect(submitButton().disabled).toBe(false);
+      queryClient.clear();
+    },
+  );
 });

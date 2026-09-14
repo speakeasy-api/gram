@@ -3,6 +3,8 @@ package admin
 import (
 	"context"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -12,9 +14,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
@@ -92,6 +96,15 @@ type fakeTrialNotifier struct {
 	started     []string
 	inactive    []string
 	inactiveErr error
+}
+
+func newAdminWorkOSHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client"})
 }
 
 func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {

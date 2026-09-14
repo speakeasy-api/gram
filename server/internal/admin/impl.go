@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -1223,12 +1224,14 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
+const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
+
 // CreateOrganization creates an organization in WorkOS and then in Gram.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
 // step that cannot be rolled back. Everything Gram stores is written inside a
-// single transaction afterwards, so a failure below leaves no organization row,
-// no role grants and no entitlements from this call.
+// single transaction afterwards. A transaction failure rolls back local writes;
+// a response read failure can occur after those writes have committed.
 //
 // A webhook can still provision the remote organization after a failed request.
 // Repeating the request creates a new WorkOS organization, not an idempotent retry.
@@ -1251,8 +1254,10 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
 		// layer does not read that map.
 		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case errors.Is(err, workos.ErrOrganizationCreationRejected):
+		return nil, oops.E(oops.CodeInvalid, err, "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.").LogWarn(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeGatewayError, err, organizationCreationUncertain).LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(
@@ -1262,7 +1267,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("begin organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -1284,10 +1289,10 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// of two.
 		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
 		if baseErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("derive organization slug: %w", baseErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 
 		// Read again now that the lock is held. The read above was taken before
@@ -1303,14 +1308,14 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		case errors.Is(reReadErr, pgx.ErrNoRows):
 			found, findErr := orgslug.FindUnique(ctx, queries, base)
 			if findErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
 			}
 			uniqueSlug = found
 		default:
-			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization after slug lock: %w", reReadErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization before create: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
@@ -1333,22 +1338,26 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seed organization default entitlements: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, organizationCreationUncertain)
+	}
+	return result, nil
 }
 
 // RearmTrial atomically replaces trial_demotion with the active-trial key policy.
