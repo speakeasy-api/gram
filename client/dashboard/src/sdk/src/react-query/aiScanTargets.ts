@@ -59,7 +59,7 @@ export type AiScanTargetsQueryError =
  * listAiScanTargets agent
  *
  * @remarks
- * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins overlaid with the organization's own additions and its on/off choices, with the catalog version agents echo on scan receipts. Requires a session with the org:admin scope.
+ * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.
  */
 export function useAiScanTargets(
   request?: ListAiScanTargetsRequest | undefined,
@@ -82,7 +82,7 @@ export function useAiScanTargets(
  * listAiScanTargets agent
  *
  * @remarks
- * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins overlaid with the organization's own additions and its on/off choices, with the catalog version agents echo on scan receipts. Requires a session with the org:admin scope.
+ * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.
  */
 export function useAiScanTargetsSuspense(
   request?: ListAiScanTargetsRequest | undefined,

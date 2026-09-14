@@ -92,7 +92,7 @@ export class Agent extends ClientSDK {
    * deleteAiScanTarget agent
    *
    * @remarks
-   * Remove a target the organization added, or drop its on/off choice for a built-in so the built-in is served again as supplied. Requires a session with the org:admin scope.
+   * Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
    */
   async deleteAiScanTarget(
     request: DeleteAiScanTargetRequest,
@@ -168,7 +168,7 @@ export class Agent extends ClientSDK {
    * listAiScanTargets agent
    *
    * @remarks
-   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins overlaid with the organization's own additions and its on/off choices, with the catalog version agents echo on scan receipts. Requires a session with the org:admin scope.
+   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.
    */
   async listAiScanTargets(
     request?: ListAiScanTargetsRequest | undefined,
@@ -263,7 +263,7 @@ export class Agent extends ClientSDK {
    * upsertAiScanTarget agent
    *
    * @remarks
-   * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged, which is how a built-in is switched on or off. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a toggle need not restate the target's matchers; sending gateway_client with empty lists still clears them. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+   * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
    */
   async upsertAiScanTarget(
     request: UpsertAiScanTargetRequest,

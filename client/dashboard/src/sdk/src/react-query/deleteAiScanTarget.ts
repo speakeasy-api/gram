@@ -54,7 +54,7 @@ export type DeleteAiScanTargetMutationError =
  * deleteAiScanTarget agent
  *
  * @remarks
- * Remove a target the organization added, or drop its on/off choice for a built-in so the built-in is served again as supplied. Requires a session with the org:admin scope.
+ * Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
  */
 export function useDeleteAiScanTargetMutation(
   options?: MutationHookOptions<

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * upsertAiScanTarget agent
  *
  * @remarks
- * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged, which is how a built-in is switched on or off. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a toggle need not restate the target's matchers; sending gateway_client with empty lists still clears them. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+ * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
  */
 export function agentUpsertAiScanTarget(
   client: GramCore,
