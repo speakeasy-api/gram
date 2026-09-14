@@ -127,6 +127,29 @@ func DefaultByID(id string) (Target, bool) {
 	return ZeroTarget(), false
 }
 
+// ResolveBuiltinDefinition puts a built-in's compiled-in definition back over
+// a target read straight from its row, keeping the one thing the row owns:
+// whether the organization has it switched on.
+//
+// A row under a built-in's id stores only the organization's choices, so its
+// definition columns are empty. Overlay already does this when it composes the
+// served list, and every other reader of a single row needs the same thing.
+// Without it a caller sees a built-in with no display name, no category, no
+// signatures and no gateway matchers, and takes that emptiness for the
+// target's definition: a toggle then fails SameDefinition against the real
+// built-in, and an audit snapshot records a blank target.
+//
+// Returns the target unchanged when its id names no built-in.
+func ResolveBuiltinDefinition(target Target) Target {
+	builtin, isBuiltin := DefaultByID(target.ID)
+	if !isBuiltin {
+		return target
+	}
+	resolved := builtin.Clone()
+	resolved.Enabled = target.Enabled
+	return resolved
+}
+
 // SameDefinition reports whether two targets describe the same tool, ignoring
 // whether it is served. Enabled is excluded deliberately: switching a built-in
 // off is the one change an organization may make to it, so it is not part of

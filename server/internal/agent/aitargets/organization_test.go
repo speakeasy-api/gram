@@ -4,9 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 )
 
 func target(id string, enabled bool) aitargets.Target {
@@ -107,4 +109,71 @@ func TestOverlayKeepsTheBuiltInDefinitionAuthoritative(t *testing.T) {
 func TestListVersionIsTheDefaultsRevision(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
+}
+
+// builtinRow is the row BuiltInUpsertParams writes for a built-in: the
+// organization's choice about it and nothing else.
+func builtinRow(id string, enabled bool) repo.AiScanTarget {
+	return repo.AiScanTarget{
+		OrganizationID:  "org",
+		ID:              id,
+		DisplayName:     pgtype.Text{String: "", Valid: false},
+		Category:        pgtype.Text{String: "", Valid: false},
+		BundleIds:       []string{},
+		Binaries:        []string{},
+		ConfigDirs:      []string{},
+		ProcessNames:    []string{},
+		VersionPlistKey: pgtype.Text{String: "", Valid: false},
+		CimdVendorKeys:  []string{},
+		OauthClientIds:  []string{},
+		ClientInfoNames: []string{},
+		Enabled:         enabled,
+		Status:          "unreviewed",
+		Rationale:       pgtype.Text{String: "", Valid: false},
+		CreatedAt:       pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		UpdatedAt:       pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+	}
+}
+
+// TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore guards a built-in
+// toggle that worked once and then failed for good.
+//
+// Before the first toggle there is no row, so the pre-write read falls back to
+// the compiled-in default: an omitted gateway_client is carried over and the
+// read-only check passes. Afterwards the row exists, and reading it back gave
+// an empty definition, so the very same toggle failed SameDefinition against
+// the real built-in and was rejected as an edit.
+func TestResolveBuiltinDefinitionRestoresWhatTheRowDoesNotStore(t *testing.T) {
+	t.Parallel()
+
+	var builtin aitargets.Target
+	for _, candidate := range aitargets.Defaults() {
+		if len(candidate.GatewayClient.OAuthClientIDs) > 0 {
+			builtin = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, builtin.ID, "expected a built-in carrying gateway matchers")
+
+	fromRow := aitargets.EntryFromRow(builtinRow(builtin.ID, false)).Target
+	require.Empty(t, fromRow.GatewayClient.OAuthClientIDs, "the row stores no definition; that is what makes resolution necessary")
+	require.False(t, aitargets.SameDefinition(builtin, fromRow), "the unresolved row must not already look like the built-in")
+
+	resolved := aitargets.ResolveBuiltinDefinition(fromRow)
+	require.True(t, aitargets.SameDefinition(builtin, resolved), "a built-in read back from its row must still be the built-in")
+	require.Equal(t, builtin.GatewayClient.OAuthClientIDs, resolved.GatewayClient.OAuthClientIDs)
+	require.Equal(t, builtin.DisplayName, resolved.DisplayName)
+	require.False(t, resolved.Enabled, "the row owns the enabled flag and nothing else")
+
+	require.True(t, aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(builtinRow(builtin.ID, true)).Target).Enabled)
+}
+
+// TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone: an organization's
+// own target is stored in full, so there is nothing to restore and resolution
+// must not overwrite it.
+func TestResolveBuiltinDefinitionLeavesOrganizationTargetsAlone(t *testing.T) {
+	t.Parallel()
+
+	own := target("an-organization-target", true)
+	require.Equal(t, own, aitargets.ResolveBuiltinDefinition(own))
 }

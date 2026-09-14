@@ -209,7 +209,7 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err)
 	}
 
-	before := aitargets.EntryFromRow(row).Target
+	before := aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(row).Target)
 	if err := s.audit.LogAiScanTargetDelete(ctx, dbtx, audit.LogAiScanTargetDeleteEvent{
 		OrganizationID:             organizationID,
 		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -231,19 +231,23 @@ func (s *Service) DeleteAiScanTarget(ctx context.Context, payload *gen.DeleteAiS
 // aiScanTargetBefore is what the organization's list held for id ahead of a
 // write: its own row, locked for the transaction; else the default the write
 // customizes; else nothing.
+//
+// A built-in's row carries only the organization's choice about it, so the row
+// is resolved back against the compiled-in definition. Both callers read the
+// definition off this: the omitted-gateway_client carry-over above, which
+// would otherwise unlink a built-in from the caller it blocks and then fail
+// the read-only check, and the update audit's before-snapshot.
 func aiScanTargetBefore(ctx context.Context, queries *repo.Queries, organizationID string, id string) (*aitargets.Target, error) {
 	row, err := queries.GetAIScanTargetForUpdate(ctx, repo.GetAIScanTargetForUpdateParams{OrganizationID: organizationID, ID: id})
 	switch {
 	case err == nil:
-		target := aitargets.EntryFromRow(row).Target
+		target := aitargets.ResolveBuiltinDefinition(aitargets.EntryFromRow(row).Target)
 		return &target, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return nil, fmt.Errorf("lock ai scan target %q: %w", id, err)
 	}
-	for _, target := range aitargets.Defaults() {
-		if target.ID == id {
-			return &target, nil
-		}
+	if builtin, isBuiltin := aitargets.DefaultByID(id); isBuiltin {
+		return &builtin, nil
 	}
 	return nil, nil
 }
