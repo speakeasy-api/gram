@@ -322,7 +322,10 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		}
 		providerCreated = true
 	} else {
-		currentProvider, err := txRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		// Locked, not merely re-read: UpdateRemoteSessionIssuer takes no
+		// advisory lock, so an unlocked re-read only narrows the race to the
+		// gap between it and the client insert below.
+		currentProvider, err := txRepo.GetRemoteSessionIssuerByIDForConfigurationCommit(ctx, repo.GetRemoteSessionIssuerByIDForConfigurationCommitParams{
 			ID:                    provider.ID,
 			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 			OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
