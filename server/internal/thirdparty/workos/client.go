@@ -57,15 +57,16 @@ func wrapSDKError(err error, context string) error {
 // Client wraps WorkOS API calls for role and membership management.
 // It is designed to have a caching layer added later.
 type Client struct {
-	apiKey     string
-	clientID   string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
-	endpoint   string // base URL for raw HTTP calls; defaults to workosBaseURL
-	httpClient *guardian.HTTPClient
-	orgs       *organizations.Client
-	um         *usermanagement.Client
-	events     *events.Client
-	sso        *sso.Client
-	dsync      *directorysync.Client
+	apiKey      string
+	clientID    string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
+	endpoint    string // base URL for raw HTTP calls; defaults to workosBaseURL
+	httpClient  *guardian.HTTPClient
+	orgs        *organizations.Client
+	orgsNoRetry *organizations.Client
+	um          *usermanagement.Client
+	events      *events.Client
+	sso         *sso.Client
+	dsync       *directorysync.Client
 }
 
 // ClientOpts configures optional overrides for New.
@@ -111,10 +112,17 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		endpoint:   endpoint,
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
-		um:         um,
-		events:     &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
-		sso:        &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
-		dsync:      &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		orgsNoRetry: &organizations.Client{APIKey: apiKey, HTTPClient: guardianPolicy.PooledClient(
+			guardian.WithResilience("workos", guardian.ResilienceConfig{
+				Partition: partitionByHostAndAPIKey(apiKey),
+				Limit:     guardian.PerMinute(6000),
+				Breaker:   guardian.NoBreaker(),
+			}),
+		), Endpoint: opt.Endpoint, JSONEncode: nil},
+		um:     um,
+		events: &events.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
+		sso:    &sso.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil, ClientID: opt.ClientID},
+		dsync:  &directorysync.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint},
 	}
 }
 

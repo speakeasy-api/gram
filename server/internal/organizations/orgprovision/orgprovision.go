@@ -36,6 +36,15 @@ type WorkOSOrganizationCreator interface {
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 }
 
+// WorkOSVerifiedDomainCreator is the platform-admin provisioning capability.
+type WorkOSVerifiedDomainCreator interface {
+	// CreateOrganizationWithVerifiedDomain returns an ID only after verifying the response domain state.
+	CreateOrganizationWithVerifiedDomain(ctx context.Context, hostname string) (string, error)
+
+	// UpdateOrganizationExternalIDWithoutRetry sets the derived ID without retrying.
+	UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error
+}
+
 // CreatedOrganization is an organization that exists in WorkOS and has no Gram
 // row yet.
 type CreatedOrganization struct {
@@ -77,9 +86,24 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 		return empty, fmt.Errorf("create WorkOS organization: %w", err)
 	}
 
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalID, workosOrgID)
+}
+
+// CreateInWorkOSWithVerifiedDomain creates an administrator-verified organization.
+// Callers must validate hostname and establish ownership before calling this.
+func CreateInWorkOSWithVerifiedDomain(ctx context.Context, client WorkOSVerifiedDomainCreator, hostname string) (CreatedOrganization, error) {
+	workosOrgID, err := client.CreateOrganizationWithVerifiedDomain(ctx, hostname)
+	if err != nil {
+		return CreatedOrganization{}, fmt.Errorf("create WorkOS organization with verified domain: %w", err)
+	}
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalIDWithoutRetry, workosOrgID)
+}
+
+func finishWorkOSCreation(ctx context.Context, update func(context.Context, string, string) error, workosOrgID string) (CreatedOrganization, error) {
+	var empty CreatedOrganization
 	gramOrgID := orgid.FromWorkOSID(workosOrgID)
 
-	if err := client.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
+	if err := update(ctx, workosOrgID, gramOrgID); err != nil {
 		return empty, fmt.Errorf("set external_id on WorkOS organization: %w", err)
 	}
 
@@ -98,6 +122,16 @@ var ErrUnavailable = errors.New("WorkOS is not configured on this server")
 // the identity provider does not know about cannot be logged into. Failing is
 // more honest than creating a Gram-only row that looks like a success.
 type Unavailable struct{}
+
+// CreateOrganizationWithVerifiedDomain always fails with ErrUnavailable.
+func (Unavailable) CreateOrganizationWithVerifiedDomain(context.Context, string) (string, error) {
+	return "", ErrUnavailable
+}
+
+// UpdateOrganizationExternalIDWithoutRetry always fails with ErrUnavailable.
+func (Unavailable) UpdateOrganizationExternalIDWithoutRetry(context.Context, string, string) error {
+	return ErrUnavailable
+}
 
 // CreateOrganization always fails with ErrUnavailable.
 func (Unavailable) CreateOrganization(context.Context, string, string) (string, error) {

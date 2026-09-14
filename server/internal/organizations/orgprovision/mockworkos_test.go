@@ -52,3 +52,24 @@ func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 	require.NotEqual(t, created.WorkOSOrganizationID, second.WorkOSOrganizationID)
 	require.NotEqual(t, created.GramOrganizationID, second.GramOrganizationID)
 }
+
+func TestCreateInWorkOSWithVerifiedDomain_AgainstMockWorkOS(t *testing.T) {
+	t.Parallel()
+	client := newEmulatorClient(t)
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
+	require.NoError(t, err)
+	require.NotEmpty(t, created.WorkOSOrganizationID)
+	require.Equal(t, orgid.FromWorkOSID(created.WorkOSOrganizationID), created.GramOrganizationID)
+	org, err := client.GetOrganization(t.Context(), created.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "www.example.com", org.Name)
+	require.Equal(t, created.GramOrganizationID, org.ExternalID)
+	policy, err := client.GetOrganizationDomainPolicy(t.Context(), created.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, []workos.OrganizationDomain{{Domain: "www.example.com", State: workos.OrganizationDomainStateVerified}}, policy.Domains)
+	plain, err := orgprovision.CreateInWorkOS(t.Context(), client, "Example")
+	require.NoError(t, err)
+	policy, err = client.GetOrganizationDomainPolicy(t.Context(), plain.WorkOSOrganizationID)
+	require.NoError(t, err)
+	require.Empty(t, policy.Domains)
+}
