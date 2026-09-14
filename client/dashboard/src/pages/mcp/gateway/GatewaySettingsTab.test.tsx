@@ -160,6 +160,21 @@ describe("Gateway instructions", () => {
     );
   });
 
+  it("copies the built-in instructions to the clipboard", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    renderSection();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Copy built-in text/i }),
+    );
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText.mock.calls[0]![0]).toContain("Work from the outside in");
+    expect(screen.getByRole("button", { name: /Copied/i })).toBeTruthy();
+  });
+
   it("does not permit edits that would be overwritten by an in-flight save", () => {
     state.isPending = true;
     renderSection();

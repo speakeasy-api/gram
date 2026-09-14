@@ -22,8 +22,9 @@ import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpSer
 import { useDeleteMetaMcpServerMutation } from "@gram/client/react-query/deleteMetaMcpServer.js";
 import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
@@ -258,9 +259,12 @@ export function GatewayInstructionsSection({
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <Field data-invalid={update.isError || overLimit ? true : undefined}>
-            <FieldLabel htmlFor="gateway-instructions">
-              Custom instructions
-            </FieldLabel>
+            <div className="flex items-center justify-between gap-2">
+              <FieldLabel htmlFor="gateway-instructions">
+                Custom instructions
+              </FieldLabel>
+              <CopyBuiltInInstructionsButton />
+            </div>
             <Textarea
               id="gateway-instructions"
               value={draft}
@@ -343,6 +347,27 @@ export function GatewayInstructionsSection({
         </SettingsSection.Footer>
       </SettingsSection.Panel>
     </SettingsSection>
+  );
+}
+
+// Puts the built-in text on the clipboard so an operator replacing it can
+// start from what clients receive today instead of a blank box.
+function CopyBuiltInInstructionsButton(): JSX.Element {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      variant="tertiary"
+      size="xs"
+      onClick={() => {
+        void navigator.clipboard.writeText(builtInInstructions);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      <Button.LeftIcon>{copied ? <Check /> : <Copy />}</Button.LeftIcon>
+      <Button.Text>{copied ? "Copied" : "Copy built-in text"}</Button.Text>
+    </Button>
   );
 }
 
