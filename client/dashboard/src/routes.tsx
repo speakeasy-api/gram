@@ -416,12 +416,12 @@ const ROUTE_STRUCTURE = {
       // the backend that stores it, and OpenAPI and functions sit under
       // "advanced" on the same page instead of in the navigation.
       //
-      // `add` and `sources` are static segments under `mcp`, so they rank above
-      // the `details` `:toolsetSlug` route and are not swallowed by it. The
-      // cost is that a toolset slugged "add" or "sources" becomes unreachable
-      // in the dashboard. Nothing reserves those slugs server-side, so this is
-      // the same latent collision the sibling `x` and `gateway`
-      // segments already carry.
+      // `add`, `catalog` and `sources` are static segments under `mcp`, so they
+      // rank above the `details` `:toolsetSlug` route and are not swallowed by
+      // it. The cost is that a toolset slugged "add", "catalog" or "sources"
+      // becomes unreachable in the dashboard. Nothing reserves those slugs
+      // server-side, so this is the same latent collision the sibling `x` and
+      // `gateway` segments already carry.
       add: {
         title: "Add MCP Server",
         url: "add",
@@ -438,22 +438,6 @@ const ROUTE_STRUCTURE = {
             url: "tunneled",
             component: CreateTunneledMcp,
           },
-          // The single catalog entry point. It previously rendered from both
-          // `/catalog` and `/sources/add-from-catalog`; both now redirect here.
-          catalog: {
-            title: "Catalog",
-            url: "catalog",
-            component: CatalogRoot,
-            indexComponent: Catalog,
-            subPages: {
-              detail: {
-                title: "Server Details",
-                url: ":serverSpecifier",
-                component: CatalogDetailRoot,
-                indexComponent: CatalogDetail,
-              },
-            },
-          },
           fromSource: {
             title: "From Existing Source",
             url: "from-existing-source",
@@ -468,6 +452,24 @@ const ROUTE_STRUCTURE = {
             title: "Add Function",
             url: "function",
             component: FunctionsOnboarding,
+          },
+        },
+      },
+      // The single catalog entry point, and a tab of the MCP index rather than
+      // a step inside the add flow: it is the one surface people go looking for
+      // by name. `/catalog`, `/sources/add-from-catalog` and the earlier
+      // `/mcp/add/catalog` all redirect here.
+      catalog: {
+        title: "Catalog",
+        url: "catalog",
+        component: CatalogRoot,
+        indexComponent: Catalog,
+        subPages: {
+          detail: {
+            title: "Server Details",
+            url: ":serverSpecifier",
+            component: CatalogDetailRoot,
+            indexComponent: CatalogDetail,
           },
         },
       },

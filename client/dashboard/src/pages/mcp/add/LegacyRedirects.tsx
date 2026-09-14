@@ -59,24 +59,25 @@ export function RedirectToAddFunction(): JSX.Element {
   return <Navigate to={routes.mcp.add.function.href()} replace />;
 }
 
+// The catalog is a tab of the MCP index rather than a step inside the add
+// flow, so `/mcp/add/catalog` joins `/catalog` and `/sources/add-from-catalog`
+// in redirecting to it.
 export function RedirectToCatalog(): JSX.Element {
   const routes = useRoutes();
-  return <Navigate to={routes.mcp.add.catalog.href()} replace />;
+  return <Navigate to={routes.mcp.catalog.href()} replace />;
 }
 
 export function RedirectToCatalogDetail(): JSX.Element {
   const routes = useRoutes();
   const { serverSpecifier } = useParams();
   if (!serverSpecifier) {
-    return <Navigate to={routes.mcp.add.catalog.href()} replace />;
+    return <Navigate to={routes.mcp.catalog.href()} replace />;
   }
   // useParams decodes the segment; the catalog builds its hrefs from an
   // encoded specifier, so re-encode rather than hand the router a raw one.
   return (
     <Navigate
-      to={routes.mcp.add.catalog.detail.href(
-        encodeURIComponent(serverSpecifier),
-      )}
+      to={routes.mcp.catalog.detail.href(encodeURIComponent(serverSpecifier))}
       replace
     />
   );

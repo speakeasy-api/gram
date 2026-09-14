@@ -2,22 +2,26 @@ import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
 import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 
-export type McpTab = "servers" | "sources" | "deployments";
+export type McpTab = "servers" | "catalog" | "sources" | "deployments";
 
 /**
- * The MCP index's three views.
+ * The MCP index's four views.
  *
- * Servers are the inventory; sources are what they can be built from, and
- * deployments are the versions those sources arrive in. They are separate
- * routes rather than one page's state — each is linked to from the CLI, from
- * a source's own page, and from each other — so the strip is rendered by each
- * page rather than owning them.
+ * Servers are the inventory; the catalog is the reviewed third-party servers
+ * that can join it; sources are what they can be built from, and deployments
+ * are the versions those sources arrive in. They are separate routes rather
+ * than one page's state — each is linked to from the CLI, from a source's own
+ * page, and from each other — so the strip is rendered by each page rather
+ * than owning them.
  */
 export function McpTabs({ active }: { active: McpTab }): JSX.Element {
   const routes = useRoutes();
 
   const tabs: { value: McpTab; label: string; href: string }[] = [
     { value: "servers", label: "MCP Servers", href: routes.mcp.href() },
+    // The catalog is reached from the add flow too, but people look for it by
+    // name next to the inventory it adds to, so it keeps a tab of its own.
+    { value: "catalog", label: "Catalog", href: routes.mcp.catalog.href() },
     { value: "sources", label: "Sources", href: routes.mcp.sources.href() },
     {
       value: "deployments",
