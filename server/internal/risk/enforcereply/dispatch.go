@@ -175,8 +175,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		}
 	}
 
-	// The operation id is an opaque string shared with metering; callers shape
-	// it differently (UUIDs, URNs) and nothing downstream parses it.
 	requestID := request.Origins[request.Lanes[0]].OperationID
 	if strings.TrimSpace(requestID) == "" {
 		return Outcome{}, errors.New("enforcement operation id is required")
