@@ -42,10 +42,6 @@ const ProviderTailscale = "tailscale"
 
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-type ReconcileSignaler interface {
-	SignalNetworkIngress(ctx context.Context, ingressID uuid.UUID) error
-}
-
 type Service struct {
 	tracer    trace.Tracer
 	logger    *slog.Logger
@@ -55,13 +51,14 @@ type Service struct {
 	enc       *encryption.Client
 	audit     *audit.Logger
 	admission *ExpansionAdmission
-	signaler  ReconcileSignaler
+	requester ReconcileRequester
+	health    HealthRefresher
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, signaler ReconcileSignaler) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
@@ -72,7 +69,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		enc:       enc,
 		audit:     auditLogger,
 		admission: admission,
-		signaler:  signaler,
+		requester: requester,
+		health:    health,
 	}
 }
 
@@ -239,10 +237,12 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if err := s.audit.LogNetworkIngressCreate(ctx, dbtx, audit.LogNetworkIngressCreateEvent{NetworkIngressEventBase: s.auditBase(authCtx, ingress), Snapshot: view}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record network ingress creation").LogError(ctx, s.logger)
 	}
+	if err := s.enqueue(ctx, dbtx, ingress); err != nil {
+		return nil, err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit network ingress creation").LogError(ctx, s.logger)
 	}
-	s.signalAfterCommit(ctx, ingress.ID)
 	return view, nil
 }
 
@@ -296,10 +296,12 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 	if err := s.audit.LogNetworkIngressUpdate(ctx, dbtx, audit.LogNetworkIngressUpdateEvent{NetworkIngressEventBase: s.auditBase(authCtx, after), Before: beforeView, After: afterView}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record network ingress update").LogError(ctx, s.logger)
 	}
+	if err := s.enqueue(ctx, dbtx, after); err != nil {
+		return nil, err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit network ingress update").LogError(ctx, s.logger)
 	}
-	s.signalAfterCommit(ctx, after.ID)
 	return afterView, nil
 }
 
@@ -336,10 +338,12 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	if err := s.audit.LogNetworkIngressRotateCredentials(ctx, dbtx, audit.LogNetworkIngressRotateCredentialsEvent{NetworkIngressEventBase: s.auditBase(authCtx, ingress), Provider: ingress.Provider}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record credential rotation").LogError(ctx, s.logger)
 	}
+	if err := s.enqueue(ctx, dbtx, ingress); err != nil {
+		return nil, err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit credential rotation").LogError(ctx, s.logger)
 	}
-	s.signalAfterCommit(ctx, ingress.ID)
 	return mv.BuildNetworkIngressView(ingress), nil
 }
 
@@ -386,10 +390,12 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 		if pendingErr != nil {
 			return oops.E(oops.CodeUnexpected, pendingErr, "find pending network ingress cleanup").LogError(ctx, s.logger)
 		}
+		if err := s.enqueue(ctx, dbtx, pending); err != nil {
+			return err
+		}
 		if err := dbtx.Commit(ctx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "commit cleanup retry").LogError(ctx, s.logger)
 		}
-		s.signalAfterCommit(ctx, pending.ID)
 		return nil
 	}
 	if err != nil {
@@ -402,10 +408,12 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 	if err := s.audit.LogNetworkIngressDelete(ctx, dbtx, audit.LogNetworkIngressDeleteEvent{NetworkIngressEventBase: s.auditBase(authCtx, ingress)}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record network ingress deletion").LogError(ctx, s.logger)
 	}
+	if err := s.enqueue(ctx, dbtx, deleted); err != nil {
+		return err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit network ingress deletion").LogError(ctx, s.logger)
 	}
-	s.signalAfterCommit(ctx, deleted.ID)
 	return nil
 }
 
@@ -424,10 +432,10 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	if s.signaler == nil {
+	if s.health == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "network ingress health reconciliation is unavailable")
 	}
-	if err := s.signaler.SignalNetworkIngress(ctx, ingress.ID); err != nil {
+	if err := s.health.RefreshNetworkIngress(ctx, authCtx.ActiveOrganizationID, ingress.ID); err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "network ingress health reconciliation is unavailable").LogError(ctx, s.logger)
 	}
 	refreshed, err := repo.New(s.db).GetNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -441,11 +449,12 @@ func (s *Service) auditBase(authCtx *contextvalues.AuthContext, ingress repo.Net
 	return audit.NetworkIngressEventBase{OrganizationID: authCtx.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, NetworkIngressURN: urn.NewNetworkIngress(ingress.ID), Hostname: ingress.Hostname}
 }
 
-func (s *Service) signalAfterCommit(ctx context.Context, ingressID uuid.UUID) {
-	if s.signaler == nil {
-		return
+func (s *Service) enqueue(ctx context.Context, tx pgx.Tx, ingress repo.NetworkIngress) error {
+	if s.requester == nil {
+		return oops.E(oops.CodeUnavailable, nil, "network ingress lifecycle delivery is unavailable")
 	}
-	if err := s.signaler.SignalNetworkIngress(context.WithoutCancel(ctx), ingressID); err != nil {
-		s.logger.WarnContext(ctx, "failed to signal network ingress reconciliation", attr.SlogError(err), attr.SlogNetworkIngressID(ingressID.String()))
+	if err := s.requester.Enqueue(ctx, tx, ingress.OrganizationID, ingress.ID); err != nil {
+		return oops.E(oops.CodeUnavailable, err, "enqueue network ingress lifecycle").LogError(ctx, s.logger)
 	}
+	return nil
 }
