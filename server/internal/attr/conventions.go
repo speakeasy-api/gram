@@ -171,10 +171,19 @@ const (
 	// from user.email — the authenticated actor — so adopting cached
 	// attribution never rewrites the canonical user identity; it has no
 	// materialized column yet.
-	ProviderKey          = attribute.Key("gram.provider")
-	ExternalOrgIDKey     = attribute.Key("gram.external_org_id")
-	AccountTypeKey       = attribute.Key("gram.account_type")
-	BillingModeKey       = attribute.Key("gram.billing_mode")
+	ProviderKey      = attribute.Key("gram.provider")
+	ExternalOrgIDKey = attribute.Key("gram.external_org_id")
+	AccountTypeKey   = attribute.Key("gram.account_type")
+	BillingModeKey   = attribute.Key("gram.billing_mode")
+
+	// AgentEventSourceKey, AgentEventSignalKey and AgentEventRawNameKey label
+	// the agent_events writer's counters: which producer surface a record came
+	// from, whether it arrived as a log or a span, and the producer's own name
+	// for it. Raw names are only attached for log records, whose event names
+	// are a closed producer vocabulary; span names are unbounded.
+	AgentEventSourceKey  = attribute.Key("gram.agent_event.source")
+	AgentEventSignalKey  = attribute.Key("gram.agent_event.signal")
+	AgentEventRawNameKey = attribute.Key("gram.agent_event.raw_name")
 	DeviceIDKey          = attribute.Key("gram.device_id")
 	AccountEmailKey      = attribute.Key("gram.account_email")
 	ChatIDKey            = attribute.Key("gram.chat.id")
@@ -1748,7 +1757,11 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
-func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
+
+func AgentEventSource(v string) attribute.KeyValue  { return AgentEventSourceKey.String(v) }
+func AgentEventSignal(v string) attribute.KeyValue  { return AgentEventSignalKey.String(v) }
+func AgentEventRawName(v string) attribute.KeyValue { return AgentEventRawNameKey.String(v) }
+func SlogProvider(v string) slog.Attr               { return slog.String(string(ProviderKey), v) }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }

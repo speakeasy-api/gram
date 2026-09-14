@@ -17,8 +17,12 @@ import (
 )
 
 const (
-	meterAgentEventCHWriterRowsSkipped  = "gram.agent_event_ch_writer.rows_skipped"
-	meterAgentEventCHWriterRowsInserted = "gram.agent_event_ch_writer.rows_inserted"
+	meterAgentEventCHWriterRowsSkipped      = "gram.agent_event_ch_writer.rows_skipped"
+	meterAgentEventCHWriterRowsInserted     = "gram.agent_event_ch_writer.rows_inserted"
+	meterAgentEventCHWriterRowsUnclassified = "gram.agent_event_ch_writer.rows_unclassified"
+
+	agentEventSignalLog  = "log"
+	agentEventSignalSpan = "span"
 )
 
 // AgentEventInserter writes a batch of agent_events rows to ClickHouse.
@@ -37,14 +41,16 @@ type AgentEventInserter interface {
 // a redelivered batch lands as duplicate rows that readers collapse on
 // record_id.
 type agentEventCHWriter struct {
-	logger       *slog.Logger
-	inserter     AgentEventInserter
-	now          func() time.Time
-	rowsSkipped  metric.Int64Counter
-	rowsInserted metric.Int64Counter
+	logger           *slog.Logger
+	inserter         AgentEventInserter
+	now              func() time.Time
+	signal           string
+	rowsSkipped      metric.Int64Counter
+	rowsInserted     metric.Int64Counter
+	rowsUnclassified metric.Int64Counter
 }
 
-func newAgentEventCHWriter(logger *slog.Logger, meterProvider metric.MeterProvider, inserter AgentEventInserter, component string) *agentEventCHWriter {
+func newAgentEventCHWriter(logger *slog.Logger, meterProvider metric.MeterProvider, inserter AgentEventInserter, component, signal string) *agentEventCHWriter {
 	logger = logger.With(attr.SlogComponent(component))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel")
 	rowsSkipped, err := meter.Int64Counter(
@@ -61,13 +67,47 @@ func newAgentEventCHWriter(logger *slog.Logger, meterProvider metric.MeterProvid
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterAgentEventCHWriterRowsInserted), attr.SlogError(err))
 	}
+	rowsUnclassified, err := meter.Int64Counter(
+		meterAgentEventCHWriterRowsUnclassified,
+		metric.WithDescription("agent_events rows written with no canonical event type, by producer surface and raw event name"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterAgentEventCHWriterRowsUnclassified), attr.SlogError(err))
+	}
 
 	return &agentEventCHWriter{
-		logger:       logger,
-		inserter:     inserter,
-		now:          time.Now,
-		rowsSkipped:  rowsSkipped,
-		rowsInserted: rowsInserted,
+		logger:           logger,
+		inserter:         inserter,
+		now:              time.Now,
+		signal:           signal,
+		rowsSkipped:      rowsSkipped,
+		rowsInserted:     rowsInserted,
+		rowsUnclassified: rowsUnclassified,
+	}
+}
+
+// countUnclassified is the only signal that dialect coverage has broken: a
+// producer renaming an event otherwise looks exactly like that producer going
+// quiet. Unclassified rows are still written; this only makes their shape
+// visible without a query. Raw names are attached for log records only, since
+// span names are unbounded and would blow up the metric's cardinality.
+func (w *agentEventCHWriter) countUnclassified(ctx context.Context, rows []chrepo.AgentEventRow) {
+	if w.rowsUnclassified == nil {
+		return
+	}
+	for _, row := range rows {
+		if row.EventType != "" {
+			continue
+		}
+		rawName := ""
+		if w.signal == agentEventSignalLog {
+			rawName = row.RawEventName
+		}
+		w.rowsUnclassified.Add(ctx, 1, metric.WithAttributes(
+			attr.AgentEventSource(row.Source),
+			attr.AgentEventSignal(w.signal),
+			attr.AgentEventRawName(rawName),
+		))
 	}
 }
 
@@ -93,6 +133,7 @@ func (w *agentEventCHWriter) write(ctx context.Context, rows []chrepo.AgentEvent
 	if err != nil {
 		return fmt.Errorf("insert agent_events: %w", err)
 	}
+	w.countUnclassified(ctx, rows)
 	return nil
 }
 
@@ -103,7 +144,7 @@ type AgentEventLogCHWriter struct {
 }
 
 func NewAgentEventLogCHWriter(logger *slog.Logger, meterProvider metric.MeterProvider, inserter AgentEventInserter) *AgentEventLogCHWriter {
-	return &AgentEventLogCHWriter{agentEventCHWriter: newAgentEventCHWriter(logger, meterProvider, inserter, "agent-event-log-ch-writer")}
+	return &AgentEventLogCHWriter{agentEventCHWriter: newAgentEventCHWriter(logger, meterProvider, inserter, "agent-event-log-ch-writer", agentEventSignalLog)}
 }
 
 var _ streams.BatchHandler[*otelv1.LogRecord] = (*AgentEventLogCHWriter)(nil)
@@ -129,7 +170,7 @@ type AgentEventSpanCHWriter struct {
 }
 
 func NewAgentEventSpanCHWriter(logger *slog.Logger, meterProvider metric.MeterProvider, inserter AgentEventInserter) *AgentEventSpanCHWriter {
-	return &AgentEventSpanCHWriter{agentEventCHWriter: newAgentEventCHWriter(logger, meterProvider, inserter, "agent-event-span-ch-writer")}
+	return &AgentEventSpanCHWriter{agentEventCHWriter: newAgentEventCHWriter(logger, meterProvider, inserter, "agent-event-span-ch-writer", agentEventSignalSpan)}
 }
 
 var _ streams.BatchHandler[*otelv1.Span] = (*AgentEventSpanCHWriter)(nil)
