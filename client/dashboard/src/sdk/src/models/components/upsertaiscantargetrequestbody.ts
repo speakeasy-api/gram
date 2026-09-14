@@ -6,20 +6,26 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  AiScanTargetGatewayClient,
+  AiScanTargetGatewayClient$Outbound,
+  AiScanTargetGatewayClient$outboundSchema,
+} from "./aiscantargetgatewayclient.js";
+import {
   AiScanTargetSignatures,
   AiScanTargetSignatures$Outbound,
   AiScanTargetSignatures$outboundSchema,
 } from "./aiscantargetsignatures.js";
 
 /**
- * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+ * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
  */
 export const UpsertAiScanTargetRequestBodyCategory = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**
- * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+ * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
  */
 export type UpsertAiScanTargetRequestBodyCategory = ClosedEnum<
   typeof UpsertAiScanTargetRequestBodyCategory
@@ -27,7 +33,7 @@ export type UpsertAiScanTargetRequestBodyCategory = ClosedEnum<
 
 export type UpsertAiScanTargetRequestBody = {
   /**
-   * Target category: harness (an AI coding tool) or local_model (a local model runtime).
+   * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
    */
   category: UpsertAiScanTargetRequestBodyCategory;
   /**
@@ -38,6 +44,10 @@ export type UpsertAiScanTargetRequestBody = {
    * Whether the organization's agents probe for the target. Defaults to true.
    */
   enabled?: boolean | undefined;
+  /**
+   * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
+   */
+  gatewayClient?: AiScanTargetGatewayClient | undefined;
   /**
    * Stable id agents report and detections key on. Never reused for a different tool.
    */
@@ -63,6 +73,7 @@ export type UpsertAiScanTargetRequestBody$Outbound = {
   category: string;
   display_name: string;
   enabled: boolean;
+  gateway_client?: AiScanTargetGatewayClient$Outbound | undefined;
   id: string;
   signatures: AiScanTargetSignatures$Outbound;
   version_plist_key?: string | undefined;
@@ -77,6 +88,7 @@ export const UpsertAiScanTargetRequestBody$outboundSchema: z.ZodMiniType<
     category: UpsertAiScanTargetRequestBodyCategory$outboundSchema,
     displayName: z.string(),
     enabled: z._default(z.boolean(), true),
+    gatewayClient: z.optional(AiScanTargetGatewayClient$outboundSchema),
     id: z.string(),
     signatures: AiScanTargetSignatures$outboundSchema,
     versionPlistKey: z.optional(z.string()),
@@ -84,6 +96,7 @@ export const UpsertAiScanTargetRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       displayName: "display_name",
+      gatewayClient: "gateway_client",
       versionPlistKey: "version_plist_key",
     });
   }),

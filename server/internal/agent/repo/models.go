@@ -8,17 +8,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type DeviceAgentAiScanTarget struct {
+type AiScanTarget struct {
 	OrganizationID  string
 	ID              string
-	DisplayName     string
-	Category        string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
 	BundleIds       []string
 	Binaries        []string
 	ConfigDirs      []string
 	ProcessNames    []string
 	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
 	Enabled         bool
+	Status          string
+	Rationale       pgtype.Text
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 }

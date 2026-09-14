@@ -1,6 +1,7 @@
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import { describe, expect, it } from "vitest";
 import {
+  categoryLabel,
   draftFromTarget,
   draftToUpsertBody,
   emptyDraft,
@@ -19,6 +20,11 @@ const classic: AiScanTarget = {
     binaries: [],
     configDirs: [],
     processNames: [],
+  },
+  gatewayClient: {
+    cimdVendorKeys: [],
+    clientInfoNames: [],
+    oauthClientIds: [],
   },
   enabled: true,
   origin: "default",
@@ -145,5 +151,35 @@ describe("signatureSummary", () => {
         },
       }),
     ).toBe("1 binary · 2 config dirs · 1 process name");
+  });
+});
+
+describe("draftFromTarget", () => {
+  // Editing or toggling a target round-trips it through the draft, so a
+  // category the draft cannot represent is silently rewritten on the next
+  // upsert. That reclassified every assistant target as a harness.
+  it("carries every category through unchanged", () => {
+    for (const category of ["harness", "assistant", "local_model"] as const) {
+      expect(draftFromTarget({ ...classic, category }).category).toBe(category);
+    }
+  });
+
+  it("round-trips a category through the upsert body", () => {
+    const body = draftToUpsertBody(
+      draftFromTarget({ ...classic, category: "assistant" }),
+    );
+    expect(body.category).toBe("assistant");
+  });
+});
+
+describe("categoryLabel", () => {
+  it("labels every category the editor offers", () => {
+    expect(categoryLabel("harness")).toBe("Harness");
+    expect(categoryLabel("assistant")).toBe("Assistant");
+    expect(categoryLabel("local_model")).toBe("Local model");
+  });
+
+  it("falls back to the raw value for an unknown category", () => {
+    expect(categoryLabel("something-new")).toBe("something-new");
   });
 });

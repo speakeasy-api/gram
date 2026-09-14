@@ -24,23 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  UpsertDeviceAgentAiScanTargetRequest,
-  UpsertDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/upsertdeviceagentaiscantarget.js";
+  UpsertAiScanTargetRequest,
+  UpsertAiScanTargetSecurity,
+} from "../models/operations/upsertaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpsertDeviceAgentAiScanTargetMutationVariables = {
-  request: UpsertDeviceAgentAiScanTargetRequest;
-  security?: UpsertDeviceAgentAiScanTargetSecurity | undefined;
+export type UpsertAiScanTargetMutationVariables = {
+  request: UpsertAiScanTargetRequest;
+  security?: UpsertAiScanTargetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpsertDeviceAgentAiScanTargetMutationData =
-  AiScanTargetMutationResult;
+export type UpsertAiScanTargetMutationData = AiScanTargetMutationResult;
 
-export type UpsertDeviceAgentAiScanTargetMutationError =
+export type UpsertAiScanTargetMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -55,46 +54,46 @@ export type UpsertDeviceAgentAiScanTargetMutationError =
  * upsertAiScanTarget agent
  *
  * @remarks
- * Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+ * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged, which is how a built-in is switched on or off. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a toggle need not restate the target's matchers; sending gateway_client with empty lists still clears them. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
  */
-export function useUpsertDeviceAgentAiScanTargetMutation(
+export function useUpsertAiScanTargetMutation(
   options?: MutationHookOptions<
-    UpsertDeviceAgentAiScanTargetMutationData,
-    UpsertDeviceAgentAiScanTargetMutationError,
-    UpsertDeviceAgentAiScanTargetMutationVariables
+    UpsertAiScanTargetMutationData,
+    UpsertAiScanTargetMutationError,
+    UpsertAiScanTargetMutationVariables
   >,
 ): UseMutationResult<
-  UpsertDeviceAgentAiScanTargetMutationData,
-  UpsertDeviceAgentAiScanTargetMutationError,
-  UpsertDeviceAgentAiScanTargetMutationVariables
+  UpsertAiScanTargetMutationData,
+  UpsertAiScanTargetMutationError,
+  UpsertAiScanTargetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpsertDeviceAgentAiScanTargetMutation(client, options),
+    ...buildUpsertAiScanTargetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpsertDeviceAgentAiScanTarget(): MutationKey {
+export function mutationKeyUpsertAiScanTarget(): MutationKey {
   return ["@gram/client", "agent", "upsertAiScanTarget"];
 }
 
-export function buildUpsertDeviceAgentAiScanTargetMutation(
+export function buildUpsertAiScanTargetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpsertDeviceAgentAiScanTargetMutationVariables,
-  ) => Promise<UpsertDeviceAgentAiScanTargetMutationData>;
+    variables: UpsertAiScanTargetMutationVariables,
+  ) => Promise<UpsertAiScanTargetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpsertDeviceAgentAiScanTarget(),
-    mutationFn: function upsertDeviceAgentAiScanTargetMutationFn({
+    mutationKey: mutationKeyUpsertAiScanTarget(),
+    mutationFn: function upsertAiScanTargetMutationFn({
       request,
       security,
       options,
-    }): Promise<UpsertDeviceAgentAiScanTargetMutationData> {
+    }): Promise<UpsertAiScanTargetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
