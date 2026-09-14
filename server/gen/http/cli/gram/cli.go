@@ -342,7 +342,6 @@ func ParseEndpoint(
 		accessListAIDetectionsCategoryFlag         = accessListAIDetectionsFlags.String("category", "", "")
 		accessListAIDetectionsDirectoryGroupIDFlag = accessListAIDetectionsFlags.String("directory-group-id", "", "")
 		accessListAIDetectionsSessionTokenFlag     = accessListAIDetectionsFlags.String("session-token", "", "")
-		accessListAIDetectionsProjectSlugInputFlag = accessListAIDetectionsFlags.String("project-slug-input", "", "")
 
 		accessListEmployeeAIDetectionsFlags                = flag.NewFlagSet("list-employee-ai-detections", flag.ExitOnError)
 		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
@@ -7856,7 +7855,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
 			case "list-ai-detections":
 				endpoint = c.ListAIDetections()
-				data, err = accessc.BuildListAIDetectionsPayload(*accessListAIDetectionsCategoryFlag, *accessListAIDetectionsDirectoryGroupIDFlag, *accessListAIDetectionsSessionTokenFlag, *accessListAIDetectionsProjectSlugInputFlag)
+				data, err = accessc.BuildListAIDetectionsPayload(*accessListAIDetectionsCategoryFlag, *accessListAIDetectionsDirectoryGroupIDFlag, *accessListAIDetectionsSessionTokenFlag)
 			case "list-employee-ai-detections":
 				endpoint = c.ListEmployeeAIDetections()
 				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
@@ -10921,7 +10920,6 @@ func accessListAIDetectionsUsage() {
 	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -directory-group-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -10932,11 +10930,10 @@ func accessListAIDetectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -directory-group-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func accessListEmployeeAIDetectionsUsage() {

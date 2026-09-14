@@ -51,7 +51,6 @@ export function buildAiDetectionsQuery(
       category: request?.category,
       directoryGroupId: request?.directoryGroupId,
       gramSession: request?.gramSession,
-      gramProject: request?.gramProject,
     }),
     queryFn: async function aiDetectionsQueryFn(
       ctx,
@@ -82,7 +81,6 @@ export function queryKeyAiDetections(
     category?: Category | undefined;
     directoryGroupId?: string | undefined;
     gramSession?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "access", "listAIDetections", parameters];

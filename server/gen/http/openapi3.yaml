@@ -4656,13 +4656,6 @@ paths:
                   schema:
                     description: Session header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             responses:
                 "200":
                     content:
@@ -4725,8 +4718,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: listAIDetections access
             tags:
                 - access

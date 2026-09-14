@@ -675,7 +675,7 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 
 // BuildListAIDetectionsPayload builds the payload for the access
 // listAIDetections endpoint from CLI flags.
-func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string, accessListAIDetectionsProjectSlugInput string) (*access.ListAIDetectionsPayload, error) {
+func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string) (*access.ListAIDetectionsPayload, error) {
 	var err error
 	var category *string
 	{
@@ -705,17 +705,10 @@ func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessL
 			sessionToken = &accessListAIDetectionsSessionToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if accessListAIDetectionsProjectSlugInput != "" {
-			projectSlugInput = &accessListAIDetectionsProjectSlugInput
-		}
-	}
 	v := &access.ListAIDetectionsPayload{}
 	v.Category = category
 	v.DirectoryGroupID = directoryGroupID
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

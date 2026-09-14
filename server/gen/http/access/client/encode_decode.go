@@ -3576,10 +3576,6 @@ func EncodeListAIDetectionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		if p.Category != nil {
 			values.Add("category", *p.Category)

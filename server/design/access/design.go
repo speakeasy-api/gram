@@ -442,7 +442,7 @@ var _ = Service("access", func() {
 
 	Method("listAIDetections", func() {
 		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
-		Security(security.Session, security.ProjectSlug)
+		Security(security.Session)
 
 		Payload(func() {
 			Attribute("category", String, "Filter to detection targets of one category.", func() {
@@ -452,7 +452,6 @@ var _ = Service("access", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
-			security.ProjectPayload()
 		})
 
 		Result(ListAIDetectionsResult)
@@ -462,7 +461,6 @@ var _ = Service("access", func() {
 			Param("category")
 			Param("directory_group_id")
 			security.SessionHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

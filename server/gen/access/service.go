@@ -419,7 +419,6 @@ type ListAIDetectionsPayload struct {
 	// group. A group with no active members yields an empty list.
 	DirectoryGroupID *string
 	SessionToken     *string
-	ProjectSlugInput *string
 }
 
 // ListAIDetectionsResult is the result type of the access service

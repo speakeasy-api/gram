@@ -43,7 +43,7 @@ func TestService_SetAIToolDecision_RecordsDecisionAndSurfacesItOnTheInventory(t 
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
-	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Detections, 1)
 	require.Equal(t, "blocked", listed.Detections[0].Access.State)
@@ -88,7 +88,7 @@ func TestService_ListAIDetections_UnenforceableToolReadsUnreviewed(t *testing.T)
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
 
-	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Detections, 1)
 	require.Equal(t, "unreviewed", listed.Detections[0].Access.State)
@@ -159,7 +159,7 @@ func TestService_ListAIDetections_ProjectReaderIsRefused(t *testing.T) {
 
 	seedAIDetection(t, ctx, ti, clone.ActiveOrganizationID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
 
-	_, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil, ProjectSlugInput: nil})
+	_, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
 	require.Error(t, err, "project read does not open the organization-wide inventory")
 }
 
@@ -167,16 +167,29 @@ func TestService_ListAIDetections_ProjectReaderIsRefused(t *testing.T) {
 // already named the one employee it answers for. It carries the same model,
 // though, and that model now holds an access decision — so the administrator
 // who recorded it does not ride along.
+//
+// The decision has to be real for this to prove anything: with no row, the
+// three fields are nil whatever the redaction does.
 func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
+	seedAIDetection(t, ctx, ti, orgID, "claude-code", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
+
+	saved, err := ti.service.SetAIToolDecision(ctx, &gen.SetAIToolDecisionPayload{
+		TargetID:     "claude-code",
+		Decision:     "blocked",
+		Rationale:    new("Not on the approved list."),
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, saved.Access.DecidedBy, "the administrator is recorded, and is what must not travel")
+
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	project := createShadowMCPProject(t, ctx, ti, orgID)
 	clone := *authCtx
-	clone.ActiveOrganizationID = "detections-test-org-" + uuid.NewString()
-	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
-	project := createShadowMCPProject(t, ctx, ti, clone.ActiveOrganizationID)
 	clone.ProjectID = &project.ID
 	ctx = contextvalues.SetAuthContext(ctx, &clone)
 	ctx = withRBACGrants(t, ctx, authz.Grant{
@@ -184,19 +197,16 @@ func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeProjectRead, project.ID.String()),
 	})
 
-	seedAIDetection(t, ctx, ti, clone.ActiveOrganizationID, "cursor", "serial-1", "alex@example.com", "installed", "harness", "", time.Now().UTC())
-
 	result, err := ti.service.ListEmployeeAIDetections(ctx, &gen.ListEmployeeAIDetectionsPayload{
-		UserEmail:        "alex@example.com",
-		SessionToken:     nil,
-		ProjectSlugInput: nil,
+		UserEmail:    "alex@example.com",
+		SessionToken: nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Detections, 1)
 
 	detection := result.Detections[0]
 	require.NotNil(t, detection.Access)
-	require.Equal(t, "unreviewed", detection.Access.State, "the state itself reaches no person")
+	require.Equal(t, "blocked", detection.Access.State, "the state itself reaches no person and stays")
 	require.Nil(t, detection.Access.DecidedBy)
 	require.Nil(t, detection.Access.DecidedAt)
 	require.Nil(t, detection.Access.Rationale)
@@ -226,7 +236,6 @@ func TestService_ListAIDetections_ProjectReaderCannotFilterByTeam(t *testing.T) 
 		Category:         nil,
 		DirectoryGroupID: new(groupID.String()),
 		SessionToken:     nil,
-		ProjectSlugInput: nil,
 	})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)

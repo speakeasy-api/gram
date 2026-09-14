@@ -3307,7 +3307,6 @@ func DecodeListAIDetectionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 			category         *string
 			directoryGroupID *string
 			sessionToken     *string
-			projectSlugInput *string
 			err              error
 		)
 		qp := r.URL.Query()
@@ -3331,26 +3330,15 @@ func DecodeListAIDetectionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
-		}
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListAIDetectionsPayload(category, directoryGroupID, sessionToken, projectSlugInput)
+		payload = NewListAIDetectionsPayload(category, directoryGroupID, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
 				payload.SessionToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 

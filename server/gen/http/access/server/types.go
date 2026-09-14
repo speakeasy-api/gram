@@ -10311,12 +10311,11 @@ func NewResolveShadowMCPInventoryRequestPayload(body *ResolveShadowMCPInventoryR
 
 // NewListAIDetectionsPayload builds a access service listAIDetections endpoint
 // payload.
-func NewListAIDetectionsPayload(category *string, directoryGroupID *string, sessionToken *string, projectSlugInput *string) *access.ListAIDetectionsPayload {
+func NewListAIDetectionsPayload(category *string, directoryGroupID *string, sessionToken *string) *access.ListAIDetectionsPayload {
 	v := &access.ListAIDetectionsPayload{}
 	v.Category = category
 	v.DirectoryGroupID = directoryGroupID
 	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

@@ -112,7 +112,6 @@ export function setAiDetectionsData(
       category?: Category | undefined;
       directoryGroupId?: string | undefined;
       gramSession?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: AiDetectionsQueryData,
@@ -129,7 +128,6 @@ export function invalidateAiDetections(
       category?: Category | undefined;
       directoryGroupId?: string | undefined;
       gramSession?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
