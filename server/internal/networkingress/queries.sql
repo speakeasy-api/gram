@@ -256,7 +256,8 @@ LIMIT LEAST(GREATEST(@page_size::integer, 1), 1000);
 -- name: SetNetworkIngressProviderResourcesForTest :execrows
 UPDATE network_ingresses
 SET provider_resources = @provider_resources::jsonb
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id;
 
 -- name: ClearDeletedNetworkIngressResources :execrows
 -- AIS-611 calls this only after every persisted provider resource is confirmed

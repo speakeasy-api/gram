@@ -22,7 +22,9 @@ const (
 	networkIngressSweepActivityAttempts = 3
 	// Three full attempts plus the 10s and 20s exponential backoffs.
 	networkIngressSweepActivityRetryBudget = networkIngressSweepActivityAttempts*networkIngressSweepActivityTimeout + 30*time.Second
-	networkIngressSweepExecutionTimeout    = 2 * networkIngressSweepActivityRetryBudget
+	// Leave room for workflow tasks and activity scheduling around both budgets.
+	networkIngressSweepWorkflowOverhead = 5 * time.Minute
+	networkIngressSweepExecutionTimeout = 2*networkIngressSweepActivityRetryBudget + networkIngressSweepWorkflowOverhead
 )
 
 func NetworkIngressSweepWorkflow(ctx workflow.Context) error {

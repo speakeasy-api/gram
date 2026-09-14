@@ -37,7 +37,8 @@ func TestNetworkIngressSweepWorkflowUsesCombinedActivityRetryBudgets(t *testing.
 
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, []string{"SweepNetworkIngresses", "FindNetworkIngressOrphans"}, activityNames)
-	require.Equal(t, 2*networkIngressSweepActivityRetryBudget, networkIngressSweepExecutionTimeout)
+	require.Greater(t, networkIngressSweepExecutionTimeout, 2*networkIngressSweepActivityRetryBudget)
+	require.Equal(t, networkIngressSweepWorkflowOverhead, networkIngressSweepExecutionTimeout-2*networkIngressSweepActivityRetryBudget)
 }
 
 func TestNetworkIngressSweepScheduleIsStableAcrossQueueChanges(t *testing.T) {

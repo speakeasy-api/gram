@@ -143,6 +143,21 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
 }
 
+func TestTailscaleNetworkIngressProxyPolicyOmitsIPv6InternetWithoutIPv6ClusterCIDRs(t *testing.T) {
+	t.Parallel()
+	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
+	provisioner.config.ClusterCIDRs = []string{"169.254.169.254/32", "10.0.0.0/8"}
+
+	policy := provisioner.proxyNetworkPolicy(desired)
+	for _, rule := range policy.Spec.Egress {
+		for _, peer := range rule.To {
+			if peer.IPBlock != nil {
+				require.NotEqual(t, "::/0", peer.IPBlock.CIDR)
+			}
+		}
+	}
+}
+
 func TestTailscaleNetworkIngressProxyPolicySeparatesAddressFamilies(t *testing.T) {
 	t.Parallel()
 	provisioner, _, _, desired := newTestTailscaleProvisioner(t)
@@ -297,6 +312,10 @@ func TestTailscaleNetworkIngressDeleteWaitsForAcceptedDeletion(t *testing.T) {
 	})
 	require.ErrorIs(t, provisioner.Delete(t.Context(), desired.Resources), ErrNetworkIngressDeletionPending)
 	_, err = typed.CoreV1().Services(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorService, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
+	require.True(t, k8serrors.IsNotFound(err))
+	_, err = typed.CoreV1().Secrets("tailscale").Get(t.Context(), desired.Resources.CredentialsSecret, metav1.GetOptions{})
 	require.NoError(t, err)
 }
 

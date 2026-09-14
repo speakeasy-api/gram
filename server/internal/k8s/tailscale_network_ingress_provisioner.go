@@ -279,114 +279,143 @@ func deleteOwnedDynamic(ctx context.Context, client dynamic.ResourceInterface, n
 	)
 }
 
+func runNetworkIngressDeletionPhase(deletes ...func() error) error {
+	pending := false
+	for _, remove := range deletes {
+		if err := remove(); err != nil {
+			if errors.Is(err, ErrNetworkIngressDeletionPending) {
+				pending = true
+				continue
+			}
+			return err
+		}
+	}
+	if pending {
+		return ErrNetworkIngressDeletionPending
+	}
+	return nil
+}
+
 func (p *TailscaleNetworkIngressProvisioner) Delete(ctx context.Context, resources NetworkIngressResourceNames) error {
 	if err := resources.Validate(); err != nil {
 		return err
 	}
 	ownerID := resources.OwnerID.String()
-	deletes := []func() error{
-		func() error { return p.deleteOwnedIngress(ctx, resources, "Ingress") },
-		func() error {
-			client := p.clientset.CoreV1().Services(resources.Namespace)
-			return deleteOwnedResource(ctx, resources.AttestorService, ownerID, "attestor Service", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.AppsV1().Deployments(resources.Namespace)
-			return deleteOwnedResource(ctx, resources.AttestorDeployment, ownerID, "attestor Deployment", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupPolicyGVR).Namespace(resources.Namespace), resources.ProxyGroupPolicy, ownerID, "ProxyGroupPolicy")
-		},
-		func() error {
-			return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupGVR), resources.ProxyGroup, ownerID, "ProxyGroup")
-		},
-		// Foreground deletion retains controllers until their dependents are gone.
-		// Also wait for remaining pods before removing credentials or isolation.
-		func() error {
-			pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return fmt.Errorf("list attestor pods before teardown: %w", err)
-			}
-			if len(pods.Items) != 0 {
-				return fmt.Errorf("%w: attestor pods", ErrNetworkIngressDeletionPending)
-			}
-			selector := labels.Set{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: resources.ProxyGroup}.String()
-			pods, err = p.clientset.CoreV1().Pods(p.config.OperatorNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
-			if err != nil {
-				return fmt.Errorf("list proxy pods before teardown: %w", err)
-			}
-			if len(pods.Items) != 0 {
-				return fmt.Errorf("%w: proxy pods", ErrNetworkIngressDeletionPending)
-			}
-			return nil
-		},
-		func() error {
-			return deleteOwnedDynamic(ctx, p.dynamic.Resource(tailnetGVR), resources.Tailnet, ownerID, "Tailnet")
-		},
-		func() error {
-			client := p.clientset.CoreV1().Secrets(p.config.OperatorNamespace)
-			return deleteOwnedResource(ctx, resources.CredentialsSecret, ownerID, "OAuth Secret", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.CoreV1().Secrets(resources.Namespace)
-			return deleteOwnedResource(ctx, resources.AttestorCASecret, ownerID, "attestor CA Secret", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.CoreV1().ServiceAccounts(resources.Namespace)
-			return deleteOwnedResource(ctx, resources.AttestorServiceAccount, ownerID, "attestor ServiceAccount", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.NetworkingV1().NetworkPolicies(resources.Namespace)
-			return deleteOwnedResource(ctx, resources.AttestorNetworkPolicy, ownerID, "attestor NetworkPolicy", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.NetworkingV1().NetworkPolicies(p.config.OperatorNamespace)
-			return deleteOwnedResource(ctx, resources.ProxyNetworkPolicy, ownerID, "proxy NetworkPolicy", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
-		func() error {
-			client := p.clientset.CoreV1().Namespaces()
-			return deleteOwnedResource(ctx, resources.Namespace, ownerID, "namespace", func(ctx context.Context, name string) (metav1.Object, error) {
-				return client.Get(ctx, name, metav1.GetOptions{})
-			}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
-				return client.Delete(ctx, name, options)
-			})
-		},
+	deleteIngress := func() error { return p.deleteOwnedIngress(ctx, resources, "Ingress") }
+	deleteAttestorService := func() error {
+		client := p.clientset.CoreV1().Services(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorService, ownerID, "attestor Service", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
 	}
-	// Later resources are dependencies of earlier resources' finalizers.
-	for _, remove := range deletes {
-		if err := remove(); err != nil {
-			return err
+	deleteAttestorDeployment := func() error {
+		client := p.clientset.AppsV1().Deployments(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorDeployment, ownerID, "attestor Deployment", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteProxyGroupPolicy := func() error {
+		return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupPolicyGVR).Namespace(resources.Namespace), resources.ProxyGroupPolicy, ownerID, "ProxyGroupPolicy")
+	}
+	deleteProxyGroup := func() error {
+		return deleteOwnedDynamic(ctx, p.dynamic.Resource(proxyGroupGVR), resources.ProxyGroup, ownerID, "ProxyGroup")
+	}
+	// Foreground deletion retains controllers until their dependents are gone.
+	// Also wait for remaining pods before removing credentials or isolation.
+	waitForPods := func() error {
+		pods, err := p.clientset.CoreV1().Pods(resources.Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("list attestor pods before teardown: %w", err)
 		}
+		if len(pods.Items) != 0 {
+			return fmt.Errorf("%w: attestor pods", ErrNetworkIngressDeletionPending)
+		}
+		selector := labels.Set{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: resources.ProxyGroup}.String()
+		pods, err = p.clientset.CoreV1().Pods(p.config.OperatorNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			return fmt.Errorf("list proxy pods before teardown: %w", err)
+		}
+		if len(pods.Items) != 0 {
+			return fmt.Errorf("%w: proxy pods", ErrNetworkIngressDeletionPending)
+		}
+		return nil
 	}
-	return nil
+	deleteTailnet := func() error {
+		return deleteOwnedDynamic(ctx, p.dynamic.Resource(tailnetGVR), resources.Tailnet, ownerID, "Tailnet")
+	}
+	deleteCredentialsSecret := func() error {
+		client := p.clientset.CoreV1().Secrets(p.config.OperatorNamespace)
+		return deleteOwnedResource(ctx, resources.CredentialsSecret, ownerID, "OAuth Secret", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteAttestorCASecret := func() error {
+		client := p.clientset.CoreV1().Secrets(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorCASecret, ownerID, "attestor CA Secret", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteAttestorServiceAccount := func() error {
+		client := p.clientset.CoreV1().ServiceAccounts(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorServiceAccount, ownerID, "attestor ServiceAccount", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteAttestorNetworkPolicy := func() error {
+		client := p.clientset.NetworkingV1().NetworkPolicies(resources.Namespace)
+		return deleteOwnedResource(ctx, resources.AttestorNetworkPolicy, ownerID, "attestor NetworkPolicy", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteProxyNetworkPolicy := func() error {
+		client := p.clientset.NetworkingV1().NetworkPolicies(p.config.OperatorNamespace)
+		return deleteOwnedResource(ctx, resources.ProxyNetworkPolicy, ownerID, "proxy NetworkPolicy", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+	deleteNamespace := func() error {
+		client := p.clientset.CoreV1().Namespaces()
+		return deleteOwnedResource(ctx, resources.Namespace, ownerID, "namespace", func(ctx context.Context, name string) (metav1.Object, error) {
+			return client.Get(ctx, name, metav1.GetOptions{})
+		}, func(ctx context.Context, name string, options metav1.DeleteOptions) error {
+			return client.Delete(ctx, name, options)
+		})
+	}
+
+	// Initiate all independent deletions in each named phase, but do not cross a
+	// dependency barrier until every resource in the preceding phase is absent.
+	controllerPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment, deleteProxyGroupPolicy}
+	if err := runNetworkIngressDeletionPhase(controllerPhase...); err != nil {
+		return err
+	}
+	if err := runNetworkIngressDeletionPhase(deleteProxyGroup); err != nil {
+		return err
+	}
+	if err := waitForPods(); err != nil {
+		return err
+	}
+	if err := runNetworkIngressDeletionPhase(deleteTailnet); err != nil {
+		return err
+	}
+	securityPhase := []func() error{deleteCredentialsSecret, deleteAttestorCASecret, deleteAttestorServiceAccount, deleteAttestorNetworkPolicy, deleteProxyNetworkPolicy}
+	if err := runNetworkIngressDeletionPhase(securityPhase...); err != nil {
+		return err
+	}
+	return runNetworkIngressDeletionPhase(deleteNamespace)
 }
 
 func parseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
@@ -675,10 +704,10 @@ func (p *TailscaleNetworkIngressProvisioner) proxyNetworkPolicy(desired NetworkI
 		rules = append(rules, networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: p.config.KubernetesAPICIDR}}}, Ports: []networkingv1.NetworkPolicyPort{{Protocol: new(corev1.ProtocolTCP), Port: new(intstr.FromInt32(p.config.KubernetesAPIPort))}}})
 	}
 	ipv4Exceptions, ipv6Exceptions := splitCIDRsByAddressFamily(p.config.ClusterCIDRs)
-	rules = append(rules,
-		networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: ipv4Exceptions}}}},
-		networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "::/0", Except: ipv6Exceptions}}}},
-	)
+	rules = append(rules, networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0", Except: ipv4Exceptions}}}})
+	if len(ipv6Exceptions) > 0 {
+		rules = append(rules, networkingv1.NetworkPolicyEgressRule{To: []networkingv1.NetworkPolicyPeer{{IPBlock: &networkingv1.IPBlock{CIDR: "::/0", Except: ipv6Exceptions}}}})
+	}
 	return &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.ProxyNetworkPolicy, Namespace: p.config.OperatorNamespace, Labels: ingressLabels(desired)}, Spec: networkingv1.NetworkPolicySpec{PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{tailscaleParentResourceType: "proxygroup", tailscaleParentResource: desired.Resources.ProxyGroup}}, PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress}, Egress: rules}}
 }
 

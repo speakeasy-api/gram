@@ -792,15 +792,17 @@ const setNetworkIngressProviderResourcesForTest = `-- name: SetNetworkIngressPro
 UPDATE network_ingresses
 SET provider_resources = $1::jsonb
 WHERE id = $2
+  AND organization_id = $3
 `
 
 type SetNetworkIngressProviderResourcesForTestParams struct {
 	ProviderResources []byte
 	ID                uuid.UUID
+	OrganizationID    string
 }
 
 func (q *Queries) SetNetworkIngressProviderResourcesForTest(ctx context.Context, arg SetNetworkIngressProviderResourcesForTestParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setNetworkIngressProviderResourcesForTest, arg.ProviderResources, arg.ID)
+	result, err := q.db.Exec(ctx, setNetworkIngressProviderResourcesForTest, arg.ProviderResources, arg.ID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}
