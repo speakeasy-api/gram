@@ -38,11 +38,12 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 
 	base := func() *Dataset {
 		return &Dataset{
-			Name:        "things",
-			Kind:        KindEvent,
-			Grain:       "one row per thing",
-			Description: "things",
-			TimeExpr:    "started_at",
+			Name:         "things",
+			Kind:         KindEvent,
+			Grain:        "one row per thing",
+			Description:  "things",
+			TimeExpr:     "started_at",
+			SummaryField: "",
 			Fields: []Field{
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id"},
 			},
@@ -66,6 +67,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
 		{name: "it rejects a dataset with no source query", mutate: func(d *Dataset) { d.Source = nil }, want: "no source query"},
 		{name: "it rejects an unknown kind", mutate: func(d *Dataset) { d.Kind = "table" }, want: "unknown kind"},
+		{name: "it rejects a summary field that is not a declared dimension", mutate: func(d *Dataset) { d.SummaryField = "nope" }, want: "summary field"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
