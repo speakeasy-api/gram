@@ -40,9 +40,13 @@ type Entry struct {
 	// Source is where the target comes from.
 	Source Source
 
-	// Customized is set on a default the organization has replaced with its
-	// own row, for example to disable it.
+	// Customized is set on a built-in the organization has a row for, for
+	// example to switch it off or to decide about it.
 	Customized bool
+
+	// Decision is the organization's standing access decision for the target.
+	// Unreviewed for one it has said nothing about.
+	Decision DecisionRecord
 
 	// CreatedAt is when the organization's row was created; zero for an
 	// untouched default.
@@ -54,9 +58,9 @@ type Entry struct {
 }
 
 // Overlay applies an organization's rows to the defaults: a row whose id
-// matches a default replaces that default and is marked customized, every
-// other row is an organization target, and the result is ordered by id.
-// Disabled entries are kept so the management surface can show them.
+// matches a built-in carries that organization's choices about it, every
+// other row is a target the organization added, and the result is ordered by
+// id. Disabled entries are kept so the management surface can show them.
 func Overlay(defaults []Target, rows []Entry) []Entry {
 	byID := make(map[string]Entry, len(rows))
 	for _, row := range rows {
@@ -65,6 +69,15 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 	entries := make([]Entry, 0, len(defaults)+len(rows))
 	for _, target := range defaults {
 		if row, ok := byID[target.ID]; ok {
+			// The built-in's own definition wins. A row under its id records
+			// only what the organization may choose — whether to scan for it
+			// and what it has decided about it — so a later registry revision
+			// still reaches an organization that has touched this one. Read
+			// the choice off the row before the definition replaces it: both
+			// live on the embedded Target.
+			enabled := row.Enabled
+			row.Target = target.Clone()
+			row.Enabled = enabled
 			row.Source = SourceDefault
 			row.Customized = true
 			entries = append(entries, row)
@@ -75,6 +88,7 @@ func Overlay(defaults []Target, rows []Entry) []Entry {
 			Target:     target.Clone(),
 			Source:     SourceDefault,
 			Customized: false,
+			Decision:   UnreviewedDecisionRecord(target.ID),
 			CreatedAt:  time.Time{},
 			UpdatedAt:  time.Time{},
 		})
@@ -172,6 +186,7 @@ func (l *OrganizationList) Entry(id string) (Entry, bool) {
 		Target:     ZeroTarget(),
 		Source:     "",
 		Customized: false,
+		Decision:   UnreviewedDecisionRecord(id),
 		CreatedAt:  time.Time{},
 		UpdatedAt:  time.Time{},
 	}, false
@@ -204,9 +219,11 @@ func EntryFromRow(row repo.AiScanTarget) Entry {
 	}
 	return Entry{
 		Target: Target{
-			ID:          row.ID,
-			DisplayName: row.DisplayName,
-			Category:    Category(row.Category),
+			ID: row.ID,
+			// Null on a row that only carries choices about a built-in.
+			// Overlay puts the built-in's own definition back over the top.
+			DisplayName: row.DisplayName.String,
+			Category:    Category(row.Category.String),
 			Signatures: Signatures{
 				BundleIDs:    orEmpty(row.BundleIds),
 				Binaries:     orEmpty(row.Binaries),
@@ -226,8 +243,35 @@ func EntryFromRow(row repo.AiScanTarget) Entry {
 		},
 		Source:     SourceOrganization,
 		Customized: false,
-		CreatedAt:  row.CreatedAt.Time,
-		UpdatedAt:  row.UpdatedAt.Time,
+		Decision: DecisionRecord{
+			TargetID:  row.ID,
+			Decision:  Decision(row.Status),
+			Rationale: row.Rationale.String,
+		},
+		CreatedAt: row.CreatedAt.Time,
+		UpdatedAt: row.UpdatedAt.Time,
+	}
+}
+
+// BuiltInUpsertParams writes only what an organization may choose about a
+// built-in: whether to scan for it. The definition columns stay null, so the
+// compiled-in definition is the only one and a later revision of it still
+// reaches this organization.
+func BuiltInUpsertParams(organizationID string, id string, enabled bool) repo.UpsertAIScanTargetParams {
+	return repo.UpsertAIScanTargetParams{
+		OrganizationID:  organizationID,
+		ID:              id,
+		DisplayName:     pgtype.Text{String: "", Valid: false},
+		Category:        pgtype.Text{String: "", Valid: false},
+		BundleIds:       []string{},
+		Binaries:        []string{},
+		ConfigDirs:      []string{},
+		ProcessNames:    []string{},
+		VersionPlistKey: pgtype.Text{String: "", Valid: false},
+		CimdVendorKeys:  []string{},
+		OauthClientIds:  []string{},
+		ClientInfoNames: []string{},
+		Enabled:         enabled,
 	}
 }
 
@@ -240,8 +284,8 @@ func UpsertParams(organizationID string, target Target) repo.UpsertAIScanTargetP
 	return repo.UpsertAIScanTargetParams{
 		OrganizationID:  organizationID,
 		ID:              target.ID,
-		DisplayName:     target.DisplayName,
-		Category:        string(target.Category),
+		DisplayName:     conv.ToPGTextEmpty(target.DisplayName),
+		Category:        conv.ToPGTextEmpty(string(target.Category)),
 		BundleIds:       orEmpty(target.Signatures.BundleIDs),
 		Binaries:        orEmpty(target.Signatures.Binaries),
 		ConfigDirs:      orEmpty(target.Signatures.ConfigDirs),

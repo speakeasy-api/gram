@@ -110,7 +110,13 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	if builtin, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin && !aitargets.SameDefinition(builtin, target) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target and cannot be edited; it can only be enabled or disabled", target.ID)
 	}
-	if _, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
+	// A built-in stores only the organization's choice about it; its
+	// definition is compiled in and stays there.
+	params := aitargets.UpsertParams(organizationID, target)
+	if _, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin {
+		params = aitargets.BuiltInUpsertParams(organizationID, target.ID, target.Enabled)
+	}
+	if _, err := queries.UpsertAIScanTarget(ctx, params); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)
 	}
 	list, err := aitargets.LoadOrganizationList(ctx, queries, organizationID)

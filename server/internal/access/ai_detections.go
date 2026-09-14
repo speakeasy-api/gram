@@ -111,10 +111,9 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		return nil, err
 	}
 	// The counts are about the employee the caller already named, so they say
-	// nothing new. Who recorded the access decision, when, and why is a
-	// different person entirely — an administrator — and naming them is not
-	// part of what this endpoint answers.
-	redactAIDecisionAttribution(result.Detections)
+	// nothing new. Why an administrator decided about a tool is a different
+	// matter, and not part of what this endpoint answers.
+	redactAIDecisionRationale(result.Detections)
 	return result, nil
 }
 
@@ -127,20 +126,16 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 	// Trouble reading the organization's scan targets degrades to the stored
 	// ids and categories.
 	queries := agentrepo.New(s.db)
-	catalog := aitargets.NewSnapshot(0, nil)
+	// The target and what the organization decided about it come off one row,
+	// so one read covers both. Trouble reading it degrades rather than fails:
+	// tools list under their stored ids and read unreviewed. Nothing is
+	// enforced from here, so a degraded status column beats no inventory.
+	var catalog *aitargets.OrganizationList
 	if list, err := aitargets.LoadOrganizationList(ctx, queries, params.OrganizationID); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; listing detections as stored", attr.SlogError(err))
+		catalog = &aitargets.OrganizationList{Entries: nil, Snapshot: aitargets.NewSnapshot(0, nil)}
 	} else {
-		catalog = list.Snapshot
-	}
-
-	// Trouble reading decisions degrades the same way: every tool reads as
-	// unreviewed rather than the list failing. Nothing is enforced from this
-	// read, so a degraded status column is strictly better than no inventory.
-	decisions, err := aitargets.LoadDecisions(ctx, queries, params.OrganizationID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "ai tool decisions unavailable; listing detections as unreviewed", attr.SlogError(err))
-		decisions = nil
+		catalog = list
 	}
 
 	detections := make([]*gen.AIDetection, 0, len(rows))
@@ -152,10 +147,12 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 		// target is the honest input for the access summary there: nothing
 		// matches a caller to it any more, so nothing is enforceable.
 		target := aitargets.ZeroTarget()
-		if known, ok := catalog.ByID(row.TargetID); ok {
-			target = known
-			displayName = known.DisplayName
-			category = string(known.Category)
+		decision := aitargets.UnreviewedDecisionRecord(row.TargetID)
+		if entry, ok := catalog.Entry(row.TargetID); ok {
+			target = entry.Target
+			decision = entry.Decision
+			displayName = entry.DisplayName
+			category = string(entry.Category)
 		}
 		detections = append(detections, &gen.AIDetection{
 			TargetID:    row.TargetID,
@@ -167,7 +164,7 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 			Versions:    row.Versions,
 			FirstSeen:   formatTimeValue(row.FirstSeen),
 			LastSeen:    formatTimeValue(row.LastSeen),
-			Access:      aiToolAccessView(aitargets.SummarizeAccess(target, aitargets.Decisions(decisions, row.TargetID)), true),
+			Access:      aiToolAccessView(aitargets.SummarizeAccess(target, decision)),
 		})
 	}
 

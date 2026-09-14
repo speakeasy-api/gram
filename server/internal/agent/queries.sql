@@ -325,6 +325,11 @@ WHERE organization_id = @organization_id
   AND id = @id
 FOR UPDATE;
 
+-- The definition and the organization's status are written by different
+-- endpoints, so neither upsert touches the other's columns: adding a target
+-- must not silently clear a standing block, and blocking one must not wipe
+-- the signatures agents scan for.
+
 -- name: UpsertAIScanTarget :one
 INSERT INTO ai_scan_targets (
   organization_id,
@@ -344,8 +349,8 @@ INSERT INTO ai_scan_targets (
 VALUES (
   @organization_id,
   @id,
-  @display_name,
-  @category,
+  sqlc.narg('display_name'),
+  sqlc.narg('category'),
   @bundle_ids::text[],
   @binaries::text[],
   @config_dirs::text[],
@@ -371,75 +376,37 @@ SET display_name = EXCLUDED.display_name
   , updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+VALUES (@organization_id, @id, @status, sqlc.narg('rationale'))
+ON CONFLICT (organization_id, id) DO UPDATE
+SET status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING *;
+
 -- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = @organization_id
   AND id = @id
 RETURNING *;
 
--- An organization's access decisions for its Shadow AI scan targets: whether
--- a detected tool may reach Gram's MCP gateway. Absent rows read as
--- unreviewed, so the defaults need no backfill.
-
--- name: ListAIToolDecisions :many
-SELECT *
-FROM ai_tool_decisions
-WHERE organization_id = @organization_id
-ORDER BY target_id;
-
 -- The gateway hot path asks only "does this organization block anything?".
 -- Nearly every organization answers with an empty set, and that answer costs
 -- one indexed lookup rather than loading the whole scan-target catalog.
 
--- name: ListBlockedDeviceAgentAITargetIDs :many
-SELECT target_id
-FROM ai_tool_decisions
+-- name: ListBlockedAITargetIDs :many
+SELECT id
+FROM ai_scan_targets
 WHERE organization_id = @organization_id
-  AND decision = 'blocked'
-ORDER BY target_id;
+  AND status = 'blocked'
+ORDER BY id;
 
--- Serializes an organization's AI tool decision writes. Transaction-scoped.
--- FOR UPDATE below cannot lock a row that does not exist yet, so without this
--- two admins deciding the same undecided target both read "unreviewed" and
--- both audit a transition from it; the second one's record would claim the
--- first never happened.
-
--- name: AcquireAIToolDecisionsLock :exec
-SELECT pg_advisory_xact_lock(hashtextextended('ai_tool_decisions:' || @organization_id::text, 0));
-
--- name: GetAIToolDecisionForUpdate :one
-SELECT *
-FROM ai_tool_decisions
-WHERE organization_id = @organization_id
-  AND target_id = @target_id
-FOR UPDATE;
-
--- name: UpsertAIToolDecision :one
-INSERT INTO ai_tool_decisions (
-  organization_id,
-  target_id,
-  decision,
-  rationale,
-  decided_by,
-  decided_at
-)
-VALUES (
-  @organization_id,
-  @target_id,
-  @decision,
-  sqlc.narg('rationale'),
-  @decided_by,
-  clock_timestamp()
-)
-ON CONFLICT (organization_id, target_id) DO UPDATE
-SET decision = EXCLUDED.decision
-  , rationale = EXCLUDED.rationale
-  , decided_by = EXCLUDED.decided_by
-  , decided_at = EXCLUDED.decided_at
-  , updated_at = clock_timestamp()
-RETURNING *;
-
--- Serializes an organization's scan target writes. Transaction-scoped.
+-- Serializes an organization's scan target writes, definition and status
+-- alike. Transaction-scoped, and taken before the reads that validate a write
+-- so a concurrent edit cannot invalidate them between check and commit.
+-- FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+-- lock, so two writers would both read absence and both act on it.
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));

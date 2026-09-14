@@ -179,12 +179,10 @@ type AIToolAccessSummary struct {
 	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
 	// admin is never told a tool is blocked when it is not.
 	Enforceable bool
-	// Why the decision was made, when an admin gave a reason.
+	// Why the decision was made, when an admin gave a reason. Who recorded it and
+	// when are in the audit log rather than here, so there is one record of that
+	// and not two.
 	Rationale *string
-	// URN of the admin who last recorded the decision.
-	DecidedBy *string
-	// When the decision was last recorded.
-	DecidedAt *string
 }
 
 // AccessMember is the result type of the access service updateMemberRoles

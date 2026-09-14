@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
@@ -44,14 +43,6 @@ export type AIToolAccessSummaryState = ClosedEnum<
  */
 export type AIToolAccessSummary = {
   /**
-   * When the decision was last recorded.
-   */
-  decidedAt?: Date | undefined;
-  /**
-   * URN of the admin who last recorded the decision.
-   */
-  decidedBy?: string | undefined;
-  /**
    * The recorded organization decision behind state. Absent rows read as unreviewed, so every tool has one.
    */
   decision: AIToolAccessSummaryDecision;
@@ -60,7 +51,7 @@ export type AIToolAccessSummary = {
    */
   enforceable: boolean;
   /**
-   * Why the decision was made, when an admin gave a reason.
+   * Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.
    */
   rationale?: string | undefined;
   /**
@@ -83,24 +74,12 @@ export const AIToolAccessSummaryState$inboundSchema: z.ZodMiniEnum<
 export const AIToolAccessSummary$inboundSchema: z.ZodMiniType<
   AIToolAccessSummary,
   unknown
-> = z.pipe(
-  z.object({
-    decided_at: z.optional(
-      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
-    ),
-    decided_by: z.optional(z.string()),
-    decision: AIToolAccessSummaryDecision$inboundSchema,
-    enforceable: z.boolean(),
-    rationale: z.optional(z.string()),
-    state: AIToolAccessSummaryState$inboundSchema,
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "decided_at": "decidedAt",
-      "decided_by": "decidedBy",
-    });
-  }),
-);
+> = z.object({
+  decision: AIToolAccessSummaryDecision$inboundSchema,
+  enforceable: z.boolean(),
+  rationale: z.optional(z.string()),
+  state: AIToolAccessSummaryState$inboundSchema,
+});
 
 export function aiToolAccessSummaryFromJSON(
   jsonString: string,

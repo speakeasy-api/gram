@@ -17,24 +17,13 @@ const acquireAIScanTargetsLock = `-- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || $1::text, 0))
 `
 
-// Serializes an organization's scan target writes. Transaction-scoped.
+// Serializes an organization's scan target writes, definition and status
+// alike. Transaction-scoped, and taken before the reads that validate a write
+// so a concurrent edit cannot invalidate them between check and commit.
+// FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+// lock, so two writers would both read absence and both act on it.
 func (q *Queries) AcquireAIScanTargetsLock(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, acquireAIScanTargetsLock, organizationID)
-	return err
-}
-
-const acquireAIToolDecisionsLock = `-- name: AcquireAIToolDecisionsLock :exec
-
-SELECT pg_advisory_xact_lock(hashtextextended('ai_tool_decisions:' || $1::text, 0))
-`
-
-// Serializes an organization's AI tool decision writes. Transaction-scoped.
-// FOR UPDATE below cannot lock a row that does not exist yet, so without this
-// two admins deciding the same undecided target both read "unreviewed" and
-// both audit a transition from it; the second one's record would claim the
-// first never happened.
-func (q *Queries) AcquireAIToolDecisionsLock(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, acquireAIToolDecisionsLock, organizationID)
 	return err
 }
 
@@ -94,7 +83,7 @@ const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
 `
 
 type DeleteAIScanTargetParams struct {
@@ -119,6 +108,8 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
 		&i.Enabled,
+		&i.Status,
+		&i.Rationale,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -126,7 +117,7 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 }
 
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
   AND id = $2
@@ -155,35 +146,8 @@ func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTar
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
 		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getAIToolDecisionForUpdate = `-- name: GetAIToolDecisionForUpdate :one
-SELECT organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
-FROM ai_tool_decisions
-WHERE organization_id = $1
-  AND target_id = $2
-FOR UPDATE
-`
-
-type GetAIToolDecisionForUpdateParams struct {
-	OrganizationID string
-	TargetID       string
-}
-
-func (q *Queries) GetAIToolDecisionForUpdate(ctx context.Context, arg GetAIToolDecisionForUpdateParams) (AiToolDecision, error) {
-	row := q.db.QueryRow(ctx, getAIToolDecisionForUpdate, arg.OrganizationID, arg.TargetID)
-	var i AiToolDecision
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.TargetID,
-		&i.Decision,
+		&i.Status,
 		&i.Rationale,
-		&i.DecidedBy,
-		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -516,7 +480,7 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 
 const listAIScanTargets = `-- name: ListAIScanTargets :many
 
-SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
 FROM ai_scan_targets
 WHERE organization_id = $1
 ORDER BY id
@@ -548,46 +512,8 @@ func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) 
 			&i.OauthClientIds,
 			&i.ClientInfoNames,
 			&i.Enabled,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAIToolDecisions = `-- name: ListAIToolDecisions :many
-
-SELECT organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
-FROM ai_tool_decisions
-WHERE organization_id = $1
-ORDER BY target_id
-`
-
-// An organization's access decisions for its Shadow AI scan targets: whether
-// a detected tool may reach Gram's MCP gateway. Absent rows read as
-// unreviewed, so the defaults need no backfill.
-func (q *Queries) ListAIToolDecisions(ctx context.Context, organizationID string) ([]AiToolDecision, error) {
-	rows, err := q.db.Query(ctx, listAIToolDecisions, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []AiToolDecision
-	for rows.Next() {
-		var i AiToolDecision
-		if err := rows.Scan(
-			&i.OrganizationID,
-			&i.TargetID,
-			&i.Decision,
+			&i.Status,
 			&i.Rationale,
-			&i.DecidedBy,
-			&i.DecidedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -601,31 +527,31 @@ func (q *Queries) ListAIToolDecisions(ctx context.Context, organizationID string
 	return items, nil
 }
 
-const listBlockedDeviceAgentAITargetIDs = `-- name: ListBlockedDeviceAgentAITargetIDs :many
+const listBlockedAITargetIDs = `-- name: ListBlockedAITargetIDs :many
 
-SELECT target_id
-FROM ai_tool_decisions
+SELECT id
+FROM ai_scan_targets
 WHERE organization_id = $1
-  AND decision = 'blocked'
-ORDER BY target_id
+  AND status = 'blocked'
+ORDER BY id
 `
 
 // The gateway hot path asks only "does this organization block anything?".
 // Nearly every organization answers with an empty set, and that answer costs
 // one indexed lookup rather than loading the whole scan-target catalog.
-func (q *Queries) ListBlockedDeviceAgentAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
-	rows, err := q.db.Query(ctx, listBlockedDeviceAgentAITargetIDs, organizationID)
+func (q *Queries) ListBlockedAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listBlockedAITargetIDs, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var items []string
 	for rows.Next() {
-		var target_id string
-		if err := rows.Scan(&target_id); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, target_id)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -730,7 +656,55 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
+const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
+`
+
+type SetAIScanTargetStatusParams struct {
+	OrganizationID string
+	ID             string
+	Status         string
+	Rationale      pgtype.Text
+}
+
+func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTargetStatusParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, setAIScanTargetStatus,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Status,
+		arg.Rationale,
+	)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Enabled,
+		&i.Status,
+		&i.Rationale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertAIScanTarget = `-- name: UpsertAIScanTarget :one
+
 INSERT INTO ai_scan_targets (
   organization_id,
   id,
@@ -774,14 +748,14 @@ SET display_name = EXCLUDED.display_name
   , client_info_names = EXCLUDED.client_info_names
   , enabled = EXCLUDED.enabled
   , updated_at = clock_timestamp()
-RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, created_at, updated_at
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, enabled, status, rationale, created_at, updated_at
 `
 
 type UpsertAIScanTargetParams struct {
 	OrganizationID  string
 	ID              string
-	DisplayName     string
-	Category        string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
 	BundleIds       []string
 	Binaries        []string
 	ConfigDirs      []string
@@ -793,6 +767,10 @@ type UpsertAIScanTargetParams struct {
 	Enabled         bool
 }
 
+// The definition and the organization's status are written by different
+// endpoints, so neither upsert touches the other's columns: adding a target
+// must not silently clear a standing block, and blocking one must not wipe
+// the signatures agents scan for.
 func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
 	row := q.db.QueryRow(ctx, upsertAIScanTarget,
 		arg.OrganizationID,
@@ -824,62 +802,8 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 		&i.OauthClientIds,
 		&i.ClientInfoNames,
 		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertAIToolDecision = `-- name: UpsertAIToolDecision :one
-INSERT INTO ai_tool_decisions (
-  organization_id,
-  target_id,
-  decision,
-  rationale,
-  decided_by,
-  decided_at
-)
-VALUES (
-  $1,
-  $2,
-  $3,
-  $4,
-  $5,
-  clock_timestamp()
-)
-ON CONFLICT (organization_id, target_id) DO UPDATE
-SET decision = EXCLUDED.decision
-  , rationale = EXCLUDED.rationale
-  , decided_by = EXCLUDED.decided_by
-  , decided_at = EXCLUDED.decided_at
-  , updated_at = clock_timestamp()
-RETURNING organization_id, target_id, decision, rationale, decided_by, decided_at, created_at, updated_at
-`
-
-type UpsertAIToolDecisionParams struct {
-	OrganizationID string
-	TargetID       string
-	Decision       string
-	Rationale      pgtype.Text
-	DecidedBy      pgtype.Text
-}
-
-func (q *Queries) UpsertAIToolDecision(ctx context.Context, arg UpsertAIToolDecisionParams) (AiToolDecision, error) {
-	row := q.db.QueryRow(ctx, upsertAIToolDecision,
-		arg.OrganizationID,
-		arg.TargetID,
-		arg.Decision,
-		arg.Rationale,
-		arg.DecidedBy,
-	)
-	var i AiToolDecision
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.TargetID,
-		&i.Decision,
+		&i.Status,
 		&i.Rationale,
-		&i.DecidedBy,
-		&i.DecidedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

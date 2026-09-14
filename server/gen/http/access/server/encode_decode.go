@@ -6192,8 +6192,6 @@ func marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *access
 		Decision:    v.Decision,
 		Enforceable: v.Enforceable,
 		Rationale:   v.Rationale,
-		DecidedBy:   v.DecidedBy,
-		DecidedAt:   v.DecidedAt,
 	}
 
 	return res

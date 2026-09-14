@@ -86,7 +86,7 @@ func (s *Service) checkAIToolGatewayBlock(ctx context.Context, logger *slog.Logg
 	}
 
 	queries := agentrepo.New(s.db)
-	blocked, err := queries.ListBlockedDeviceAgentAITargetIDs(ctx, organizationID)
+	blocked, err := queries.ListBlockedAITargetIDs(ctx, organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "ai tool gateway block unavailable; allowing the connection", attr.SlogError(err))
 		return nil

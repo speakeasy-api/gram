@@ -2,10 +2,7 @@ package access
 
 import (
 	"context"
-	"errors"
 	"strings"
-
-	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -47,10 +44,11 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := agentrepo.New(dbtx)
-	// Taken before the read below, which cannot lock a decision that has no
-	// row yet: two admins deciding the same undecided target would otherwise
-	// both audit a transition out of unreviewed.
-	if err := queries.AcquireAIToolDecisionsLock(ctx, organizationID); err != nil {
+	// One lock covers the catalog and the decisions on it, because they are
+	// one row. Held across the checks below so a concurrent edit cannot make
+	// them stale before the write lands, and so two admins deciding the same
+	// undecided target cannot both audit a transition out of unreviewed.
+	if err := queries.AcquireAIScanTargetsLock(ctx, organizationID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize ai tool decision update").LogError(ctx, s.logger)
 	}
 
@@ -76,29 +74,19 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Gram cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
 	}
 
-	before := aitargets.UnreviewedDecisionRecord(targetID)
-	switch row, err := queries.GetAIToolDecisionForUpdate(ctx, agentrepo.GetAIToolDecisionForUpdateParams{
-		OrganizationID: organizationID,
-		TargetID:       targetID,
-	}); {
-	case err == nil:
-		before = aitargets.DecisionRecordFromRow(row)
-	case !errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeUnexpected, err, "read existing ai tool decision").LogError(ctx, s.logger)
-	}
+	before := entry.Decision
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	saved, err := queries.UpsertAIToolDecision(ctx, agentrepo.UpsertAIToolDecisionParams{
+	saved, err := queries.SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
 		OrganizationID: organizationID,
-		TargetID:       targetID,
-		Decision:       string(decision),
+		ID:             targetID,
+		Status:         string(decision),
 		Rationale:      conv.ToPGTextEmpty(rationale),
-		DecidedBy:      conv.ToPGTextEmpty(actor.String()),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai tool decision").LogError(ctx, s.logger)
 	}
-	after := aitargets.DecisionRecordFromRow(saved)
+	after := aitargets.EntryFromRow(saved).Decision
 
 	if err := s.audit.LogAIToolDecisionSet(ctx, dbtx, audit.LogAIToolDecisionSetEvent{
 		OrganizationID:         organizationID,
@@ -118,27 +106,16 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 
 	return &gen.SetAIToolDecisionResult{
 		TargetID: targetID,
-		Access:   aiToolAccessView(aitargets.SummarizeAccess(entry.Target, after), true),
+		Access:   aiToolAccessView(aitargets.SummarizeAccess(entry.Target, after)),
 	}, nil
 }
 
-// aiToolAccessView renders an access summary. attributed is false for the
-// project-read projection, which sees the verdict but not who reached it or
-// why — the same split the detection counts are held to.
-func aiToolAccessView(summary aitargets.AccessSummary, attributed bool) *gen.AIToolAccessSummary {
-	view := &gen.AIToolAccessSummary{
+// aiToolAccessView renders an access summary.
+func aiToolAccessView(summary aitargets.AccessSummary) *gen.AIToolAccessSummary {
+	return &gen.AIToolAccessSummary{
 		State:       string(summary.State),
 		Decision:    string(summary.Decision),
 		Enforceable: summary.Enforceable,
-		Rationale:   nil,
-		DecidedBy:   nil,
-		DecidedAt:   nil,
+		Rationale:   conv.PtrEmpty(summary.Record.Rationale),
 	}
-	if !attributed {
-		return view
-	}
-	view.Rationale = conv.PtrEmpty(summary.Record.Rationale)
-	view.DecidedBy = conv.PtrEmpty(summary.Record.DecidedBy)
-	view.DecidedAt = formatOptionalTimeValue(summary.Record.DecidedAt)
-	return view
 }

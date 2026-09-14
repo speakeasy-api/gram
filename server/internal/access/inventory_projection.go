@@ -32,20 +32,18 @@ func (s *Service) requireLiveOrgAdmin(ctx context.Context, ac *contextvalues.Aut
 	return nil
 }
 
-// redactAIDecisionAttribution drops who recorded an access decision and why.
+// redactAIDecisionRationale drops the reason behind an access decision.
 //
 // Every other reader of gen.AIDetection is an org admin. listEmployeeAIDetections
-// is not: it answers for one named employee to anyone who can read the project,
-// and the decision record it now carries names an administrator. The state
-// itself stays — that a tool is blocked is the useful half and nothing about it
-// reaches a person.
-func redactAIDecisionAttribution(detections []*gen.AIDetection) {
+// is not: it answers for one named employee to anyone who can read the project.
+// The rationale is free text an administrator wrote for other administrators,
+// and it routinely names people and internal threads. The state itself stays —
+// that a tool is blocked is the useful half and reaches no person.
+func redactAIDecisionRationale(detections []*gen.AIDetection) {
 	for _, detection := range detections {
 		if detection.Access == nil {
 			continue
 		}
-		detection.Access.DecidedBy = nil
-		detection.Access.DecidedAt = nil
 		detection.Access.Rationale = nil
 	}
 }

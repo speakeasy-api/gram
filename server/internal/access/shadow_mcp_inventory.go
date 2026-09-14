@@ -119,17 +119,6 @@ func formatTimeValue(ts time.Time) string {
 	return ts.UTC().Format(time.RFC3339)
 }
 
-// formatOptionalTimeValue renders a timestamp, or nothing for the zero value.
-// Unlike formatTimeValue it distinguishes "never" from "the epoch", which is
-// what an undecided row needs.
-func formatOptionalTimeValue(ts time.Time) *string {
-	if ts.IsZero() {
-		return nil
-	}
-	formatted := ts.UTC().Format(time.RFC3339)
-	return &formatted
-}
-
 // ShadowMCPInventoryReadInput identifies a project-scoped inventory page for a trusted internal caller.
 type ShadowMCPInventoryReadInput struct {
 	OrganizationID string

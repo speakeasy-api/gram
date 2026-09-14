@@ -67516,13 +67516,6 @@ components:
     AIToolAccessSummary:
       type: object
       properties:
-        decided_at:
-          type: string
-          description: When the decision was last recorded.
-          format: date-time
-        decided_by:
-          type: string
-          description: URN of the admin who last recorded the decision.
         decision:
           type: string
           description: The recorded organization decision behind state. Absent rows read as unreviewed, so every tool has one.
@@ -67535,7 +67528,7 @@ components:
           description: 'Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.'
         rationale:
           type: string
-          description: Why the decision was made, when an admin gave a reason.
+          description: Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.
         state:
           type: string
           description: 'The decision as a table renders it: allowed and blocked are the recorded organization decision, unreviewed means nobody has decided and nothing is enforced.'

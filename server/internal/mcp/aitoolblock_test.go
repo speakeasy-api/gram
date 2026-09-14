@@ -49,12 +49,11 @@ func seedCIMDClient(t *testing.T, ctx context.Context, ti *testInstance, issuerI
 func blockTarget(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, targetID string) {
 	t.Helper()
 
-	_, err := agentrepo.New(ti.conn).UpsertAIToolDecision(ctx, agentrepo.UpsertAIToolDecisionParams{
+	_, err := agentrepo.New(ti.conn).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
 		OrganizationID: organizationID,
-		TargetID:       targetID,
-		Decision:       "blocked",
+		ID:             targetID,
+		Status:         "blocked",
 		Rationale:      conv.ToPGTextEmpty("not approved"),
-		DecidedBy:      conv.ToPGTextEmpty("urn:gram:principal:user:admin"),
 	})
 	require.NoError(t, err)
 }

@@ -11,8 +11,8 @@ import (
 type AiScanTarget struct {
 	OrganizationID  string
 	ID              string
-	DisplayName     string
-	Category        string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
 	BundleIds       []string
 	Binaries        []string
 	ConfigDirs      []string
@@ -22,19 +22,10 @@ type AiScanTarget struct {
 	OauthClientIds  []string
 	ClientInfoNames []string
 	Enabled         bool
+	Status          string
+	Rationale       pgtype.Text
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
-}
-
-type AiToolDecision struct {
-	OrganizationID string
-	TargetID       string
-	Decision       string
-	Rationale      pgtype.Text
-	DecidedBy      pgtype.Text
-	DecidedAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {

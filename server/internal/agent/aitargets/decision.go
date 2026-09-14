@@ -1,13 +1,6 @@
 package aitargets
 
-import (
-	"context"
-	"fmt"
-	"slices"
-	"time"
-
-	"github.com/speakeasy-api/gram/server/internal/agent/repo"
-)
+import "slices"
 
 // Decision is an organization's access decision for one AI tool: whether it
 // may reach Gram's MCP gateway. Org-level per tool; a per-server override
@@ -31,60 +24,25 @@ func (d Decision) Valid() bool {
 	return slices.Contains(KnownDecisions(), d)
 }
 
-// DecisionRecord is one organization's recorded decision for one target, with
-// who recorded it. DecidedBy and DecidedAt are zero on a defaulted row.
+// DecisionRecord is one organization's standing decision for one target.
+//
+// Who set it and when are deliberately absent: the audit log answers those,
+// and keeping them here as well would be a second copy of the same fact that
+// nothing keeps in step.
 type DecisionRecord struct {
 	TargetID  string
 	Decision  Decision
 	Rationale string
-	DecidedBy string
-	DecidedAt time.Time
 }
 
-// UnreviewedDecisionRecord is what a target with no row resolves to.
+// UnreviewedDecisionRecord is what a target the organization has said nothing
+// about resolves to.
 func UnreviewedDecisionRecord(targetID string) DecisionRecord {
 	return DecisionRecord{
 		TargetID:  targetID,
 		Decision:  DecisionUnreviewed,
 		Rationale: "",
-		DecidedBy: "",
-		DecidedAt: time.Time{},
 	}
-}
-
-// DecisionRecordFromRow converts a stored row.
-func DecisionRecordFromRow(row repo.AiToolDecision) DecisionRecord {
-	return DecisionRecord{
-		TargetID:  row.TargetID,
-		Decision:  Decision(row.Decision),
-		Rationale: row.Rationale.String,
-		DecidedBy: row.DecidedBy.String,
-		DecidedAt: row.DecidedAt.Time,
-	}
-}
-
-// LoadDecisions reads an organization's recorded decisions, keyed by target
-// id. Targets with no row are absent from the map rather than filled in, so
-// callers can tell "never decided" from "decided as unreviewed"; Decisions
-// resolves either to the same Decision value.
-func LoadDecisions(ctx context.Context, queries *repo.Queries, organizationID string) (map[string]DecisionRecord, error) {
-	rows, err := queries.ListAIToolDecisions(ctx, organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("list ai target decisions: %w", err)
-	}
-	decisions := make(map[string]DecisionRecord, len(rows))
-	for _, row := range rows {
-		decisions[row.TargetID] = DecisionRecordFromRow(row)
-	}
-	return decisions, nil
-}
-
-// Decisions resolves one target's decision, defaulting to unreviewed.
-func Decisions(decisions map[string]DecisionRecord, targetID string) DecisionRecord {
-	if decision, ok := decisions[targetID]; ok {
-		return decision
-	}
-	return UnreviewedDecisionRecord(targetID)
 }
 
 // AccessState is the verdict a table cell renders. Shares its vocabulary with

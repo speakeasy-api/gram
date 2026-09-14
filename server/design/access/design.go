@@ -1222,12 +1222,7 @@ var AIToolAccessSummaryModel = Type("AIToolAccessSummary", func() {
 		Enum("unreviewed", "approved", "blocked")
 	})
 	Attribute("enforceable", Boolean, "Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.")
-	Attribute("rationale", String, "Why the decision was made, when an admin gave a reason.")
-	Attribute("decided_by", String, "URN of the admin who last recorded the decision.")
-	Attribute("decided_at", String, func() {
-		Description("When the decision was last recorded.")
-		Format(FormatDateTime)
-	})
+	Attribute("rationale", String, "Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.")
 })
 
 var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {

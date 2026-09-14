@@ -5526,12 +5526,10 @@ type AIToolAccessSummaryResponseBody struct {
 	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
 	// admin is never told a tool is blocked when it is not.
 	Enforceable *bool `form:"enforceable,omitempty" json:"enforceable,omitempty" xml:"enforceable,omitempty"`
-	// Why the decision was made, when an admin gave a reason.
+	// Why the decision was made, when an admin gave a reason. Who recorded it and
+	// when are in the audit log rather than here, so there is one record of that
+	// and not two.
 	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
-	// URN of the admin who last recorded the decision.
-	DecidedBy *string `form:"decided_by,omitempty" json:"decided_by,omitempty" xml:"decided_by,omitempty"`
-	// When the decision was last recorded.
-	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
 }
 
 // ResourceAudienceEntryResponseBody is used to define fields on response body
@@ -17717,9 +17715,6 @@ func ValidateAIToolAccessSummaryResponseBody(body *AIToolAccessSummaryResponseBo
 		if !(*body.Decision == "unreviewed" || *body.Decision == "approved" || *body.Decision == "blocked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"unreviewed", "approved", "blocked"}))
 		}
-	}
-	if body.DecidedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
 	}
 	return
 }

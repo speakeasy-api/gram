@@ -184,7 +184,7 @@ func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
 		SessionToken: nil,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, saved.Access.DecidedBy, "the administrator is recorded, and is what must not travel")
+	require.NotNil(t, saved.Access.Rationale, "the reason is recorded, and is what must not travel")
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -207,8 +207,6 @@ func TestService_ListEmployeeAIDetections_HidesWhoDecided(t *testing.T) {
 	detection := result.Detections[0]
 	require.NotNil(t, detection.Access)
 	require.Equal(t, "blocked", detection.Access.State, "the state itself reaches no person and stays")
-	require.Nil(t, detection.Access.DecidedBy)
-	require.Nil(t, detection.Access.DecidedAt)
 	require.Nil(t, detection.Access.Rationale)
 }
 
