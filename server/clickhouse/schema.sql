@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
     billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
     event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).',
-    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).'
+    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).',
+    mcp_client_name String MATERIALIZED toString(attributes.gram.mcp.client.name) COMMENT 'MCP client name self-reported at the initialize handshake or in the per-request _meta hint. Untrusted, attribution only. Empty for hook-observed and non-MCP traffic (materialized from attributes.gram.mcp.client.name).',
+    mcp_client_version String MATERIALIZED toString(attributes.gram.mcp.client.version) COMMENT 'MCP client version reported alongside mcp_client_name. Empty when the client reported a name but no version (materialized from attributes.gram.mcp.client.version).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -98,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_meta_mcp_server_id ON telemetry_logs (meta_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_client_name ON telemetry_logs (mcp_client_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
@@ -232,7 +235,13 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- Meta MCP server (Gateway Endpoint) the trace was dispatched through,
     -- materialized on telemetry_logs from attributes.gram.meta_mcp_server.id.
     -- Carried, not a sort key; max() keeps the non-empty value over empties.
-    meta_mcp_server_id SimpleAggregateFunction(max, String)
+    meta_mcp_server_id SimpleAggregateFunction(max, String),
+    -- MCP client identity, materialized on telemetry_logs from
+    -- attributes.gram.mcp.client.*. Only the tool_call row of a trace carries
+    -- it, so a non-empty value must win over empty siblings across part
+    -- merges, exactly as toolset_slug and meta_mcp_server_id do.
+    mcp_client_name SimpleAggregateFunction(max, String),
+    mcp_client_version SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -283,7 +292,9 @@ SELECT
     anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
     anyIf(account_type, account_type != '') AS account_type,
     anyIf(provider, provider != '') AS provider,
-    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id
+    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id,
+    anyIf(mcp_client_name, mcp_client_name != '') AS mcp_client_name,
+    anyIf(mcp_client_version, mcp_client_version != '') AS mcp_client_version
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
