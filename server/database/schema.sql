@@ -2992,6 +2992,15 @@ WHERE deleted IS FALSE
   AND refresh_token_encrypted IS NOT NULL
   AND auto_refresh IS TRUE;
 
+-- Keepalive re-check claim (AIM-285): the no-refresh-token population ordered by
+-- its due clock, so ClaimDueRemoteSessionRecheckCandidates range-scans instead of
+-- sequentially scanning the table every tick.
+CREATE INDEX IF NOT EXISTS remote_sessions_recheck_due_idx
+ON remote_sessions ((COALESCE(last_validated_at, created_at)), id)
+WHERE deleted IS FALSE
+  AND refresh_token_encrypted IS NULL
+  AND refresh_expires_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
