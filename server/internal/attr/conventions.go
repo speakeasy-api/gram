@@ -366,15 +366,21 @@ const (
 	// McpEntryPointKey is the bounded entry-point dimension on the
 	// mcp.toolset_slug_fallback counter: which public surface resolved a
 	// request through the legacy toolsets.mcp_slug lookup.
-	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
-	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
-	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
-	MetaMemberBackendKey          = attribute.Key("gram.meta.member.backend")
-	MetaDispatchOutcomeKey        = attribute.Key("gram.meta.dispatch.outcome")
-	McpURLKey                     = attribute.Key("gram.mcp.url")
+	McpEntryPointKey       = attribute.Key("gram.mcp.entry_point")
+	McpRequestedTagsKey    = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
+	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
+	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
+	McpURLKey              = attribute.Key("gram.mcp.url")
+	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
+	// self-reported identity from the initialize handshake (or the
+	// per-request _meta hint). Untrusted client input: attribution only,
+	// never authorization.
+	McpClientNameKey              = attribute.Key("gram.mcp.client.name")
+	McpClientVersionKey           = attribute.Key("gram.mcp.client.version")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
 	MimeTypeKey                   = attribute.Key("mime.type")
@@ -2370,6 +2376,14 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
+func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
+
+func McpClientVersion(v string) attribute.KeyValue { return McpClientVersionKey.String(v) }
+func SlogMcpClientVersion(v string) slog.Attr {
+	return slog.String(string(McpClientVersionKey), v)
+}
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }

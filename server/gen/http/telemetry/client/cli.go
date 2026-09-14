@@ -1267,7 +1267,7 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageSummaryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1350,6 +1350,12 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1365,7 +1371,7 @@ func BuildGetToolUsageTotalsPayload(telemetryGetToolUsageTotalsBody string, tele
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageTotalsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1448,6 +1454,12 @@ func BuildGetToolUsageTotalsPayload(telemetryGetToolUsageTotalsBody string, tele
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1463,7 +1475,7 @@ func BuildGetToolUsageTargetsPayload(telemetryGetToolUsageTargetsBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageTargetsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1546,6 +1558,12 @@ func BuildGetToolUsageTargetsPayload(telemetryGetToolUsageTargetsBody string, te
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1561,7 +1579,7 @@ func BuildGetToolUsageUsersPayload(telemetryGetToolUsageUsersBody string, teleme
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageUsersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1644,6 +1662,220 @@ func BuildGetToolUsageUsersPayload(telemetryGetToolUsageUsersBody string, teleme
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolUsageClientsPayload builds the payload for the telemetry
+// getToolUsageClients endpoint from CLI flags.
+func BuildGetToolUsageClientsPayload(telemetryGetToolUsageClientsBody string, telemetryGetToolUsageClientsApikeyToken string, telemetryGetToolUsageClientsSessionToken string, telemetryGetToolUsageClientsProjectSlugInput string) (*telemetry.GetToolUsageClientsPayload, error) {
+	var err error
+	var body GetToolUsageClientsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageClientsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.TargetTypes {
+			if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+			}
+		}
+		for _, e := range body.UserFilters {
+			if e != nil {
+				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageClientsApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageClientsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageClientsSessionToken != "" {
+			sessionToken = &telemetryGetToolUsageClientsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageClientsProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageClientsProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageClientsPayload{
+		From:        body.From,
+		To:          body.To,
+		AccountType: body.AccountType,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolUsageClientToolBreakdownPayload builds the payload for the
+// telemetry getToolUsageClientToolBreakdown endpoint from CLI flags.
+func BuildGetToolUsageClientToolBreakdownPayload(telemetryGetToolUsageClientToolBreakdownBody string, telemetryGetToolUsageClientToolBreakdownApikeyToken string, telemetryGetToolUsageClientToolBreakdownSessionToken string, telemetryGetToolUsageClientToolBreakdownProjectSlugInput string) (*telemetry.GetToolUsageClientToolBreakdownPayload, error) {
+	var err error
+	var body GetToolUsageClientToolBreakdownRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageClientToolBreakdownBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.TargetTypes {
+			if !(e == "hosted_mcp_server" || e == "tunneled_mcp_server" || e == "meta_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+			}
+		}
+		for _, e := range body.UserFilters {
+			if e != nil {
+				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageClientToolBreakdownApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageClientToolBreakdownApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageClientToolBreakdownSessionToken != "" {
+			sessionToken = &telemetryGetToolUsageClientToolBreakdownSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageClientToolBreakdownProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageClientToolBreakdownProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageClientToolBreakdownPayload{
+		From:        body.From,
+		To:          body.To,
+		AccountType: body.AccountType,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.MetaMcpServerIds != nil {
+		v.MetaMcpServerIds = make([]string, len(body.MetaMcpServerIds))
+		for i, val := range body.MetaMcpServerIds {
+			v.MetaMcpServerIds[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1659,7 +1891,7 @@ func BuildGetToolUsageTargetTimeSeriesPayload(telemetryGetToolUsageTargetTimeSer
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageTargetTimeSeriesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1742,6 +1974,12 @@ func BuildGetToolUsageTargetTimeSeriesPayload(telemetryGetToolUsageTargetTimeSer
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1757,7 +1995,7 @@ func BuildGetToolUsageUserTimeSeriesPayload(telemetryGetToolUsageUserTimeSeriesB
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageUserTimeSeriesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1840,6 +2078,12 @@ func BuildGetToolUsageUserTimeSeriesPayload(telemetryGetToolUsageUserTimeSeriesB
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1855,7 +2099,7 @@ func BuildGetToolUsageUsersByTargetPayload(telemetryGetToolUsageUsersByTargetBod
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageUsersByTargetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -1938,6 +2182,12 @@ func BuildGetToolUsageUsersByTargetPayload(telemetryGetToolUsageUsersByTargetBod
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1953,7 +2203,7 @@ func BuildGetToolUsageTargetToolBreakdownPayload(telemetryGetToolUsageTargetTool
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageTargetToolBreakdownBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -2036,6 +2286,12 @@ func BuildGetToolUsageTargetToolBreakdownPayload(telemetryGetToolUsageTargetTool
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2051,7 +2307,7 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 	{
 		err = json.Unmarshal([]byte(telemetryListToolUsageTracesBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"statuses\": [\n         \"success\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"account_type\": \"abc123\",\n      \"client_keys\": [\n         \"abc123\"\n      ],\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"operator\": \"not_eq\",\n            \"path\": \"@user.region\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hook_sources\": [\n         \"abc123\"\n      ],\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"limit\": 2,\n      \"meta_mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"query\": \"abc123\",\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"sort\": \"desc\",\n      \"statuses\": [\n         \"success\"\n      ],\n      \"target_types\": [\n         \"tunneled_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -2159,6 +2415,12 @@ func BuildListToolUsageTracesPayload(telemetryListToolUsageTracesBody string, te
 			v.HookSources[i] = val
 		}
 	}
+	if body.ClientKeys != nil {
+		v.ClientKeys = make([]string, len(body.ClientKeys))
+		for i, val := range body.ClientKeys {
+			v.ClientKeys[i] = val
+		}
+	}
 	if body.Statuses != nil {
 		v.Statuses = make([]telemetry.ToolUsageStatus, len(body.Statuses))
 		for i, val := range body.Statuses {
@@ -2207,8 +2469,8 @@ func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBod
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
 		for _, e := range body.OptionTypes {
-			if !(e == "hosted_servers" || e == "shadow_servers" || e == "gateways" || e == "users") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "gateways", "users"}))
+			if !(e == "hosted_servers" || e == "shadow_servers" || e == "gateways" || e == "users" || e == "clients") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "gateways", "users", "clients"}))
 			}
 		}
 		if err != nil {

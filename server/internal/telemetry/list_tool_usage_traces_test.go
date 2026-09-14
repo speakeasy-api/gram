@@ -14,6 +14,7 @@ import (
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -905,4 +906,84 @@ func TestListToolUsageTraces_PreservesNameAcrossUnnamedSpans(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, raw.Traces, 6)
 	require.Equal(t, normalizeToolUsageTraces(summary.Traces), normalizeToolUsageTraces(raw.Traces))
+}
+
+func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "alice@example.com",
+		statusCode: 200, clientName: "Claude Code", clientVersion: "2.4.1",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-19 * time.Minute),
+		toolsetSlug: "payments", toolName: "refund", userEmail: "bob@example.com",
+		statusCode: 200,
+	})
+
+	rawPathQuery := "charge"
+	// Calling the service directly skips the HTTP decoder that applies the
+	// payload defaults, so the limit has to be set here.
+	limit := 100
+
+	window := func() (string, string) {
+		return now.Add(-1 * time.Hour).Format(time.RFC3339), now.Add(1 * time.Hour).Format(time.RFC3339)
+	}
+
+	// A free-text query drops the listing off trace_summaries onto a raw
+	// telemetry_logs scan. The two paths derive the client separately, so they
+	// are asserted to agree rather than assumed to.
+	for _, tc := range []struct {
+		name  string
+		query *string
+	}{
+		{name: "summary path", query: nil},
+		{name: "raw log path", query: &rawPathQuery},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				from, to := window()
+				res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+					From: from, To: to, Query: tc.query, Limit: limit,
+				})
+				if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
+					return
+				}
+
+				byTool := map[string]*gen.ToolUsageTraceSummary{}
+				for _, trace := range res.Traces {
+					byTool[trace.ToolName] = trace
+				}
+
+				charge := byTool["charge"]
+				if !assert.NotNil(c, charge) {
+					return
+				}
+				assert.Equal(c, "claude code", charge.ClientKey)
+				assert.Equal(c, "Claude Code", charge.ClientLabel)
+				if assert.NotNil(c, charge.ClientVersion) {
+					assert.Equal(c, "2.4.1", *charge.ClientVersion)
+				}
+
+				if tc.query != nil {
+					return
+				}
+				refund := byTool["refund"]
+				if !assert.NotNil(c, refund) {
+					return
+				}
+				assert.Equal(c, "unattributed", refund.ClientKey)
+				assert.Nil(c, refund.ClientVersion)
+			}, 20*time.Second, 250*time.Millisecond)
+		})
+	}
 }

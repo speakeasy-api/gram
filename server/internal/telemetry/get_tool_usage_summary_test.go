@@ -480,12 +480,14 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 }
 
 type hostedToolEventParams struct {
-	projectID   string
-	timestamp   time.Time
-	toolsetSlug string
-	toolName    string
-	userEmail   string
-	statusCode  int
+	projectID     string
+	timestamp     time.Time
+	toolsetSlug   string
+	toolName      string
+	userEmail     string
+	statusCode    int
+	clientName    string
+	clientVersion string
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -502,6 +504,14 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		"gen_ai.tool.call.id":            uuid.New().String(),
 		"gen_ai.conversation.id":         uuid.New().String(),
 		"gen_ai.response.finish_reasons": []string{"tool_calls"},
+	}
+	// Left off entirely when unset, so a fixture can model a caller Gram never
+	// saw an initialize handshake for.
+	if p.clientName != "" {
+		attrs["gram.mcp.client.name"] = p.clientName
+	}
+	if p.clientVersion != "" {
+		attrs["gram.mcp.client.version"] = p.clientVersion
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
@@ -858,4 +868,112 @@ func TestToolUsageFixturesAreQueryReady(t *testing.T) {
 	var count uint64
 	require.NoError(t, ti.chConn.QueryRow(ctx, "SELECT count() FROM telemetry_logs WHERE gram_project_id = ?", ti.projectID).Scan(&count))
 	require.Equal(t, uint64(3), count, "fixture helpers must commit every row before returning")
+}
+
+func TestGetToolUsageClients_FoldsCaseAndUnattributed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// Two spellings of one client must rank as one client: clients report
+	// whatever casing they like and a split row would understate both.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "alice@example.com",
+		statusCode: 200, clientName: "Claude Code", clientVersion: "2.4.1",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-19 * time.Minute),
+		toolsetSlug: "payments", toolName: "refund", userEmail: "alice@example.com",
+		statusCode: 500, clientName: "claude code", clientVersion: "2.3.8",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-18 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
+		statusCode: 200, clientName: "Cursor", clientVersion: "1.7.42",
+	})
+	// No client reported at all: the caller handshaked before Gram recorded
+	// identities, or never handshaked.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-17 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
+		statusCode: 200,
+	})
+
+	payload := func() *gen.GetToolUsageClientsPayload {
+		return &gen.GetToolUsageClientsPayload{
+			From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		}
+	}
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.GetToolUsageClients(ctx, payload())
+		if !assert.NoError(c, err, "cause: %v", errors.Unwrap(err)) {
+			return
+		}
+		if !assert.Len(c, res.Clients, 3) {
+			return
+		}
+
+		byKey := map[string]*gen.ToolUsageClientSummary{}
+		for _, client := range res.Clients {
+			byKey[client.ClientKey] = client
+		}
+
+		claude := byKey["claude code"]
+		if !assert.NotNil(c, claude) {
+			return
+		}
+		assert.Equal(c, int64(2), claude.EventCount)
+		assert.Equal(c, int64(1), claude.SuccessCount)
+		assert.Equal(c, int64(1), claude.FailureCount)
+		assert.Equal(c, int64(2), claude.UniqueTools)
+
+		cursor := byKey["cursor"]
+		if !assert.NotNil(c, cursor) {
+			return
+		}
+		assert.Equal(c, int64(1), cursor.EventCount)
+
+		unattributed := byKey["unattributed"]
+		if !assert.NotNil(c, unattributed) {
+			return
+		}
+		assert.Equal(c, int64(1), unattributed.EventCount)
+		assert.Equal(c, "unattributed", unattributed.ClientLabel)
+	}, 20*time.Second, 250*time.Millisecond)
+
+	t.Run("filters every aggregate", func(t *testing.T) {
+		t.Parallel()
+
+		totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+			From:       now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:         now.Add(1 * time.Hour).Format(time.RFC3339),
+			ClientKeys: []string{"claude code"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(2), totals.Totals.EventCount)
+		require.Equal(t, int64(1), totals.Totals.FailureCount)
+	})
+
+	t.Run("breaks down tools per client", func(t *testing.T) {
+		t.Parallel()
+
+		res, err := ti.service.GetToolUsageClientToolBreakdown(ctx, &gen.GetToolUsageClientToolBreakdownPayload{
+			From:       now.Add(-1 * time.Hour).Format(time.RFC3339),
+			To:         now.Add(1 * time.Hour).Format(time.RFC3339),
+			ClientKeys: []string{"claude code"},
+		})
+		require.NoError(t, err)
+		require.Len(t, res.ClientToolBreakdown, 2)
+		for _, row := range res.ClientToolBreakdown {
+			require.Equal(t, "claude code", row.ClientKey)
+			require.Equal(t, int64(1), row.EventCount)
+		}
+	})
 }

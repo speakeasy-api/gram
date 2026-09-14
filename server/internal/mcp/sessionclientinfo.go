@@ -34,6 +34,24 @@ type sessionClientInfoStore interface {
 // generation for the rest of its session, which is the more useful of the two
 // for diagnosing version-specific behaviour. Admitting those records does not
 // affect how much can be stored: the per-server record cap is what bounds that.
+// metaClientInfoScope keys a gateway session's client-info record. The ":"
+// prefix cannot collide with a toolset slug, which never contains one.
+func metaClientInfoScope(metaServerID uuid.UUID) string {
+	return "meta:" + metaServerID.String()
+}
+
+// sessionClientInfoScope is the key a session's client-info record lives under.
+// Records are per (project, scope, session), and the hosted path scopes by
+// toolset slug. A caller that handshakes once for several toolsets — the
+// gateway — sets its own scope instead, so every dispatch in that session
+// resolves the identity the handshake recorded.
+func sessionClientInfoScope(payload *mcpInputs) string {
+	if payload.clientInfoScope != "" {
+		return payload.clientInfoScope
+	}
+	return payload.toolset
+}
+
 func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version, protocolVersion string) {
 	name = mcprequests.SanitizeClientInfoField(name)
 	protocolVersion = mcpversions.Sanitize(protocolVersion)
@@ -41,7 +59,7 @@ func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sess
 		return
 	}
 
-	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
+	err := store.Store(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, sessionclientinfo.Info{
 		Name:            name,
 		Version:         mcprequests.SanitizeClientInfoField(version),
 		ProtocolVersion: protocolVersion,
@@ -88,7 +106,7 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 		return identity, ""
 	}
 
-	info, err := store.Load(ctx, payload.projectID, payload.toolset, payload.sessionID, time.Now().UnixMilli())
+	info, err := store.Load(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
 	switch {
 	case errors.Is(err, sessionclientinfo.ErrNotFound):
 		// An unknown caller is ordinary: no Redis, an evicted record, or a
