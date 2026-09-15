@@ -188,6 +188,9 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Equal(t, string(dialect.EventTypeAPIResponse), row.EventType)
 		require.Equal(t, "msg-9", row.EventID)
 		require.Equal(t, "Done. Two files changed.", row.Text)
+		require.Contains(t, row.OutputContent, `"role":"assistant"`)
+		require.Contains(t, row.OutputContent, `"Done. Two files changed."`)
+		require.Empty(t, row.InputContent)
 		require.Equal(t, "repl_main_thread", row.QuerySource)
 		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
 	})
@@ -519,4 +522,27 @@ func TestAgentEventRowFromLogDropsABodyThatRepeatsTheEventName(t *testing.T) {
 	require.Equal(t, dialect.EventTypeUnclassified, row.EventType)
 	require.Equal(t, "hook_registered", row.RawEventName)
 	require.Empty(t, row.Text)
+}
+
+// An MCP tool as a 2.1 CLI reports it with tool details on: the tool is
+// named mcp_tool and the server and tool live inside tool_parameters.
+func TestAgentEventRowFromLogReadsMCPAttributionFromToolParameters(t *testing.T) {
+	t.Parallel()
+
+	record := agentEventTestLog(claudeCodeScopeName, "",
+		logEventTestKV("event.name", "tool_result"),
+		logEventTestKV("session.id", "session-1"),
+		logEventTestKV("tool_name", "mcp_tool"),
+		logEventTestKV("tool_use_id", "toolu_1"),
+		logEventTestKV("success", "true"),
+		logEventTestKV("tool_input", "{}"),
+		logEventTestKV("tool_parameters", `{"mcp_server_name":"assistants-dev","mcp_tool_name":"whoami"}`),
+	)
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, string(dialect.EventTypeToolCallResult), row.EventType)
+	require.Equal(t, "mcp_tool", row.ToolName)
+	require.Equal(t, "assistants-dev", row.MCPServerName)
+	require.Equal(t, "whoami", row.MCPToolName)
 }
