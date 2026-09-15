@@ -48,6 +48,7 @@ func requireEMAScopeError(t *testing.T, err error) {
 	require.Equal(t, "23503", pgErr.Code)
 }
 
+//nolint:paralleltest,tparallel // Subtests mutate shared fixture rows and must run serially; only the parent runs in parallel.
 func TestEMABindingScope(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
