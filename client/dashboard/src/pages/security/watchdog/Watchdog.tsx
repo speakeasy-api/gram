@@ -289,7 +289,6 @@ function WatchdogContent(): JSX.Element {
 
   const controls = (
     <span className="flex items-center gap-2">
-      <AnalysisStatusBadge />
       <TimeRangePicker
         preset={customRange ? null : dateRange}
         customRange={customRange}
@@ -312,7 +311,12 @@ function WatchdogContent(): JSX.Element {
   if (isLoggingDisabled) {
     return (
       <Page.Section>
-        <Page.Section.Title>Watchdog</Page.Section.Title>
+        <Page.Section.Title>
+          <span className="inline-flex items-center gap-3">
+            Watchdog
+            <AnalysisStatusBadge />
+          </span>
+        </Page.Section.Title>
         <Page.Section.Description>
           Your riskiest AI usage, clustered and ranked across {rangeLabel}.
         </Page.Section.Description>
@@ -335,7 +339,12 @@ function WatchdogContent(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Watchdog</Page.Section.Title>
+      <Page.Section.Title>
+        <span className="inline-flex items-center gap-3">
+          Watchdog
+          <AnalysisStatusBadge />
+        </span>
+      </Page.Section.Title>
       <Page.Section.Description>
         Your riskiest AI usage, clustered and ranked
         {subtitleSummary ? ` — ${subtitleSummary}` : ""} across {rangeLabel}.
