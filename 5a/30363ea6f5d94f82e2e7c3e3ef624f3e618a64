@@ -1,0 +1,45 @@
+server/internal/gateway/proxy.go
+  s_e708fb1e789d24::t_fe1f8b6c862687 40,131,144,159,170,202-218
+server/internal/gateway/proxy_riskscan_test.go
+  s_e708fb1e789d24::t_1471b8c45eb861 1-129
+server/internal/mcp/risk_scan_test.go
+  s_e708fb1e789d24::t_83df002230427a 1-123
+server/internal/mcp/rpc_prompt_get.go
+  s_e708fb1e789d24::t_f99aafde818ea4 10,30,49-64
+server/internal/mcp/serve_meta_proxy.go
+  s_e708fb1e789d24::t_1a1ebe59338ab6 42,555-566
+server/internal/mcp/setup_test.go
+  s_e708fb1e789d24::t_6c358658afdaa7 37-38,147,313,325,476-492
+server/internal/remotemcp/proxymanager.go
+  s_e708fb1e789d24::t_ac16516b625db0 21,71,129,289-302
+server/internal/remotemcp/proxymanager_identity_coverage_test.go
+  s_e708fb1e789d24::t_650cfa5457d012 9,16
+server/internal/remotemcp/tools_call_risk_scan_interceptor.go
+  s_031c3ddf6446b8::t_ad86c316f067d1 1-26
+server/internal/riskscan/scan.go
+  s_e708fb1e789d24::t_05d9fe2b8a3901 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5a30363ea6f5d94f82e2e7c3e3ef624f3e618a64",
+  "prompts": {},
+  "sessions": {
+    "s_031c3ddf6446b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "03c8c097-4772-4d39-9f72-fa8367b76441",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_e708fb1e789d24": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a26c4a2-02c5-4f1b-91a9-ae649e8d9620",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
