@@ -1160,6 +1160,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// in what the primary left out. There are only two families, so the loop
 	// ends as soon as the second has contributed.
 	var firstErr *discoveryError
+	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
 	// unreadable records, per family, the first candidate that could not be
@@ -1202,10 +1203,12 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		// Discovery location is not issuer identity. Even an origin fallback
 		// must name the exact requested issuer (including its trailing slash).
 		if doc.Issuer == "" {
-			return discoveryResult{}, &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
+			continue
 		}
 		if doc.Issuer != issuerURL {
-			return discoveryResult{}, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
+			continue
 		}
 
 		// A 200 that parses but advertises no usable OAuth endpoints is almost
@@ -1245,6 +1248,12 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable))
 		}
 		return result, nil
+	}
+
+	// Reject unusable identity evidence only after every candidate was tried.
+	// An unread candidate still takes transient precedence so it can be retried.
+	if untrustedErr != nil && unreadableErr == nil {
+		return discoveryResult{}, untrustedErr
 	}
 
 	// An endpoint-less document is only worth returning when it is all the
