@@ -435,7 +435,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// therefore requires organization-level authority in addition to project write.
 		if !client.ProjectID.Valid {
 			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+				return nil, err
 			}
 		}
 		client, err = q.SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org), GrantTypes: grants})

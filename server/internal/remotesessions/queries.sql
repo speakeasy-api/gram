@@ -3763,7 +3763,7 @@ SELECT count(*) FROM remote_session_clients WHERE project_id = @project_id AND r
 UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = @id AND project_id = @project_id;
 
 -- name: GetPreparationFixtureRegistration :one
-SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id;
+SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id AND (c.project_id = b.project_id OR (c.project_id IS NULL AND c.organization_id = b.organization_id)) WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id;
 
 -- name: SetPreparationFixtureTrust :exec
 UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WHERE id = @id AND project_id = @project_id;

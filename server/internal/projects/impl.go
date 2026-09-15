@@ -576,6 +576,10 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil // Return successfully even if the project was already deleted
 	case err != nil:
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
+			return oops.E(oops.CodeConflict, err, "project has active references; unlink identity-chaining bindings before deletion")
+		}
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").LogError(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 
