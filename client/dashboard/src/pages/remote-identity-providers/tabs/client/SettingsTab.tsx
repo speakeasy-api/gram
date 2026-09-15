@@ -14,7 +14,7 @@ import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/org
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { remoteSessionClientDisplayName } from "../../clientDisplay";
 import {
@@ -39,9 +39,11 @@ export function SettingsTab({
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
+  const persistedAuthMethod =
+    narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "";
   const [authMethod, setAuthMethod] = useState<
     CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
-  >(narrowTokenEndpointAuthMethod(client.tokenEndpointAuthMethod, true) ?? "");
+  >(persistedAuthMethod);
   const [authAudienceFormat, setAuthAudienceFormat] = useState<
     AuthAudienceFormat | undefined
   >(client.tokenEndpointAuthAudienceFormat);
@@ -61,6 +63,27 @@ export function SettingsTab({
   // selectable; the sequencing is here so it is already right when it does.
   const [keySetPending, setKeySetPending] = useState(false);
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(authMethod);
+  const privateKeyJwtMissingKeySet =
+    privateKeyJwtSelected && client.jsonWebKeySetId == null;
+
+  // The key-set field saves independently. If a detach succeeds while
+  // private_key_jwt is only a local, unsaved selection, its refetch removes the
+  // prerequisite beneath this draft. Reconcile to the persisted method so the
+  // next Save cannot submit a combination the server must reject. This also
+  // handles the set disappearing in another tab.
+  useEffect(() => {
+    if (client.jsonWebKeySetId != null) return;
+
+    setAuthMethod((current) => {
+      if (
+        !isPrivateKeyJwtAuthMethod(current) ||
+        isPrivateKeyJwtAuthMethod(persistedAuthMethod)
+      ) {
+        return current;
+      }
+      return persistedAuthMethod;
+    });
+  }, [client.jsonWebKeySetId, persistedAuthMethod]);
 
   const handleAuthMethodChange = (
     method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
@@ -160,7 +183,9 @@ export function SettingsTab({
           <RequireScope scope="org:admin" level="component">
             <Button
               onClick={handleSave}
-              disabled={update.isPending || keySetPending}
+              disabled={
+                update.isPending || keySetPending || privateKeyJwtMissingKeySet
+              }
             >
               <Button.Text>
                 {update.isPending ? "Saving…" : "Save changes"}

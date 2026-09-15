@@ -202,4 +202,53 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
       }),
     );
   });
+
+  it("preserves an omitted private_key_jwt audience format on an unrelated save", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ModifyRemoteIdentityProviderSheet
+          open
+          onOpenChange={vi.fn<(open: boolean) => void>()}
+          userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+          issuer={
+            {
+              id: "issuer-1",
+              issuer: "https://idp.example.com",
+              slug: "idp",
+              authorizationEndpoint: "https://idp.example.com/authorize",
+              tokenEndpoint: "https://idp.example.com/token",
+              clientIdMetadataDocumentSupported: false,
+            } as RemoteSessionIssuer
+          }
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: "Client assertion audience",
+          }) as HTMLSelectElement
+        ).value,
+      ).toBe(AuthAudienceFormat.Issuer),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateClient).toHaveBeenCalledWith({
+        updateRemoteSessionClientForm: expect.objectContaining({
+          id: "client-1",
+          tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
+          tokenEndpointAuthAudienceFormat: undefined,
+        }),
+      }),
+    );
+  });
 });

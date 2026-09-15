@@ -56,9 +56,11 @@ vi.mock(
     TokenEndpointAuthMethodField: ({
       value,
       onChange,
+      allowPrivateKeyJwt,
     }: {
       value: AuthMethod | "";
-      onChange: (method: AuthMethod) => void;
+      onChange: (method: AuthMethod | "") => void;
+      allowPrivateKeyJwt?: boolean;
     }) => (
       <select
         aria-label="Authentication method"
@@ -68,7 +70,9 @@ vi.mock(
         <option value={AuthMethod.ClientSecretBasic}>
           client_secret_basic
         </option>
-        <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
+        {(allowPrivateKeyJwt || value === AuthMethod.PrivateKeyJwt) && (
+          <option value={AuthMethod.PrivateKeyJwt}>private_key_jwt</option>
+        )}
       </select>
     ),
   }),
@@ -79,11 +83,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function client(method: AuthMethod): RemoteSessionClient {
+function client(
+  method: AuthMethod,
+  jsonWebKeySetId: string | null = "set-1",
+): RemoteSessionClient {
   return {
     id: "client-1",
     tokenEndpointAuthMethod: method,
-    jsonWebKeySetId: "set-1",
+    jsonWebKeySetId,
   } as RemoteSessionClient;
 }
 
@@ -149,6 +156,47 @@ describe("organization client settings", () => {
         ) as HTMLInputElement
       ).value,
     ).toBe("");
+  });
+
+  it("hides private_key_jwt when no signing key set is attached", () => {
+    render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic, null)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("option", { name: AuthMethod.PrivateKeyJwt }),
+    ).toBeNull();
+  });
+
+  it("discards an unsaved private_key_jwt selection when the key set is detached", () => {
+    const view = render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Authentication method" }),
+      { target: { value: AuthMethod.PrivateKeyJwt } },
+    );
+
+    view.rerender(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic, null)}
+        issuerId="issuer-1"
+      />,
+    );
+
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Authentication method",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe(AuthMethod.ClientSecretBasic);
   });
 
   it("preserves an unset assertion audience on an unrelated save", () => {
