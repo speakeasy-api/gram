@@ -67,6 +67,7 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "@types/archiver": "^8.0.0",
+    "typescript": "catalog:",
     "vitest": "^4.1.10"
   }
 }
