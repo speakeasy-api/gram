@@ -1,5 +1,18 @@
 # server
 
+## 2.7.0
+
+### Minor Changes
+
+- 8464d04: Add `private_key_jwt` authentication for remote OAuth token exchanges and refreshes. Remote session clients can select an attached organization JSON Web Key Set and configure whether signed client assertions use the issuer URL or token endpoint URL as their audience.
+
+### Patch Changes
+
+- f7ae834: The MCP gateway now recognises which AI tool is calling it and enforces the organization's decision for that tool. A caller is matched by its CIMD vendor key, its OAuth client id, or the client name it reports at initialize, and a tool the organization has blocked is refused at the gateway. Blocking only takes effect for callers that present a CIMD client id; anything else stays unreviewed.
+- a5d8539: Assistants can authenticate to CIMD-capable MCP OAuth servers with a stable Client ID Metadata Document instead of dynamic client registration. The existing one-client-per-assistant DCR path remains the default and the fallback when CIMD is unsupported.
+- df885d9: Shadow AI now reports ChatGPT Classic as running, not just installed. The scan target carries the app's process name alongside the bundle id it already had, so a device agent distinguishes the app being open from the app merely being present. Classic stays distinguishable from the current ChatGPT app, which ships under a different bundle id.
+- f7ae834: Platform MCP gains two Shadow AI tools. `list_shadow_ai_inventory` returns the AI tools an organization's devices have been seen running, with each tool's access decision; `list_ai_scan_library` returns the scan target library those detections are matched against. Both require an org admin on every call.
+
 ## 2.6.0
 
 ### Minor Changes

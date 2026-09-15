@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.121.0
+
+### Minor Changes
+
+- 8464d04: Add `private_key_jwt` authentication for remote OAuth token exchanges and refreshes. Remote session clients can select an attached organization JSON Web Key Set and configure whether signed client assertions use the issuer URL or token endpoint URL as their audience.
+
+### Patch Changes
+
+- e116bae: The dashboard gains a Shadow AI section listing the AI tools running on an organization's devices, split into coding harnesses, assistants, and open model runners, with each tool's logo and its access decision. A new AI scan targets page shows the detection library behind it — built-in targets grouped by kind and collapsed by default, an organization's own targets above them — and lets an admin add a target by pasting its JSON or by fetching it from a URL.
+
 ## 0.120.0
 
 ### Minor Changes
