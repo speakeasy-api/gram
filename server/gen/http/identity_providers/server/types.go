@@ -1301,6 +1301,8 @@ type IdentityProviderClaimResponseBody struct {
 	Name          string `form:"name" json:"name" xml:"name"`
 	Purpose       string `form:"purpose" json:"purpose" xml:"purpose"`
 	CarriesAccess bool   `form:"carries_access" json:"carries_access" xml:"carries_access"`
+	// Whether Speakeasy provisioned this claim in the identity provider.
+	Provisioned bool `form:"provisioned" json:"provisioned" xml:"provisioned"`
 }
 
 // IdentityProviderRepairResponseBody is used to define fields on response body

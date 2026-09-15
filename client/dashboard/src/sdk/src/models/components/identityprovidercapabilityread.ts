@@ -12,6 +12,7 @@ export const IdentityProviderCapabilityReadResource = {
   Groups: "groups",
   Users: "users",
   Apps: "apps",
+  AuthorizationServers: "authorization_servers",
   SignInApplication: "sign_in_application",
   SignInConnection: "sign_in_connection",
 } as const;

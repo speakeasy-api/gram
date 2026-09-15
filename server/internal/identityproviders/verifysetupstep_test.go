@@ -29,43 +29,48 @@ import (
 )
 
 const (
-	fakeOktaPassed        = "passed"
-	fakeOktaRefused       = "refused"
-	fakeOktaUnavailable   = "unavailable"
-	fakeOktaAppsBlocked   = "apps_blocked"
-	fakeOktaManageDenied  = "manage_scope_denied"
-	fakeOktaManageOmitted = "manage_scope_omitted"
-	fakeOktaExistingApp   = "existing_sign_in_app"
-	fakeOktaAppInactive   = "sign_in_app_inactive"
-	fakeOktaAppForbidden  = "sign_in_app_forbidden"
-	fakeOktaAppRefused    = "sign_in_app_refused"
-	fakeOktaAssignFails   = "sign_in_assignment_fails"
-	testAccessToken       = "test-access-token"
-	testClientID          = "test-client-id"
-	testSignInAppID       = "app-example"
-	testSignInClientID    = "public-client-example"
-	testEveryoneGroupID   = "group-everyone"
-	testFakeClientSecret  = "FAKE_SECRET_SENTINEL_DO_NOT_USE"
+	fakeOktaPassed            = "passed"
+	fakeOktaRefused           = "refused"
+	fakeOktaUnavailable       = "unavailable"
+	fakeOktaAppsBlocked       = "apps_blocked"
+	fakeOktaManageDenied      = "manage_scope_denied"
+	fakeOktaManageOmitted     = "manage_scope_omitted"
+	fakeOktaClaimsOmitted     = "claims_scopes_omitted"
+	fakeOktaExistingApp       = "existing_sign_in_app"
+	fakeOktaAppInactive       = "sign_in_app_inactive"
+	fakeOktaAppForbidden      = "sign_in_app_forbidden"
+	fakeOktaAppRefused        = "sign_in_app_refused"
+	fakeOktaAssignFails       = "sign_in_assignment_fails"
+	fakeOktaDefaultMissing    = "default_authorization_server_missing"
+	testAccessToken           = "test-access-token"
+	testClientID              = "test-client-id"
+	testSignInAppID           = "app-example"
+	testSignInClientID        = "public-client-example"
+	testEveryoneGroupID       = "group-everyone"
+	testAuthorizationServerID = "auth-server-default"
+	testFakeClientSecret      = "FAKE_SECRET_SENTINEL_DO_NOT_USE"
 )
 
 type fakeOktaServer struct {
 	server *httptest.Server
 	mode   string
 
-	mu               sync.Mutex
-	publicJWK        jose.JSONWebKey
-	validationErr    error
-	createdApp       map[string]any
-	createdAppCount  int
-	applicationReads int
-	resolvedClientID string
-	assignedAppID    string
-	assignedGroupID  string
-	signInClientID   string
-	tokenStarted     chan struct{}
-	releaseToken     chan struct{}
-	startOnce        sync.Once
-	releaseOnce      sync.Once
+	mu                sync.Mutex
+	publicJWK         jose.JSONWebKey
+	validationErr     error
+	createdApp        map[string]any
+	createdAppCount   int
+	applicationReads  int
+	resolvedClientID  string
+	assignedAppID     string
+	assignedGroupID   string
+	createdClaim      map[string]any
+	createdClaimCount int
+	signInClientID    string
+	tokenStarted      chan struct{}
+	releaseToken      chan struct{}
+	startOnce         sync.Once
+	releaseOnce       sync.Once
 }
 
 func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
@@ -80,11 +85,13 @@ func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
 	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "passed", result.Outcome)
-	require.Equal(t, []string{"directory_read", "application_assignment_read", "sign_in_provisioning"}, result.Capabilities)
-	require.Equal(t, []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage"}, result.GrantedScopes)
-	require.Len(t, result.Evidence.Reads, 3)
+	require.Equal(t, []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"}, result.Capabilities)
+	require.Equal(t, []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"}, result.GrantedScopes)
+	require.Len(t, result.Evidence.Reads, 4)
 	require.True(t, result.Evidence.Reads[0].OK)
 	require.Contains(t, *result.Evidence.Reads[0].Detail, "more pages are available")
+	require.Equal(t, "authorization_servers", result.Evidence.Reads[3].Resource)
+	require.True(t, result.Evidence.Reads[3].OK)
 	require.NoError(t, fake.ValidationError())
 
 	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
@@ -112,7 +119,7 @@ func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
 	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "passed", afterSnapshot["outcome"])
-	require.Equal(t, []any{"directory_read", "application_assignment_read", "sign_in_provisioning"}, afterSnapshot["capabilities"])
+	require.Equal(t, []any{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"}, afterSnapshot["capabilities"])
 	auditJSON := string(record.Metadata) + string(record.BeforeSnapshot) + string(record.AfterSnapshot)
 	require.NotContains(t, auditJSON, testAccessToken)
 	require.NotContains(t, auditJSON, "PRIVATE KEY")
@@ -143,6 +150,24 @@ func TestVerifySetupStepMintsFreshTokenAfterScopeGrantChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "passed", second.Outcome)
 	require.Contains(t, second.Capabilities, "sign_in_provisioning")
+	require.Contains(t, second.Capabilities, "claims_provisioning")
+}
+
+func TestVerifySetupStepDoesNotRequireDefaultAuthorizationServer(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaDefaultMissing)
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareConnectionForVerification(t, ctx, ti, fake)
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", result.Outcome)
+	require.NotContains(t, result.Capabilities, "claims_provisioning")
+	require.Len(t, result.Evidence.Reads, 4)
+	require.Equal(t, "authorization_servers", result.Evidence.Reads[3].Resource)
+	require.False(t, result.Evidence.Reads[3].OK)
+	require.Contains(t, *result.Evidence.Reads[3].Detail, "none named default")
 }
 
 func TestVerifySetupStepPersistsInvalidClientRefusal(t *testing.T) {
@@ -182,8 +207,8 @@ func TestVerifySetupStepReportsMissingApplicationRead(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "capability_missing", result.Outcome)
 	require.Contains(t, result.Detail, "apps read failed")
-	require.Equal(t, []string{"directory_read", "sign_in_provisioning"}, result.Capabilities)
-	require.Len(t, result.Evidence.Reads, 3)
+	require.Equal(t, []string{"directory_read", "sign_in_provisioning", "claims_provisioning"}, result.Capabilities)
+	require.Len(t, result.Evidence.Reads, 4)
 	require.False(t, result.Evidence.Reads[2].OK)
 	require.Equal(t, "Okta application read is not permitted.", *result.Evidence.Reads[2].Detail)
 	require.NoError(t, fake.ValidationError())
@@ -324,8 +349,8 @@ func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing
 	require.Equal(t, &gen.IdentityProviderVerifyResult{
 		Outcome:       "passed",
 		Detail:        "Okta sign-in application and WorkOS OIDC connection verified.",
-		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning"},
-		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage"},
+		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning", "claims_provisioning"},
+		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage", "okta.authorizationServers.read", "okta.authorizationServers.manage"},
 		Evidence: &gen.IdentityProviderVerifyEvidence{
 			CheckedAt: result.Evidence.CheckedAt,
 			Reads: []*gen.IdentityProviderCapabilityRead{
@@ -449,6 +474,28 @@ func TestVerifySignInStepFailsForDraftWorkOSConnection(t *testing.T) {
 	require.Equal(t, "conn-example", stored.WorkosConnectionID.String)
 }
 
+func TestVerifySignInStepWaitsForFirstSignInWhileWorkOSIsValidating(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	expectWorkOSConnectionRead(t, ti, stored.WorkosID.String, "validating")
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "pending_validation", result.Outcome)
+	require.Equal(t, "Speakeasy has configured sign-in. It becomes active after the first successful sign-in through Okta; run a test sign-in from the sign-in provider or sign in to Speakeasy with Okta, then check again.", result.Detail)
+	require.True(t, result.Evidence.Reads[0].OK)
+	require.False(t, result.Evidence.Reads[1].OK)
+	require.Equal(t, "WorkOS has the sign-in configuration and is waiting for the first successful sign-in.", *result.Evidence.Reads[1].Detail)
+
+	stored, err = repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "application_created", stored.SignInState.String)
+}
+
 func TestVerifySignInStepFailsWhenWorkOSConnectionIsMissing(t *testing.T) {
 	t.Parallel()
 
@@ -570,22 +617,24 @@ func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
 func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 	t.Helper()
 	fake := &fakeOktaServer{
-		server:           nil,
-		mode:             mode,
-		mu:               sync.Mutex{},
-		publicJWK:        jose.JSONWebKey{},
-		validationErr:    nil,
-		createdApp:       nil,
-		createdAppCount:  0,
-		applicationReads: 0,
-		resolvedClientID: "",
-		assignedAppID:    "",
-		assignedGroupID:  "",
-		signInClientID:   testSignInClientID,
-		tokenStarted:     nil,
-		releaseToken:     nil,
-		startOnce:        sync.Once{},
-		releaseOnce:      sync.Once{},
+		server:            nil,
+		mode:              mode,
+		mu:                sync.Mutex{},
+		publicJWK:         jose.JSONWebKey{},
+		validationErr:     nil,
+		createdApp:        nil,
+		createdAppCount:   0,
+		applicationReads:  0,
+		resolvedClientID:  "",
+		assignedAppID:     "",
+		assignedGroupID:   "",
+		createdClaim:      nil,
+		createdClaimCount: 0,
+		signInClientID:    testSignInClientID,
+		tokenStarted:      nil,
+		releaseToken:      nil,
+		startOnce:         sync.Once{},
+		releaseOnce:       sync.Once{},
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(fake.handle))
 	t.Cleanup(fake.server.Close)
@@ -610,6 +659,10 @@ func (f *fakeOktaServer) handle(w http.ResponseWriter, r *http.Request) {
 		f.handleSignInApplication(w, r)
 	case "/api/v1/apps/" + testSignInAppID + "/groups/" + testEveryoneGroupID:
 		f.handleApplicationAssignment(w, r)
+	case "/api/v1/authorizationServers":
+		f.handleAuthorizationServers(w, r)
+	case "/api/v1/authorizationServers/" + testAuthorizationServerID + "/claims":
+		f.handleGroupsClaim(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -621,10 +674,13 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	requestedScopes := r.Form.Get("scope")
-	allScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
+	allScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
+	claimVerificationScopes := "okta.apps.read okta.groups.read okta.users.read okta.authorizationServers.read okta.authorizationServers.manage"
+	applicationScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
 	readScopes := "okta.apps.read okta.groups.read okta.users.read"
+	claimScopes := "okta.authorizationServers.read okta.authorizationServers.manage"
 	mode := f.Mode()
-	validScopes := requestedScopes == allScopes || requestedScopes == readScopes
+	validScopes := requestedScopes == allScopes || requestedScopes == claimVerificationScopes || requestedScopes == applicationScopes || requestedScopes == readScopes || requestedScopes == claimScopes
 	if r.Method != http.MethodPost || r.Form.Get("grant_type") != "client_credentials" || !validScopes || r.Form.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
 		f.fail(w, errors.New("unexpected token request"))
 		return
@@ -664,7 +720,7 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"server_error","error_description":"The token service is temporarily unavailable."}`))
 		return
 	}
-	if mode == fakeOktaManageDenied && requestedScopes == allScopes {
+	if mode == fakeOktaManageDenied && requestedScopes != readScopes {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error":"invalid_scope","error_description":"The requested scope is not granted"}`))
@@ -673,9 +729,43 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 	grantedScopes := requestedScopes
 	if mode == fakeOktaManageOmitted {
 		grantedScopes = readScopes
+	} else if mode == fakeOktaClaimsOmitted && requestedScopes == allScopes {
+		grantedScopes = applicationScopes
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + grantedScopes + `"}`))
+}
+
+func (f *fakeOktaServer) handleAuthorizationServers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+		f.fail(w, errors.New("unexpected authorization servers request"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if f.Mode() == fakeOktaDefaultMissing {
+		_, _ = w.Write([]byte(`[{"id":"other-server","name":"other"}]`))
+		return
+	}
+	_, _ = w.Write([]byte(`[{"id":"` + testAuthorizationServerID + `","name":"default"}]`))
+}
+
+func (f *fakeOktaServer) handleGroupsClaim(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer "+testAccessToken || r.Header.Get("Content-Type") != "application/json" {
+		f.fail(w, errors.New("unexpected groups claim request"))
+		return
+	}
+	var claim map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&claim); err != nil {
+		f.fail(w, err)
+		return
+	}
+	f.mu.Lock()
+	f.createdClaim = claim
+	f.createdClaimCount++
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_, _ = w.Write([]byte(`{"id":"claim-groups"}`))
 }
 
 func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Request) {
@@ -899,6 +989,12 @@ func (f *fakeOktaServer) Assignment() (string, string) {
 	return f.assignedAppID, f.assignedGroupID
 }
 
+func (f *fakeOktaServer) CreatedClaim() (map[string]any, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.createdClaim), f.createdClaimCount
+}
+
 func (f *fakeOktaServer) BlockTokenResponse() {
 	f.tokenStarted = make(chan struct{})
 	f.releaseToken = make(chan struct{})
@@ -936,7 +1032,7 @@ func prepareProvisionedSignInApplication(t *testing.T, fake *fakeOktaServer) (co
 	t.Helper()
 	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
 	prepareActiveConnection(t, ctx, ti, fake)
-	expectDirectWorkOSConnection(t, ti, testSignInClientID)
+	expectDirectWorkOSConnection(t, ti, testSignInClientID, fake.Mode() != fakeOktaClaimsOmitted)
 	_, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
 		StepKey:      "sign_in",
 		Values:       []*gen.IdentityProviderSetupValue{},

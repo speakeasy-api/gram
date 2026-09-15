@@ -449,6 +449,68 @@ func TestListGroupsBoundsSuccessfulResponseBody(t *testing.T) {
 	require.ErrorContains(t, err, "decode Okta response")
 }
 
+func TestListAuthorizationServersAndCreateGroupsClaim(t *testing.T) {
+	t.Parallel()
+
+	claimBodies := make(chan []byte, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-access-token" || r.Header.Get("Accept") != "application/json" {
+			http.Error(w, "invalid authorization", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/authorizationServers":
+			_, _ = w.Write([]byte(`[{"id":"server-other","name":"other"},{"id":"server-default","name":"default"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/authorizationServers/server-default/claims":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			claimBodies <- body
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"claim-groups"}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	servers, err := client.ListAuthorizationServers(t.Context(), "example.okta.com", "test-access-token")
+	require.NoError(t, err)
+	require.Equal(t, []okta.AuthorizationServer{{ID: "server-other", Name: "other"}, {ID: "server-default", Name: "default"}}, servers)
+	require.NoError(t, client.CreateGroupsClaim(t.Context(), "example.okta.com", "test-access-token", "server-default"))
+	require.JSONEq(t, `{
+		"alwaysIncludeInToken":true,
+		"claimType":"IDENTITY",
+		"conditions":{"scopes":[]},
+		"group_filter_type":"REGEX",
+		"name":"groups",
+		"status":"ACTIVE",
+		"value":".*",
+		"valueType":"GROUPS"
+	}`, string(<-claimBodies))
+}
+
+func TestCreateGroupsClaimDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000009","errorSummary":"temporary failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestClientWithRetries(t, server.URL, 3).CreateGroupsClaim(t.Context(), "example.okta.com", "test-access-token", "server-default")
+	require.Error(t, err)
+	require.Equal(t, int64(1), requests.Load())
+}
+
 func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing.T) {
 	t.Parallel()
 

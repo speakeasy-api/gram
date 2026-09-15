@@ -77,8 +77,18 @@ function signInStep(
     expectedValues: [],
     state: "not_started",
     claims: [
-      { name: "email", purpose: "Identity", carriesAccess: false },
-      { name: "groups", purpose: "Roles", carriesAccess: true },
+      {
+        name: "email",
+        purpose: "Identity",
+        carriesAccess: false,
+        provisioned: false,
+      },
+      {
+        name: "groups",
+        purpose: "Roles",
+        carriesAccess: true,
+        provisioned: true,
+      },
     ],
     ...overrides,
   };
@@ -123,6 +133,7 @@ describe("OktaSignOnSection", () => {
     expect(screen.getByText("email")).toBeTruthy();
     expect(screen.getByText("groups")).toBeTruthy();
     expect(screen.getByText("Carries access")).toBeTruthy();
+    expect(screen.getByText("Provisioned")).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Create the sign-in application" }),

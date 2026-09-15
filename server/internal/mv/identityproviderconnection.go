@@ -114,7 +114,7 @@ func validIdentityProviderVerifyOutcome(outcome string) bool {
 
 func validIdentityProviderCapabilityResource(resource string) bool {
 	switch resource {
-	case "groups", "users", "apps", "sign_in_application", "sign_in_connection":
+	case "groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection":
 		return true
 	default:
 		return false

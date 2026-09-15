@@ -189,7 +189,8 @@ var IdentityProviderClaim = Type("IdentityProviderClaim", func() {
 	Attribute("name", String)
 	Attribute("purpose", String)
 	Attribute("carries_access", Boolean)
-	Required("name", "purpose", "carries_access")
+	Attribute("provisioned", Boolean, "Whether Speakeasy provisioned this claim in the identity provider.")
+	Required("name", "purpose", "carries_access", "provisioned")
 })
 
 var IdentityProviderRepair = Type("IdentityProviderRepair", func() {
@@ -236,7 +237,9 @@ var IdentityProviderFieldOutcome = Type("IdentityProviderFieldOutcome", func() {
 })
 
 var IdentityProviderVerifyResult = Type("IdentityProviderVerifyResult", func() {
-	Attribute("outcome", String, func() { Enum("passed", "unreachable", "refused", "mismatched_value", "capability_missing") })
+	Attribute("outcome", String, func() {
+		Enum("passed", "pending_validation", "unreachable", "refused", "mismatched_value", "capability_missing")
+	})
 	Attribute("detail", String)
 	Attribute("capabilities", ArrayOf(String))
 	Attribute("granted_scopes", ArrayOf(String))
@@ -252,7 +255,9 @@ var IdentityProviderVerifyEvidence = Type("IdentityProviderVerifyEvidence", func
 
 var IdentityProviderCapabilityRead = Type("IdentityProviderCapabilityRead", func() {
 	Attribute("capability", String)
-	Attribute("resource", String, func() { Enum("groups", "users", "apps", "sign_in_application", "sign_in_connection") })
+	Attribute("resource", String, func() {
+		Enum("groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection")
+	})
 	Attribute("ok", Boolean)
 	Attribute("count", Int)
 	Attribute("detail", String)

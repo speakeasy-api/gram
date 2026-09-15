@@ -138,6 +138,16 @@ function ClaimTable({
           </Badge>
         ) : null,
     },
+    {
+      key: "status",
+      header: "",
+      render: (claim) =>
+        claim.provisioned ? (
+          <Badge variant="success" background size="sm">
+            <Badge.Text>Provisioned</Badge.Text>
+          </Badge>
+        ) : null,
+    },
   ];
 
   return (

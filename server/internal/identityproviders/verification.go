@@ -32,19 +32,42 @@ const (
 	capabilityDirectoryRead             = "directory_read"
 	capabilityApplicationAssignmentRead = "application_assignment_read"
 	capabilitySignInProvisioning        = "sign_in_provisioning"
+	capabilityClaimsProvisioning        = "claims_provisioning"
 )
 
-var requiredOktaScopes = []string{
+var requestedOktaScopes = []string{
 	"okta.apps.read",
 	"okta.groups.read",
 	"okta.users.read",
 	"okta.apps.manage",
+	"okta.authorizationServers.read",
+	"okta.authorizationServers.manage",
 }
 
 var requiredOktaReadScopes = []string{
 	"okta.apps.read",
 	"okta.groups.read",
 	"okta.users.read",
+}
+
+var oktaApplicationProvisioningScopes = []string{
+	"okta.apps.read",
+	"okta.groups.read",
+	"okta.users.read",
+	"okta.apps.manage",
+}
+
+var oktaClaimsProvisioningScopes = []string{
+	"okta.authorizationServers.read",
+	"okta.authorizationServers.manage",
+}
+
+var oktaClaimsVerificationScopes = []string{
+	"okta.apps.read",
+	"okta.groups.read",
+	"okta.users.read",
+	"okta.authorizationServers.read",
+	"okta.authorizationServers.manage",
 }
 
 // OktaClient is the provider boundary used by identity provider verification.
@@ -55,7 +78,9 @@ type OktaClient interface {
 	ListGroups(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListUsers(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplications(context.Context, string, string, okta.PageRequest) (okta.Page, error)
+	ListAuthorizationServers(context.Context, string, string) ([]okta.AuthorizationServer, error)
 	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)
+	CreateGroupsClaim(context.Context, string, string, string) error
 	FindActiveApplicationByLabel(context.Context, string, string, string) (okta.Application, string, bool, error)
 	GetApplication(context.Context, string, string, string) (okta.Application, error)
 	ResolveApplicationByClientID(context.Context, string, string, string) (okta.Application, error)
@@ -137,23 +162,23 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 
 	tenantDomain := normalizeOktaDomain(before.TenantIdentifier)
 	checkedAt := time.Now().UTC()
-	token, tokenErr := s.okta.AcquireFreshToken(ctx, okta.TokenRequest{
-		ConnectionID: before.ID,
-		TenantDomain: tenantDomain,
-		ClientID:     before.ClientID.String,
-		KeyID:        signingKey.Kid,
-		PrivateKey:   privateKey,
-		Scopes:       append([]string(nil), requiredOktaScopes...),
-	})
-	if apiErr, ok := errors.AsType[*okta.APIError](tokenErr); ok && apiErr.Code == "invalid_scope" {
+	var token okta.Token
+	var tokenErr error
+	for _, scopes := range [][]string{requestedOktaScopes, oktaClaimsVerificationScopes, oktaApplicationProvisioningScopes, requiredOktaReadScopes} {
 		token, tokenErr = s.okta.AcquireFreshToken(ctx, okta.TokenRequest{
 			ConnectionID: before.ID,
 			TenantDomain: tenantDomain,
 			ClientID:     before.ClientID.String,
 			KeyID:        signingKey.Kid,
 			PrivateKey:   privateKey,
-			Scopes:       append([]string(nil), requiredOktaReadScopes...),
+			Scopes:       append([]string(nil), scopes...),
 		})
+		if tokenErr == nil {
+			break
+		}
+		if apiErr, ok := errors.AsType[*okta.APIError](tokenErr); !ok || apiErr.Code != "invalid_scope" {
+			break
+		}
 	}
 	var result *gen.IdentityProviderVerifyResult
 	tokenUsed := tokenErr == nil
@@ -253,7 +278,43 @@ func (s *Service) probeCapabilities(ctx context.Context, checkedAt time.Time, te
 		return s.okta.ListApplications(ctx, tenantDomain, token.AccessToken, pageRequest)
 	})
 
-	capabilities := make([]string, 0, 3)
+	authorizationServers := &gen.IdentityProviderCapabilityRead{
+		Capability: capabilityClaimsProvisioning,
+		Resource:   "authorization_servers",
+		OK:         false,
+		Count:      nil,
+		Detail:     nil,
+	}
+	if !granted["okta.authorizationServers.read"] || !granted["okta.authorizationServers.manage"] {
+		detail := "Okta did not grant both optional authorization server scopes."
+		authorizationServers.Detail = &detail
+	} else {
+		servers, err := s.okta.ListAuthorizationServers(ctx, tenantDomain, token.AccessToken)
+		count := len(servers)
+		authorizationServers.Count = &count
+		switch {
+		case err != nil:
+			detail := "Unable to read Okta authorization_servers."
+			if apiErr, ok := errors.AsType[*okta.APIError](err); ok && apiErr.Description != "" {
+				detail = apiErr.Description
+			}
+			authorizationServers.Detail = &detail
+		default:
+			for _, server := range servers {
+				if server.Name == "default" && server.ID != "" {
+					authorizationServers.OK = true
+					break
+				}
+			}
+			detail := fmt.Sprintf("Found %d custom authorization server(s), including default.", count)
+			if !authorizationServers.OK {
+				detail = fmt.Sprintf("Found %d custom authorization server(s), but none named default.", count)
+			}
+			authorizationServers.Detail = &detail
+		}
+	}
+
+	capabilities := make([]string, 0, 4)
 	missing := make([]string, 0, 3)
 	if groups.OK && users.OK {
 		capabilities = append(capabilities, capabilityDirectoryRead)
@@ -267,6 +328,9 @@ func (s *Service) probeCapabilities(ctx context.Context, checkedAt time.Time, te
 	}
 	if granted["okta.apps.manage"] {
 		capabilities = append(capabilities, capabilitySignInProvisioning)
+	}
+	if authorizationServers.OK {
+		capabilities = append(capabilities, capabilityClaimsProvisioning)
 	}
 
 	outcome := "passed"
@@ -282,7 +346,7 @@ func (s *Service) probeCapabilities(ctx context.Context, checkedAt time.Time, te
 		GrantedScopes: append([]string(nil), token.GrantedScopes...),
 		Evidence: &gen.IdentityProviderVerifyEvidence{
 			CheckedAt: checkedAt.Format(time.RFC3339Nano),
-			Reads:     []*gen.IdentityProviderCapabilityRead{groups, users, apps},
+			Reads:     []*gen.IdentityProviderCapabilityRead{groups, users, apps, authorizationServers},
 		},
 	}
 }

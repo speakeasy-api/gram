@@ -106,6 +106,8 @@ type IdentityProviderClaim struct {
 	Name          string
 	Purpose       string
 	CarriesAccess bool
+	// Whether Speakeasy provisioned this claim in the identity provider.
+	Provisioned bool
 }
 
 // IdentityProviderConnection is the result type of the identityProviders

@@ -77170,6 +77170,7 @@ components:
             - groups
             - users
             - apps
+            - authorization_servers
             - sign_in_application
             - sign_in_connection
       required:
@@ -77183,12 +77184,16 @@ components:
           type: boolean
         name:
           type: string
+        provisioned:
+          type: boolean
+          description: Whether Speakeasy provisioned this claim in the identity provider.
         purpose:
           type: string
       required:
         - name
         - purpose
         - carries_access
+        - provisioned
     IdentityProviderConnection:
       type: object
       properties:
@@ -77446,6 +77451,7 @@ components:
           type: string
           enum:
             - passed
+            - pending_validation
             - unreachable
             - refused
             - mismatched_value

@@ -77,15 +77,19 @@ func (m *mockWorkOSClient) GetConnection(ctx context.Context, connectionID strin
 	return connection, args.Error(1)
 }
 
-func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID string) *string {
+func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID string, customAuthorizationServer bool) *string {
 	t.Helper()
 
 	var clientSecret string
+	discoveryEndpoint := "https://example.okta.com/.well-known/openid-configuration"
+	if customAuthorizationServer {
+		discoveryEndpoint = "https://example.okta.com/oauth2/default/.well-known/openid-configuration"
+	}
 	ti.workos.On("CreateOIDCConnection", mock.Anything, mock.MatchedBy(func(input workos.CreateOIDCConnectionInput) bool {
 		clientSecret = input.ClientSecret
 		return input.OrganizationID != "" &&
 			input.Name == "Okta" &&
-			input.DiscoveryEndpoint == "https://example.okta.com/.well-known/openid-configuration" &&
+			input.DiscoveryEndpoint == discoveryEndpoint &&
 			input.ClientID == clientID &&
 			input.ClientSecret != ""
 	})).Run(func(_ mock.Arguments) {
@@ -93,6 +97,10 @@ func expectDirectWorkOSConnection(t *testing.T, ti *testInstance, clientID strin
 		require.NoError(t, err)
 		require.Equal(t, testSignInAppID, stored.SignInApplicationID.String)
 		require.Equal(t, "application_created", stored.SignInState.String)
+		if customAuthorizationServer {
+			require.True(t, stored.GroupsClaimConfirmed)
+			require.Equal(t, "token", stored.GroupsSource.String)
+		}
 	}).Return(workos.Connection{
 		ID:             "conn-example",
 		OrganizationID: "550e8400-e29b-41d4-a716-446655440000",

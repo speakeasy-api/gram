@@ -36,7 +36,7 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		DeepLink: new("https://acme-admin.okta.com/admin/apps/active"),
 		PrintedValues: []*gen.IdentityProviderPrintedValue{
 			{Label: "JWKS URL", Value: connection.JwksURL, Copyable: true},
-			{Label: "API scopes", Value: "okta.apps.read okta.groups.read okta.users.read okta.apps.manage", Copyable: true},
+			{Label: "API scopes", Value: "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage", Copyable: true},
 			{Label: "Administrator roles", Value: "Read-only Administrator, Application Administrator", Copyable: false},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{{Key: "client_id", Label: "Client ID", Secret: false, CurrentValue: nil}},
@@ -55,10 +55,10 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		PrintedValues:  []*gen.IdentityProviderPrintedValue{},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{},
 		Claims: []*gen.IdentityProviderClaim{
-			{Name: "email", Purpose: "identity", CarriesAccess: false},
-			{Name: "first_name", Purpose: "display", CarriesAccess: false},
-			{Name: "last_name", Purpose: "display", CarriesAccess: false},
-			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true},
+			{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},
+			{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+			{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true, Provisioned: false},
 		},
 		Repair:       nil,
 		PortalIntent: nil,

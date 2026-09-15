@@ -11,6 +11,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export type IdentityProviderClaim = {
   carriesAccess: boolean;
   name: string;
+  /**
+   * Whether Speakeasy provisioned this claim in the identity provider.
+   */
+  provisioned: boolean;
   purpose: string;
 };
 
@@ -22,6 +26,7 @@ export const IdentityProviderClaim$inboundSchema: z.ZodMiniType<
   z.object({
     carries_access: z.boolean(),
     name: z.string(),
+    provisioned: z.boolean(),
     purpose: z.string(),
   }),
   z.transform((v) => {

@@ -1301,6 +1301,8 @@ type IdentityProviderClaimResponseBody struct {
 	Name          *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	Purpose       *string `form:"purpose,omitempty" json:"purpose,omitempty" xml:"purpose,omitempty"`
 	CarriesAccess *bool   `form:"carries_access,omitempty" json:"carries_access,omitempty" xml:"carries_access,omitempty"`
+	// Whether Speakeasy provisioned this claim in the identity provider.
+	Provisioned *bool `form:"provisioned,omitempty" json:"provisioned,omitempty" xml:"provisioned,omitempty"`
 }
 
 // IdentityProviderRepairResponseBody is used to define fields on response body
@@ -2531,8 +2533,8 @@ func ValidateVerifySetupStepResponseBody(body *VerifySetupStepResponseBody) (err
 		err = goa.MergeErrors(err, goa.MissingFieldError("evidence", "body"))
 	}
 	if body.Outcome != nil {
-		if !(*body.Outcome == "passed" || *body.Outcome == "unreachable" || *body.Outcome == "refused" || *body.Outcome == "mismatched_value" || *body.Outcome == "capability_missing") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"passed", "unreachable", "refused", "mismatched_value", "capability_missing"}))
+		if !(*body.Outcome == "passed" || *body.Outcome == "pending_validation" || *body.Outcome == "unreachable" || *body.Outcome == "refused" || *body.Outcome == "mismatched_value" || *body.Outcome == "capability_missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"passed", "pending_validation", "unreachable", "refused", "mismatched_value", "capability_missing"}))
 		}
 	}
 	if body.Evidence != nil {
@@ -4018,8 +4020,8 @@ func ValidateIdentityProviderCapabilityReadResponseBody(body *IdentityProviderCa
 		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
 	}
 	if body.Resource != nil {
-		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps" || *body.Resource == "sign_in_application" || *body.Resource == "sign_in_connection") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps", "sign_in_application", "sign_in_connection"}))
+		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps" || *body.Resource == "authorization_servers" || *body.Resource == "sign_in_application" || *body.Resource == "sign_in_connection") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps", "authorization_servers", "sign_in_application", "sign_in_connection"}))
 		}
 	}
 	return
@@ -4219,6 +4221,9 @@ func ValidateIdentityProviderClaimResponseBody(body *IdentityProviderClaimRespon
 	if body.CarriesAccess == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("carries_access", "body"))
 	}
+	if body.Provisioned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provisioned", "body"))
+	}
 	return
 }
 
@@ -4259,8 +4264,8 @@ func ValidateIdentityProviderVerifyResultResponseBody(body *IdentityProviderVeri
 		err = goa.MergeErrors(err, goa.MissingFieldError("evidence", "body"))
 	}
 	if body.Outcome != nil {
-		if !(*body.Outcome == "passed" || *body.Outcome == "unreachable" || *body.Outcome == "refused" || *body.Outcome == "mismatched_value" || *body.Outcome == "capability_missing") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"passed", "unreachable", "refused", "mismatched_value", "capability_missing"}))
+		if !(*body.Outcome == "passed" || *body.Outcome == "pending_validation" || *body.Outcome == "unreachable" || *body.Outcome == "refused" || *body.Outcome == "mismatched_value" || *body.Outcome == "capability_missing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"passed", "pending_validation", "unreachable", "refused", "mismatched_value", "capability_missing"}))
 		}
 	}
 	if body.Evidence != nil {

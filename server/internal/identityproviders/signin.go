@@ -38,11 +38,12 @@ const (
 )
 
 type storedSignInEvidence struct {
-	ClientID  string                   `json:"client_id,omitempty"`
-	Outcome   string                   `json:"outcome,omitempty"`
-	Detail    string                   `json:"detail,omitempty"`
-	CheckedAt string                   `json:"checked_at,omitempty"`
-	Reads     []storedVerificationRead `json:"reads,omitempty"`
+	ClientID               string                   `json:"client_id,omitempty"`
+	GroupsClaimProvisioned bool                     `json:"groups_claim_provisioned,omitempty"`
+	Outcome                string                   `json:"outcome,omitempty"`
+	Detail                 string                   `json:"detail,omitempty"`
+	CheckedAt              string                   `json:"checked_at,omitempty"`
+	Reads                  []storedVerificationRead `json:"reads,omitempty"`
 }
 
 func (s *Service) submitSignInSetupStep(
@@ -72,6 +73,12 @@ func (s *Service) submitSignInSetupStep(
 		if slices.Contains(before.Capabilities, capabilitySignInProvisioning) {
 			if err := s.assignSignInApplicationToEveryone(ctx, authCtx.ActiveOrganizationID, before); err != nil {
 				return nil, oops.E(oops.CodeGatewayError, err, "error assigning the Okta sign-in application to Everyone").LogError(ctx, logger)
+			}
+		}
+		if slices.Contains(before.Capabilities, capabilityClaimsProvisioning) {
+			before, err = s.provisionGroupsClaim(ctx, authCtx, logger, before)
+			if err != nil {
+				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
 			}
 		}
 		step, err := buildSignInSetupStep(before)
@@ -153,6 +160,7 @@ func (s *Service) submitSignInSetupStep(
 		return queries.UpdateOktaIdentityProviderSignInAcknowledgement(ctx, repo.UpdateOktaIdentityProviderSignInAcknowledgementParams{
 			GroupsSource:                 conv.PtrToPGTextEmpty(groupsSource),
 			GroupsClaimConfirmed:         groupsClaimConfirmed,
+			SignInEvidence:               before.SignInEvidence,
 			OrganizationID:               authCtx.ActiveOrganizationID,
 			IdentityProviderConnectionID: before.ID,
 		})
@@ -175,6 +183,7 @@ func (s *Service) submitSignInApplication(
 	before repo.GetIdentityProviderConnectionByOrganizationRow,
 ) (*gen.SubmitSetupStepResult, error) {
 	canProvision := slices.Contains(before.Capabilities, capabilitySignInProvisioning)
+	canProvisionClaims := slices.Contains(before.Capabilities, capabilityClaimsProvisioning)
 	var submittedClientID, clientSecret string
 	if canProvision {
 		if len(payload.Values) != 0 {
@@ -230,13 +239,16 @@ func (s *Service) submitSignInApplication(
 	if canProvision != slices.Contains(before.Capabilities, capabilitySignInProvisioning) {
 		return nil, oops.E(oops.CodeConflict, nil, "Okta capabilities changed during sign-in setup").LogError(ctx, logger)
 	}
+	if canProvisionClaims != slices.Contains(before.Capabilities, capabilityClaimsProvisioning) {
+		return nil, oops.E(oops.CodeConflict, nil, "Okta capabilities changed during sign-in setup").LogError(ctx, logger)
+	}
 	if !before.WorkosID.Valid || strings.TrimSpace(before.WorkosID.String) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, logger)
 	}
 
 	tokenScopes := requiredOktaReadScopes
 	if canProvision {
-		tokenScopes = requiredOktaScopes
+		tokenScopes = oktaApplicationProvisioningScopes
 	}
 	token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, tokenScopes)
 	if err != nil {
@@ -259,6 +271,14 @@ func (s *Service) submitSignInApplication(
 			if err := s.assignSignInApplicationToEveryone(ctx, authCtx.ActiveOrganizationID, before); err != nil {
 				return nil, oops.E(oops.CodeGatewayError, err, "error assigning the Okta sign-in application to Everyone").LogError(ctx, logger)
 			}
+		}
+		if canProvisionClaims {
+			before, err = s.provisionGroupsClaim(ctx, authCtx, logger, before)
+			if err != nil {
+				return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
+			}
+		}
+		if canProvision {
 			step, buildErr := buildSignInSetupStep(before)
 			if buildErr != nil {
 				return nil, oops.E(oops.CodeUnexpected, buildErr, "error building identity provider setup").LogError(ctx, logger)
@@ -294,11 +314,12 @@ func (s *Service) submitSignInApplication(
 		return nil, oops.E(oops.CodeGatewayError, nil, "Okta returned an incomplete sign-in application").LogError(ctx, logger)
 	}
 	evidence, err := json.Marshal(storedSignInEvidence{
-		ClientID:  application.ClientID,
-		Outcome:   "",
-		Detail:    "",
-		CheckedAt: "",
-		Reads:     nil,
+		ClientID:               application.ClientID,
+		GroupsClaimProvisioned: false,
+		Outcome:                "",
+		Detail:                 "",
+		CheckedAt:              "",
+		Reads:                  nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error encoding Okta sign-in application state").LogError(ctx, logger)
@@ -335,13 +356,19 @@ func (s *Service) submitSignInApplication(
 		if err := s.assignSignInApplicationToEveryone(ctx, authCtx.ActiveOrganizationID, after); err != nil {
 			return nil, oops.E(oops.CodeGatewayError, err, "error assigning the Okta sign-in application to Everyone").LogError(ctx, logger)
 		}
-		if clientSecret == "" {
-			step, buildErr := buildSignInSetupStep(after)
-			if buildErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, buildErr, "error building identity provider setup").LogError(ctx, logger)
-			}
-			return &gen.SubmitSetupStepResult{Step: step, FieldOutcomes: []*gen.IdentityProviderFieldOutcome{}, NextStepKey: nil}, nil
+	}
+	if canProvisionClaims {
+		after, err = s.provisionGroupsClaim(ctx, authCtx, logger, after)
+		if err != nil {
+			return nil, oops.E(oops.CodeGatewayError, err, "error provisioning the Okta groups claim").LogError(ctx, logger)
 		}
+	}
+	if canProvision && clientSecret == "" {
+		step, buildErr := buildSignInSetupStep(after)
+		if buildErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, buildErr, "error building identity provider setup").LogError(ctx, logger)
+		}
+		return &gen.SubmitSetupStepResult{Step: step, FieldOutcomes: []*gen.IdentityProviderFieldOutcome{}, NextStepKey: nil}, nil
 	}
 	return s.createWorkOSSignInConnection(ctx, authCtx, logger, after, application, clientSecret, canProvision)
 }
@@ -355,10 +382,14 @@ func (s *Service) createWorkOSSignInConnection(
 	clientSecret string,
 	canProvision bool,
 ) (*gen.SubmitSetupStepResult, error) {
+	discoveryEndpoint := "https://" + normalizeOktaDomain(before.TenantIdentifier) + "/.well-known/openid-configuration"
+	if slices.Contains(before.Capabilities, capabilityClaimsProvisioning) {
+		discoveryEndpoint = "https://" + normalizeOktaDomain(before.TenantIdentifier) + "/oauth2/default/.well-known/openid-configuration"
+	}
 	connection, connectionErr := s.workos.CreateOIDCConnection(ctx, workos.CreateOIDCConnectionInput{
 		OrganizationID:    before.WorkosID.String,
 		Name:              "Okta",
-		DiscoveryEndpoint: "https://" + normalizeOktaDomain(before.TenantIdentifier) + "/.well-known/openid-configuration",
+		DiscoveryEndpoint: discoveryEndpoint,
 		ClientID:          application.ClientID,
 		ClientSecret:      clientSecret,
 	})
@@ -454,7 +485,7 @@ func (s *Service) getActiveStoredSignInApplication(
 }
 
 func (s *Service) assignSignInApplicationToEveryone(ctx context.Context, organizationID string, row repo.GetIdentityProviderConnectionByOrganizationRow) error {
-	token, err := s.acquireOktaManagementToken(ctx, organizationID, row, requiredOktaScopes)
+	token, err := s.acquireOktaManagementToken(ctx, organizationID, row, oktaApplicationProvisioningScopes)
 	if err != nil {
 		return err
 	}
@@ -467,6 +498,57 @@ func (s *Service) assignSignInApplicationToEveryone(ctx context.Context, organiz
 		return fmt.Errorf("assign Okta sign-in application to Everyone: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) provisionGroupsClaim(
+	ctx context.Context,
+	authCtx *contextvalues.AuthContext,
+	logger *slog.Logger,
+	before repo.GetIdentityProviderConnectionByOrganizationRow,
+) (repo.GetIdentityProviderConnectionByOrganizationRow, error) {
+	evidence, err := decodeStoredSignInEvidence(before.SignInEvidence)
+	if err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, err
+	}
+	if evidence.GroupsClaimProvisioned {
+		return before, nil
+	}
+	token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, oktaClaimsProvisioningScopes)
+	if err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, err
+	}
+	tenantDomain := normalizeOktaDomain(before.TenantIdentifier)
+	servers, err := s.okta.ListAuthorizationServers(ctx, tenantDomain, token.AccessToken)
+	if err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("list Okta authorization servers: %w", err)
+	}
+	authorizationServerID := ""
+	for _, server := range servers {
+		if server.Name == "default" && server.ID != "" {
+			authorizationServerID = server.ID
+			break
+		}
+	}
+	if authorizationServerID == "" {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, errors.New("find Okta default authorization server: server not found")
+	}
+	if err := s.okta.CreateGroupsClaim(ctx, tenantDomain, token.AccessToken, authorizationServerID); err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("create Okta groups claim: %w", err)
+	}
+	evidence.GroupsClaimProvisioned = true
+	encodedEvidence, err := json.Marshal(evidence)
+	if err != nil {
+		return repo.GetIdentityProviderConnectionByOrganizationRow{}, fmt.Errorf("encode provisioned Okta groups claim: %w", err)
+	}
+	return s.persistSignInUpdate(ctx, authCtx, logger, before, func(queries *repo.Queries) error {
+		return queries.UpdateOktaIdentityProviderSignInAcknowledgement(ctx, repo.UpdateOktaIdentityProviderSignInAcknowledgementParams{
+			GroupsSource:                 conv.ToPGText("token"),
+			GroupsClaimConfirmed:         true,
+			SignInEvidence:               encodedEvidence,
+			OrganizationID:               authCtx.ActiveOrganizationID,
+			IdentityProviderConnectionID: before.ID,
+		})
+	})
 }
 
 func (s *Service) verifySignInSetupStep(
@@ -550,6 +632,8 @@ func (s *Service) verifySignInSetupStep(
 		connectionDetail = "Unable to read the WorkOS sign-in connection."
 	} else if connectionID == "" {
 		connectionDetail = "WorkOS does not have an active OIDC connection for this organization."
+	} else if connection.State == "validating" {
+		connectionDetail = "WorkOS has the sign-in configuration and is waiting for the first successful sign-in."
 	} else if connection.State != "active" {
 		connectionDetail = "WorkOS OIDC connection state is " + connection.State + "."
 	} else if connection.ConnectionType != "GenericOIDC" || !before.WorkosID.Valid || connection.OrganizationID != before.WorkosID.String {
@@ -579,18 +663,22 @@ func (s *Service) verifySignInSetupStep(
 		storedReads[i] = storedVerificationRead{Capability: read.Capability, Resource: read.Resource, OK: read.OK, Count: read.Count, Detail: read.Detail}
 	}
 	evidence, err := json.Marshal(storedSignInEvidence{
-		ClientID:  prior.ClientID,
-		Outcome:   result.Outcome,
-		Detail:    result.Detail,
-		CheckedAt: result.Evidence.CheckedAt,
-		Reads:     storedReads,
+		ClientID:               prior.ClientID,
+		GroupsClaimProvisioned: prior.GroupsClaimProvisioned,
+		Outcome:                result.Outcome,
+		Detail:                 result.Detail,
+		CheckedAt:              result.Evidence.CheckedAt,
+		Reads:                  storedReads,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error encoding sign-in verification").LogError(ctx, logger)
 	}
 	signInState := "failed"
-	if outcome == "passed" {
+	switch outcome {
+	case "passed":
 		signInState = "passed"
+	case "pending_validation":
+		signInState = "application_created"
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -683,7 +771,12 @@ func signInVerificationOutcome(
 	}
 	if !connectionOK {
 		if !portalFallback && connection.State != "" && connection.State != "active" {
-			return "refused", "WorkOS reported the sign-in connection state as " + connection.State + "."
+			switch connection.State {
+			case "validating":
+				return "pending_validation", "Speakeasy has configured sign-in. It becomes active after the first successful sign-in through Okta; run a test sign-in from the sign-in provider or sign in to Speakeasy with Okta, then check again."
+			case "draft", "inactive", "requires_type":
+				return "refused", "WorkOS reported the sign-in connection state as " + connection.State + "."
+			}
 		}
 		if !portalFallback {
 			return "mismatched_value", "The WorkOS sign-in connection does not match the configured organization and type."
@@ -779,7 +872,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 		DeepLink:       nil,
 		PrintedValues:  []*gen.IdentityProviderPrintedValue{},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{},
-		Claims:         signInClaims(),
+		Claims:         signInClaims(evidence.GroupsClaimProvisioned),
 		Repair:         nil,
 		PortalIntent:   nil,
 		State:          signInStepState(conv.FromPGText[string](row.SignInState)),
@@ -798,7 +891,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 				"Enter the application's Client ID and client secret in Speakeasy. The secret is sent to WorkOS and not retained.",
 			}
 			step.DeepLink = oktaAdminAppsURL(row.TenantIdentifier)
-			step.PrintedValues = signInPrintedValues(row.TenantIdentifier, "")
+			step.PrintedValues = signInPrintedValues(row.TenantIdentifier, "", false)
 			step.ExpectedValues = []*gen.IdentityProviderExpectedValue{
 				buildExpectedSetupValue(setupValueClientID, "Client ID", false, nil),
 				buildExpectedSetupValue(setupValueClientSecret, "Client secret", true, nil),
@@ -809,6 +902,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 
 	step.Where = "their_console"
 	workOSConnectionMissing := !row.WorkosConnectionID.Valid || strings.TrimSpace(row.WorkosConnectionID.String) == ""
+	canProvisionClaims := slices.Contains(row.Capabilities, capabilityClaimsProvisioning)
 	if workOSConnectionMissing && !slices.Contains(row.Capabilities, capabilitySignInProvisioning) {
 		step.Instructions = []string{
 			"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
@@ -816,7 +910,7 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 			"The client secret is sent to WorkOS and not retained by Speakeasy.",
 		}
 		step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "general")
-		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID)
+		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, canProvisionClaims)
 		step.ExpectedValues = []*gen.IdentityProviderExpectedValue{
 			buildExpectedSetupValue(setupValueClientID, "Client ID", false, conv.PtrEmpty(evidence.ClientID)),
 			buildExpectedSetupValue(setupValueClientSecret, "Client secret", true, nil),
@@ -824,12 +918,30 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 		step.PortalIntent = new("sso")
 		return step, nil
 	}
+	if canProvisionClaims {
+		step.Where = "our_page"
+		step.Instructions = []string{
+			"Speakeasy created the Okta sign-in application, groups claim, and WorkOS OIDC connection.",
+		}
+		step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, true)
+		if workOSConnectionMissing {
+			step.Where = "their_console"
+			step.Instructions = []string{
+				"Open WorkOS Admin Portal and choose the OpenID Connect connection.",
+				"Copy the client secret from the Okta application directly into WorkOS Admin Portal. It is not retained by Speakeasy.",
+				"Use the Client ID, issuer, and discovery URL shown below, then activate the connection.",
+			}
+			step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "general")
+			step.PortalIntent = new("sso")
+		}
+		return step, nil
+	}
 	step.Instructions = []string{
 		"Speakeasy created the Okta sign-in application and WorkOS OIDC connection.",
 		"Configure the groups claim in Okta, then confirm whether sign-in tokens or the directory will supply groups.",
 	}
 	step.DeepLink = oktaAdminApplicationURL(row.TenantIdentifier, row.SignInApplicationID.String, "sign-on")
-	step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID)
+	step.PrintedValues = signInPrintedValues(row.TenantIdentifier, evidence.ClientID, false)
 	step.ExpectedValues = []*gen.IdentityProviderExpectedValue{
 		buildExpectedSetupValue(setupValueGroupsClaimConfirmed, "Groups claim confirmed", false, conv.PtrEmpty(fmt.Sprintf("%t", row.GroupsClaimConfirmed))),
 		buildExpectedSetupValue(setupValueGroupsSource, "Groups source", false, conv.FromPGText[string](row.GroupsSource)),
@@ -856,12 +968,15 @@ func buildSignInSetupStep(row repo.GetIdentityProviderConnectionByOrganizationRo
 	return step, nil
 }
 
-func signInPrintedValues(tenantIdentifier, clientID string) []*gen.IdentityProviderPrintedValue {
+func signInPrintedValues(tenantIdentifier, clientID string, customAuthorizationServer bool) []*gen.IdentityProviderPrintedValue {
 	values := make([]*gen.IdentityProviderPrintedValue, 0, 4)
 	if clientID != "" {
 		values = append(values, &gen.IdentityProviderPrintedValue{Label: "Client ID", Value: clientID, Copyable: true})
 	}
 	issuer := "https://" + tenantIdentifier
+	if customAuthorizationServer {
+		issuer += "/oauth2/default"
+	}
 	values = append(values,
 		&gen.IdentityProviderPrintedValue{Label: "Issuer", Value: issuer, Copyable: true},
 		&gen.IdentityProviderPrintedValue{Label: "Discovery URL", Value: issuer + "/.well-known/openid-configuration", Copyable: true},
@@ -870,22 +985,22 @@ func signInPrintedValues(tenantIdentifier, clientID string) []*gen.IdentityProvi
 	return values
 }
 
-func signInClaims() []*gen.IdentityProviderClaim {
+func signInClaims(groupsProvisioned bool) []*gen.IdentityProviderClaim {
 	return []*gen.IdentityProviderClaim{
-		{Name: "email", Purpose: "identity", CarriesAccess: false},
-		{Name: "first_name", Purpose: "display", CarriesAccess: false},
-		{Name: "last_name", Purpose: "display", CarriesAccess: false},
-		{Name: "groups", Purpose: "used by access rules", CarriesAccess: true},
+		{Name: "email", Purpose: "identity", CarriesAccess: false, Provisioned: false},
+		{Name: "first_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+		{Name: "last_name", Purpose: "display", CarriesAccess: false, Provisioned: false},
+		{Name: "groups", Purpose: "used by access rules", CarriesAccess: true, Provisioned: groupsProvisioned},
 	}
 }
 
 func decodeStoredSignInEvidence(raw []byte) (storedSignInEvidence, error) {
 	if len(raw) == 0 {
-		return storedSignInEvidence{ClientID: "", Outcome: "", Detail: "", CheckedAt: "", Reads: nil}, nil
+		return storedSignInEvidence{ClientID: "", GroupsClaimProvisioned: false, Outcome: "", Detail: "", CheckedAt: "", Reads: nil}, nil
 	}
 	var evidence storedSignInEvidence
 	if err := json.Unmarshal(raw, &evidence); err != nil {
-		return storedSignInEvidence{}, fmt.Errorf("decode sign-in evidence: %w", err)
+		return storedSignInEvidence{ClientID: "", GroupsClaimProvisioned: false, Outcome: "", Detail: "", CheckedAt: "", Reads: nil}, fmt.Errorf("decode sign-in evidence: %w", err)
 	}
 	return evidence, nil
 }
@@ -921,7 +1036,7 @@ func signInLastOutcome(evidence storedSignInEvidence, capabilities, grantedScope
 
 func validSignInVerifyOutcome(outcome string) bool {
 	switch outcome {
-	case "passed", "unreachable", "refused", "mismatched_value", "capability_missing":
+	case "passed", "pending_validation", "unreachable", "refused", "mismatched_value", "capability_missing":
 		return true
 	default:
 		return false

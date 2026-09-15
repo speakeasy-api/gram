@@ -177,6 +177,15 @@ type Group struct {
 	Name string
 }
 
+// AuthorizationServer identifies an Okta custom authorization server.
+type AuthorizationServer struct {
+	// ID is Okta's authorization server identifier.
+	ID string `json:"id"`
+
+	// Name is the authorization server's display name.
+	Name string `json:"name"`
+}
+
 type applicationResponse struct {
 	ID          string `json:"id"`
 	Status      string `json:"status"`
@@ -218,6 +227,24 @@ type oauthClientSettingsRequest struct {
 	ResponseTypes   []string `json:"response_types"`
 	RedirectURIs    []string `json:"redirect_uris"`
 	ConsentMethod   string   `json:"consent_method"`
+}
+
+// Okta's OAuth2Claim wire model deliberately uses group_filter_type while its
+// other fields are camelCase:
+// https://github.com/okta/terraform-provider-okta/blob/33f6568264a666fb5a023a26b6b86a12d003279b/sdk/v2_oAuth2Claim.go
+type createGroupsClaimRequest struct {
+	AlwaysIncludeInToken bool                         `json:"alwaysIncludeInToken"`
+	ClaimType            string                       `json:"claimType"`
+	Conditions           authorizationClaimConditions `json:"conditions"`
+	GroupFilterType      string                       `json:"group_filter_type"`
+	Name                 string                       `json:"name"`
+	Status               string                       `json:"status"`
+	Value                string                       `json:"value"`
+	ValueType            string                       `json:"valueType"`
+}
+
+type authorizationClaimConditions struct {
+	Scopes []string `json:"scopes"`
 }
 
 type cacheKey struct {
@@ -600,6 +627,70 @@ func (c *Client) ListUsers(ctx context.Context, tenantDomain, accessToken string
 // ListApplications reads one cursor-addressable page of Okta applications.
 func (c *Client) ListApplications(ctx context.Context, tenantDomain, accessToken string, page PageRequest) (Page, error) {
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
+}
+
+// ListAuthorizationServers returns the tenant's custom authorization servers.
+func (c *Client) ListAuthorizationServers(ctx context.Context, tenantDomain, accessToken string) ([]AuthorizationServer, error) {
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/authorizationServers")
+	if err != nil {
+		return nil, fmt.Errorf("list Okta authorization servers: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create Okta authorization servers request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var response []AuthorizationServer
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &response); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// CreateGroupsClaim adds the groups identity claim to a custom authorization server.
+func (c *Client) CreateGroupsClaim(ctx context.Context, tenantDomain, accessToken, authorizationServerID string) error {
+	if authorizationServerID == "" {
+		return errors.New("create Okta groups claim: authorization server ID is required")
+	}
+	payload := createGroupsClaimRequest{
+		AlwaysIncludeInToken: true,
+		ClaimType:            "IDENTITY",
+		Conditions:           authorizationClaimConditions{Scopes: []string{}},
+		GroupFilterType:      "REGEX",
+		Name:                 "groups",
+		Status:               "ACTIVE",
+		Value:                ".*",
+		ValueType:            "GROUPS",
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode Okta groups claim: %w", err)
+	}
+	path := "/api/v1/authorizationServers/" + url.PathEscape(authorizationServerID) + "/claims"
+	requestURL, err := c.urlFor(tenantDomain, path)
+	if err != nil {
+		return fmt.Errorf("create Okta groups claim: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create Okta groups claim request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	var response struct {
+		ID string `json:"id"`
+	}
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
+		return err
+	}
+	if response.ID == "" {
+		return errors.New("create Okta groups claim: Okta returned an empty claim ID")
+	}
+	return nil
 }
 
 // CreateOIDCApplication creates the Speakeasy OIDC web application with a caller-minted client secret.

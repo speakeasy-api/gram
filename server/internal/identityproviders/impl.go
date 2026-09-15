@@ -53,7 +53,7 @@ const (
 	setupValueClientID                     = "client_id"
 	identityProviderJSONWebKeySetMaxAgeSec = 3600
 	identityProviderSigningKeyBits         = 2048
-	oktaAPIScopes                          = "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
+	oktaAPIScopes                          = "okta.apps.read okta.groups.read okta.users.read okta.apps.manage okta.authorizationServers.read okta.authorizationServers.manage"
 	oktaAdministratorRoles                 = "Read-only Administrator, Application Administrator"
 	oktaClientAuthenticationInstruction    = "Client authentication must be Public key / Private key with Use a URL; entering the URL alone is not enough"
 )

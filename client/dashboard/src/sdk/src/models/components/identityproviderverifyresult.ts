@@ -15,6 +15,7 @@ import {
 
 export const IdentityProviderVerifyResultOutcome = {
   Passed: "passed",
+  PendingValidation: "pending_validation",
   Unreachable: "unreachable",
   Refused: "refused",
   MismatchedValue: "mismatched_value",

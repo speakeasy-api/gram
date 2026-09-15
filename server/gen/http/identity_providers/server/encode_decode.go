@@ -1507,6 +1507,7 @@ func marshalIdentityprovidersIdentityProviderClaimToIdentityProviderClaimRespons
 		Name:          v.Name,
 		Purpose:       v.Purpose,
 		CarriesAccess: v.CarriesAccess,
+		Provisioned:   v.Provisioned,
 	}
 
 	return res

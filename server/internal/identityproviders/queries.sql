@@ -120,6 +120,7 @@ UPDATE okta_identity_provider_connections AS o
 SET
   groups_source = @groups_source,
   groups_claim_confirmed = @groups_claim_confirmed,
+  sign_in_evidence = @sign_in_evidence,
   updated_at = clock_timestamp()
 FROM identity_provider_connections AS c
 WHERE o.identity_provider_connection_id = c.id

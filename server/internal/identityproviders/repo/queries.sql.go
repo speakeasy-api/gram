@@ -572,11 +572,12 @@ UPDATE okta_identity_provider_connections AS o
 SET
   groups_source = $1,
   groups_claim_confirmed = $2,
+  sign_in_evidence = $3,
   updated_at = clock_timestamp()
 FROM identity_provider_connections AS c
 WHERE o.identity_provider_connection_id = c.id
-  AND c.organization_id = $3
-  AND c.id = $4
+  AND c.organization_id = $4
+  AND c.id = $5
   AND c.deleted IS FALSE
   AND o.sign_in_application_id IS NOT NULL
 `
@@ -584,6 +585,7 @@ WHERE o.identity_provider_connection_id = c.id
 type UpdateOktaIdentityProviderSignInAcknowledgementParams struct {
 	GroupsSource                 pgtype.Text
 	GroupsClaimConfirmed         bool
+	SignInEvidence               []byte
 	OrganizationID               string
 	IdentityProviderConnectionID uuid.UUID
 }
@@ -592,6 +594,7 @@ func (q *Queries) UpdateOktaIdentityProviderSignInAcknowledgement(ctx context.Co
 	_, err := q.db.Exec(ctx, updateOktaIdentityProviderSignInAcknowledgement,
 		arg.GroupsSource,
 		arg.GroupsClaimConfirmed,
+		arg.SignInEvidence,
 		arg.OrganizationID,
 		arg.IdentityProviderConnectionID,
 	)
