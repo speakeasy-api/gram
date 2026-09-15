@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 func TestExecuteIndexToolsetWithoutTemporal(t *testing.T) {
@@ -28,7 +29,7 @@ func TestExecuteIndexToolsetWithoutTemporal(t *testing.T) {
 		DeploymentID:          uuid.New(),
 		PermanentFailureCount: 0,
 	})
-	require.ErrorIs(t, err, ErrTemporalUnavailable)
+	require.ErrorIs(t, err, tenv.ErrNotConfigured)
 	require.Nil(t, run)
 }
 

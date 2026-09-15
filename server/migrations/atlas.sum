@@ -1,4 +1,4 @@
-h1:34KKGy9gODZ8TAto6TSAVYEjJkS4QpHw7w7JdTxnYRM=
+h1:sWLOFhlJ5jr0Dibqp7JGim5RlEm8iAbZhjlb2j6ei2Q=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -405,4 +405,5 @@ h1:34KKGy9gODZ8TAto6TSAVYEjJkS4QpHw7w7JdTxnYRM=
 20260914180125_meta-mcp-servers-add-instructions.sql h1:ST3kAJt/RWvfNP11TMCGIvTeLn5i0/PN6r6naSvELjE=
 20260914214202_remote-sessions-recheck-due-idx.sql h1:mOvmU54oQwFnA+CwO4M+o1tYcMwufEcmXbNMOraTMTw=
 20260914231317_organization-onboarding.sql h1:4FOev19mpRTwBlP3FXGxZJNjR6E3+rZ49cW0Gex3jZw=
-20260915002444_ai-scan-targets.sql h1:6g4Tr3oS4KFcTHVW0LzS85Tkew8H+7V0pe3GnuHHr3w=
+20260915092321_principal_remote_session_bindings.sql h1:sGx4I8wPGx6RhZMVAz0Gt/5w/W+tQumNIIcla0T9T58=
+20260915160400_ai-scan-targets.sql h1:0TIdQ8+qyLPHX9jdA+HwyhnmlhEVbDCN5TvVqvjLVmw=
