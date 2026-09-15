@@ -10,6 +10,12 @@ const onboardingStatus = vi.hoisted(() => ({
   },
 }));
 const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const identityProvider = vi.hoisted(() => ({
+  current: { data: { connection: undefined }, isPending: false } as {
+    data: { connection: { status: string } | undefined };
+    isPending: boolean;
+  },
+}));
 
 vi.mock("@gram/client/react-query/onboardingStatus", () => ({
   useOnboardingStatus: () => onboardingStatus.current,
@@ -21,15 +27,12 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
 }));
 
-// The guided path reads the identity provider connection. This file covers the
-// fork and the grid; okta-connect-section.test.tsx covers the exchange itself,
-// so here there is never a connection.
+// The guided path reads the identity provider connection, and which steps open
+// follows from it. This file covers the fork, the grid and what each step does
+// with the connection; okta-connect-section.test.tsx covers the exchange itself.
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/identityProvider.js", () => ({
-  useIdentityProvider: () => ({
-    data: { connection: undefined },
-    isPending: false,
-  }),
+  useIdentityProvider: () => identityProvider.current,
   invalidateAllIdentityProvider: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/identityProviderSetup.js", () => ({
@@ -74,6 +77,10 @@ beforeEach(() => {
     refetch: vi.fn(),
   };
   portal.mutate.mockReset();
+  identityProvider.current = {
+    data: { connection: undefined },
+    isPending: false,
+  };
 });
 
 describe("IdentityProviderStep", () => {
@@ -156,6 +163,25 @@ describe("IdentityProviderStep", () => {
     expect(
       screen.queryByRole("button", { name: "Connect directory" }),
     ).toBeNull();
+  });
+
+  it("opens the directory step on the portal once Okta is connected", () => {
+    identityProvider.current = {
+      data: { connection: { status: "active" } },
+      isPending: false,
+    };
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    // The directory is the one step Speakeasy cannot do over the API, and it
+    // opens on the connection alone rather than waiting on sign-on.
+    expect(
+      screen.getByText("This is the one step that leaves Speakeasy"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Connect directory" }),
+    ).toBeTruthy();
+    // No group mirroring here: the portal owns the directory.
+    expect(screen.queryByText(/one Speakeasy role per Okta group/)).toBeNull();
   });
 
   it("names the rest of the journey without opening it", () => {

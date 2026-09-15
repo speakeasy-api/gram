@@ -12,6 +12,7 @@ import type { IdentityProviderConnection } from "@gram/client/models/components/
 import { useIdentityProvider } from "@gram/client/react-query/identityProvider.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -127,7 +128,8 @@ export function IdentityProviderStep({
           index={3}
           configured={!!onboardingStatus?.dsyncConfigured}
           isLoading={isLoading}
-          locked={guided}
+          locked={guided && connection?.status !== "active"}
+          guided={guided}
         />
         {LOCKED_STEPS.map((step) => (
           <StepSection key={step.slug} locked {...step} />
@@ -502,7 +504,15 @@ function DirectorySyncSection({
   configured,
   isLoading,
   locked,
-}: SectionProps): JSX.Element {
+  guided,
+}: SectionProps & {
+  /**
+   * On the guided path this is the one step Speakeasy cannot do for you: the
+   * directory is created in the sign-in provider's portal, so the step says so
+   * rather than letting the round trip come as a surprise.
+   */
+  guided: boolean;
+}): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
@@ -569,10 +579,24 @@ function DirectorySyncSection({
   } else {
     body = (
       <div className="space-y-4">
+        {guided ? (
+          <Alert variant="info" alignTop>
+            <div>
+              <AlertTitle>
+                This is the one step that leaves Speakeasy
+              </AlertTitle>
+              <AlertDescription>
+                Everything else about Okta is set up from here, but a directory
+                is created in Speakeasy&apos;s sign-in provider portal rather
+                than over its API. You go there once, and come back.
+              </AlertDescription>
+            </div>
+          </Alert>
+        ) : null}
         <PortalNote>
           {portalOpened
-            ? "Finish configuring the directory connection in the WorkOS tab, then verify it here."
-            : "After clicking Connect directory, the WorkOS portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
+            ? `Finish configuring the directory connection in the ${guided ? "portal" : "WorkOS"} tab, then verify it here.`
+            : `After clicking Connect directory, the ${guided ? "sign-in provider portal" : "WorkOS portal"} opens in a new browser tab. Finish configuring the connection there, then come back and verify.`}
         </PortalNote>
         <div className="flex justify-end">
           {portalOpened ? (
@@ -604,11 +628,7 @@ function DirectorySyncSection({
       index={index}
       slug="directory-sync"
       title="Directory sync"
-      description={
-        locked
-          ? "Mirror one Speakeasy role per Okta group so access can follow the assignments Okta already holds."
-          : "Keep users, groups, and roles in step with your identity provider automatically."
-      }
+      description="Keep users, groups, and roles in step with your identity provider automatically."
       complete={configured}
       locked={locked}
       badge={locked ? "Waiting" : undefined}
