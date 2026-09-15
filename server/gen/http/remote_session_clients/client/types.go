@@ -13,6 +13,50 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// PrepareEMARequestBody is the type of the "remoteSessionClients" service
+// "prepareEMA" endpoint HTTP request body.
+type PrepareEMARequestBody struct {
+	UserSessionIssuerID   string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Canonical intended resource URI.
+	Resource string `form:"resource" json:"resource" xml:"resource"`
+	// Explicit selected client row ID; never inferred.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Requested scope tokens.
+	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	Mechanism string   `form:"mechanism" json:"mechanism" xml:"mechanism"`
+	// Explicit DCR authentication method.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	ResourceMetadata        *struct {
+		Resource             string   `form:"resource" json:"resource" xml:"resource"`
+		AuthorizationServers []string `form:"authorization_servers" json:"authorization_servers" xml:"authorization_servers"`
+	} `form:"resource_metadata,omitempty" json:"resource_metadata,omitempty" xml:"resource_metadata,omitempty"`
+	// Administrator-declared grants, not provider verification.
+	ConfirmGrants []string `form:"confirm_grants,omitempty" json:"confirm_grants,omitempty" xml:"confirm_grants,omitempty"`
+	// Optimistic binding generation.
+	ExpectedGeneration int64 `form:"expected_generation" json:"expected_generation" xml:"expected_generation"`
+}
+
+// ReadEMARequestBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP request body.
+type ReadEMARequestBody struct {
+	UserSessionIssuerID   string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Canonical intended resource URI.
+	Resource string `form:"resource" json:"resource" xml:"resource"`
+}
+
+// UnlinkEMARequestBody is the type of the "remoteSessionClients" service
+// "unlinkEMA" endpoint HTTP request body.
+type UnlinkEMARequestBody struct {
+	UserSessionIssuerID   string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Canonical intended resource URI.
+	Resource string `form:"resource" json:"resource" xml:"resource"`
+	// Optimistic binding generation.
+	ExpectedGeneration int64 `form:"expected_generation" json:"expected_generation" xml:"expected_generation"`
+}
+
 // CreateRemoteSessionClientRequestBody is the type of the
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // request body.
@@ -113,10 +157,85 @@ type AttachKeySetRequestBody struct {
 	JSONWebKeySetID string `form:"json_web_key_set_id" json:"json_web_key_set_id" xml:"json_web_key_set_id"`
 }
 
+// PrepareEMAResponseBody is the type of the "remoteSessionClients" service
+// "prepareEMA" endpoint HTTP response body.
+type PrepareEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Safe next action without provider bodies or credentials.
+	Remediation *string `form:"remediation,omitempty" json:"remediation,omitempty" xml:"remediation,omitempty"`
+	Retryable   *bool   `form:"retryable,omitempty" json:"retryable,omitempty" xml:"retryable,omitempty"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  *int64  `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
+}
+
+// ReadEMAResponseBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP response body.
+type ReadEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Safe next action without provider bodies or credentials.
+	Remediation *string `form:"remediation,omitempty" json:"remediation,omitempty" xml:"remediation,omitempty"`
+	Retryable   *bool   `form:"retryable,omitempty" json:"retryable,omitempty" xml:"retryable,omitempty"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  *int64  `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
+}
+
+// UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
+// "unlinkEMA" endpoint HTTP response body.
+type UnlinkEMAResponseBody struct {
+	// Preparation state; readiness never proves user access.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Safe next action without provider bodies or credentials.
+	Remediation *string `form:"remediation,omitempty" json:"remediation,omitempty" xml:"remediation,omitempty"`
+	Retryable   *bool   `form:"retryable,omitempty" json:"retryable,omitempty" xml:"retryable,omitempty"`
+	BindingID   *string `form:"binding_id,omitempty" json:"binding_id,omitempty" xml:"binding_id,omitempty"`
+	Generation  *int64  `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string `form:"external_client_id,omitempty" json:"external_client_id,omitempty" xml:"external_client_id,omitempty"`
+	Issuer           *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	Resource         *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	// Provenance of recorded grants, not provider trust.
+	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
+}
+
 // CreateRemoteSessionClientResponseBody is the type of the
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint HTTP
 // response body.
 type CreateRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -166,6 +285,9 @@ type CreateRemoteSessionClientResponseBody struct {
 // CreateCimdResponseBody is the type of the "remoteSessionClients" service
 // "createCimd" endpoint HTTP response body.
 type CreateCimdResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -216,6 +338,9 @@ type CreateCimdResponseBody struct {
 // "remoteSessionClients" service "updateRemoteSessionClient" endpoint HTTP
 // response body.
 type UpdateRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -266,6 +391,9 @@ type UpdateRemoteSessionClientResponseBody struct {
 // "remoteSessionClients" service "attachUserSessionIssuer" endpoint HTTP
 // response body.
 type AttachUserSessionIssuerResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -316,6 +444,9 @@ type AttachUserSessionIssuerResponseBody struct {
 // "remoteSessionClients" service "detachUserSessionIssuer" endpoint HTTP
 // response body.
 type DetachUserSessionIssuerResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -365,6 +496,9 @@ type DetachUserSessionIssuerResponseBody struct {
 // AttachKeySetResponseBody is the type of the "remoteSessionClients" service
 // "attachKeySet" endpoint HTTP response body.
 type AttachKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -414,6 +548,9 @@ type AttachKeySetResponseBody struct {
 // DetachKeySetResponseBody is the type of the "remoteSessionClients" service
 // "detachKeySet" endpoint HTTP response body.
 type DetachKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -472,6 +609,9 @@ type ListRemoteSessionClientsResponseBody struct {
 // GetRemoteSessionClientResponseBody is the type of the "remoteSessionClients"
 // service "getRemoteSessionClient" endpoint HTTP response body.
 type GetRemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -516,6 +656,555 @@ type GetRemoteSessionClientResponseBody struct {
 	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// PrepareEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "unauthorized"
+// error.
+type PrepareEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "forbidden" error.
+type PrepareEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "bad_request" error.
+type PrepareEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "not_found" error.
+type PrepareEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "conflict" error.
+type PrepareEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "prepareEMA" endpoint HTTP response body for
+// the "unsupported_media" error.
+type PrepareEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAInvalidResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "invalid" error.
+type PrepareEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "prepareEMA" endpoint HTTP response body for
+// the "invariant_violation" error.
+type PrepareEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "unexpected" error.
+type PrepareEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PrepareEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "prepareEMA" endpoint HTTP response body for the "gateway_error"
+// error.
+type PrepareEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "unauthorized" error.
+type ReadEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "forbidden" error.
+type ReadEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "bad_request" error.
+type ReadEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "not_found" error.
+type ReadEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "conflict" error.
+type ReadEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "readEMA" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReadEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAInvalidResponseBody is the type of the "remoteSessionClients" service
+// "readEMA" endpoint HTTP response body for the "invalid" error.
+type ReadEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "readEMA" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReadEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "unexpected" error.
+type ReadEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReadEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "readEMA" endpoint HTTP response body for the "gateway_error" error.
+type ReadEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "unauthorized" error.
+type UnlinkEMAUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAForbiddenResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "forbidden" error.
+type UnlinkEMAForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMABadRequestResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "bad_request" error.
+type UnlinkEMABadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMANotFoundResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "not_found" error.
+type UnlinkEMANotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAConflictResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "conflict" error.
+type UnlinkEMAConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "unlinkEMA" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UnlinkEMAUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAInvalidResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "invalid" error.
+type UnlinkEMAInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "unlinkEMA" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UnlinkEMAInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAUnexpectedResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "unexpected" error.
+type UnlinkEMAUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UnlinkEMAGatewayErrorResponseBody is the type of the "remoteSessionClients"
+// service "unlinkEMA" endpoint HTTP response body for the "gateway_error"
+// error.
+type UnlinkEMAGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
 // CreateRemoteSessionClientUnauthorizedResponseBody is the type of the
@@ -2445,6 +3134,9 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2489,6 +3181,78 @@ type RemoteSessionClientResponseBody struct {
 	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// NewPrepareEMARequestBody builds the HTTP request body from the payload of
+// the "prepareEMA" endpoint of the "remoteSessionClients" service.
+func NewPrepareEMARequestBody(p *remotesessionclients.PrepareEMAPayload) *PrepareEMARequestBody {
+	body := &PrepareEMARequestBody{
+		UserSessionIssuerID:     p.UserSessionIssuerID,
+		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
+		Resource:                p.Resource,
+		ClientID:                p.ClientID,
+		Mechanism:               p.Mechanism,
+		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
+		ExpectedGeneration:      p.ExpectedGeneration,
+	}
+	if p.Scopes != nil {
+		body.Scopes = make([]string, len(p.Scopes))
+		for i, val := range p.Scopes {
+			body.Scopes[i] = val
+		}
+	}
+	{
+		var zero string
+		if body.Mechanism == zero {
+			body.Mechanism = "manual"
+		}
+	}
+	if p.ResourceMetadata != nil {
+		body.ResourceMetadata = &struct {
+			Resource             string   `form:"resource" json:"resource" xml:"resource"`
+			AuthorizationServers []string `form:"authorization_servers" json:"authorization_servers" xml:"authorization_servers"`
+		}{
+			Resource: p.ResourceMetadata.Resource,
+		}
+		if p.ResourceMetadata.AuthorizationServers != nil {
+			body.ResourceMetadata.AuthorizationServers = make([]string, len(p.ResourceMetadata.AuthorizationServers))
+			for i, val := range p.ResourceMetadata.AuthorizationServers {
+				body.ResourceMetadata.AuthorizationServers[i] = val
+			}
+		} else {
+			body.ResourceMetadata.AuthorizationServers = []string{}
+		}
+	}
+	if p.ConfirmGrants != nil {
+		body.ConfirmGrants = make([]string, len(p.ConfirmGrants))
+		for i, val := range p.ConfirmGrants {
+			body.ConfirmGrants[i] = val
+		}
+	}
+	return body
+}
+
+// NewReadEMARequestBody builds the HTTP request body from the payload of the
+// "readEMA" endpoint of the "remoteSessionClients" service.
+func NewReadEMARequestBody(p *remotesessionclients.ReadEMAPayload) *ReadEMARequestBody {
+	body := &ReadEMARequestBody{
+		UserSessionIssuerID:   p.UserSessionIssuerID,
+		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
+		Resource:              p.Resource,
+	}
+	return body
+}
+
+// NewUnlinkEMARequestBody builds the HTTP request body from the payload of the
+// "unlinkEMA" endpoint of the "remoteSessionClients" service.
+func NewUnlinkEMARequestBody(p *remotesessionclients.UnlinkEMAPayload) *UnlinkEMARequestBody {
+	body := &UnlinkEMARequestBody{
+		UserSessionIssuerID:   p.UserSessionIssuerID,
+		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
+		Resource:              p.Resource,
+		ExpectedGeneration:    p.ExpectedGeneration,
+	}
+	return body
 }
 
 // NewCreateRemoteSessionClientRequestBody builds the HTTP request body from
@@ -2594,6 +3358,546 @@ func NewAttachKeySetRequestBody(p *remotesessionclients.AttachKeySetPayload) *At
 	return body
 }
 
+// NewPrepareEMAIdentityChainingPreparationOK builds a "remoteSessionClients"
+// service "prepareEMA" endpoint result from a HTTP "OK" response.
+func NewPrepareEMAIdentityChainingPreparationOK(body *PrepareEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
+	v := &remotesessionclients.IdentityChainingPreparation{
+		State:            *body.State,
+		Stage:            *body.Stage,
+		Remediation:      *body.Remediation,
+		Retryable:        *body.Retryable,
+		BindingID:        body.BindingID,
+		Generation:       *body.Generation,
+		ClientID:         body.ClientID,
+		ExternalClientID: body.ExternalClientID,
+		Issuer:           body.Issuer,
+		Resource:         *body.Resource,
+		GrantSource:      *body.GrantSource,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+
+	return v
+}
+
+// NewPrepareEMAUnauthorized builds a remoteSessionClients service prepareEMA
+// endpoint unauthorized error.
+func NewPrepareEMAUnauthorized(body *PrepareEMAUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAForbidden builds a remoteSessionClients service prepareEMA
+// endpoint forbidden error.
+func NewPrepareEMAForbidden(body *PrepareEMAForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMABadRequest builds a remoteSessionClients service prepareEMA
+// endpoint bad_request error.
+func NewPrepareEMABadRequest(body *PrepareEMABadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMANotFound builds a remoteSessionClients service prepareEMA
+// endpoint not_found error.
+func NewPrepareEMANotFound(body *PrepareEMANotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAConflict builds a remoteSessionClients service prepareEMA
+// endpoint conflict error.
+func NewPrepareEMAConflict(body *PrepareEMAConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAUnsupportedMedia builds a remoteSessionClients service
+// prepareEMA endpoint unsupported_media error.
+func NewPrepareEMAUnsupportedMedia(body *PrepareEMAUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAInvalid builds a remoteSessionClients service prepareEMA
+// endpoint invalid error.
+func NewPrepareEMAInvalid(body *PrepareEMAInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAInvariantViolation builds a remoteSessionClients service
+// prepareEMA endpoint invariant_violation error.
+func NewPrepareEMAInvariantViolation(body *PrepareEMAInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAUnexpected builds a remoteSessionClients service prepareEMA
+// endpoint unexpected error.
+func NewPrepareEMAUnexpected(body *PrepareEMAUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPrepareEMAGatewayError builds a remoteSessionClients service prepareEMA
+// endpoint gateway_error error.
+func NewPrepareEMAGatewayError(body *PrepareEMAGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAIdentityChainingPreparationOK builds a "remoteSessionClients"
+// service "readEMA" endpoint result from a HTTP "OK" response.
+func NewReadEMAIdentityChainingPreparationOK(body *ReadEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
+	v := &remotesessionclients.IdentityChainingPreparation{
+		State:            *body.State,
+		Stage:            *body.Stage,
+		Remediation:      *body.Remediation,
+		Retryable:        *body.Retryable,
+		BindingID:        body.BindingID,
+		Generation:       *body.Generation,
+		ClientID:         body.ClientID,
+		ExternalClientID: body.ExternalClientID,
+		Issuer:           body.Issuer,
+		Resource:         *body.Resource,
+		GrantSource:      *body.GrantSource,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+
+	return v
+}
+
+// NewReadEMAUnauthorized builds a remoteSessionClients service readEMA
+// endpoint unauthorized error.
+func NewReadEMAUnauthorized(body *ReadEMAUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAForbidden builds a remoteSessionClients service readEMA endpoint
+// forbidden error.
+func NewReadEMAForbidden(body *ReadEMAForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMABadRequest builds a remoteSessionClients service readEMA endpoint
+// bad_request error.
+func NewReadEMABadRequest(body *ReadEMABadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMANotFound builds a remoteSessionClients service readEMA endpoint
+// not_found error.
+func NewReadEMANotFound(body *ReadEMANotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAConflict builds a remoteSessionClients service readEMA endpoint
+// conflict error.
+func NewReadEMAConflict(body *ReadEMAConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAUnsupportedMedia builds a remoteSessionClients service readEMA
+// endpoint unsupported_media error.
+func NewReadEMAUnsupportedMedia(body *ReadEMAUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAInvalid builds a remoteSessionClients service readEMA endpoint
+// invalid error.
+func NewReadEMAInvalid(body *ReadEMAInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAInvariantViolation builds a remoteSessionClients service readEMA
+// endpoint invariant_violation error.
+func NewReadEMAInvariantViolation(body *ReadEMAInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAUnexpected builds a remoteSessionClients service readEMA endpoint
+// unexpected error.
+func NewReadEMAUnexpected(body *ReadEMAUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReadEMAGatewayError builds a remoteSessionClients service readEMA
+// endpoint gateway_error error.
+func NewReadEMAGatewayError(body *ReadEMAGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAIdentityChainingPreparationOK builds a "remoteSessionClients"
+// service "unlinkEMA" endpoint result from a HTTP "OK" response.
+func NewUnlinkEMAIdentityChainingPreparationOK(body *UnlinkEMAResponseBody) *remotesessionclients.IdentityChainingPreparation {
+	v := &remotesessionclients.IdentityChainingPreparation{
+		State:            *body.State,
+		Stage:            *body.Stage,
+		Remediation:      *body.Remediation,
+		Retryable:        *body.Retryable,
+		BindingID:        body.BindingID,
+		Generation:       *body.Generation,
+		ClientID:         body.ClientID,
+		ExternalClientID: body.ExternalClientID,
+		Issuer:           body.Issuer,
+		Resource:         *body.Resource,
+		GrantSource:      *body.GrantSource,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+
+	return v
+}
+
+// NewUnlinkEMAUnauthorized builds a remoteSessionClients service unlinkEMA
+// endpoint unauthorized error.
+func NewUnlinkEMAUnauthorized(body *UnlinkEMAUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAForbidden builds a remoteSessionClients service unlinkEMA
+// endpoint forbidden error.
+func NewUnlinkEMAForbidden(body *UnlinkEMAForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMABadRequest builds a remoteSessionClients service unlinkEMA
+// endpoint bad_request error.
+func NewUnlinkEMABadRequest(body *UnlinkEMABadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMANotFound builds a remoteSessionClients service unlinkEMA
+// endpoint not_found error.
+func NewUnlinkEMANotFound(body *UnlinkEMANotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAConflict builds a remoteSessionClients service unlinkEMA
+// endpoint conflict error.
+func NewUnlinkEMAConflict(body *UnlinkEMAConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAUnsupportedMedia builds a remoteSessionClients service unlinkEMA
+// endpoint unsupported_media error.
+func NewUnlinkEMAUnsupportedMedia(body *UnlinkEMAUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAInvalid builds a remoteSessionClients service unlinkEMA endpoint
+// invalid error.
+func NewUnlinkEMAInvalid(body *UnlinkEMAInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAInvariantViolation builds a remoteSessionClients service
+// unlinkEMA endpoint invariant_violation error.
+func NewUnlinkEMAInvariantViolation(body *UnlinkEMAInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAUnexpected builds a remoteSessionClients service unlinkEMA
+// endpoint unexpected error.
+func NewUnlinkEMAUnexpected(body *UnlinkEMAUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUnlinkEMAGatewayError builds a remoteSessionClients service unlinkEMA
+// endpoint gateway_error error.
+func NewUnlinkEMAGatewayError(body *UnlinkEMAGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewCreateRemoteSessionClientRemoteSessionClientOK builds a
 // "remoteSessionClients" service "createRemoteSessionClient" endpoint result
 // from a HTTP "OK" response.
@@ -2614,6 +3918,12 @@ func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSession
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2798,6 +4108,12 @@ func NewCreateCimdRemoteSessionClientOK(body *CreateCimdResponseBody) *types.Rem
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2984,6 +4300,12 @@ func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSession
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -3168,6 +4490,12 @@ func NewAttachUserSessionIssuerRemoteSessionClientOK(body *AttachUserSessionIssu
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3354,6 +4682,12 @@ func NewDetachUserSessionIssuerRemoteSessionClientOK(body *DetachUserSessionIssu
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -3537,6 +4871,12 @@ func NewAttachKeySetRemoteSessionClientOK(body *AttachKeySetResponseBody) *types
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3736,6 +5076,12 @@ func NewDetachKeySetRemoteSessionClientOK(body *DetachKeySetResponseBody) *types
 		Audience:                        body.Audience,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
+	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -4105,6 +5451,12 @@ func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClient
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
 	}
+	if body.GrantTypes != nil {
+		v.GrantTypes = make([]string, len(body.GrantTypes))
+		for i, val := range body.GrantTypes {
+			v.GrantTypes[i] = val
+		}
+	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
 		v.UserSessionIssuerIds[i] = val
@@ -4417,6 +5769,126 @@ func NewDeleteRemoteSessionClientGatewayError(body *DeleteRemoteSessionClientGat
 	}
 
 	return v
+}
+
+// ValidatePrepareEMAResponseBody runs the validations defined on
+// PrepareEMAResponseBody
+func ValidatePrepareEMAResponseBody(body *PrepareEMAResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Remediation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remediation", "body"))
+	}
+	if body.Retryable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retryable", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.GrantSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_source", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "unsupported_profile" || *body.State == "incomplete_metadata" || *body.State == "unknown_grants" || *body.State == "manual_setup_required" || *body.State == "configuration_required" || *body.State == "in_progress" || *body.State == "indeterminate" || *body.State == "provider_rejection" || *body.State == "transient_failure" || *body.State == "published_acceptance_unverified" || *body.State == "ready" || *body.State == "unlinked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unsupported_profile", "incomplete_metadata", "unknown_grants", "manual_setup_required", "configuration_required", "in_progress", "indeterminate", "provider_rejection", "transient_failure", "published_acceptance_unverified", "ready", "unlinked"}))
+		}
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "selection" || *body.Stage == "eligibility" || *body.Stage == "registration" || *body.Stage == "discovery" || *body.Stage == "publication") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
+		}
+	}
+	return
+}
+
+// ValidateReadEMAResponseBody runs the validations defined on
+// ReadEMAResponseBody
+func ValidateReadEMAResponseBody(body *ReadEMAResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Remediation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remediation", "body"))
+	}
+	if body.Retryable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retryable", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.GrantSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_source", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "unsupported_profile" || *body.State == "incomplete_metadata" || *body.State == "unknown_grants" || *body.State == "manual_setup_required" || *body.State == "configuration_required" || *body.State == "in_progress" || *body.State == "indeterminate" || *body.State == "provider_rejection" || *body.State == "transient_failure" || *body.State == "published_acceptance_unverified" || *body.State == "ready" || *body.State == "unlinked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unsupported_profile", "incomplete_metadata", "unknown_grants", "manual_setup_required", "configuration_required", "in_progress", "indeterminate", "provider_rejection", "transient_failure", "published_acceptance_unverified", "ready", "unlinked"}))
+		}
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "selection" || *body.Stage == "eligibility" || *body.Stage == "registration" || *body.Stage == "discovery" || *body.Stage == "publication") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
+		}
+	}
+	return
+}
+
+// ValidateUnlinkEMAResponseBody runs the validations defined on
+// UnlinkEMAResponseBody
+func ValidateUnlinkEMAResponseBody(body *UnlinkEMAResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if body.Remediation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remediation", "body"))
+	}
+	if body.Retryable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("retryable", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.Resource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.GrantSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grant_source", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "unsupported_profile" || *body.State == "incomplete_metadata" || *body.State == "unknown_grants" || *body.State == "manual_setup_required" || *body.State == "configuration_required" || *body.State == "in_progress" || *body.State == "indeterminate" || *body.State == "provider_rejection" || *body.State == "transient_failure" || *body.State == "published_acceptance_unverified" || *body.State == "ready" || *body.State == "unlinked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unsupported_profile", "incomplete_metadata", "unknown_grants", "manual_setup_required", "configuration_required", "in_progress", "indeterminate", "provider_rejection", "transient_failure", "published_acceptance_unverified", "ready", "unlinked"}))
+		}
+	}
+	if body.Stage != nil {
+		if !(*body.Stage == "selection" || *body.Stage == "eligibility" || *body.Stage == "registration" || *body.Stage == "discovery" || *body.Stage == "publication") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
+		}
+	}
+	return
 }
 
 // ValidateCreateRemoteSessionClientResponseBody runs the validations defined
@@ -4991,6 +6463,726 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidatePrepareEMAUnauthorizedResponseBody runs the validations defined on
+// prepareEMA_unauthorized_response_body
+func ValidatePrepareEMAUnauthorizedResponseBody(body *PrepareEMAUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAForbiddenResponseBody runs the validations defined on
+// prepareEMA_forbidden_response_body
+func ValidatePrepareEMAForbiddenResponseBody(body *PrepareEMAForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMABadRequestResponseBody runs the validations defined on
+// prepareEMA_bad_request_response_body
+func ValidatePrepareEMABadRequestResponseBody(body *PrepareEMABadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMANotFoundResponseBody runs the validations defined on
+// prepareEMA_not_found_response_body
+func ValidatePrepareEMANotFoundResponseBody(body *PrepareEMANotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAConflictResponseBody runs the validations defined on
+// prepareEMA_conflict_response_body
+func ValidatePrepareEMAConflictResponseBody(body *PrepareEMAConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAUnsupportedMediaResponseBody runs the validations defined
+// on prepareEMA_unsupported_media_response_body
+func ValidatePrepareEMAUnsupportedMediaResponseBody(body *PrepareEMAUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAInvalidResponseBody runs the validations defined on
+// prepareEMA_invalid_response_body
+func ValidatePrepareEMAInvalidResponseBody(body *PrepareEMAInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAInvariantViolationResponseBody runs the validations
+// defined on prepareEMA_invariant_violation_response_body
+func ValidatePrepareEMAInvariantViolationResponseBody(body *PrepareEMAInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAUnexpectedResponseBody runs the validations defined on
+// prepareEMA_unexpected_response_body
+func ValidatePrepareEMAUnexpectedResponseBody(body *PrepareEMAUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePrepareEMAGatewayErrorResponseBody runs the validations defined on
+// prepareEMA_gateway_error_response_body
+func ValidatePrepareEMAGatewayErrorResponseBody(body *PrepareEMAGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAUnauthorizedResponseBody runs the validations defined on
+// readEMA_unauthorized_response_body
+func ValidateReadEMAUnauthorizedResponseBody(body *ReadEMAUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAForbiddenResponseBody runs the validations defined on
+// readEMA_forbidden_response_body
+func ValidateReadEMAForbiddenResponseBody(body *ReadEMAForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMABadRequestResponseBody runs the validations defined on
+// readEMA_bad_request_response_body
+func ValidateReadEMABadRequestResponseBody(body *ReadEMABadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMANotFoundResponseBody runs the validations defined on
+// readEMA_not_found_response_body
+func ValidateReadEMANotFoundResponseBody(body *ReadEMANotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAConflictResponseBody runs the validations defined on
+// readEMA_conflict_response_body
+func ValidateReadEMAConflictResponseBody(body *ReadEMAConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAUnsupportedMediaResponseBody runs the validations defined on
+// readEMA_unsupported_media_response_body
+func ValidateReadEMAUnsupportedMediaResponseBody(body *ReadEMAUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAInvalidResponseBody runs the validations defined on
+// readEMA_invalid_response_body
+func ValidateReadEMAInvalidResponseBody(body *ReadEMAInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAInvariantViolationResponseBody runs the validations defined
+// on readEMA_invariant_violation_response_body
+func ValidateReadEMAInvariantViolationResponseBody(body *ReadEMAInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAUnexpectedResponseBody runs the validations defined on
+// readEMA_unexpected_response_body
+func ValidateReadEMAUnexpectedResponseBody(body *ReadEMAUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReadEMAGatewayErrorResponseBody runs the validations defined on
+// readEMA_gateway_error_response_body
+func ValidateReadEMAGatewayErrorResponseBody(body *ReadEMAGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAUnauthorizedResponseBody runs the validations defined on
+// unlinkEMA_unauthorized_response_body
+func ValidateUnlinkEMAUnauthorizedResponseBody(body *UnlinkEMAUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAForbiddenResponseBody runs the validations defined on
+// unlinkEMA_forbidden_response_body
+func ValidateUnlinkEMAForbiddenResponseBody(body *UnlinkEMAForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMABadRequestResponseBody runs the validations defined on
+// unlinkEMA_bad_request_response_body
+func ValidateUnlinkEMABadRequestResponseBody(body *UnlinkEMABadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMANotFoundResponseBody runs the validations defined on
+// unlinkEMA_not_found_response_body
+func ValidateUnlinkEMANotFoundResponseBody(body *UnlinkEMANotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAConflictResponseBody runs the validations defined on
+// unlinkEMA_conflict_response_body
+func ValidateUnlinkEMAConflictResponseBody(body *UnlinkEMAConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAUnsupportedMediaResponseBody runs the validations defined
+// on unlinkEMA_unsupported_media_response_body
+func ValidateUnlinkEMAUnsupportedMediaResponseBody(body *UnlinkEMAUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAInvalidResponseBody runs the validations defined on
+// unlinkEMA_invalid_response_body
+func ValidateUnlinkEMAInvalidResponseBody(body *UnlinkEMAInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAInvariantViolationResponseBody runs the validations defined
+// on unlinkEMA_invariant_violation_response_body
+func ValidateUnlinkEMAInvariantViolationResponseBody(body *UnlinkEMAInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAUnexpectedResponseBody runs the validations defined on
+// unlinkEMA_unexpected_response_body
+func ValidateUnlinkEMAUnexpectedResponseBody(body *UnlinkEMAUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUnlinkEMAGatewayErrorResponseBody runs the validations defined on
+// unlinkEMA_gateway_error_response_body
+func ValidateUnlinkEMAGatewayErrorResponseBody(body *UnlinkEMAGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
 	}
 	return
 }

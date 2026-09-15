@@ -133,25 +133,26 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:                    pgtype.Text{String: "", Valid: false},
-		Slug:                              strings.TrimSpace(payload.Slug),
-		Issuer:                            strings.TrimSpace(payload.Issuer),
-		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
-		LogoAssetID:                       logoAssetID,
-		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   orEmptySlice(payload.ScopesSupported),
-		GrantTypesSupported:               orEmptySlice(payload.GrantTypesSupported),
-		ResponseTypesSupported:            orEmptySlice(payload.ResponseTypesSupported),
-		TokenEndpointAuthMethodsSupported: orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
+		ProjectID:                           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                      pgtype.Text{String: "", Valid: false},
+		Slug:                                strings.TrimSpace(payload.Slug),
+		Issuer:                              strings.TrimSpace(payload.Issuer),
+		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                         logoAssetID,
+		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
+		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
+		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: orEmptySlice(payload.AuthorizationGrantProfilesSupported),
+		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
+		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		// Unlike the NOT NULL siblings above, deliberately not orEmptySlice:
 		// the column is nullable, and an omitted payload field must store NULL
 		// ("not captured") rather than the empty array ("the issuer advertises
@@ -379,31 +380,36 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
 	}
 
+	if err := guardEMABindingsForIssuer(ctx, txRepo, "", issuerID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
 		// Trimmed so the stored slug/issuer match what the emptiness validation
 		// above saw; whitespace-only never reaches here, so the trimmed-empty →
 		// NULL (keep) behavior of PtrToPGTextTrimmed cannot trigger.
-		Slug:                              conv.PtrToPGTextTrimmed(payload.Slug),
-		Issuer:                            conv.PtrToPGTextTrimmed(payload.Issuer),
-		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
-		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		UserinfoEndpoint:                  conv.PtrToPGText(payload.UserinfoEndpoint),
-		IntrospectionEndpoint:             conv.PtrToPGText(payload.IntrospectionEndpoint),
+		Slug:                                conv.PtrToPGTextTrimmed(payload.Slug),
+		Issuer:                              conv.PtrToPGTextTrimmed(payload.Issuer),
+		Name:                                conv.PtrToPGText(payload.Name),
+		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
+		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGText(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		UserinfoEndpoint:                    conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:               conv.PtrToPGText(payload.IntrospectionEndpoint),
 		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
 		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
 		ClaimsSupported:                            payload.ClaimsSupported,
@@ -493,6 +499,10 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	// first" would point a platform admin at clients they cannot see or remove.
 	// Reporting the two counts distinctly tells them which blockers are theirs
 	// (the global clients) and which belong to tenants.
+	if err := guardEMABindingsForIssuer(ctx, txRepo, "", issuerID); err != nil {
+		return err
+	}
+
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
@@ -600,7 +610,7 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 
 	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, s.tunnels, existing)
 	if err != nil {
-		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1143,6 +1153,10 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, err
 	}
 
+	if err := guardEMABindingsForClient(ctx, repo.New(dbtx), "", clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
@@ -1187,6 +1201,10 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	if err := guardEMABindingsForClient(ctx, txRepo, "", clientID); err != nil {
+		return err
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {

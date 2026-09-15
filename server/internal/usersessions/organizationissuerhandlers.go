@@ -335,6 +335,9 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orggen.UpdateIssuer
 	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
 	}
+	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return nil, err
+	}
 
 	existing, err := txRepo.LockOrganizationUserSessionIssuer(ctx, repo.LockOrganizationUserSessionIssuerParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
@@ -445,7 +448,17 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
 	}
 
-	return organizationIssuerDeletePreflight(ctx, s.logger, q, id, authCtx.ActiveOrganizationID)
+	preflight, err := organizationIssuerDeletePreflight(ctx, s.logger, q, id, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	count, err := remotesessionsrepo.New(s.db).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+	preflight.EmaBindingCount = count
+	preflight.CanDelete = preflight.CanDelete && count == 0
+	return preflight, nil
 }
 
 // DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
@@ -467,6 +480,9 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
+	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
+		return err
+	}
 	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
 	}

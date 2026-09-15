@@ -395,6 +395,7 @@ func sortedUnique(values []string) []string {
 // by migrateIssuer's own guards, so the dialog an admin confirms and the
 // mutation that runs cannot disagree about what blocks a migration.
 type migratePreflight struct {
+	emaBindingCount               int64
 	clientCount                   int64
 	mcpServerNames                []string
 	endpointMismatches            []issuerFieldMismatch
@@ -405,7 +406,7 @@ type migratePreflight struct {
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+	return p.emaBindingCount == 0 && len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
 }
 
 type trustedUserSessionIssuerReference struct {
@@ -417,6 +418,11 @@ type trustedUserSessionIssuerReference struct {
 // source onto target. The caller has already loaded both issuers scoped to the
 // organization and validated the scope ladder.
 func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target repo.RemoteSessionIssuer) (migratePreflight, error) {
+	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: source.ID, OrganizationID: source.OrganizationID.String, ProjectID: uuid.Nil})
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count identity-chaining bindings: %w", err)
+	}
+
 	clientCount, err := r.CountRemoteSessionClientsByIssuerID(ctx, source.ID)
 	if err != nil {
 		return migratePreflight{}, fmt.Errorf("count source issuer clients: %w", err)
@@ -472,6 +478,7 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 	}
 
 	return migratePreflight{
+		emaBindingCount:               emaCount,
 		clientCount:                   clientCount,
 		mcpServerNames:                names,
 		endpointMismatches:            endpointMismatches(source, target),
@@ -517,6 +524,10 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // have re-read both issuers under a row lock, so that the rows validated here
 // cannot change before the transaction commits.
 func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+	if err := guardEMABindingsForIssuer(ctx, r, source.OrganizationID.String, source.ID); err != nil {
+		return 0, err
+	}
+
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)

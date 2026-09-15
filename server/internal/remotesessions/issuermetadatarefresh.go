@@ -2,12 +2,14 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"sync"
 	"time"
 
@@ -128,7 +130,9 @@ type issuerMetadataPlanner func(use IssuerMetadataUse, now time.Time) issuerMeta
 
 // planIssuerMetadataRefresh: fetch when never visited, when the last visit (fetched_at or last_error_at) is stale, or when an outright transient failure is past its retry window; re-project when a stored document has a NULL capability column, no definitive failure stands, and no fetch is due (a fetch writes every column the re-projection would).
 //
-// An error stands only when it is newer than the last successful fetch. A partial read stamps both together, so its unread candidate waits for the daily cadence rather than the hourly retry.
+// An error stands only when it is newer than the last successful fetch. Legacy
+// partial snapshots stamped both together; new incomplete reads record only a
+// failure and use the hourly retry without advancing the successful timestamp.
 func planIssuerMetadataRefresh(use IssuerMetadataUse, now time.Time) issuerMetadataPlan {
 	visited, visitedAt := lastIssuerMetadataVisit(use)
 	errorStands, transient := issuerMetadataFailureState(use)
@@ -398,6 +402,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.ReprojectRemoteSessionIssuerMetadataCapabilities(ctx, repo.ReprojectRemoteSessionIssuerMetadataCapabilitiesParams{
 			CodeChallengeMethodsSupported:              orEmptySlice(doc.CodeChallengeMethodsSupported),
+			AuthorizationGrantProfilesSupported:        orEmptySlice(doc.AuthorizationGrantProfilesSupported),
 			IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
 			IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
 			ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
@@ -479,7 +484,8 @@ func issuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 			row.ClaimsSupported == nil ||
 			!row.BackchannelLogoutSupported.Valid ||
 			!row.AuthorizationResponseIssParameterSupported.Valid ||
-			row.CodeChallengeMethodsSupported == nil),
+			row.CodeChallengeMethodsSupported == nil ||
+			issuerProfilesNeedReprojection(row)),
 	}
 }
 
@@ -648,4 +654,22 @@ func sameTimestamp(a, b pgtype.Timestamptz) bool {
 		return false
 	}
 	return !a.Valid || a.Time.Equal(b.Time)
+}
+
+// The profile column predates capture and is non-null, so its empty default
+// cannot identify an uncaptured row. Compare it with the stored evidence.
+func issuerProfilesNeedReprojection(row repo.RemoteSessionIssuer) bool {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(row.Metadata, &members); err != nil {
+		return true
+	}
+	raw, present := members["authorization_grant_profiles_supported"]
+	if !present {
+		return len(row.AuthorizationGrantProfilesSupported) != 0
+	}
+	var profiles []string
+	if err := json.Unmarshal(raw, &profiles); err != nil || profiles == nil {
+		return true
+	}
+	return !slices.Equal(row.AuthorizationGrantProfilesSupported, profiles)
 }

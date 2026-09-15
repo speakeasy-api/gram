@@ -19,6 +19,15 @@ import (
 // an OAuth client of a remote_session_issuer. client_secret_encrypted is never
 // returned.
 type Service interface {
+	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
+	// tokens or establish user access.
+	PrepareEMA(context.Context, *PrepareEMAPayload) (res *IdentityChainingPreparation, err error)
+	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
+	// tokens or establish user access.
+	ReadEMA(context.Context, *ReadEMAPayload) (res *IdentityChainingPreparation, err error)
+	// Explicit, tenant-scoped identity-chaining configuration. Does not exchange
+	// tokens or establish user access.
+	UnlinkEMA(context.Context, *UnlinkEMAPayload) (res *IdentityChainingPreparation, err error)
 	// Register a remote_session_client by supplying a client_id and optional
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
@@ -77,7 +86,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [13]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachKeySetPayload is the payload type of the remoteSessionClients service
 // attachKeySet method.
@@ -202,6 +211,30 @@ type GetRemoteSessionClientPayload struct {
 	ProjectSlugInput *string
 }
 
+// IdentityChainingPreparation is the result type of the remoteSessionClients
+// service prepareEMA method.
+type IdentityChainingPreparation struct {
+	// Preparation state; readiness never proves user access.
+	State string
+	Stage string
+	// Safe next action without provider bodies or credentials.
+	Remediation string
+	Retryable   bool
+	BindingID   *string
+	Generation  int64
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string
+	Issuer           *string
+	Resource         string
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	Scopes     []string
+	// Provenance of recorded grants, not provider trust.
+	GrantSource string
+}
+
 // ListRemoteSessionClientsPayload is the payload type of the
 // remoteSessionClients service listRemoteSessionClients method.
 type ListRemoteSessionClientsPayload struct {
@@ -224,6 +257,59 @@ type ListRemoteSessionClientsResult struct {
 	Items []*types.RemoteSessionClient
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// PrepareEMAPayload is the payload type of the remoteSessionClients service
+// prepareEMA method.
+type PrepareEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+	// Explicit selected client row ID; never inferred.
+	ClientID *string
+	// Requested scope tokens.
+	Scopes    []string
+	Mechanism string
+	// Explicit DCR authentication method.
+	TokenEndpointAuthMethod *string
+	ResourceMetadata        *struct {
+		Resource             string
+		AuthorizationServers []string
+	}
+	// Administrator-declared grants, not provider verification.
+	ConfirmGrants []string
+	// Optimistic binding generation.
+	ExpectedGeneration int64
+}
+
+// ReadEMAPayload is the payload type of the remoteSessionClients service
+// readEMA method.
+type ReadEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+}
+
+// UnlinkEMAPayload is the payload type of the remoteSessionClients service
+// unlinkEMA method.
+type UnlinkEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+	// Optimistic binding generation.
+	ExpectedGeneration int64
 }
 
 // UpdateRemoteSessionClientPayload is the payload type of the

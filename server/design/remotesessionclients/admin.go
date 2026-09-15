@@ -85,6 +85,8 @@ var OrganizationClientDeletePreflight = Type("OrganizationClientDeletePreflight"
 	})
 
 	Required("session_count", "mcp_server_names", "trusted_user_session_issuers", "can_delete")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
 })
 
 // CreateOrganizationRemoteSessionClientForm registers a standalone

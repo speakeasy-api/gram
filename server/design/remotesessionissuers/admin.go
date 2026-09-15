@@ -44,6 +44,8 @@ var OrganizationIssuerDeletePreflight = Type("OrganizationIssuerDeletePreflight"
 	Attribute("trusted_user_session_issuers", ArrayOf(TrustedUserSessionIssuerReference), "Organization-owned user_session_issuers that trust this issuer and block deletion.")
 
 	Required("client_count", "mcp_server_names", "trusted_user_session_issuers")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
 })
 
 var TrustedUserSessionIssuerReference = Type("TrustedUserSessionIssuerReference", func() {

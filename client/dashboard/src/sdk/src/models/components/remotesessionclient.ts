@@ -62,6 +62,10 @@ export type RemoteSessionClient = {
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
+   * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
+   */
+  grantTypes: Array<string> | null;
+  /**
    * The remote_session_client id.
    */
   id: string;
@@ -137,6 +141,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
     organization_id: z.string(),
@@ -165,6 +170,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
       "organization_id": "organizationId",
       "project_id": "projectId",

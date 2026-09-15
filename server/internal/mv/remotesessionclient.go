@@ -65,6 +65,7 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		Audience:                        conv.FromPGText[string](row.Audience),
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
 	}, nil
 }
 
@@ -117,5 +118,6 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		Audience:                        conv.FromPGText[string](row.Audience),
 		CreatedAt:                       row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
+		GrantTypes:                      row.GrantTypes,
 	}
 }

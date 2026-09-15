@@ -196,6 +196,9 @@ type GetIssuerDeletePreflightResponseBody struct {
 	Toolsets []*OrganizationUserSessionIssuerReferenceResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// True when no live MCP server or toolset references the issuer.
 	CanDelete *bool `form:"can_delete,omitempty" json:"can_delete,omitempty" xml:"can_delete,omitempty"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
 }
 
 // CreateCimdClientResponseBody is the type of the
@@ -2923,6 +2926,7 @@ func NewGetIssuerDeletePreflightOrganizationUserSessionIssuerDeletePreflightOK(b
 		ClientCount:      *body.ClientCount,
 		LiveSessionCount: *body.LiveSessionCount,
 		CanDelete:        *body.CanDelete,
+		EmaBindingCount:  *body.EmaBindingCount,
 	}
 	v.McpServers = make([]*organizationusersessionissuers.OrganizationUserSessionIssuerReference, len(body.McpServers))
 	for i, val := range body.McpServers {
@@ -4090,6 +4094,9 @@ func ValidateGetIssuerDeletePreflightResponseBody(body *GetIssuerDeletePreflight
 	}
 	if body.CanDelete == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_delete", "body"))
+	}
+	if body.EmaBindingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
 	}
 	for _, e := range body.McpServers {
 		if e != nil {

@@ -1,0 +1,182 @@
+package remotesessions
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"mime"
+	"net/http"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+)
+
+type preparationDCRResponse struct {
+	ClientID                string   `json:"client_id"`
+	ClientSecret            string   `json:"client_secret"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	GrantTypes              []string `json:"grant_types"`
+	Scope                   *string  `json:"scope"`
+	ClientIDIssuedAt        int64    `json:"client_id_issued_at"`
+	ClientSecretExpiresAt   int64    `json:"client_secret_expires_at"`
+}
+
+// Every failure after submission that does not prove rejection is indeterminate.
+// No response body, client secret or management token becomes a diagnostic.
+func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
+	var result preparationDCRResponse
+	if s.policy == nil {
+		return result, "indeterminate"
+	}
+	body, _ := json.Marshal(struct {
+		GrantTypes []string `json:"grant_types"`
+		AuthMethod string   `json:"token_endpoint_auth_method"`
+		Scope      string   `json:"scope,omitempty"`
+		ClientName string   `json:"client_name"`
+	}{[]string{PreparationJWTBearerGrant}, method, strings.Join(in.Scopes, " "), "Gram identity chaining"})
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return result, "indeterminate"
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	client := s.policy.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := client.Do(request)
+	if err != nil {
+		return result, "indeterminate"
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode >= 400 && response.StatusCode < 500 && response.StatusCode != http.StatusRequestTimeout && response.StatusCode != http.StatusTooManyRequests {
+		return result, "provider_rejection"
+	}
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusCreated {
+		return result, "indeterminate"
+	}
+	media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || media != "application/json" {
+		return result, "indeterminate"
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil || len(data) > 1<<20 {
+		return result, "indeterminate"
+	}
+	if err = json.Unmarshal(data, &result); err != nil {
+		return preparationDCRResponse{}, "indeterminate"
+	}
+	return result, validatePreparationDCR(result, in.Scopes, method)
+}
+func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
+	if strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || result.TokenEndpointAuthMethod != method || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
+		return "indeterminate"
+	}
+	// A provider response can narrow scope, never broaden the requested set.
+	if result.Scope != nil {
+		for scope := range strings.FieldsSeq(*result.Scope) {
+			if !slices.Contains(requested, scope) {
+				return "indeterminate"
+			}
+		}
+	}
+	for _, grant := range result.GrantTypes {
+		if grant == "" || strings.ContainsAny(grant, " \t\r\n") {
+			return "indeterminate"
+		}
+	}
+	if !slices.Contains(result.GrantTypes, PreparationJWTBearerGrant) {
+		return "unknown_grants"
+	}
+	if result.ClientSecretExpiresAt > 0 && !time.Unix(result.ClientSecretExpiresAt, 0).After(time.Now()) {
+		return "manual_setup_required"
+	}
+	return "ready"
+}
+func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (*PreparationResult, error) {
+	response, state := s.submitPreparationDCR(ctx, in, issuer.RegistrationEndpoint.String, method)
+	// Persist an outcome even if the requesting connection has gone away. If this
+	// process dies before commit, the durable claim becomes indeterminate on read.
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	tx, err := s.db.Begin(saveCtx)
+	if err != nil {
+		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	q := repo.New(tx)
+	if err = lockUserSessionIssuersForClientBinding(saveCtx, s.logger, tx, q, claim.ProjectID, claim.OrganizationID, []uuid.UUID{claim.UserSessionIssuerID}); err != nil {
+		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+	}
+	if _, err = q.LockEMAUserIssuer(saveCtx, repo.LockEMAUserIssuerParams{ID: claim.UserSessionIssuerID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)}); err != nil {
+		return nil, err
+	}
+	currentIssuer, err := q.LockEMAIssuer(saveCtx, repo.LockEMAIssuerParams{ID: issuer.ID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)})
+	if err != nil {
+		return nil, err
+	}
+	b, err := q.LockEMABinding(saveCtx, repo.LockEMABindingParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID, UserSessionIssuerID: claim.UserSessionIssuerID, RemoteSessionIssuerID: claim.RemoteSessionIssuerID, Resource: claim.Resource})
+	if err != nil {
+		return nil, err
+	}
+	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || b.State != "in_progress" {
+		return preparationResult(b, currentIssuer, repo.RemoteSessionClient{}, "configuration_required"), nil
+	}
+	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint || PreparationEligibility(currentIssuer.AuthorizationGrantProfilesSupported, currentIssuer.GrantTypesSupported) != "eligible" {
+		state = "indeterminate"
+	}
+	var client repo.RemoteSessionClient
+	if state == "ready" || state == "unknown_grants" || state == "manual_setup_required" {
+		ciphertext, encErr := s.enc.Encrypt([]byte(response.ClientSecret))
+		if encErr != nil {
+			return preparationResult(b, currentIssuer, client, "indeterminate"), encErr
+		}
+		scopes := in.Scopes
+		if response.Scope != nil {
+			scopes = strings.Fields(*response.Scope)
+		}
+		issued, expires := pgtype.Timestamptz{}, pgtype.Timestamptz{}
+		if response.ClientIDIssuedAt > 0 {
+			issued = conv.ToPGTimestamptz(time.Unix(response.ClientIDIssuedAt, 0))
+		}
+		if response.ClientSecretExpiresAt > 0 {
+			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
+		}
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
+		if err != nil {
+			return preparationResult(b, currentIssuer, client, "indeterminate"), err
+		}
+		client, err = q.SetEMAClientGrants(saveCtx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), GrantTypes: response.GrantTypes})
+		if err != nil {
+			return nil, err
+		}
+		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
+		b.RequestedScopes = scopes
+		b.GrantSource = "provider_returned"
+		b.ClaimID = uuid.NullUUID{}
+		b.ClaimedAt = pgtype.Timestamptz{}
+		// A confirmed registration must be retained even when it is not usable.
+		// Recheck after all lock waits and writes: metadata can change while the
+		// POST is in flight, and a returned secret can expire before completion.
+		if currentIssuer.MetadataLastError.Valid && currentIssuer.MetadataLastError.String != "" {
+			state = "transient_failure"
+		} else if !preparationClientConfigurationValid(saveCtx, q, client, currentIssuer, b.OrganizationID) {
+			state = "manual_setup_required"
+		}
+	}
+	b.State = state
+	b, err = setPreparationBinding(saveCtx, q, b, b.Generation)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(saveCtx); err != nil {
+		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+	}
+	return preparationResult(b, currentIssuer, client, state), nil
+}
