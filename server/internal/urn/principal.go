@@ -21,6 +21,8 @@ const (
 	PrincipalTypeAgent PrincipalType = "agent"
 	// PrincipalTypeSystem is a Gram component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
 	PrincipalTypeSystem PrincipalType = "system"
+	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agent.
+	PrincipalTypeWorkload PrincipalType = "workload"
 )
 
 // PrincipalWildcard is the URN that matches any principal in the org. It is
@@ -33,21 +35,23 @@ const PrincipalWildcard = "*"
 const AllUsersPrincipalID = "all"
 
 var principalTypes = map[PrincipalType]struct{}{
-	PrincipalTypeUser:   {},
-	PrincipalTypeRole:   {},
-	PrincipalTypeEmail:  {},
-	PrincipalTypeAgent:  {},
-	PrincipalTypeSystem: {},
+	PrincipalTypeUser:     {},
+	PrincipalTypeRole:     {},
+	PrincipalTypeEmail:    {},
+	PrincipalTypeAgent:    {},
+	PrincipalTypeSystem:   {},
+	PrincipalTypeWorkload: {},
 }
 
 // systemPrincipalIDPattern is the lowercase kebab-case component name a system principal carries.
 var systemPrincipalIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
-// Format: "type:id" where type is "user", "role", "email", "agent", or
-// "system" and id is the principal identifier (e.g. "user:user_01abc",
-// "user:all", "role:admin", "email:dev@example.com", "agent:<uuid>", or
-// "system:issuer-metadata-refresh").
+// Format: "type:id" where type is "user", "role", "email", "agent", "system",
+// or "workload" and id is the principal identifier (e.g. "user:user_01abc",
+// "user:all", "role:admin", "email:dev@example.com", "agent:<uuid>",
+// "system:issuer-metadata-refresh", or
+// "workload:<workload_issuers id>:<external subject>").
 type Principal struct {
 	Type PrincipalType
 	ID   string
@@ -74,6 +78,27 @@ func NewPrincipal(typ PrincipalType, id string) Principal {
 // NewSystemPrincipal names a Gram component acting on its own, for audit entries background work writes.
 func NewSystemPrincipal(component string) Principal {
 	return NewPrincipal(PrincipalTypeSystem, component)
+}
+
+// NewWorkloadPrincipal names a workload by the workload_issuers row that
+// vouched for it and the subject that issuer asserted, the same identity a
+// workload session subject carries.
+func NewWorkloadPrincipal(workloadIssuerID uuid.UUID, externalSubject string) Principal {
+	return NewPrincipal(PrincipalTypeWorkload, workloadIssuerID.String()+delimiter+externalSubject)
+}
+
+// Workload splits a workload principal back into the issuer that vouched for
+// it and the external subject that issuer asserted. It reports an error for any
+// other principal type.
+func (u Principal) Workload() (uuid.UUID, string, error) {
+	if err := u.validate(); err != nil {
+		return uuid.Nil, "", err
+	}
+	if u.Type != PrincipalTypeWorkload {
+		return uuid.Nil, "", fmt.Errorf("%w: not a workload principal: %q", ErrInvalid, u.Type)
+	}
+
+	return splitWorkloadID(u.ID)
 }
 
 // ParsePrincipal parses a string of the form "type:id" into a Principal.
@@ -227,8 +252,13 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > maxSegmentLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
+	// Workload principals share the workload session subject's id cap.
+	maxIDLength := maxSegmentLength
+	if u.Type == PrincipalTypeWorkload {
+		maxIDLength = MaxWorkloadSubjectIDLength
+	}
+	if len(u.ID) > maxIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxIDLength, len(u.ID))
 		return u.err
 	}
 
@@ -236,6 +266,21 @@ func (u *Principal) validate() error {
 		id, err := uuid.Parse(u.ID)
 		if err != nil || id.String() != u.ID {
 			u.err = fmt.Errorf("%w: agent principal id must be a canonical UUID", ErrInvalid)
+			return u.err
+		}
+	}
+
+	if u.Type == PrincipalTypeWorkload {
+		issuerID, _, err := splitWorkloadID(u.ID)
+		if err != nil {
+			u.err = err
+			return u.err
+		}
+		// Canonical form only, as for agents: uuid.Parse also accepts uppercase
+		// and braced forms, which would give one workload several principal
+		// strings that compare unequal.
+		if !strings.HasPrefix(u.ID, issuerID.String()+delimiter) {
+			u.err = fmt.Errorf("%w: workload principal issuer reference must be a canonical UUID", ErrInvalid)
 			return u.err
 		}
 	}

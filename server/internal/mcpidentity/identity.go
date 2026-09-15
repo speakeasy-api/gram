@@ -86,6 +86,16 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID})
 }
 
+// withoutIdentity masks any provenance already on ctx, so FromContext reports
+// the request as unattributed. A zero boundary stays inert: a capability that
+// cannot stamp provenance cannot remove it either.
+func (b *ValidatorBoundary) withoutIdentity(ctx context.Context) context.Context {
+	if b == nil || !b.initialized {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: ""})
+}
+
 // StampValidatedSession records provenance from an opaque session proof returned
 // by sessiontokens.Signer.ValidateBearer. Zero or malformed proofs leave the
 // context unstamped.
@@ -106,6 +116,10 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return b.withIdentity(ctx, KindAgent, "")
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
+	case urn.SessionSubjectKindWorkload:
+		// No provenance kind describes a workload. Provenance already on ctx
+		// belongs to another credential, so it is cleared.
+		return b.withoutIdentity(ctx)
 	default:
 		return ctx
 	}
