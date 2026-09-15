@@ -203,12 +203,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
 	current := row.RemoteSessionClient
-	// EMA grants describe this exact registration. Ordinary interactive rotation
-	// must not silently replace it with an authorization-code-only registration.
-	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: current.OrganizationID.String, ProjectID: uuid.Nil})
-	if err := requireNoEMABindings(emaCount, err); err != nil {
-		return zero, err
-	}
 
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(current.ID.String()),
@@ -236,6 +230,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			logger.InfoContext(ctx, "client registration no longer needs rotation; adopting the current row")
 			return current, nil
 		}
+	}
+
+	// EMA grants describe this exact registration. Ordinary interactive rotation
+	// must not silently replace it with an authorization-code-only registration.
+	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: current.OrganizationID.String, ProjectID: uuid.Nil})
+	if err := requireNoEMABindings(emaCount, err); err != nil {
+		return zero, err
 	}
 
 	if current.ClientIDMetadataUri.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {

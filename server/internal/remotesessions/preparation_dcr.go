@@ -13,8 +13,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type preparationDCRResponse struct {
@@ -70,7 +74,8 @@ func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput,
 		return result, "indeterminate"
 	}
 	if err = json.Unmarshal(data, &result); err != nil {
-		return preparationDCRResponse{}, "indeterminate"
+		var empty preparationDCRResponse
+		return empty, "indeterminate"
 	}
 	return result, validatePreparationDCR(result, in.Scopes, method)
 }
@@ -92,7 +97,7 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 		}
 	}
 	if !slices.Contains(result.GrantTypes, PreparationJWTBearerGrant) {
-		return "unknown_grants"
+		return preparationMissingGrantsState(result.GrantTypes)
 	}
 	if result.ClientSecretExpiresAt > 0 && !time.Unix(result.ClientSecretExpiresAt, 0).After(time.Now()) {
 		return "manual_setup_required"
@@ -100,6 +105,7 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 	return "ready"
 }
 func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (*PreparationResult, error) {
+	var emptyClient repo.RemoteSessionClient
 	response, state := s.submitPreparationDCR(ctx, in, issuer.RegistrationEndpoint.String, method)
 	// Persist an outcome even if the requesting connection has gone away. If this
 	// process dies before commit, the durable claim becomes indeterminate on read.
@@ -107,26 +113,26 @@ func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput,
 	defer cancel()
 	tx, err := s.db.Begin(saveCtx)
 	if err != nil {
-		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+		return preparationResult(claim, issuer, emptyClient, "indeterminate"), err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	q := repo.New(tx)
 	if err = lockUserSessionIssuersForClientBinding(saveCtx, s.logger, tx, q, claim.ProjectID, claim.OrganizationID, []uuid.UUID{claim.UserSessionIssuerID}); err != nil {
-		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+		return preparationResult(claim, issuer, emptyClient, "indeterminate"), err
 	}
 	if _, err = q.LockEMAUserIssuer(saveCtx, repo.LockEMAUserIssuerParams{ID: claim.UserSessionIssuerID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)}); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 	}
 	currentIssuer, err := q.LockEMAIssuer(saveCtx, repo.LockEMAIssuerParams{ID: issuer.ID, ProjectID: conv.ToNullUUID(claim.ProjectID), OrganizationID: conv.ToPGText(claim.OrganizationID)})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 	}
 	b, err := q.LockEMABinding(saveCtx, repo.LockEMABindingParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID, UserSessionIssuerID: claim.UserSessionIssuerID, RemoteSessionIssuerID: claim.RemoteSessionIssuerID, Resource: claim.Resource})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 	}
 	if b.Generation != claim.Generation || b.ClaimID != claim.ClaimID || b.State != "in_progress" {
-		return preparationResult(b, currentIssuer, repo.RemoteSessionClient{}, "configuration_required"), nil
+		return preparationResult(b, currentIssuer, emptyClient, "configuration_required"), nil
 	}
 	if currentIssuer.Issuer != issuer.Issuer || currentIssuer.RegistrationEndpoint != issuer.RegistrationEndpoint || PreparationEligibility(currentIssuer.AuthorizationGrantProfilesSupported, currentIssuer.GrantTypesSupported) != "eligible" {
 		state = "indeterminate"
@@ -141,30 +147,41 @@ func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput,
 		if response.Scope != nil {
 			scopes = strings.Fields(*response.Scope)
 		}
-		issued, expires := pgtype.Timestamptz{}, pgtype.Timestamptz{}
+		issued, expires := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		if response.ClientIDIssuedAt > 0 {
 			issued = conv.ToPGTimestamptz(time.Unix(response.ClientIDIssuedAt, 0))
 		}
 		if response.ClientSecretExpiresAt > 0 {
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(method), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, "indeterminate"), err
 		}
 		client, err = q.SetEMAClientGrants(saveCtx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), GrantTypes: response.GrantTypes})
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+		}
+		auth, ok := contextvalues.GetAuthContext(saveCtx)
+		if !ok || auth == nil {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+		if err := s.auditLogger.LogRemoteSessionClientCreate(saveCtx, tx, audit.LogRemoteSessionClientCreateEvent{
+			OrganizationID: b.OrganizationID, ProjectID: b.ProjectID,
+			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), ActorDisplayName: auth.Email, ActorSlug: nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID), ClientID: client.ClientID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "audit preparation client creation")
 		}
 		b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
 		b.RequestedScopes = scopes
 		b.GrantSource = "provider_returned"
-		b.ClaimID = uuid.NullUUID{}
-		b.ClaimedAt = pgtype.Timestamptz{}
+		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		// A confirmed registration must be retained even when it is not usable.
 		// Recheck after all lock waits and writes: metadata can change while the
 		// POST is in flight, and a returned secret can expire before completion.
-		if currentIssuer.MetadataLastError.Valid && currentIssuer.MetadataLastError.String != "" {
+		if preparationMetadataTransient(currentIssuer) {
 			state = "transient_failure"
 		} else if !preparationClientConfigurationValid(saveCtx, q, client, currentIssuer, b.OrganizationID) {
 			state = "manual_setup_required"
@@ -173,10 +190,10 @@ func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput,
 	b.State = state
 	b, err = setPreparationBinding(saveCtx, q, b, b.Generation)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 	}
 	if err = tx.Commit(saveCtx); err != nil {
-		return preparationResult(claim, issuer, repo.RemoteSessionClient{}, "indeterminate"), err
+		return preparationResult(claim, issuer, emptyClient, "indeterminate"), err
 	}
 	return preparationResult(b, currentIssuer, client, state), nil
 }

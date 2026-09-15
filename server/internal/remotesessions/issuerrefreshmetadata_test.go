@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -1644,6 +1645,7 @@ func TestAIM63RefreshEvidenceAcrossOwnershipTiers(t *testing.T) {
 	t.Parallel()
 	for _, tier := range []string{"project", "organization", "platform"} {
 		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestService(t)
 			var malformed atomic.Bool
 			var removed atomic.Bool
@@ -1664,7 +1666,10 @@ func TestAIM63RefreshEvidenceAcrossOwnershipTiers(t *testing.T) {
 				created, err = ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("profile-project", upstream.URL))
 				refresh = func() error {
 					_, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
-					return err
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
 				}
 			case "organization":
 				payload := newCreateIssuerPayload("profile-organization", nil)
@@ -1672,7 +1677,10 @@ func TestAIM63RefreshEvidenceAcrossOwnershipTiers(t *testing.T) {
 				created, err = ti.service.CreateIssuer(ctx, payload)
 				refresh = func() error {
 					_, err := ti.service.RefreshIssuerMetadata(ctx, &orgissuersgen.RefreshIssuerMetadataPayload{ID: created.ID})
-					return err
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
 				}
 			case "platform":
 				ctx = withAdmin(t, ctx)
@@ -1681,7 +1689,10 @@ func TestAIM63RefreshEvidenceAcrossOwnershipTiers(t *testing.T) {
 				created, err = ti.service.CreateGlobalIssuer(ctx, payload)
 				refresh = func() error {
 					_, err := ti.service.RefreshGlobalIssuerMetadata(ctx, &adminrsgen.RefreshGlobalIssuerMetadataPayload{ID: created.ID})
-					return err
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
 				}
 			}
 			require.NoError(t, err)

@@ -20,6 +20,8 @@ import (
 )
 
 const PreparationIDJAGProfile = "urn:ietf:params:oauth:grant-profile:id-jag"
+
+// #nosec G101 -- Public OAuth grant identifier, not a credential.
 const PreparationJWTBearerGrant = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
 // PreparationResourceMetadata is previously discovered RFC 9728 association evidence.
@@ -69,7 +71,7 @@ func PreparationEligibility(profiles, grants []string) string {
 	return "eligible"
 }
 func preparationDiagnostic(state string) *PreparationResult {
-	r := &PreparationResult{State: state, Stage: "selection", GrantSource: "unknown"}
+	r := &PreparationResult{State: state, Stage: "selection", GrantSource: "unknown", Remediation: "", Retryable: false, BindingID: uuid.Nil, Generation: 0, ClientID: uuid.Nil, ExternalClientID: "", Issuer: "", Resource: "", GrantTypes: nil, Scopes: nil}
 	switch state {
 	case "unsupported_profile":
 		r.Stage = "eligibility"
@@ -173,13 +175,17 @@ func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID,
 	if write {
 		scope = authz.ScopeProjectWrite
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceID: a.ProjectID.String()}); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: scope, ResourceID: a.ProjectID.String()}); err != nil {
 		return uuid.Nil, "", err
 	}
 	return *a.ProjectID, a.ActiveOrganizationID, nil
 }
 func setPreparationBinding(ctx context.Context, q *repo.Queries, b repo.RemoteSessionEmaBinding, previous int64) (repo.RemoteSessionEmaBinding, error) {
-	return q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientID: b.RemoteSessionClientID, Generation: b.Generation, ExpectedGeneration: previous, State: b.State, GrantSource: b.GrantSource, RequestedScopes: b.RequestedScopes, ClaimID: b.ClaimID, ClaimedAt: b.ClaimedAt})
+	result, err := q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: b.ID, ProjectID: b.ProjectID, OrganizationID: b.OrganizationID, RemoteSessionClientID: b.RemoteSessionClientID, Generation: b.Generation, ExpectedGeneration: previous, State: b.State, GrantSource: b.GrantSource, RequestedScopes: b.RequestedScopes, ClaimID: b.ClaimID, ClaimedAt: b.ClaimedAt})
+	if err != nil {
+		return result, oops.E(oops.CodeUnexpected, err, "persist preparation binding")
+	}
+	return result, nil
 }
 
 // PrepareIdentityChaining is the only registration entrypoint. Discovery never
@@ -195,6 +201,7 @@ func (s *Service) ReadIdentityChaining(ctx context.Context, in PreparationInput)
 }
 
 func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInput, unlink, read bool) (*PreparationResult, error) {
+	var emptyClient repo.RemoteSessionClient
 	project, org, err := s.preparationTenant(ctx, !read)
 	if err != nil {
 		return nil, err
@@ -205,19 +212,19 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	q := repo.New(tx)
 	if err = lockUserSessionIssuersForClientBinding(ctx, s.logger, tx, q, project, org, []uuid.UUID{in.UserSessionIssuerID}); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	if _, err = q.LockEMAUserIssuer(ctx, repo.LockEMAUserIssuerParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)}); err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found")
+		return nil, preparationLookupError(err, "user session issuer not found")
 	}
 	issuer, err := q.LockEMAIssuer(ctx, repo.LockEMAIssuerParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "remote issuer not found")
+		return nil, preparationLookupError(err, "remote issuer not found")
 	}
 	if m := in.ResourceMetadata; m != nil && (m.Resource != in.Resource || !slices.Contains(m.AuthorizationServers, issuer.Issuer)) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "resource authorization server association mismatch")
@@ -232,7 +239,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			if read {
 				if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != "eligible" {
 					state = eligibility
-				} else if issuer.MetadataLastError.Valid && issuer.MetadataLastError.String != "" {
+				} else if preparationMetadataTransient(issuer) {
 					state = "transient_failure"
 				}
 			}
@@ -243,12 +250,12 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 		err = q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams(key))
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
 		b, err = q.GetEMABinding(ctx, key)
 	}
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	selected := in.ClientID
 	if selected == uuid.Nil && b.RemoteSessionClientID.Valid {
@@ -258,7 +265,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if selected != uuid.Nil {
 		client, err = q.LockEMAClient(ctx, repo.LockEMAClientParams{ID: selected, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org)})
 		if err != nil {
-			return nil, oops.E(oops.CodeNotFound, err, "selected client not found")
+			return nil, preparationLookupError(err, "selected client not found")
 		}
 		if client.RemoteSessionIssuerID != issuer.ID {
 			return nil, oops.E(oops.CodeBadRequest, nil, "selected client belongs to another issuer")
@@ -266,7 +273,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	b, err = q.LockEMABinding(ctx, repo.LockEMABindingParams(key))
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	previous := b.Generation
 	if unlink {
@@ -275,31 +282,31 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 		b.Generation++
 		b.State = "unlinked"
-		b.RemoteSessionClientID = uuid.NullUUID{}
-		b.ClaimID = uuid.NullUUID{}
-		b.ClaimedAt = pgtype.Timestamptz{}
+		b.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		b.GrantSource = "unknown"
 		b.RequestedScopes = []string{}
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
 		if err = tx.Commit(ctx); err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
-		return preparationResult(b, issuer, repo.RemoteSessionClient{}, b.State), nil
+		return preparationResult(b, issuer, emptyClient, b.State), nil
 	}
-	if b.ClaimID.Valid && in.ClientID == uuid.Nil {
+	if b.ClaimID.Valid && in.ClientID == uuid.Nil && (read || b.State != "provider_rejection" || in.ExpectedGeneration != b.Generation) {
 		state := b.State
 		if state == "in_progress" && (!b.ClaimedAt.Valid || time.Since(b.ClaimedAt.Time) > time.Minute) {
 			state = "indeterminate"
 			b.State = state
 			b, err = setPreparationBinding(ctx, q, b, previous)
 			if err != nil {
-				return nil, err
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 			}
 			if err = tx.Commit(ctx); err != nil {
-				return nil, err
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 			}
 		}
 		return preparationResult(b, issuer, client, state), nil
@@ -308,7 +315,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if eligibility != "eligible" {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}
-	if issuer.MetadataLastError.Valid && issuer.MetadataLastError.String != "" {
+	if preparationMetadataTransient(issuer) {
 		return preparationResult(b, issuer, client, "transient_failure"), nil
 	}
 	if (read || in.Mechanism == "dcr") && (b.State == "ready" || b.State == "published_acceptance_unverified") {
@@ -316,7 +323,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, "manual_setup_required"), nil
 		}
 		if !slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) {
-			return preparationResult(b, issuer, client, "unknown_grants"), nil
+			return preparationResult(b, issuer, client, preparationMissingGrantsState(client.GrantTypes)), nil
 		}
 	}
 	if read {
@@ -328,7 +335,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if in.Mechanism == "dcr" && in.ClientID == uuid.Nil && b.RemoteSessionClientID.Valid && b.GrantSource == "provider_returned" {
 		return preparationResult(b, issuer, client, b.State), nil
 	}
-	changed := selected != b.RemoteSessionClientID.UUID || b.State == "unlinked" || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || b.GrantSource != "administrator_declared")) || (in.Mechanism == "cimd" && !slices.Contains(client.GrantTypes, PreparationJWTBearerGrant))
+	changed := b.State == "provider_rejection" || selected != b.RemoteSessionClientID.UUID || b.State == "unlinked" || !slices.Equal(b.RequestedScopes, in.Scopes) || (in.ConfirmGrants != nil && (!samePreparationGrants(in.ConfirmGrants, client.GrantTypes) || b.GrantSource != "administrator_declared")) || (in.Mechanism == "cimd" && (!slices.Contains(client.GrantTypes, PreparationJWTBearerGrant) || b.GrantSource != "cimd_published"))
 	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || b.State == "unlinked") && in.ExpectedGeneration != b.Generation {
 		return preparationResult(b, issuer, client, "configuration_required"), nil
 	}
@@ -353,10 +360,10 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		b.GrantSource = "unknown"
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
 		if err = tx.Commit(ctx); err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
 		return s.finishPreparationDCR(ctx, in, b, issuer, method)
 	}
@@ -415,7 +422,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// resource binding without invalidating its generation as well.
 		count, countErr := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(client.ID), OrganizationID: org, ProjectID: uuid.Nil})
 		if countErr != nil {
-			return nil, countErr
+			return nil, oops.E(oops.CodeUnexpected, countErr, "count client bindings")
 		}
 		allowed := int64(0)
 		if b.RemoteSessionClientID.Valid && b.RemoteSessionClientID.UUID == client.ID && b.State != "unlinked" {
@@ -427,13 +434,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// Publishing/modifying inherited registrations affects other projects and
 		// therefore requires organization-level authority in addition to project write.
 		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
-				return nil, err
+			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 			}
 		}
 		client, err = q.SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org), GrantTypes: grants})
 		if err != nil {
-			return nil, err
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
 	}
 	if grants == nil {
@@ -442,14 +449,14 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
 	b.State = state
 	b.GrantSource = source
-	b.ClaimID = uuid.NullUUID{}
-	b.ClaimedAt = pgtype.Timestamptz{}
+	b.ClaimID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	b.ClaimedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	b, err = setPreparationBinding(ctx, q, b, previous)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	return preparationResult(b, issuer, client, state), nil
 }
@@ -470,4 +477,26 @@ func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, c
 		}
 	}
 	return true
+}
+
+func preparationLookupError(err error, message string) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "%s", message)
+	}
+	return oops.E(oops.CodeUnexpected, err, "failed to lock preparation resource")
+}
+
+func preparationMissingGrantsState(grants []string) string {
+	if grants == nil {
+		return "unknown_grants"
+	}
+	return "manual_setup_required"
+}
+
+func preparationMetadataTransient(issuer repo.RemoteSessionIssuer) bool {
+	_, transient := issuerMetadataFailureState(IssuerMetadataUse{
+		ID: issuer.ID, IssuerURL: issuer.Issuer, ProjectID: issuer.ProjectID, OrganizationID: issuer.OrganizationID,
+		MetadataFetchedAt: issuer.MetadataFetchedAt, MetadataLastErrorAt: issuer.MetadataLastErrorAt, MetadataLastErrorUrl: issuer.MetadataLastErrorUrl, NeedsReprojection: false,
+	})
+	return transient
 }

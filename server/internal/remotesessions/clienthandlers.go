@@ -772,15 +772,23 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	// Ownership was checked above. Serialize the join change with preparation,
+	// but only inspect EMA bindings if this request actually removes a join.
+	if err := lockClientForEMALifecycle(ctx, txRepo, clientID); err != nil {
 		return nil, err
 	}
-
-	if _, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	removed, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "detach remote session client from user session issuer").LogError(ctx, logger)
+	}
+	if removed > 0 {
+		// A conflict rolls back the tentative removal with the transaction.
+		if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+			return nil, err
+		}
 	}
 
 	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
@@ -868,6 +876,18 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// A missing project-owned row is a no-op, including org-level and foreign
+	// clients. Do not inspect bindings or lock those other clients.
+	if _, err := txRepo.LockRemoteSessionClientForAuthMethodWrite(ctx, repo.LockRemoteSessionClientForAuthMethodWriteParams{
+		ID:        clientID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock project remote session client").LogError(ctx, logger)
+	}
 
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
 		return err

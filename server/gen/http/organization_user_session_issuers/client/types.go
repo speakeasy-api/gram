@@ -178,7 +178,8 @@ type GetIssuerDeletePreflightResponseBody struct {
 	McpServers []*OrganizationUserSessionIssuerReferenceResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Live toolsets that block deletion.
 	Toolsets []*OrganizationUserSessionIssuerReferenceResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// True when no live MCP server or toolset references the issuer.
+	// True when no live MCP server, toolset, or active identity-chaining binding
+	// references the issuer.
 	CanDelete *bool `form:"can_delete,omitempty" json:"can_delete,omitempty" xml:"can_delete,omitempty"`
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.

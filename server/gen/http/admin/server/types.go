@@ -1353,8 +1353,13 @@ type GetGlobalIssuerMigratePreflightResponseBody struct {
 	// Number of user_session_issuers that trust the source. Any non-zero value
 	// blocks migration.
 	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int64 `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -11984,6 +11989,7 @@ func NewGetGlobalIssuerMigratePreflightResponseBody(res *admin.IssuerMigratePref
 	body := &GetGlobalIssuerMigratePreflightResponseBody{
 		ClientCount:                   res.ClientCount,
 		TrustedUserSessionIssuerCount: res.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               res.EmaBindingCount,
 		CanMigrate:                    res.CanMigrate,
 		TargetTenantClientCount:       res.TargetTenantClientCount,
 	}

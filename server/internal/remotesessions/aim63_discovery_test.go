@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +22,7 @@ func TestAIM63StrictMetadataArrays(t *testing.T) {
 	for _, member := range []string{"authorization_grant_profiles_supported", "grant_types_supported", "scopes_supported", "response_types_supported", "token_endpoint_auth_methods_supported", "code_challenge_methods_supported", "introspection_endpoint_auth_methods_supported", "id_token_signing_alg_values_supported", "claims_supported"} {
 		for _, raw := range []string{`null`, `"jwt-bearer"`, `{}`, `[null]`, `[1]`, `[true]`, `["ok",null]`} {
 			t.Run(member+raw, func(t *testing.T) {
+				t.Parallel()
 				_, err := decodeIssuerDocument([]byte(`{"`+member+`":`+raw+`}`), requested)
 				require.Error(t, err)
 			})
@@ -45,6 +47,7 @@ func TestAIM63DiscoveryEvidence(t *testing.T) {
 		{"unrelated", []string{"other"}, []string{grant}}, {"removed", []string{}, []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var server *httptest.Server
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/tenant/.well-known/openid-configuration" {
@@ -59,7 +62,7 @@ func TestAIM63DiscoveryEvidence(t *testing.T) {
 				if tc.grants != nil {
 					doc["grant_types_supported"] = tc.grants
 				}
-				require.NoError(t, json.NewEncoder(w).Encode(doc))
+				assert.NoError(t, json.NewEncoder(w).Encode(doc))
 			}))
 			defer server.Close()
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -83,6 +86,7 @@ func TestAIM63DiscoveryRejectsUnsafeEvidence(t *testing.T) {
 		{"null_array", "application/json", "", `{"authorization_grant_profiles_supported":[null]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var server *httptest.Server
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", tc.contentType)
@@ -90,7 +94,7 @@ func TestAIM63DiscoveryRejectsUnsafeEvidence(t *testing.T) {
 					_, _ = w.Write([]byte(tc.raw))
 					return
 				}
-				require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + tc.suffix, "authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token"}))
+				assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + tc.suffix, "authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token"}))
 			}))
 			defer server.Close()
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -115,6 +119,7 @@ func TestAIM63ClientMetadataGrants(t *testing.T) {
 		{"combined", []string{"authorization_code", "refresh_token", jwt}, []string{"authorization_code", "refresh_token", jwt}, []string{"code"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			doc := BuildClientMetadataDocumentWithGrants(clientID, "https://gram.example/callback", TokenEndpointAuthMethodNone, "", nil, tc.grants)
 			require.Equal(t, clientID, doc.ClientID)
 			require.Equal(t, tc.expected, doc.GrantTypes)
@@ -142,6 +147,7 @@ func TestAIM63ProfilesNeedReprojection(t *testing.T) {
 		{"malformed", `{"authorization_grant_profiles_supported":true}`, []string{}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			require.Equal(t, tc.want, issuerProfilesNeedReprojection(repo.RemoteSessionIssuer{Metadata: []byte(tc.metadata), AuthorizationGrantProfilesSupported: tc.stored}))
 		})
 	}

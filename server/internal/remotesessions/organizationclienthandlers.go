@@ -676,6 +676,9 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		OrganizationID:           authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
+		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
+			return nil, conflict.LogWarn(ctx, logger)
+		}
 		var registrationErr *DynamicClientRegistrationError
 		switch {
 		case errors.Is(err, ErrClientNotRotatable):

@@ -38,6 +38,7 @@ func TestClientGrantTypesWireDistinguishesUnknownEmptyAndPopulated(t *testing.T)
 			{"populated", []string{"urn:ietf:params:oauth:grant-type:jwt-bearer"}, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`},
 		} {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
 				wire, err := json.Marshal(encode(&types.RemoteSessionClient{GrantTypes: tc.grants}))
 				require.NoError(t, err)
 				var fields map[string]json.RawMessage

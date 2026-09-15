@@ -5819,6 +5819,14 @@ func ValidatePrepareEMARequestBody(body *PrepareEMARequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
 	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
+	}
+	if body.Resource != nil {
 		if utf8.RuneCountInString(*body.Resource) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 2048, false))
 		}
@@ -5876,6 +5884,14 @@ func ValidateReadEMARequestBody(body *ReadEMARequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
 	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
+	}
+	if body.Resource != nil {
 		if utf8.RuneCountInString(*body.Resource) > 2048 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 2048, false))
 		}
@@ -5903,6 +5919,14 @@ func ValidateUnlinkEMARequestBody(body *UnlinkEMARequestBody) (err error) {
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.Resource != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource", *body.Resource, goa.FormatURI))
+	}
+	if body.Resource != nil {
+		if utf8.RuneCountInString(*body.Resource) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", *body.Resource, utf8.RuneCountInString(*body.Resource), 1, true))
+		}
 	}
 	if body.Resource != nil {
 		if utf8.RuneCountInString(*body.Resource) > 2048 {

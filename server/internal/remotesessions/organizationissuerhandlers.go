@@ -1085,6 +1085,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 	}
 
 	return &orgissuersgen.OrganizationIssuerMigratePreflight{
+		EmaBindingCount:           preflight.emaBindingCount,
 		ClientCount:               int(preflight.clientCount),
 		McpServerNames:            preflight.mcpServerNames,
 		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
