@@ -10,6 +10,21 @@ const onboardingStatus = vi.hoisted(() => ({
   },
 }));
 const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const applications = vi.hoisted(() => ({
+  current: {
+    data: undefined,
+    isPending: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  } as {
+    data: { applications: unknown[]; applicationCount: number } | undefined;
+    isPending: boolean;
+    isFetching: boolean;
+    error: unknown;
+    refetch: () => unknown;
+  },
+}));
 const identityProvider = vi.hoisted(() => ({
   current: { data: { connection: undefined }, isPending: false } as {
     data: { connection: { status: string } | undefined };
@@ -30,7 +45,16 @@ vi.mock("@/components/ui/hooks/useConfig", () => ({
 // The guided path reads the identity provider connection, and which steps open
 // follows from it. This file covers the fork, the grid and what each step does
 // with the connection; okta-connect-section.test.tsx covers the exchange itself.
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+vi.mock("react-router", () => ({
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
+vi.mock("@gram/client/react-query/listIdentityProviderApplications.js", () => ({
+  useListIdentityProviderApplications: () => applications.current,
+}));
 vi.mock("@gram/client/react-query/identityProvider.js", () => ({
   useIdentityProvider: () => identityProvider.current,
   invalidateAllIdentityProvider: vi.fn(),

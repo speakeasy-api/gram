@@ -21,6 +21,7 @@ import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
+import { OktaApplicationsSection } from "./okta-applications-section";
 import { OktaConnectSection } from "./okta-connect-section";
 import { OktaSignOnSection } from "./okta-sign-on-section";
 import { IDP_PROVIDERS } from "../../providers";
@@ -40,26 +41,31 @@ const GUIDED_DESCRIPTION =
 // The two outcomes no provider can reach yet. They are named and numbered from
 // the start so the shape of the journey is the same whoever is walking it, and
 // locked because nothing behind them exists to open.
-const LOCKED_STEPS = [
-  {
-    index: 4,
-    slug: "applications",
-    title: "Applications and access",
-    description:
-      "Read what your identity provider assigns to each application and carry it into MCP server access as a reviewed proposal.",
-    badge: "Waiting",
-  },
-  {
-    index: 5,
-    slug: "enterprise-managed-auth",
-    title: "Enterprise managed auth setup",
-    // Not merely later in the queue: setup is complete without it, and it opens
-    // on a capability Speakeasy does not have yet.
-    description:
-      "Setup finishes without this. It becomes available when Speakeasy can acquire credentials on a person's behalf, so people's agents stop signing in to each server separately.",
-    badge: "Later",
-  },
-];
+/** Okta-only, and locked for every other provider until there is one. */
+const APPLICATIONS_STEP = {
+  index: 4,
+  slug: "applications",
+  title: "Applications and access",
+  description:
+    "Read what your identity provider assigns to each application and carry it into MCP server access as a reviewed proposal.",
+  badge: "Waiting",
+};
+
+/**
+ * The outcome no provider can reach yet. Named and numbered from the start so
+ * the shape of the journey is the same whoever is walking it, and locked
+ * because nothing behind it exists to open.
+ */
+const ENTERPRISE_STEP = {
+  index: 5,
+  slug: "enterprise-managed-auth",
+  title: "Enterprise managed auth setup",
+  // Not merely later in the queue: setup is complete without it, and it opens
+  // on a capability Speakeasy does not have yet.
+  description:
+    "Setup finishes without this. It becomes available when Speakeasy can acquire credentials on a person's behalf, so people's agents stop signing in to each server separately.",
+  badge: "Later",
+};
 
 interface IdentityProviderStepProps {
   onComplete: () => void;
@@ -131,9 +137,12 @@ export function IdentityProviderStep({
           locked={guided && connection?.status !== "active"}
           guided={guided}
         />
-        {LOCKED_STEPS.map((step) => (
-          <StepSection key={step.slug} locked {...step} />
-        ))}
+        {guided ? (
+          <OktaApplicationsSection index={4} connection={connection} />
+        ) : (
+          <StepSection locked {...APPLICATIONS_STEP} />
+        )}
+        <StepSection locked {...ENTERPRISE_STEP} />
       </div>
     </StepContainer>
   );
