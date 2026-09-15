@@ -537,7 +537,7 @@ func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizat
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsDisabledOnly string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -576,6 +576,61 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			if err != nil {
 				return nil, fmt.Errorf("invalid JSON for disabledStates, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\"\n   ]'")
 			}
+		}
+	}
+	var minMembers *int64
+	{
+		if adminListOrganizationsMinMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMinMembers, 10, 64)
+			minMembers = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for minMembers, must be INT64")
+			}
+			if *minMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_members", *minMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var maxMembers *int64
+	{
+		if adminListOrganizationsMaxMembers != "" {
+			val, err := strconv.ParseInt(adminListOrganizationsMaxMembers, 10, 64)
+			maxMembers = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for maxMembers, must be INT64")
+			}
+			if *maxMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("max_members", *maxMembers, 0, true))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var disabledOnly *bool
+	{
+		if adminListOrganizationsDisabledOnly != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListOrganizationsDisabledOnly)
+			disabledOnly = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for disabledOnly, must be BOOL")
+			}
+		}
+	}
+	var createdFrom *string
+	{
+		if adminListOrganizationsCreatedFrom != "" {
+			createdFrom = &adminListOrganizationsCreatedFrom
+		}
+	}
+	var createdTo *string
+	{
+		if adminListOrganizationsCreatedTo != "" {
+			createdTo = &adminListOrganizationsCreatedTo
 		}
 	}
 	var includeDisabled *bool
@@ -643,6 +698,11 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
 	v.DisabledStates = disabledStates
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.DisabledOnly = disabledOnly
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit

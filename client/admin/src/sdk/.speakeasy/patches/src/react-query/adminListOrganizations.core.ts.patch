@@ -1,0 +1,33 @@
+diff --git a/src/react-query/adminListOrganizations.core.ts b/src/react-query/adminListOrganizations.core.ts
+--- a/src/react-query/adminListOrganizations.core.ts
++++ b/src/react-query/adminListOrganizations.core.ts
+@@ -194,7 +194,16 @@
+     page?: number | undefined;
+   },
+ ): QueryKey {
+-  return ["@gram/admin-client", "admin", "listOrganizations", parameters];
++  return [
++    "@gram/admin-client",
++    "admin",
++    "listOrganizations",
++    {
++      ...parameters,
++      minMembers: parameters.minMembers?.toString(),
++      maxMembers: parameters.maxMembers?.toString(),
++    },
++  ];
+ }
+ 
+ export function queryKeyAdminListOrganizationsInfinite(
+@@ -222,6 +231,10 @@
+     "admin",
+     "listOrganizations",
+     "infinite",
+-    parameters,
++    {
++      ...parameters,
++      minMembers: parameters.minMembers?.toString(),
++      maxMembers: parameters.maxMembers?.toString(),
++    },
+   ];
+ }

@@ -34,6 +34,26 @@ export type AdminListOrganizationsRequest = {
    */
   disabledStates?: Array<string> | undefined;
   /**
+   * Inclusive minimum active member count, from 0 through 9223372036854775807. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+   */
+  minMembers?: bigint | undefined;
+  /**
+   * Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. JavaScript clients must use a decimal string or bigint above Number.MAX_SAFE_INTEGER.
+   */
+  maxMembers?: bigint | undefined;
+  /**
+   * When supplied, overrides both include_disabled and disabled_states: true selects only disabled organizations (even for exact ID searches); false does not restrict status. Omitted preserves legacy behavior, including the exact ID exception.
+   */
+  disabledOnly?: boolean | undefined;
+  /**
+   * Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.
+   */
+  createdFrom?: string | undefined;
+  /**
+   * Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.
+   */
+  createdTo?: string | undefined;
+  /**
    * Include organizations with disabled_at set. Defaults to false. Superseded by disabled_states, which overrides it outright when supplied.
    */
   includeDisabled?: boolean | undefined;
@@ -70,6 +90,11 @@ export type AdminListOrganizationsRequest$Outbound = {
   account_types?: Array<string> | undefined;
   trial_states?: Array<string> | undefined;
   disabled_states?: Array<string> | undefined;
+  min_members?: string | undefined;
+  max_members?: string | undefined;
+  disabled_only?: boolean | undefined;
+  created_from?: string | undefined;
+  created_to?: string | undefined;
   include_disabled?: boolean | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
@@ -89,6 +114,11 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
     accountTypes: z.optional(z.array(z.string())),
     trialStates: z.optional(z.array(z.string())),
     disabledStates: z.optional(z.array(z.string())),
+    minMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
+    maxMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
+    disabledOnly: z.optional(z.boolean()),
+    createdFrom: z.optional(z.string()),
+    createdTo: z.optional(z.string()),
     includeDisabled: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
@@ -102,6 +132,11 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
       accountTypes: "account_types",
       trialStates: "trial_states",
       disabledStates: "disabled_states",
+      minMembers: "min_members",
+      maxMembers: "max_members",
+      disabledOnly: "disabled_only",
+      createdFrom: "created_from",
+      createdTo: "created_to",
       includeDisabled: "include_disabled",
     });
   }),

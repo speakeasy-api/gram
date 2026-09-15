@@ -1037,6 +1037,26 @@ type ListOrganizationsPayload struct {
 	// Match any of active or disabled. Empty falls back to include_disabled. An
 	// unrecognised value matches nothing rather than failing the request.
 	DisabledStates []string
+	// Inclusive minimum active member count, from 0 through 9223372036854775807.
+	// JavaScript clients must use a decimal string or bigint above
+	// Number.MAX_SAFE_INTEGER.
+	MinMembers *int64
+	// Inclusive maximum active member count, from 0 through 9223372036854775807.
+	// Must be at least min_members. JavaScript clients must use a decimal string
+	// or bigint above Number.MAX_SAFE_INTEGER.
+	MaxMembers *int64
+	// When supplied, overrides both include_disabled and disabled_states: true
+	// selects only disabled organizations (even for exact ID searches); false does
+	// not restrict status. Omitted preserves legacy behavior, including the exact
+	// ID exception.
+	DisabledOnly *bool
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date
+	// bound is optional; must not be after created_to.
+	CreatedFrom *string
+	// Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes
+	// the entire UTC day, implemented as an exclusive bound at the following
+	// midnight.
+	CreatedTo *string
 	// Include organizations with disabled_at set. Defaults to false. Superseded by
 	// disabled_states, which overrides it outright when supplied.
 	IncludeDisabled *bool

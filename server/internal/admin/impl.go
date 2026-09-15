@@ -719,6 +719,10 @@ func listOrganizationsFilters(payload *gen.ListOrganizationsPayload) (accountTyp
 }
 
 func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrganizationsPayload) (*gen.AdminListOrganizationsResult, error) {
+	bounds, err := listOrganizationsBounds(payload)
+	if err != nil {
+		return nil, err
+	}
 	queries := repo.New(s.db)
 
 	limit := int32(listOrganizationsDefaultLimit)
@@ -763,6 +767,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 	}
 
 	accountTypes, disabledStates := listOrganizationsFilters(payload)
+	if payload.DisabledOnly != nil {
+		// Explicit false is unrestricted, not active-only. The separate strict
+		// predicate handles true without the legacy exact-ID exception.
+		disabledStates = []string{"active", "disabled"}
+	}
 
 	// Trimmed once for both queries. A pasted id commonly arrives with the
 	// newline that ended the line it was copied from, and no arm matches through
@@ -775,6 +784,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
+		DisabledOnly:   bounds.disabledOnly,
 		AfterID:        afterID,
 		SortBy:         sortBy,
 		SortDir:        sortDir,
@@ -793,6 +807,11 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStates: disabledStates,
+		MinMembers:     bounds.minMembers,
+		MaxMembers:     bounds.maxMembers,
+		CreatedAtGte:   bounds.createdAtGte,
+		CreatedAtLt:    bounds.createdAtLt,
+		DisabledOnly:   bounds.disabledOnly,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count organizations").LogError(ctx, s.logger)

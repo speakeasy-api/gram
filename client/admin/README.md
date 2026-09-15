@@ -66,3 +66,47 @@ The pinned Speakeasy generator (`1.796.1`) owns that file. Its bundled
 override for the React Query mutation template. This non-generated guide keeps
 the correction durable without modifying generated output or enabling
 persistent edits. The generated example still needs an upstream template fix.
+
+## Organization list API filters
+
+`GET /admin/organizations.list` accepts these optional query parameters. All
+filters intersect with search, account type and trial state; `total` counts the
+full filtered set independently of cursor, page, offset or limit.
+
+- `min_members` / `max_members`: inclusive nonnegative integer bounds on active
+  member count, including zero. Each can be omitted. Values must fit signed
+  int64 (`0`–`9223372036854775807`), and minimum cannot exceed maximum.
+  The handwritten `listOrganizations` API client accepts safe JavaScript numbers
+  or decimal strings; use strings above `Number.MAX_SAFE_INTEGER` to avoid
+  precision loss. The generated admin SDK instead accepts native `bigint` and
+  serializes it losslessly to decimal query strings.
+- `created_from` / `created_to`: strict `YYYY-MM-DD` UTC calendar dates, **both
+  inclusive**, each independently optional. The service converts the start to
+  UTC midnight and the end to an exclusive bound at the next day's UTC midnight,
+  including the entire end day at database precision. Invalid calendar dates or
+  a reversed range are rejected.
+- `disabled_only`: omission preserves `include_disabled` / `disabled_states`
+  behavior, including the legacy exact organization/WorkOS-ID exception.
+  Explicit `true` restricts results to disabled organizations even on an exact
+  ID search; explicit `false` does not restrict status. Either explicit value
+  overrides **both** legacy status parameters when they conflict. Other filters
+  continue to apply to exact-ID searches.
+
+Invalid bounds, fractional or overflowing member counts, and invalid dates
+return a 4xx response. These are API parameters only; no UI filter controls or
+preset-to-date mappings are introduced here.
+
+### Bigint React Query keys
+
+The generated normal and infinite organization-list key factories normalize only
+`minMembers` and `maxMembers` to lossless decimal strings. Request payloads remain
+native `bigint`; HTTP serialization is unchanged. This keeps the keys compatible
+with TanStack Query's default JSON hashing without narrowing the int64 range.
+
+The two-factory fix is maintained in the admin SDK's
+[Speakeasy native patch](src/sdk/.speakeasy/patches/src/react-query/adminListOrganizations.core.ts.patch),
+not by editing generated files or adding a custom post-generation script.
+`mise run gen:sdk` applies the patch during generation. If the generator changes
+these factories, update the patch and run the real QueryClient regression tests
+in `src/lib/gramAdminApi.test.ts`; missing targets can otherwise be reported only
+as generator warnings. See [Speakeasy patch files](https://www.speakeasy.com/docs/sdks/customize/code/patch-files/patch-files).

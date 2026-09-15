@@ -48,17 +48,21 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Every boolean it takes is an opt-in
-// flag, so `false` is the same request as no flag at all.
+// Values the admin API reads as unset. Legacy booleans are opt-in flags,
+// but disabled_only=false explicitly removes the status restriction.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
 // two entries.
 export function omitUnset(params: QueryParams): QueryParams {
   return Object.fromEntries(
-    Object.entries(params).filter(([, value]) => {
+    Object.entries(params).filter(([key, value]) => {
       if (Array.isArray(value)) return value.length > 0;
-      return value !== undefined && value !== "" && value !== false;
+      return (
+        value !== undefined &&
+        value !== "" &&
+        (value !== false || key === "disabled_only")
+      );
     }),
   );
 }
@@ -330,6 +334,16 @@ export type ListOrganizationsParams = {
   account_types?: string[];
   trial_states?: string[];
   disabled_states?: string[];
+  /** Overrides legacy disabled_states/include_disabled when supplied, even false. */
+  disabled_only?: boolean;
+  /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
+  min_members?: number | string;
+  /** Nonnegative int64. Unsafe numeric values are rejected before sending. */
+  max_members?: number | string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_from?: string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_to?: string;
   cursor?: string;
   limit?: number;
 };
@@ -337,6 +351,32 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
+  for (const key of ["min_members", "max_members"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    // Never convert a decimal string through Number: int64 exceeds JS precision.
+    if (
+      (typeof value === "number" && !Number.isSafeInteger(value)) ||
+      !/^[0-9]+$/.test(String(value)) ||
+      BigInt(value) > 9223372036854775807n
+    ) {
+      throw new RangeError(
+        `${key} must be a nonnegative int64; use a decimal string for large values`,
+      );
+    }
+  }
+  for (const key of ["created_from", "created_to"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw new RangeError(`${key} must be a valid YYYY-MM-DD UTC date`);
+    }
+  }
   const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,

@@ -80,6 +80,11 @@ export function buildAdminListOrganizationsQuery(
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
       disabledStates: request?.disabledStates,
+      minMembers: request?.minMembers,
+      maxMembers: request?.maxMembers,
+      disabledOnly: request?.disabledOnly,
+      createdFrom: request?.createdFrom,
+      createdTo: request?.createdTo,
       includeDisabled: request?.includeDisabled,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -127,6 +132,11 @@ export function buildAdminListOrganizationsInfiniteQuery(
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
       disabledStates: request?.disabledStates,
+      minMembers: request?.minMembers,
+      maxMembers: request?.maxMembers,
+      disabledOnly: request?.disabledOnly,
+      createdFrom: request?.createdFrom,
+      createdTo: request?.createdTo,
       includeDisabled: request?.includeDisabled,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -171,6 +181,11 @@ export function queryKeyAdminListOrganizations(
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
     disabledStates?: Array<string> | undefined;
+    minMembers?: bigint | undefined;
+    maxMembers?: bigint | undefined;
+    disabledOnly?: boolean | undefined;
+    createdFrom?: string | undefined;
+    createdTo?: string | undefined;
     includeDisabled?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -179,7 +194,16 @@ export function queryKeyAdminListOrganizations(
     page?: number | undefined;
   },
 ): QueryKey {
-  return ["@gram/admin-client", "admin", "listOrganizations", parameters];
+  return [
+    "@gram/admin-client",
+    "admin",
+    "listOrganizations",
+    {
+      ...parameters,
+      minMembers: parameters.minMembers?.toString(),
+      maxMembers: parameters.maxMembers?.toString(),
+    },
+  ];
 }
 
 export function queryKeyAdminListOrganizationsInfinite(
@@ -189,6 +213,11 @@ export function queryKeyAdminListOrganizationsInfinite(
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
     disabledStates?: Array<string> | undefined;
+    minMembers?: bigint | undefined;
+    maxMembers?: bigint | undefined;
+    disabledOnly?: boolean | undefined;
+    createdFrom?: string | undefined;
+    createdTo?: string | undefined;
     includeDisabled?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -202,6 +231,10 @@ export function queryKeyAdminListOrganizationsInfinite(
     "admin",
     "listOrganizations",
     "infinite",
-    parameters,
+    {
+      ...parameters,
+      minMembers: parameters.minMembers?.toString(),
+      maxMembers: parameters.maxMembers?.toString(),
+    },
   ];
 }

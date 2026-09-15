@@ -3969,6 +3969,11 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			accountTypes      []string
 			trialStates       []string
 			disabledStates    []string
+			minMembers        *int64
+			maxMembers        *int64
+			disabledOnly      *bool
+			createdFrom       *string
+			createdTo         *string
 			includeDisabled   *bool
 			cursor            *string
 			limit             *int
@@ -3990,6 +3995,54 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		accountTypes = qp["account_types"]
 		trialStates = qp["trial_states"]
 		disabledStates = qp["disabled_states"]
+		{
+			minMembersRaw := qp.Get("min_members")
+			if minMembersRaw != "" {
+				v, err2 := strconv.ParseInt(minMembersRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("min_members", minMembersRaw, "integer"))
+				}
+				minMembers = &v
+			}
+		}
+		if minMembers != nil {
+			if *minMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("min_members", *minMembers, 0, true))
+			}
+		}
+		{
+			maxMembersRaw := qp.Get("max_members")
+			if maxMembersRaw != "" {
+				v, err2 := strconv.ParseInt(maxMembersRaw, 10, 64)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("max_members", maxMembersRaw, "integer"))
+				}
+				maxMembers = &v
+			}
+		}
+		if maxMembers != nil {
+			if *maxMembers < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("max_members", *maxMembers, 0, true))
+			}
+		}
+		{
+			disabledOnlyRaw := qp.Get("disabled_only")
+			if disabledOnlyRaw != "" {
+				v, err2 := strconv.ParseBool(disabledOnlyRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("disabled_only", disabledOnlyRaw, "boolean"))
+				}
+				disabledOnly = &v
+			}
+		}
+		createdFromRaw := qp.Get("created_from")
+		if createdFromRaw != "" {
+			createdFrom = &createdFromRaw
+		}
+		createdToRaw := qp.Get("created_to")
+		if createdToRaw != "" {
+			createdTo = &createdToRaw
+		}
 		{
 			includeDisabledRaw := qp.Get("include_disabled")
 			if includeDisabledRaw != "" {
@@ -4041,7 +4094,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStates, includeDisabled, cursor, limit, sort, direction, page, adminSessionToken)
+		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStates, minMembers, maxMembers, disabledOnly, createdFrom, createdTo, includeDisabled, cursor, limit, sort, direction, page, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

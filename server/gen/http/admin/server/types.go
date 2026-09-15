@@ -20362,13 +20362,18 @@ func NewListOrganizationActivityPayload(organizationID string, cursor *string, a
 
 // NewListOrganizationsPayload builds a admin service listOrganizations
 // endpoint payload.
-func NewListOrganizationsPayload(q *string, accountType *string, accountTypes []string, trialStates []string, disabledStates []string, includeDisabled *bool, cursor *string, limit *int, sort *string, direction *string, page *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
+func NewListOrganizationsPayload(q *string, accountType *string, accountTypes []string, trialStates []string, disabledStates []string, minMembers *int64, maxMembers *int64, disabledOnly *bool, createdFrom *string, createdTo *string, includeDisabled *bool, cursor *string, limit *int, sort *string, direction *string, page *int, adminSessionToken *string) *admin.ListOrganizationsPayload {
 	v := &admin.ListOrganizationsPayload{}
 	v.Q = q
 	v.AccountType = accountType
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
 	v.DisabledStates = disabledStates
+	v.MinMembers = minMembers
+	v.MaxMembers = maxMembers
+	v.DisabledOnly = disabledOnly
+	v.CreatedFrom = createdFrom
+	v.CreatedTo = createdTo
 	v.IncludeDisabled = includeDisabled
 	v.Cursor = cursor
 	v.Limit = limit
