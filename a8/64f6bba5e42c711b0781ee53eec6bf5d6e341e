@@ -1,0 +1,27 @@
+server/internal/gateway/proxy.go
+  s_ce4779ee43f020::t_3a65a05326716f 131,144,159,207
+server/internal/mcp/impl.go
+  s_ce4779ee43f020::t_df9616727975bb 111,392,416,445,1639
+server/internal/mcpriskscan/scan.go
+  s_ce4779ee43f020::t_44ad70792b911f 6-7,12,74,79-80,85-87,90-115,119-121,126-127,140-151
+server/internal/remotemcp/proxymanager.go
+  s_ce4779ee43f020::t_2fba0f0bd90f40 71,129,290
+server/internal/remotemcp/tools_call_risk_scan_interceptor.go
+  s_ce4779ee43f020::t_36fb37e562aa0c 14-15,28-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a864f6bba5e42c711b0781ee53eec6bf5d6e341e",
+  "prompts": {},
+  "sessions": {
+    "s_ce4779ee43f020": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "38a7b3a6-bc47-464c-bead-2a89d5b0a4ba",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
