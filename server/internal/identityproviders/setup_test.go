@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
@@ -48,8 +49,19 @@ type testInstance struct {
 	service    *identityproviders.Service
 	conn       *pgxpool.Pool
 	encryption *encryption.Client
+	workos     *mockWorkOSClient
 	serverURL  *url.URL
 	orgID      string
+}
+
+type mockWorkOSClient struct {
+	mock.Mock
+}
+
+func (m *mockWorkOSClient) ListConnections(ctx context.Context, organizationID string) ([]workos.Connection, error) {
+	args := m.Called(ctx, organizationID)
+	connections, _ := args.Get(0).([]workos.Connection)
+	return connections, args.Error(1)
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -93,6 +105,9 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 	require.NoError(t, err)
 	retryConfig := guardian.DefaultRetryConfig()
 	retryConfig.MaxAttempts = 0
+	workOSClient := &mockWorkOSClient{}
+	workOSClient.Test(t)
+	t.Cleanup(func() { workOSClient.AssertExpectations(t) })
 	service := identityproviders.NewService(
 		logger,
 		tracerProvider,
@@ -102,6 +117,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		audit.NewLogger(),
 		encryptionClient,
 		okta.NewClient(logger, guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
+		workOSClient,
 		serverURL,
 	)
 
@@ -109,6 +125,7 @@ func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (conte
 		service:    service,
 		conn:       conn,
 		encryption: encryptionClient,
+		workos:     workOSClient,
 		serverURL:  serverURL,
 		orgID:      authCtx.ActiveOrganizationID,
 	}

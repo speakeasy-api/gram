@@ -133,7 +133,7 @@ INSERT INTO okta_identity_provider_connections (
   $3,
   '{}'
 )
-RETURNING identity_provider_connection_id, identity_provider_connections_kind, okta_domain, auth_method, client_id, signing_key_id, granted_scopes, created_at, updated_at
+RETURNING identity_provider_connection_id, identity_provider_connections_kind, okta_domain, auth_method, client_id, signing_key_id, granted_scopes, sign_in_application_id, workos_connection_id, sign_in_state, groups_source, groups_claim_confirmed, sign_in_evidence, created_at, updated_at
 `
 
 type CreateOktaIdentityProviderConnectionParams struct {
@@ -153,6 +153,12 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 		&i.ClientID,
 		&i.SigningKeyID,
 		&i.GrantedScopes,
+		&i.SignInApplicationID,
+		&i.WorkosConnectionID,
+		&i.SignInState,
+		&i.GroupsSource,
+		&i.GroupsClaimConfirmed,
+		&i.SignInEvidence,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -204,10 +210,19 @@ SELECT
   o.client_id,
   o.granted_scopes,
   o.signing_key_id,
+  o.sign_in_application_id,
+  o.workos_connection_id,
+  o.sign_in_state,
+  o.groups_source,
+  o.groups_claim_confirmed,
+  o.sign_in_evidence,
+  m.workos_id,
   k.kid AS signing_key_kid
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
+JOIN organization_metadata AS m
+  ON m.id = c.organization_id
 JOIN identity_provider_signing_keys AS k
   ON k.id = o.signing_key_id
   AND k.organization_id = c.organization_id
@@ -218,24 +233,31 @@ WHERE c.organization_id = $1
 `
 
 type GetIdentityProviderConnectionByOrganizationRow struct {
-	ID               uuid.UUID
-	OrganizationID   string
-	Kind             string
-	TenantIdentifier string
-	DisplayName      pgtype.Text
-	Status           string
-	StatusDetail     pgtype.Text
-	Capabilities     []string
-	LastVerifiedAt   pgtype.Timestamptz
-	VerifyEvidence   []byte
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
-	ClientID         pgtype.Text
-	GrantedScopes    []string
-	SigningKeyID     uuid.NullUUID
-	SigningKeyKid    string
+	ID                   uuid.UUID
+	OrganizationID       string
+	Kind                 string
+	TenantIdentifier     string
+	DisplayName          pgtype.Text
+	Status               string
+	StatusDetail         pgtype.Text
+	Capabilities         []string
+	LastVerifiedAt       pgtype.Timestamptz
+	VerifyEvidence       []byte
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+	ClientID             pgtype.Text
+	GrantedScopes        []string
+	SigningKeyID         uuid.NullUUID
+	SignInApplicationID  pgtype.Text
+	WorkosConnectionID   pgtype.Text
+	SignInState          pgtype.Text
+	GroupsSource         pgtype.Text
+	GroupsClaimConfirmed bool
+	SignInEvidence       []byte
+	WorkosID             pgtype.Text
+	SigningKeyKid        string
 }
 
 func (q *Queries) GetIdentityProviderConnectionByOrganization(ctx context.Context, organizationID string) (GetIdentityProviderConnectionByOrganizationRow, error) {
@@ -259,6 +281,13 @@ func (q *Queries) GetIdentityProviderConnectionByOrganization(ctx context.Contex
 		&i.ClientID,
 		&i.GrantedScopes,
 		&i.SigningKeyID,
+		&i.SignInApplicationID,
+		&i.WorkosConnectionID,
+		&i.SignInState,
+		&i.GroupsSource,
+		&i.GroupsClaimConfirmed,
+		&i.SignInEvidence,
+		&i.WorkosID,
 		&i.SigningKeyKid,
 	)
 	return i, err
@@ -326,6 +355,29 @@ func (q *Queries) GetIdentityProviderSigningKey(ctx context.Context, arg GetIden
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const lockOktaIdentityProviderSignIn = `-- name: LockOktaIdentityProviderSignIn :one
+SELECT c.id
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+WHERE c.organization_id = $1
+  AND c.id = $2
+  AND c.deleted IS FALSE
+FOR UPDATE OF o
+`
+
+type LockOktaIdentityProviderSignInParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) LockOktaIdentityProviderSignIn(ctx context.Context, arg LockOktaIdentityProviderSignInParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOktaIdentityProviderSignIn, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const markIdentityProviderAwaitingVerification = `-- name: MarkIdentityProviderAwaitingVerification :exec
@@ -513,4 +565,108 @@ type UpdateOktaIdentityProviderGrantedScopesParams struct {
 func (q *Queries) UpdateOktaIdentityProviderGrantedScopes(ctx context.Context, arg UpdateOktaIdentityProviderGrantedScopesParams) error {
 	_, err := q.db.Exec(ctx, updateOktaIdentityProviderGrantedScopes, arg.GrantedScopes, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	return err
+}
+
+const updateOktaIdentityProviderSignInAcknowledgement = `-- name: UpdateOktaIdentityProviderSignInAcknowledgement :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  groups_source = $1,
+  groups_claim_confirmed = $2,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $3
+  AND c.id = $4
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id IS NOT NULL
+`
+
+type UpdateOktaIdentityProviderSignInAcknowledgementParams struct {
+	GroupsSource                 pgtype.Text
+	GroupsClaimConfirmed         bool
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) UpdateOktaIdentityProviderSignInAcknowledgement(ctx context.Context, arg UpdateOktaIdentityProviderSignInAcknowledgementParams) error {
+	_, err := q.db.Exec(ctx, updateOktaIdentityProviderSignInAcknowledgement,
+		arg.GroupsSource,
+		arg.GroupsClaimConfirmed,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+	)
+	return err
+}
+
+const updateOktaIdentityProviderSignInApplication = `-- name: UpdateOktaIdentityProviderSignInApplication :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  sign_in_application_id = $1,
+  sign_in_state = 'application_created',
+  sign_in_evidence = $2,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $3
+  AND c.id = $4
+  AND c.deleted IS FALSE
+`
+
+type UpdateOktaIdentityProviderSignInApplicationParams struct {
+	SignInApplicationID          pgtype.Text
+	SignInEvidence               []byte
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) UpdateOktaIdentityProviderSignInApplication(ctx context.Context, arg UpdateOktaIdentityProviderSignInApplicationParams) error {
+	_, err := q.db.Exec(ctx, updateOktaIdentityProviderSignInApplication,
+		arg.SignInApplicationID,
+		arg.SignInEvidence,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+	)
+	return err
+}
+
+const updateOktaIdentityProviderSignInVerification = `-- name: UpdateOktaIdentityProviderSignInVerification :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  workos_connection_id = $1,
+  sign_in_state = $2,
+  sign_in_evidence = $3,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $4
+  AND c.id = $5
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id = $6
+  AND o.sign_in_evidence = $7
+`
+
+type UpdateOktaIdentityProviderSignInVerificationParams struct {
+	WorkosConnectionID           pgtype.Text
+	SignInState                  pgtype.Text
+	SignInEvidence               []byte
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	SignInApplicationID          pgtype.Text
+	PreviousSignInEvidence       []byte
+}
+
+func (q *Queries) UpdateOktaIdentityProviderSignInVerification(ctx context.Context, arg UpdateOktaIdentityProviderSignInVerificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateOktaIdentityProviderSignInVerification,
+		arg.WorkosConnectionID,
+		arg.SignInState,
+		arg.SignInEvidence,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.SignInApplicationID,
+		arg.PreviousSignInEvidence,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

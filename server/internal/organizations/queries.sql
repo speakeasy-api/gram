@@ -930,6 +930,15 @@ SELECT
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     EXISTS (
         SELECT 1
+        FROM identity_provider_connections
+        JOIN okta_identity_provider_connections
+          ON okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id
+        WHERE identity_provider_connections.organization_id = @organization_id
+          AND identity_provider_connections.deleted IS FALSE
+          AND okta_identity_provider_connections.sign_in_state = 'passed'
+    ) AS okta_sign_in_passed,
+    EXISTS (
+        SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
     ) AS marketplace_published,
@@ -942,3 +951,13 @@ SELECT
     )::boolean AS logging_enabled
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
+
+-- name: SetOktaIdentityProviderSignInStateForTest :exec
+UPDATE okta_identity_provider_connections
+SET sign_in_state = @sign_in_state,
+    updated_at = clock_timestamp()
+FROM identity_provider_connections
+WHERE okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id
+  AND identity_provider_connections.organization_id = @organization_id
+  AND identity_provider_connections.id = @identity_provider_connection_id
+  AND identity_provider_connections.deleted IS FALSE;

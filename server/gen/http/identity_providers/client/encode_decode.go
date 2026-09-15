@@ -1471,18 +1471,22 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 		return nil
 	}
 	res := &identityproviders.IdentityProviderConnection{
-		ID:               *v.ID,
-		Kind:             *v.Kind,
-		TenantIdentifier: *v.TenantIdentifier,
-		DisplayName:      v.DisplayName,
-		ClientID:         v.ClientID,
-		Status:           *v.Status,
-		StatusDetail:     v.StatusDetail,
-		JwksURL:          *v.JwksURL,
-		SigningKeyKid:    *v.SigningKeyKid,
-		LastVerifiedAt:   v.LastVerifiedAt,
-		CreatedAt:        *v.CreatedAt,
-		UpdatedAt:        *v.UpdatedAt,
+		ID:                   *v.ID,
+		Kind:                 *v.Kind,
+		TenantIdentifier:     *v.TenantIdentifier,
+		DisplayName:          v.DisplayName,
+		ClientID:             v.ClientID,
+		Status:               *v.Status,
+		StatusDetail:         v.StatusDetail,
+		JwksURL:              *v.JwksURL,
+		SigningKeyKid:        *v.SigningKeyKid,
+		LastVerifiedAt:       v.LastVerifiedAt,
+		SignInState:          v.SignInState,
+		SignInConnectionID:   v.SignInConnectionID,
+		GroupsSource:         v.GroupsSource,
+		GroupsClaimConfirmed: v.GroupsClaimConfirmed,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
 	}
 	res.Capabilities = make([]string, len(v.Capabilities))
 	for i, val := range v.Capabilities {
@@ -1504,11 +1508,12 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 // value of type *IdentityProviderSetupStepResponseBody.
 func unmarshalIdentityProviderSetupStepResponseBodyToIdentityprovidersIdentityProviderSetupStep(v *IdentityProviderSetupStepResponseBody) *identityproviders.IdentityProviderSetupStep {
 	res := &identityproviders.IdentityProviderSetupStep{
-		Key:      *v.Key,
-		Title:    *v.Title,
-		Where:    *v.Where,
-		DeepLink: v.DeepLink,
-		State:    *v.State,
+		Key:          *v.Key,
+		Title:        *v.Title,
+		Where:        *v.Where,
+		DeepLink:     v.DeepLink,
+		PortalIntent: v.PortalIntent,
+		State:        *v.State,
 	}
 	res.Instructions = make([]string, len(v.Instructions))
 	for i, val := range v.Instructions {
@@ -1529,6 +1534,19 @@ func unmarshalIdentityProviderSetupStepResponseBodyToIdentityprovidersIdentityPr
 			continue
 		}
 		res.ExpectedValues[i] = unmarshalIdentityProviderExpectedValueResponseBodyToIdentityprovidersIdentityProviderExpectedValue(val)
+	}
+	if v.Claims != nil {
+		res.Claims = make([]*identityproviders.IdentityProviderClaim, len(v.Claims))
+		for i, val := range v.Claims {
+			if val == nil {
+				res.Claims[i] = nil
+				continue
+			}
+			res.Claims[i] = unmarshalIdentityProviderClaimResponseBodyToIdentityprovidersIdentityProviderClaim(val)
+		}
+	}
+	if v.Repair != nil {
+		res.Repair = unmarshalIdentityProviderRepairResponseBodyToIdentityprovidersIdentityProviderRepair(v.Repair)
 	}
 	if v.LastOutcome != nil {
 		res.LastOutcome = unmarshalIdentityProviderVerifyResultResponseBodyToIdentityprovidersIdentityProviderVerifyResult(v.LastOutcome)
@@ -1559,6 +1577,42 @@ func unmarshalIdentityProviderExpectedValueResponseBodyToIdentityprovidersIdenti
 		Label:        *v.Label,
 		Secret:       *v.Secret,
 		CurrentValue: v.CurrentValue,
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderClaimResponseBodyToIdentityprovidersIdentityProviderClaim
+// builds a value of type *identityproviders.IdentityProviderClaim from a value
+// of type *IdentityProviderClaimResponseBody.
+func unmarshalIdentityProviderClaimResponseBodyToIdentityprovidersIdentityProviderClaim(v *IdentityProviderClaimResponseBody) *identityproviders.IdentityProviderClaim {
+	if v == nil {
+		return nil
+	}
+	res := &identityproviders.IdentityProviderClaim{
+		Name:          *v.Name,
+		Purpose:       *v.Purpose,
+		CarriesAccess: *v.CarriesAccess,
+	}
+
+	return res
+}
+
+// unmarshalIdentityProviderRepairResponseBodyToIdentityprovidersIdentityProviderRepair
+// builds a value of type *identityproviders.IdentityProviderRepair from a
+// value of type *IdentityProviderRepairResponseBody.
+func unmarshalIdentityProviderRepairResponseBodyToIdentityprovidersIdentityProviderRepair(v *IdentityProviderRepairResponseBody) *identityproviders.IdentityProviderRepair {
+	if v == nil {
+		return nil
+	}
+	res := &identityproviders.IdentityProviderRepair{
+		Title:             *v.Title,
+		DeepLink:          v.DeepLink,
+		FallbackAvailable: *v.FallbackAvailable,
+	}
+	res.Instructions = make([]string, len(v.Instructions))
+	for i, val := range v.Instructions {
+		res.Instructions[i] = val
 	}
 
 	return res

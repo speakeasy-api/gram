@@ -1045,10 +1045,12 @@ trackedFiles:
   src/models/components/identitydirectory.ts: {}
   src/models/components/identitymodel.ts: {}
   src/models/components/identityprovidercapabilityread.ts: {}
+  src/models/components/identityproviderclaim.ts: {}
   src/models/components/identityproviderconnection.ts: {}
   src/models/components/identityproviderexpectedvalue.ts: {}
   src/models/components/identityproviderfieldoutcome.ts: {}
   src/models/components/identityproviderprintedvalue.ts: {}
+  src/models/components/identityproviderrepair.ts: {}
   src/models/components/identityprovidersetup.ts: {}
   src/models/components/identityprovidersetupstep.ts: {}
   src/models/components/identityprovidersetupvalue.ts: {}

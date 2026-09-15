@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  IdentityProviderClaim,
+  IdentityProviderClaim$inboundSchema,
+} from "./identityproviderclaim.js";
+import {
   IdentityProviderExpectedValue,
   IdentityProviderExpectedValue$inboundSchema,
 } from "./identityproviderexpectedvalue.js";
@@ -17,9 +21,24 @@ import {
   IdentityProviderPrintedValue$inboundSchema,
 } from "./identityproviderprintedvalue.js";
 import {
+  IdentityProviderRepair,
+  IdentityProviderRepair$inboundSchema,
+} from "./identityproviderrepair.js";
+import {
   IdentityProviderVerifyResult,
   IdentityProviderVerifyResult$inboundSchema,
 } from "./identityproviderverifyresult.js";
+
+/**
+ * WorkOS Admin Portal intent the dashboard should open for this step.
+ */
+export const PortalIntent = {
+  Sso: "sso",
+} as const;
+/**
+ * WorkOS Admin Portal intent the dashboard should open for this step.
+ */
+export type PortalIntent = ClosedEnum<typeof PortalIntent>;
 
 export const IdentityProviderSetupStepState = {
   NotStarted: "not_started",
@@ -39,16 +58,29 @@ export const Where = {
 export type Where = ClosedEnum<typeof Where>;
 
 export type IdentityProviderSetupStep = {
+  /**
+   * Claims Speakeasy intends sign-in to carry.
+   */
+  claims?: Array<IdentityProviderClaim> | undefined;
   deepLink?: string | undefined;
   expectedValues: Array<IdentityProviderExpectedValue>;
   instructions: Array<string>;
   key: string;
   lastOutcome?: IdentityProviderVerifyResult | undefined;
+  /**
+   * WorkOS Admin Portal intent the dashboard should open for this step.
+   */
+  portalIntent?: PortalIntent | undefined;
   printedValues: Array<IdentityProviderPrintedValue>;
+  repair?: IdentityProviderRepair | undefined;
   state: IdentityProviderSetupStepState;
   title: string;
   where: Where;
 };
+
+/** @internal */
+export const PortalIntent$inboundSchema: z.ZodMiniEnum<typeof PortalIntent> = z
+  .enum(PortalIntent);
 
 /** @internal */
 export const IdentityProviderSetupStepState$inboundSchema: z.ZodMiniEnum<
@@ -64,12 +96,15 @@ export const IdentityProviderSetupStep$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    claims: z.optional(z.array(IdentityProviderClaim$inboundSchema)),
     deep_link: z.optional(z.string()),
     expected_values: z.array(IdentityProviderExpectedValue$inboundSchema),
     instructions: z.array(z.string()),
     key: z.string(),
     last_outcome: z.optional(IdentityProviderVerifyResult$inboundSchema),
+    portal_intent: z.optional(PortalIntent$inboundSchema),
     printed_values: z.array(IdentityProviderPrintedValue$inboundSchema),
+    repair: z.optional(IdentityProviderRepair$inboundSchema),
     state: IdentityProviderSetupStepState$inboundSchema,
     title: z.string(),
     where: Where$inboundSchema,
@@ -79,6 +114,7 @@ export const IdentityProviderSetupStep$inboundSchema: z.ZodMiniType<
       "deep_link": "deepLink",
       "expected_values": "expectedValues",
       "last_outcome": "lastOutcome",
+      "portal_intent": "portalIntent",
       "printed_values": "printedValues",
     });
   }),

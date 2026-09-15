@@ -58,10 +58,19 @@ SELECT
   o.client_id,
   o.granted_scopes,
   o.signing_key_id,
+  o.sign_in_application_id,
+  o.workos_connection_id,
+  o.sign_in_state,
+  o.groups_source,
+  o.groups_claim_confirmed,
+  o.sign_in_evidence,
+  m.workos_id,
   k.kid AS signing_key_kid
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
+JOIN organization_metadata AS m
+  ON m.id = c.organization_id
 JOIN identity_provider_signing_keys AS k
   ON k.id = o.signing_key_id
   AND k.organization_id = c.organization_id
@@ -69,6 +78,57 @@ JOIN identity_provider_signing_keys AS k
   AND k.deleted IS FALSE
 WHERE c.organization_id = @organization_id
   AND c.deleted IS FALSE;
+
+-- name: UpdateOktaIdentityProviderSignInApplication :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  sign_in_application_id = @sign_in_application_id,
+  sign_in_state = 'application_created',
+  sign_in_evidence = @sign_in_evidence,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE;
+
+-- name: LockOktaIdentityProviderSignIn :one
+SELECT c.id
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+WHERE c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+FOR UPDATE OF o;
+
+-- name: UpdateOktaIdentityProviderSignInAcknowledgement :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  groups_source = @groups_source,
+  groups_claim_confirmed = @groups_claim_confirmed,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id IS NOT NULL;
+
+-- name: UpdateOktaIdentityProviderSignInVerification :execrows
+UPDATE okta_identity_provider_connections AS o
+SET
+  workos_connection_id = @workos_connection_id,
+  sign_in_state = @sign_in_state,
+  sign_in_evidence = @sign_in_evidence,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE
+  AND o.sign_in_application_id = @sign_in_application_id
+  AND o.sign_in_evidence = @previous_sign_in_evidence;
 
 -- name: UpdateOktaIdentityProviderClientID :exec
 UPDATE okta_identity_provider_connections AS o

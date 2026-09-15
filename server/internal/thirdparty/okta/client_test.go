@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -255,6 +257,184 @@ func TestListGroupsBoundsSuccessfulResponseBody(t *testing.T) {
 	_, err := newTestClient(t, server.URL).ListGroups(t.Context(), "example.okta.com", "test-access-token", okta.PageRequest{Limit: 1, After: ""})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "decode Okta response")
+}
+
+func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing.T) {
+	t.Parallel()
+
+	const responseSecret = "response-secret-must-not-escape"
+	requests := make(chan *http.Request, 1)
+	bodies := make(chan []byte, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		requests <- r.Clone(t.Context())
+		bodies <- body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"app-1","status":"ACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"client-1","client_secret":"` + responseSecret + `"}}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	app, err := newTestClientWithLogger(t, server.URL, logger).CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{
+		RedirectURIs: []string{"https://auth.example.com/sso/callback", "https://app.example.com/oauth/callback"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, okta.Application{ID: "app-1", Status: "ACTIVE", Label: "Speakeasy", ClientID: "client-1"}, app)
+
+	request := <-requests
+	require.Equal(t, http.MethodPost, request.Method)
+	require.Equal(t, "/api/v1/apps", request.URL.Path)
+	require.Equal(t, "Bearer test-access-token", request.Header.Get("Authorization"))
+	require.Equal(t, "application/json", request.Header.Get("Content-Type"))
+	body := <-bodies
+	require.JSONEq(t, `{
+		"name":"oidc_client",
+		"label":"Speakeasy",
+		"signOnMode":"OPENID_CONNECT",
+		"credentials":{"oauthClient":{"token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true,"pkce_required":true}},
+		"settings":{"oauthClient":{"application_type":"web","grant_types":["authorization_code","refresh_token"],"response_types":["code"],"redirect_uris":["https://auth.example.com/sso/callback","https://app.example.com/oauth/callback"],"consent_method":"TRUSTED"}}
+	}`, string(body))
+	require.NotContains(t, string(body), `"client_secret":`)
+	_, exposesSecret := reflect.TypeOf(app).FieldByName("ClientSecret")
+	require.False(t, exposesSecret)
+	encoded, err := json.Marshal(app)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), responseSecret)
+	require.NotContains(t, fmt.Sprintf("%+v", app), responseSecret)
+	require.NotContains(t, logs.String(), responseSecret)
+}
+
+func TestGetApplicationReturnsOnlyNonSecretFields(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps/app-123" || r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"app-123","status":"INACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"client-123","client_secret":"discard-me"}},"settings":{"oauthClient":{"redirect_uris":["https://auth.example.com/callback"]}}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	app, err := newTestClient(t, server.URL).GetApplication(t.Context(), "example.okta.com", "test-access-token", "app-123")
+	require.NoError(t, err)
+	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123"}, app)
+	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
+}
+
+func TestResolveApplicationByClientIDUsesSafeFilterAndExactFallbackMatch(t *testing.T) {
+	t.Parallel()
+
+	const clientID = `client" or label eq "Other`
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps" || r.URL.Query().Get("limit") != "200" || r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if requests.Add(1) == 1 {
+			if r.URL.Query().Get("filter") != `credentials.oauthClient.client_id eq "client\" or label eq \"Other"` {
+				http.Error(w, "unsafe filter", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"errorCode":"E0000001","errorSummary":"filter not supported"}`))
+			return
+		}
+		if r.URL.Query().Has("filter") {
+			http.Error(w, "unexpected fallback filter", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"id":"wrong-app","status":"ACTIVE","label":"Other","credentials":{"oauthClient":{"client_id":"wrong-client"}}},
+			{"id":"matching-app","status":"ACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"client\" or label eq \"Other","client_secret":"discard-me"}}}
+		]`))
+	}))
+	t.Cleanup(server.Close)
+
+	app, err := newTestClient(t, server.URL).ResolveApplicationByClientID(t.Context(), "example.okta.com", "test-access-token", clientID)
+	require.NoError(t, err)
+	require.Equal(t, okta.Application{ID: "matching-app", Status: "ACTIVE", Label: "Speakeasy", ClientID: clientID}, app)
+	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
+	require.Equal(t, int64(2), requests.Load())
+}
+
+func TestFindEveryoneGroupAndAssignItToApplication(t *testing.T) {
+	t.Parallel()
+
+	assignmentBodies := make(chan []byte, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-access-token" {
+			http.Error(w, "invalid authorization", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/groups":
+			if r.URL.Query().Get("filter") != `type eq "BUILT_IN"` || r.URL.Query().Get("limit") != "200" {
+				http.Error(w, "invalid filter", http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte(`[
+				{"id":"custom-everyone","type":"OKTA_GROUP","profile":{"name":"Everyone"}},
+				{"id":"built-in-admins","type":"BUILT_IN","profile":{"name":"Okta Administrators"}},
+				{"id":"everyone-group","type":"BUILT_IN","profile":{"name":"Everyone"}}
+			]`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/apps/app-123/groups/everyone-group":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			assignmentBodies <- body
+			_, _ = w.Write([]byte(`{"id":"everyone-group"}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	group, err := client.FindEveryoneGroup(t.Context(), "example.okta.com", "test-access-token")
+	require.NoError(t, err)
+	require.Equal(t, okta.Group{ID: "everyone-group", Name: "Everyone"}, group)
+	require.NoError(t, client.AssignGroupToApplication(t.Context(), "example.okta.com", "test-access-token", "app-123", group.ID))
+	require.JSONEq(t, `{}`, string(<-assignmentBodies))
+}
+
+func TestOIDCApplicationMutationsDoNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var posts atomic.Int64
+	var puts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			posts.Add(1)
+		case http.MethodPut:
+			puts.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000009","errorSummary":"temporary failure"}`))
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClientWithRetries(t, server.URL, 3)
+
+	_, createErr := client.CreateOIDCApplication(t.Context(), "example.okta.com", "test-access-token", okta.CreateOIDCApplicationInput{RedirectURIs: []string{"https://auth.example.com/callback"}})
+	require.Error(t, createErr)
+	assignErr := client.AssignGroupToApplication(t.Context(), "example.okta.com", "test-access-token", "app-123", "group-123")
+	require.Error(t, assignErr)
+	require.Equal(t, int64(1), posts.Load())
+	require.Equal(t, int64(1), puts.Load())
 }
 
 func newTestClient(t *testing.T, endpoint string) *okta.Client {

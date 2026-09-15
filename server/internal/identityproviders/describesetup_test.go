@@ -21,7 +21,7 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, connection.ID, setup.ConnectionID)
-	require.Len(t, setup.Steps, 1)
+	require.Len(t, setup.Steps, 2)
 	require.Equal(t, &gen.IdentityProviderSetupStep{
 		Key:   "connect",
 		Title: "Connect Okta",
@@ -39,9 +39,32 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 			{Label: "Administrator roles", Value: "Read-only Administrator, Application Administrator", Copyable: false},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{{Key: "client_id", Label: "Client ID", Secret: false, CurrentValue: nil}},
+		Claims:         nil,
+		Repair:         nil,
+		PortalIntent:   nil,
 		State:          "awaiting_values",
 		LastOutcome:    nil,
 	}, setup.Steps[0])
+	require.Equal(t, &gen.IdentityProviderSetupStep{
+		Key:            "sign_in",
+		Title:          "Configure Okta sign-in",
+		Where:          "our_page",
+		Instructions:   []string{"Verify the Okta connection before creating the sign-in application."},
+		DeepLink:       nil,
+		PrintedValues:  []*gen.IdentityProviderPrintedValue{},
+		ExpectedValues: []*gen.IdentityProviderExpectedValue{},
+		Claims: []*gen.IdentityProviderClaim{
+			{Name: "email", Purpose: "identity", CarriesAccess: false},
+			{Name: "name", Purpose: "display", CarriesAccess: false},
+			{Name: "groups", Purpose: "used by access rules", CarriesAccess: true},
+			{Name: "department", Purpose: "reporting", CarriesAccess: false},
+			{Name: "title", Purpose: "reporting", CarriesAccess: false},
+		},
+		Repair:       nil,
+		PortalIntent: nil,
+		State:        "not_started",
+		LastOutcome:  nil,
+	}, setup.Steps[1])
 }
 
 func TestDescribeSetupBuildsDeepLinksOnlyForSupportedOktaTenants(t *testing.T) {
@@ -66,8 +89,9 @@ func TestDescribeSetupBuildsDeepLinksOnlyForSupportedOktaTenants(t *testing.T) {
 		createConnection(t, ctx, ti, testCase.tenantURL)
 		setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
 		require.NoError(t, err)
-		require.Len(t, setup.Steps, 1)
+		require.Len(t, setup.Steps, 2)
 		require.Equal(t, testCase.deepLink, setup.Steps[0].DeepLink, testCase.tenantURL)
+		require.Nil(t, setup.Steps[1].DeepLink, testCase.tenantURL)
 	}
 }
 

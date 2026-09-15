@@ -1365,18 +1365,22 @@ func marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnect
 		return nil
 	}
 	res := &IdentityProviderConnectionResponseBody{
-		ID:               v.ID,
-		Kind:             v.Kind,
-		TenantIdentifier: v.TenantIdentifier,
-		DisplayName:      v.DisplayName,
-		ClientID:         v.ClientID,
-		Status:           v.Status,
-		StatusDetail:     v.StatusDetail,
-		JwksURL:          v.JwksURL,
-		SigningKeyKid:    v.SigningKeyKid,
-		LastVerifiedAt:   v.LastVerifiedAt,
-		CreatedAt:        v.CreatedAt,
-		UpdatedAt:        v.UpdatedAt,
+		ID:                   v.ID,
+		Kind:                 v.Kind,
+		TenantIdentifier:     v.TenantIdentifier,
+		DisplayName:          v.DisplayName,
+		ClientID:             v.ClientID,
+		Status:               v.Status,
+		StatusDetail:         v.StatusDetail,
+		JwksURL:              v.JwksURL,
+		SigningKeyKid:        v.SigningKeyKid,
+		LastVerifiedAt:       v.LastVerifiedAt,
+		SignInState:          v.SignInState,
+		SignInConnectionID:   v.SignInConnectionID,
+		GroupsSource:         v.GroupsSource,
+		GroupsClaimConfirmed: v.GroupsClaimConfirmed,
+		CreatedAt:            v.CreatedAt,
+		UpdatedAt:            v.UpdatedAt,
 	}
 	if v.Capabilities != nil {
 		res.Capabilities = make([]string, len(v.Capabilities))
@@ -1406,11 +1410,12 @@ func marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnect
 // of type *identityproviders.IdentityProviderSetupStep.
 func marshalIdentityprovidersIdentityProviderSetupStepToIdentityProviderSetupStepResponseBody(v *identityproviders.IdentityProviderSetupStep) *IdentityProviderSetupStepResponseBody {
 	res := &IdentityProviderSetupStepResponseBody{
-		Key:      v.Key,
-		Title:    v.Title,
-		Where:    v.Where,
-		DeepLink: v.DeepLink,
-		State:    v.State,
+		Key:          v.Key,
+		Title:        v.Title,
+		Where:        v.Where,
+		DeepLink:     v.DeepLink,
+		PortalIntent: v.PortalIntent,
+		State:        v.State,
 	}
 	if v.Instructions != nil {
 		res.Instructions = make([]string, len(v.Instructions))
@@ -1444,6 +1449,19 @@ func marshalIdentityprovidersIdentityProviderSetupStepToIdentityProviderSetupSte
 	} else {
 		res.ExpectedValues = []*IdentityProviderExpectedValueResponseBody{}
 	}
+	if v.Claims != nil {
+		res.Claims = make([]*IdentityProviderClaimResponseBody, len(v.Claims))
+		for i, val := range v.Claims {
+			if val == nil {
+				res.Claims[i] = nil
+				continue
+			}
+			res.Claims[i] = marshalIdentityprovidersIdentityProviderClaimToIdentityProviderClaimResponseBody(val)
+		}
+	}
+	if v.Repair != nil {
+		res.Repair = marshalIdentityprovidersIdentityProviderRepairToIdentityProviderRepairResponseBody(v.Repair)
+	}
 	if v.LastOutcome != nil {
 		res.LastOutcome = marshalIdentityprovidersIdentityProviderVerifyResultToIdentityProviderVerifyResultResponseBody(v.LastOutcome)
 	}
@@ -1473,6 +1491,46 @@ func marshalIdentityprovidersIdentityProviderExpectedValueToIdentityProviderExpe
 		Label:        v.Label,
 		Secret:       v.Secret,
 		CurrentValue: v.CurrentValue,
+	}
+
+	return res
+}
+
+// marshalIdentityprovidersIdentityProviderClaimToIdentityProviderClaimResponseBody
+// builds a value of type *IdentityProviderClaimResponseBody from a value of
+// type *identityproviders.IdentityProviderClaim.
+func marshalIdentityprovidersIdentityProviderClaimToIdentityProviderClaimResponseBody(v *identityproviders.IdentityProviderClaim) *IdentityProviderClaimResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityProviderClaimResponseBody{
+		Name:          v.Name,
+		Purpose:       v.Purpose,
+		CarriesAccess: v.CarriesAccess,
+	}
+
+	return res
+}
+
+// marshalIdentityprovidersIdentityProviderRepairToIdentityProviderRepairResponseBody
+// builds a value of type *IdentityProviderRepairResponseBody from a value of
+// type *identityproviders.IdentityProviderRepair.
+func marshalIdentityprovidersIdentityProviderRepairToIdentityProviderRepairResponseBody(v *identityproviders.IdentityProviderRepair) *IdentityProviderRepairResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &IdentityProviderRepairResponseBody{
+		Title:             v.Title,
+		DeepLink:          v.DeepLink,
+		FallbackAvailable: v.FallbackAvailable,
+	}
+	if v.Instructions != nil {
+		res.Instructions = make([]string, len(v.Instructions))
+		for i, val := range v.Instructions {
+			res.Instructions[i] = val
+		}
+	} else {
+		res.Instructions = []string{}
 	}
 
 	return res

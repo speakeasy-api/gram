@@ -1647,7 +1647,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), &identityProviderPublicURL))
+			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(logger, guardianPolicy), workosClient, &identityProviderPublicURL))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,

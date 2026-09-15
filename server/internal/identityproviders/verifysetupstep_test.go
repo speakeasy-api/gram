@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/identity_providers"
@@ -22,28 +25,43 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 const (
-	fakeOktaPassed      = "passed"
-	fakeOktaRefused     = "refused"
-	fakeOktaUnavailable = "unavailable"
-	fakeOktaAppsBlocked = "apps_blocked"
-	testAccessToken     = "test-access-token"
-	testClientID        = "test-client-id"
+	fakeOktaPassed       = "passed"
+	fakeOktaRefused      = "refused"
+	fakeOktaUnavailable  = "unavailable"
+	fakeOktaAppsBlocked  = "apps_blocked"
+	fakeOktaNoProvision  = "no_provisioning"
+	fakeOktaAppInactive  = "sign_in_app_inactive"
+	fakeOktaAppForbidden = "sign_in_app_forbidden"
+	fakeOktaAppRefused   = "sign_in_app_refused"
+	fakeOktaAssignFails  = "sign_in_assignment_fails"
+	testAccessToken      = "test-access-token"
+	testClientID         = "test-client-id"
+	testSignInAppID      = "app-example"
+	testSignInClientID   = "public-client-example"
+	testEveryoneGroupID  = "group-everyone"
+	testFakeClientSecret = "FAKE_SECRET_SENTINEL_DO_NOT_USE"
 )
 
 type fakeOktaServer struct {
 	server *httptest.Server
 	mode   string
 
-	mu            sync.Mutex
-	publicJWK     jose.JSONWebKey
-	validationErr error
-	tokenStarted  chan struct{}
-	releaseToken  chan struct{}
-	startOnce     sync.Once
-	releaseOnce   sync.Once
+	mu               sync.Mutex
+	publicJWK        jose.JSONWebKey
+	validationErr    error
+	createdApp       map[string]any
+	resolvedClientID string
+	assignedAppID    string
+	assignedGroupID  string
+	signInClientID   string
+	tokenStarted     chan struct{}
+	releaseToken     chan struct{}
+	startOnce        sync.Once
+	releaseOnce      sync.Once
 }
 
 func TestVerifySetupStepPassesAndPersistsEvidence(t *testing.T) {
@@ -268,18 +286,258 @@ func TestVerifySetupStepRejectsResultWhenClientIDChangesDuringProbe(t *testing.T
 	require.Equal(t, beforeAudits, afterAudits)
 }
 
+func TestVerifySignInStepPassesForActiveOktaAndGenericOIDCConnections(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	storedBefore, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.True(t, storedBefore.WorkosID.Valid)
+	ti.workos.On("ListConnections", mock.Anything, storedBefore.WorkosID.String).Return([]workos.Connection{{
+		ID:             "conn-example",
+		OrganizationID: storedBefore.WorkosID.String,
+		ConnectionType: "GenericOIDC",
+		Name:           "Example OIDC",
+		State:          "active",
+		CreatedAt:      "2026-09-14T00:00:00Z",
+		UpdatedAt:      "2026-09-14T00:00:00Z",
+	}}, nil).Once()
+	beforeAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionVerified)
+	require.NoError(t, err)
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, &gen.IdentityProviderVerifyResult{
+		Outcome:       "passed",
+		Detail:        "Okta sign-in application and WorkOS OIDC connection verified.",
+		Capabilities:  []string{"directory_read", "application_assignment_read", "sign_in_provisioning"},
+		GrantedScopes: []string{"okta.apps.read", "okta.groups.read", "okta.users.read", "okta.apps.manage"},
+		Evidence: &gen.IdentityProviderVerifyEvidence{
+			CheckedAt: result.Evidence.CheckedAt,
+			Reads: []*gen.IdentityProviderCapabilityRead{
+				{Capability: "sign_in", Resource: "sign_in_application", OK: true, Count: nil, Detail: new("Okta sign-in application is active.")},
+				{Capability: "sign_in", Resource: "sign_in_connection", OK: true, Count: nil, Detail: new("WorkOS OIDC connection is active.")},
+			},
+		},
+	}, result)
+	_, err = time.Parse(time.RFC3339Nano, result.Evidence.CheckedAt)
+	require.NoError(t, err)
+	require.NoError(t, fake.ValidationError())
+
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "passed", stored.SignInState.String)
+	require.Equal(t, "conn-example", stored.WorkosConnectionID.String)
+	var evidence map[string]any
+	require.NoError(t, json.Unmarshal(stored.SignInEvidence, &evidence))
+	require.Equal(t, testSignInClientID, evidence["client_id"])
+	require.Equal(t, "passed", evidence["outcome"])
+	require.Equal(t, result.Evidence.CheckedAt, evidence["checked_at"])
+	require.Len(t, evidence["reads"], 2)
+	require.NotContains(t, string(stored.SignInEvidence), testFakeClientSecret)
+
+	afterAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionVerified)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudits+1, afterAudits)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionVerified)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "application_created", beforeSnapshot["sign_in_state"])
+	require.Equal(t, "passed", afterSnapshot["sign_in_state"])
+	require.Equal(t, "passed", afterSnapshot["outcome"])
+	auditJSON := string(record.Metadata) + string(record.BeforeSnapshot) + string(record.AfterSnapshot)
+	for _, sensitive := range []string{testAccessToken, testClientID, testSignInClientID, testSignInAppID, testFakeClientSecret, "conn-example"} {
+		require.NotContains(t, auditJSON, sensitive)
+	}
+
+	getResult, err := ti.service.Get(ctx, &gen.GetPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, new("passed"), getResult.Connection.SignInState)
+	require.Equal(t, new("conn-example"), getResult.Connection.SignInConnectionID)
+	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", setup.Steps[1].State)
+	require.Equal(t, "passed", setup.Steps[1].LastOutcome.Outcome)
+}
+
+func TestVerifySignInStepFailsForDraftWorkOSConnection(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{{
+		ID:             "conn-draft-example",
+		OrganizationID: stored.WorkosID.String,
+		ConnectionType: "GenericOIDC",
+		Name:           "Draft OIDC",
+		State:          "draft",
+		CreatedAt:      "2026-09-14T00:00:00Z",
+		UpdatedAt:      "2026-09-14T00:00:00Z",
+	}}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "mismatched_value", result.Outcome)
+	require.Equal(t, "Finish the OIDC connection in WorkOS Admin Portal, then verify again.", result.Detail)
+	require.True(t, result.Evidence.Reads[0].OK)
+	require.False(t, result.Evidence.Reads[1].OK)
+
+	stored, err = repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "failed", stored.SignInState.String)
+	require.False(t, stored.WorkosConnectionID.Valid)
+}
+
+func TestVerifySignInStepFailsWhenWorkOSConnectionIsMissing(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "mismatched_value", result.Outcome)
+	require.Equal(t, "Finish the OIDC connection in WorkOS Admin Portal, then verify again.", result.Detail)
+	require.True(t, result.Evidence.Reads[0].OK)
+	require.False(t, result.Evidence.Reads[1].OK)
+}
+
+func TestVerifySignInStepFailsForInactiveOktaApplication(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	fake.SetMode(fakeOktaAppInactive)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{{
+		ID:             "conn-example",
+		OrganizationID: stored.WorkosID.String,
+		ConnectionType: "GenericOIDC",
+		Name:           "Example OIDC",
+		State:          "active",
+		CreatedAt:      "2026-09-14T00:00:00Z",
+		UpdatedAt:      "2026-09-14T00:00:00Z",
+	}}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "mismatched_value", result.Outcome)
+	require.Equal(t, "The Okta sign-in application is not active.", result.Detail)
+	require.False(t, result.Evidence.Reads[0].OK)
+	require.True(t, result.Evidence.Reads[1].OK)
+}
+
+func TestVerifySignInStepReportsOktaForbidden(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	fake.SetMode(fakeOktaAppForbidden)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "capability_missing", result.Outcome)
+	require.Equal(t, "Okta did not permit reading the sign-in application.", result.Detail)
+	require.False(t, result.Evidence.Reads[0].OK)
+}
+
+func TestVerifySignInStepReportsOktaRefusal(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	fake.SetMode(fakeOktaAppRefused)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "refused", result.Outcome)
+	require.Equal(t, "Okta refused the sign-in application read.", result.Detail)
+}
+
+func TestVerifySignInStepReportsOktaUnreachable(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection{}, nil).Once()
+	fake.server.Close()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", result.Outcome)
+	require.Equal(t, "Unable to reach Okta while reading the sign-in application.", result.Detail)
+}
+
+func TestVerifySignInStepReportsWorkOSRefusal(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection(nil), &workos.APIError{
+		Method:     http.MethodGet,
+		Path:       "/sso/connections",
+		StatusCode: http.StatusForbidden,
+		Body:       "example refusal",
+	}).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "refused", result.Outcome)
+	require.Equal(t, "WorkOS refused the sign-in connection read.", result.Detail)
+}
+
+func TestVerifySignInStepReportsWorkOSUnreachable(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeOktaServer(t, fakeOktaPassed)
+	ctx, ti := prepareProvisionedSignInApplication(t, fake)
+	stored, err := repo.New(ti.conn).GetIdentityProviderConnectionByOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	ti.workos.On("ListConnections", mock.Anything, stored.WorkosID.String).Return([]workos.Connection(nil), errors.New("example network failure")).Once()
+
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "sign_in", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "unreachable", result.Outcome)
+	require.Equal(t, "Unable to reach WorkOS while reading sign-in connections.", result.Detail)
+}
+
 func newFakeOktaServer(t *testing.T, mode string) *fakeOktaServer {
 	t.Helper()
 	fake := &fakeOktaServer{
-		server:        nil,
-		mode:          mode,
-		mu:            sync.Mutex{},
-		publicJWK:     jose.JSONWebKey{},
-		validationErr: nil,
-		tokenStarted:  nil,
-		releaseToken:  nil,
-		startOnce:     sync.Once{},
-		releaseOnce:   sync.Once{},
+		server:           nil,
+		mode:             mode,
+		mu:               sync.Mutex{},
+		publicJWK:        jose.JSONWebKey{},
+		validationErr:    nil,
+		createdApp:       nil,
+		resolvedClientID: "",
+		assignedAppID:    "",
+		assignedGroupID:  "",
+		signInClientID:   testSignInClientID,
+		tokenStarted:     nil,
+		releaseToken:     nil,
+		startOnce:        sync.Once{},
+		releaseOnce:      sync.Once{},
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(fake.handle))
 	t.Cleanup(fake.server.Close)
@@ -291,11 +549,19 @@ func (f *fakeOktaServer) handle(w http.ResponseWriter, r *http.Request) {
 	case "/oauth2/v1/token":
 		f.handleToken(w, r)
 	case "/api/v1/groups":
-		f.handleCollection(w, r, "groups")
+		if r.URL.Query().Get("limit") == "200" {
+			f.handleEveryoneGroup(w, r)
+		} else {
+			f.handleCollection(w, r, "groups")
+		}
 	case "/api/v1/users":
 		f.handleCollection(w, r, "users")
 	case "/api/v1/apps":
-		f.handleCollection(w, r, "apps")
+		f.handleApplications(w, r)
+	case "/api/v1/apps/" + testSignInAppID:
+		f.handleSignInApplication(w, r)
+	case "/api/v1/apps/" + testSignInAppID + "/groups/" + testEveryoneGroupID:
+		f.handleApplicationAssignment(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -334,20 +600,137 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		<-f.releaseToken
 	}
 
-	if f.mode == fakeOktaRefused {
+	mode := f.Mode()
+	if mode == fakeOktaRefused {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"invalid_client","error_description":"The client assertion could not be verified."}`))
 		return
 	}
-	if f.mode == fakeOktaUnavailable {
+	if mode == fakeOktaUnavailable {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"server_error","error_description":"The token service is temporarily unavailable."}`))
 		return
 	}
+	grantedScopes := expectedScopes
+	if mode == fakeOktaNoProvision {
+		grantedScopes = "okta.apps.read okta.groups.read okta.users.read"
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + expectedScopes + `"}`))
+	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + grantedScopes + `"}`))
+}
+
+func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		if r.Header.Get("Authorization") != "Bearer "+testAccessToken || r.Header.Get("Content-Type") != "application/json" {
+			f.fail(w, errors.New("unexpected create application request"))
+			return
+		}
+		var created map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
+			f.fail(w, err)
+			return
+		}
+		f.mu.Lock()
+		f.createdApp = created
+		clientID := f.signInClientID
+		f.mu.Unlock()
+		f.writeApplication(w, "ACTIVE", clientID)
+		return
+	}
+	if r.Method == http.MethodGet && r.URL.Query().Get("limit") == "200" {
+		if r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+			f.fail(w, errors.New("unexpected resolve application authorization"))
+			return
+		}
+		filter := r.URL.Query().Get("filter")
+		const prefix = `credentials.oauthClient.client_id eq "`
+		clientID, hasPrefix := strings.CutPrefix(filter, prefix)
+		clientID, hasSuffix := strings.CutSuffix(clientID, `"`)
+		if !hasPrefix || !hasSuffix || clientID == "" {
+			f.fail(w, errors.New("unexpected resolve application filter"))
+			return
+		}
+		f.mu.Lock()
+		f.resolvedClientID = clientID
+		expectedClientID := f.signInClientID
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if clientID != expectedClientID {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		_, _ = w.Write([]byte(`[{"id":"` + testSignInAppID + `","status":"ACTIVE","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"` + expectedClientID + `","client_secret":"` + testFakeClientSecret + `"}}}]`))
+		return
+	}
+	f.handleCollection(w, r, "apps")
+}
+
+func (f *fakeOktaServer) handleEveryoneGroup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer "+testAccessToken || r.URL.Query().Get("filter") != `type eq "BUILT_IN"` {
+		f.fail(w, errors.New("unexpected Everyone group request"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`[{"id":"` + testEveryoneGroupID + `","type":"BUILT_IN","profile":{"name":"Everyone"}}]`))
+}
+
+func (f *fakeOktaServer) handleSignInApplication(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer "+testAccessToken {
+		f.fail(w, errors.New("unexpected sign-in application request"))
+		return
+	}
+	switch f.Mode() {
+	case fakeOktaAppForbidden:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000006","errorSummary":"Application read is not permitted."}`))
+		return
+	case fakeOktaAppRefused:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000001","errorSummary":"Application read was refused."}`))
+		return
+	case fakeOktaAppInactive:
+		f.writeApplication(w, "INACTIVE", f.SignInClientID())
+		return
+	default:
+		f.writeApplication(w, "ACTIVE", f.SignInClientID())
+	}
+}
+
+func (f *fakeOktaServer) handleApplicationAssignment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut || r.Header.Get("Authorization") != "Bearer "+testAccessToken || r.Header.Get("Content-Type") != "application/json" {
+		f.fail(w, errors.New("unexpected application assignment request"))
+		return
+	}
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		f.fail(w, err)
+		return
+	}
+	if len(body) != 0 {
+		f.fail(w, errors.New("unexpected application assignment body"))
+		return
+	}
+	if f.Mode() == fakeOktaAssignFails {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000006","errorSummary":"Application assignment is not permitted."}`))
+		return
+	}
+	f.mu.Lock()
+	f.assignedAppID = testSignInAppID
+	f.assignedGroupID = testEveryoneGroupID
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{}`))
+}
+
+func (f *fakeOktaServer) writeApplication(w http.ResponseWriter, status, clientID string) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"id":"` + testSignInAppID + `","status":"` + status + `","label":"Speakeasy","credentials":{"oauthClient":{"client_id":"` + clientID + `","client_secret":"` + testFakeClientSecret + `"}}}`))
 }
 
 func (f *fakeOktaServer) handleCollection(w http.ResponseWriter, r *http.Request, resource string) {
@@ -355,7 +738,7 @@ func (f *fakeOktaServer) handleCollection(w http.ResponseWriter, r *http.Request
 		f.fail(w, errors.New("unexpected collection request"))
 		return
 	}
-	if resource == "apps" && f.mode == fakeOktaAppsBlocked {
+	if resource == "apps" && f.Mode() == fakeOktaAppsBlocked {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"errorCode":"E0000006","errorSummary":"Okta application read is not permitted."}`))
@@ -398,6 +781,48 @@ func (f *fakeOktaServer) ValidationError() error {
 	return f.validationErr
 }
 
+func (f *fakeOktaServer) Mode() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mode
+}
+
+func (f *fakeOktaServer) SetMode(mode string) {
+	f.mu.Lock()
+	f.mode = mode
+	f.mu.Unlock()
+}
+
+func (f *fakeOktaServer) SetSignInClientID(clientID string) {
+	f.mu.Lock()
+	f.signInClientID = clientID
+	f.mu.Unlock()
+}
+
+func (f *fakeOktaServer) SignInClientID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.signInClientID
+}
+
+func (f *fakeOktaServer) CreatedApplication() map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.createdApp)
+}
+
+func (f *fakeOktaServer) ResolvedClientID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resolvedClientID
+}
+
+func (f *fakeOktaServer) Assignment() (string, string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.assignedAppID, f.assignedGroupID
+}
+
 func (f *fakeOktaServer) BlockTokenResponse() {
 	f.tokenStarted = make(chan struct{})
 	f.releaseToken = make(chan struct{})
@@ -420,6 +845,29 @@ func prepareConnectionForVerification(t *testing.T, ctx context.Context, ti *tes
 	fake.SetPublicJWK(storedKey.PublicJwk)
 	setStoredClientID(t, ctx, ti)
 	return connection
+}
+
+func prepareActiveConnection(t *testing.T, ctx context.Context, ti *testInstance, fake *fakeOktaServer) *gen.IdentityProviderConnection {
+	t.Helper()
+	connection := prepareConnectionForVerification(t, ctx, ti, fake)
+	result, err := ti.service.VerifySetupStep(ctx, &gen.VerifySetupStepPayload{StepKey: "connect", SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "passed", result.Outcome)
+	return connection
+}
+
+func prepareProvisionedSignInApplication(t *testing.T, fake *fakeOktaServer) (context.Context, *testInstance) {
+	t.Helper()
+	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
+	prepareActiveConnection(t, ctx, ti, fake)
+	_, err := ti.service.SubmitSetupStep(ctx, &gen.SubmitSetupStepPayload{
+		StepKey:      "sign_in",
+		Values:       []*gen.IdentityProviderSetupValue{},
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	return ctx, ti
 }
 
 func setStoredClientID(t *testing.T, ctx context.Context, ti *testInstance) {

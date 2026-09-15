@@ -3,6 +3,7 @@ package organizations_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviders/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/stretchr/testify/require"
@@ -91,6 +93,46 @@ func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T
 	rows, err := orgrepo.New(ti.conn).ListOrganizationSetupTasks(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Empty(t, rows, "completion projection must not persist catalog defaults or facts")
+}
+
+func TestService_ListSetupTasksCompletesIdentityProviderForPassedOktaSignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	connection, err := idprepo.New(ti.conn).CreateIdentityProviderConnection(ctx, idprepo.CreateIdentityProviderConnectionParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Kind:             "okta",
+		TenantIdentifier: "example.okta.test",
+	})
+	require.NoError(t, err)
+	_, err = idprepo.New(ti.conn).CreateOktaIdentityProviderConnection(ctx, idprepo.CreateOktaIdentityProviderConnectionParams{
+		IdentityProviderConnectionID: connection.ID,
+		OktaDomain:                   "example.okta.test",
+		SigningKeyID:                 uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, orgrepo.New(ti.conn).SetOktaIdentityProviderSignInStateForTest(ctx, orgrepo.SetOktaIdentityProviderSignInStateForTestParams{
+		SignInState:                  conv.ToPGText("passed"),
+		OrganizationID:               authCtx.ActiveOrganizationID,
+		IdentityProviderConnectionID: connection.ID,
+	}))
+
+	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "done", setupTask(result.Tasks, "identity-provider").Status)
+	require.True(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
+
+	require.NoError(t, idprepo.New(ti.conn).SoftDeleteIdentityProviderConnection(ctx, idprepo.SoftDeleteIdentityProviderConnectionParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             connection.ID,
+	}))
+	result, err = ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "todo", setupTask(result.Tasks, "identity-provider").Status)
+	require.False(t, setupTask(result.Tasks, "identity-provider").CompletedByFact)
 }
 
 func TestService_ListSetupTasksResolvesEmailAssigneeAndScopesOrganization(t *testing.T) {

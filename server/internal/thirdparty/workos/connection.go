@@ -3,6 +3,7 @@ package workos
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/sso"
@@ -22,30 +23,41 @@ type Connection struct {
 // ListConnections fetches SSO connections for an organization from WorkOS.
 // https://workos.com/docs/reference/sso/connection#list-connections
 func (wc *Client) ListConnections(ctx context.Context, organizationID string) ([]Connection, error) {
-	resp, err := wc.sso.ListConnections(ctx, sso.ListConnectionsOpts{
-		OrganizationID: organizationID,
-		ConnectionType: "",
-		Domain:         "",
-		Limit:          0,
-		Order:          "",
-		Before:         "",
-		After:          "",
-	})
-	if err != nil {
-		return nil, wrapSDKError(err, "list connections")
-	}
-
-	out := make([]Connection, 0, len(resp.Data))
-	for _, c := range resp.Data {
-		out = append(out, Connection{
-			ID:             c.ID,
-			OrganizationID: c.OrganizationID,
-			ConnectionType: string(c.ConnectionType),
-			Name:           c.Name,
-			State:          string(c.State),
-			CreatedAt:      c.CreatedAt,
-			UpdatedAt:      c.UpdatedAt,
+	out := make([]Connection, 0)
+	seen := make(map[string]struct{})
+	after := ""
+	for {
+		resp, err := wc.sso.ListConnections(ctx, sso.ListConnectionsOpts{
+			OrganizationID: organizationID,
+			ConnectionType: "",
+			Domain:         "",
+			Limit:          100,
+			Order:          "",
+			Before:         "",
+			After:          after,
 		})
+		if err != nil {
+			return nil, wrapSDKError(err, "list connections")
+		}
+		for _, c := range resp.Data {
+			out = append(out, Connection{
+				ID:             c.ID,
+				OrganizationID: c.OrganizationID,
+				ConnectionType: string(c.ConnectionType),
+				Name:           c.Name,
+				State:          string(c.State),
+				CreatedAt:      c.CreatedAt,
+				UpdatedAt:      c.UpdatedAt,
+			})
+		}
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		if _, exists := seen[resp.ListMetadata.After]; exists {
+			return nil, fmt.Errorf("list connections: repeated pagination cursor %q", resp.ListMetadata.After)
+		}
+		seen[resp.ListMetadata.After] = struct{}{}
+		after = resp.ListMetadata.After
 	}
 	return out, nil
 }

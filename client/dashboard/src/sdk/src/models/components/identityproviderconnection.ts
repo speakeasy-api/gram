@@ -13,12 +13,26 @@ import {
   IdentityProviderVerifyEvidence$inboundSchema,
 } from "./identityproviderverifyevidence.js";
 
+export const GroupsSource = {
+  Token: "token",
+  Directory: "directory",
+} as const;
+export type GroupsSource = ClosedEnum<typeof GroupsSource>;
+
 export const IdentityProviderConnectionKind = {
   Okta: "okta",
 } as const;
 export type IdentityProviderConnectionKind = ClosedEnum<
   typeof IdentityProviderConnectionKind
 >;
+
+export const SignInState = {
+  NotStarted: "not_started",
+  ApplicationCreated: "application_created",
+  Passed: "passed",
+  Failed: "failed",
+} as const;
+export type SignInState = ClosedEnum<typeof SignInState>;
 
 export const IdentityProviderConnectionStatus = {
   Pending: "pending",
@@ -42,6 +56,11 @@ export type IdentityProviderConnection = {
   createdAt: Date;
   displayName?: string | undefined;
   grantedScopes: Array<string>;
+  /**
+   * Whether an administrator confirmed the Okta groups claim filter is configured.
+   */
+  groupsClaimConfirmed?: boolean | undefined;
+  groupsSource?: GroupsSource | undefined;
   id: string;
   /**
    * Absolute URL of the Speakeasy-hosted public JSON Web Key Set.
@@ -49,6 +68,11 @@ export type IdentityProviderConnection = {
   jwksUrl: string;
   kind: IdentityProviderConnectionKind;
   lastVerifiedAt?: Date | undefined;
+  /**
+   * Identifier of the WorkOS connection used for sign-in.
+   */
+  signInConnectionId?: string | undefined;
+  signInState?: SignInState | undefined;
   /**
    * RFC 7638 thumbprint of the active signing key.
    */
@@ -61,9 +85,17 @@ export type IdentityProviderConnection = {
 };
 
 /** @internal */
+export const GroupsSource$inboundSchema: z.ZodMiniEnum<typeof GroupsSource> = z
+  .enum(GroupsSource);
+
+/** @internal */
 export const IdentityProviderConnectionKind$inboundSchema: z.ZodMiniEnum<
   typeof IdentityProviderConnectionKind
 > = z.enum(IdentityProviderConnectionKind);
+
+/** @internal */
+export const SignInState$inboundSchema: z.ZodMiniEnum<typeof SignInState> = z
+  .enum(SignInState);
 
 /** @internal */
 export const IdentityProviderConnectionStatus$inboundSchema: z.ZodMiniEnum<
@@ -84,12 +116,16 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
     ),
     display_name: z.optional(z.string()),
     granted_scopes: z.array(z.string()),
+    groups_claim_confirmed: z.optional(z.boolean()),
+    groups_source: z.optional(GroupsSource$inboundSchema),
     id: z.string(),
     jwks_url: z.string(),
     kind: IdentityProviderConnectionKind$inboundSchema,
     last_verified_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
+    sign_in_connection_id: z.optional(z.string()),
+    sign_in_state: z.optional(SignInState$inboundSchema),
     signing_key_kid: z.string(),
     status: IdentityProviderConnectionStatus$inboundSchema,
     status_detail: z.optional(z.string()),
@@ -106,8 +142,12 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "display_name": "displayName",
       "granted_scopes": "grantedScopes",
+      "groups_claim_confirmed": "groupsClaimConfirmed",
+      "groups_source": "groupsSource",
       "jwks_url": "jwksUrl",
       "last_verified_at": "lastVerifiedAt",
+      "sign_in_connection_id": "signInConnectionId",
+      "sign_in_state": "signInState",
       "signing_key_kid": "signingKeyKid",
       "status_detail": "statusDetail",
       "tenant_identifier": "tenantIdentifier",

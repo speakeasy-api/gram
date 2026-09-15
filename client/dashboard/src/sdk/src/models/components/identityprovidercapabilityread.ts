@@ -12,6 +12,8 @@ export const IdentityProviderCapabilityReadResource = {
   Groups: "groups",
   Users: "users",
   Apps: "apps",
+  SignInApplication: "sign_in_application",
+  SignInConnection: "sign_in_connection",
 } as const;
 export type IdentityProviderCapabilityReadResource = ClosedEnum<
   typeof IdentityProviderCapabilityReadResource

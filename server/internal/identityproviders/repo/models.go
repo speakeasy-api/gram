@@ -52,6 +52,12 @@ type OktaIdentityProviderConnection struct {
 	ClientID                        pgtype.Text
 	SigningKeyID                    uuid.NullUUID
 	GrantedScopes                   []string
+	SignInApplicationID             pgtype.Text
+	WorkosConnectionID              pgtype.Text
+	SignInState                     pgtype.Text
+	GroupsSource                    pgtype.Text
+	GroupsClaimConfirmed            bool
+	SignInEvidence                  []byte
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 }

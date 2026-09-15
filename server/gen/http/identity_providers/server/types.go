@@ -56,8 +56,15 @@ type CreateResponseBody struct {
 	SigningKeyKid  string                                      `form:"signing_key_kid" json:"signing_key_kid" xml:"signing_key_kid"`
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
-	CreatedAt      string                                      `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt      string                                      `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
+	// Identifier of the WorkOS connection used for sign-in.
+	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
+	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
+	// Whether an administrator confirmed the Okta groups claim filter is
+	// configured.
+	GroupsClaimConfirmed *bool  `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "identityProviders" service "get"
@@ -1240,8 +1247,15 @@ type IdentityProviderConnectionResponseBody struct {
 	SigningKeyKid  string                                      `form:"signing_key_kid" json:"signing_key_kid" xml:"signing_key_kid"`
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
-	CreatedAt      string                                      `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt      string                                      `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
+	// Identifier of the WorkOS connection used for sign-in.
+	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
+	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
+	// Whether an administrator confirmed the Okta groups claim filter is
+	// configured.
+	GroupsClaimConfirmed *bool  `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	CreatedAt            string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IdentityProviderSetupStepResponseBody is used to define fields on response
@@ -1254,8 +1268,13 @@ type IdentityProviderSetupStepResponseBody struct {
 	DeepLink       *string                                      `form:"deep_link,omitempty" json:"deep_link,omitempty" xml:"deep_link,omitempty"`
 	PrintedValues  []*IdentityProviderPrintedValueResponseBody  `form:"printed_values" json:"printed_values" xml:"printed_values"`
 	ExpectedValues []*IdentityProviderExpectedValueResponseBody `form:"expected_values" json:"expected_values" xml:"expected_values"`
-	State          string                                       `form:"state" json:"state" xml:"state"`
-	LastOutcome    *IdentityProviderVerifyResultResponseBody    `form:"last_outcome,omitempty" json:"last_outcome,omitempty" xml:"last_outcome,omitempty"`
+	// Claims Speakeasy intends sign-in to carry.
+	Claims []*IdentityProviderClaimResponseBody `form:"claims,omitempty" json:"claims,omitempty" xml:"claims,omitempty"`
+	Repair *IdentityProviderRepairResponseBody  `form:"repair,omitempty" json:"repair,omitempty" xml:"repair,omitempty"`
+	// WorkOS Admin Portal intent the dashboard should open for this step.
+	PortalIntent *string                                   `form:"portal_intent,omitempty" json:"portal_intent,omitempty" xml:"portal_intent,omitempty"`
+	State        string                                    `form:"state" json:"state" xml:"state"`
+	LastOutcome  *IdentityProviderVerifyResultResponseBody `form:"last_outcome,omitempty" json:"last_outcome,omitempty" xml:"last_outcome,omitempty"`
 }
 
 // IdentityProviderPrintedValueResponseBody is used to define fields on
@@ -1274,6 +1293,23 @@ type IdentityProviderExpectedValueResponseBody struct {
 	Secret bool   `form:"secret" json:"secret" xml:"secret"`
 	// Previously submitted value. Always omitted for secret values.
 	CurrentValue *string `form:"current_value,omitempty" json:"current_value,omitempty" xml:"current_value,omitempty"`
+}
+
+// IdentityProviderClaimResponseBody is used to define fields on response body
+// types.
+type IdentityProviderClaimResponseBody struct {
+	Name          string `form:"name" json:"name" xml:"name"`
+	Purpose       string `form:"purpose" json:"purpose" xml:"purpose"`
+	CarriesAccess bool   `form:"carries_access" json:"carries_access" xml:"carries_access"`
+}
+
+// IdentityProviderRepairResponseBody is used to define fields on response body
+// types.
+type IdentityProviderRepairResponseBody struct {
+	Title             string   `form:"title" json:"title" xml:"title"`
+	Instructions      []string `form:"instructions" json:"instructions" xml:"instructions"`
+	DeepLink          *string  `form:"deep_link,omitempty" json:"deep_link,omitempty" xml:"deep_link,omitempty"`
+	FallbackAvailable bool     `form:"fallback_available" json:"fallback_available" xml:"fallback_available"`
 }
 
 // IdentityProviderVerifyResultResponseBody is used to define fields on
@@ -1305,18 +1341,22 @@ type IdentityProviderSetupValueRequestBody struct {
 // "create" endpoint of the "identityProviders" service.
 func NewCreateResponseBody(res *identityproviders.IdentityProviderConnection) *CreateResponseBody {
 	body := &CreateResponseBody{
-		ID:               res.ID,
-		Kind:             res.Kind,
-		TenantIdentifier: res.TenantIdentifier,
-		DisplayName:      res.DisplayName,
-		ClientID:         res.ClientID,
-		Status:           res.Status,
-		StatusDetail:     res.StatusDetail,
-		JwksURL:          res.JwksURL,
-		SigningKeyKid:    res.SigningKeyKid,
-		LastVerifiedAt:   res.LastVerifiedAt,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		ID:                   res.ID,
+		Kind:                 res.Kind,
+		TenantIdentifier:     res.TenantIdentifier,
+		DisplayName:          res.DisplayName,
+		ClientID:             res.ClientID,
+		Status:               res.Status,
+		StatusDetail:         res.StatusDetail,
+		JwksURL:              res.JwksURL,
+		SigningKeyKid:        res.SigningKeyKid,
+		LastVerifiedAt:       res.LastVerifiedAt,
+		SignInState:          res.SignInState,
+		SignInConnectionID:   res.SignInConnectionID,
+		GroupsSource:         res.GroupsSource,
+		GroupsClaimConfirmed: res.GroupsClaimConfirmed,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
 	}
 	if res.Capabilities != nil {
 		body.Capabilities = make([]string, len(res.Capabilities))

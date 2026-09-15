@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,6 +94,37 @@ func TestClient_ListConnections_DecodesResponse(t *testing.T) {
 	require.Equal(t, "active", conns[0].State)
 	require.Equal(t, "OktaSAML", conns[0].ConnectionType)
 	require.Equal(t, "inactive", conns[1].State)
+}
+
+func TestClient_ListConnectionsReadsEveryPage(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("limit") != "100" {
+			http.Error(w, "unexpected limit", http.StatusBadRequest)
+			return
+		}
+		if calls.Add(1) == 1 {
+			if r.URL.Query().Get("after") != "" {
+				http.Error(w, "unexpected first cursor", http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":[{"id":"conn_a","organization_id":"org_1","connection_type":"GenericOIDC","name":"OIDC","state":"draft"}],"list_metadata":{"before":"","after":"next"}}`))
+			return
+		}
+		if r.URL.Query().Get("after") != "next" {
+			http.Error(w, "unexpected next cursor", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"conn_b","organization_id":"org_1","connection_type":"GenericOIDC","name":"OIDC","state":"active"}],"list_metadata":{"before":"","after":""}}`))
+	})
+
+	connections, err := newClientWithHandler(t, handler).ListConnections(t.Context(), "org_1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"conn_a", "conn_b"}, []string{connections[0].ID, connections[1].ID})
+	require.Equal(t, int64(2), calls.Load())
 }
 
 func TestClient_ListDirectories_DecodesResponse(t *testing.T) {

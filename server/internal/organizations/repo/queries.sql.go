@@ -685,6 +685,15 @@ SELECT
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     EXISTS (
         SELECT 1
+        FROM identity_provider_connections
+        JOIN okta_identity_provider_connections
+          ON okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id
+        WHERE identity_provider_connections.organization_id = $1
+          AND identity_provider_connections.deleted IS FALSE
+          AND okta_identity_provider_connections.sign_in_state = 'passed'
+    ) AS okta_sign_in_passed,
+    EXISTS (
+        SELECT 1
         FROM plugin_github_connections
         JOIN default_project ON default_project.id = plugin_github_connections.project_id
     ) AS marketplace_published,
@@ -702,6 +711,7 @@ WHERE organization_metadata.id = $1
 type GetSetupTaskCompletionFactsRow struct {
 	SsoConfigured        bool
 	DsyncConfigured      bool
+	OktaSignInPassed     bool
 	MarketplacePublished bool
 	LoggingEnabled       bool
 }
@@ -712,6 +722,7 @@ func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationI
 	err := row.Scan(
 		&i.SsoConfigured,
 		&i.DsyncConfigured,
+		&i.OktaSignInPassed,
 		&i.MarketplacePublished,
 		&i.LoggingEnabled,
 	)
@@ -1650,6 +1661,28 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const setOktaIdentityProviderSignInStateForTest = `-- name: SetOktaIdentityProviderSignInStateForTest :exec
+UPDATE okta_identity_provider_connections
+SET sign_in_state = $1,
+    updated_at = clock_timestamp()
+FROM identity_provider_connections
+WHERE okta_identity_provider_connections.identity_provider_connection_id = identity_provider_connections.id
+  AND identity_provider_connections.organization_id = $2
+  AND identity_provider_connections.id = $3
+  AND identity_provider_connections.deleted IS FALSE
+`
+
+type SetOktaIdentityProviderSignInStateForTestParams struct {
+	SignInState                  pgtype.Text
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) SetOktaIdentityProviderSignInStateForTest(ctx context.Context, arg SetOktaIdentityProviderSignInStateForTestParams) error {
+	_, err := q.db.Exec(ctx, setOktaIdentityProviderSignInStateForTest, arg.SignInState, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	return err
 }
 
 const setOrgWorkosID = `-- name: SetOrgWorkosID :one

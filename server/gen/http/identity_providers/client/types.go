@@ -56,8 +56,15 @@ type CreateResponseBody struct {
 	SigningKeyKid  *string                                     `form:"signing_key_kid,omitempty" json:"signing_key_kid,omitempty" xml:"signing_key_kid,omitempty"`
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
-	CreatedAt      *string                                     `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string                                     `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
+	// Identifier of the WorkOS connection used for sign-in.
+	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
+	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
+	// Whether an administrator confirmed the Okta groups claim filter is
+	// configured.
+	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetResponseBody is the type of the "identityProviders" service "get"
@@ -1240,8 +1247,15 @@ type IdentityProviderConnectionResponseBody struct {
 	SigningKeyKid  *string                                     `form:"signing_key_kid,omitempty" json:"signing_key_kid,omitempty" xml:"signing_key_kid,omitempty"`
 	LastVerifiedAt *string                                     `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
 	VerifyEvidence *IdentityProviderVerifyEvidenceResponseBody `form:"verify_evidence,omitempty" json:"verify_evidence,omitempty" xml:"verify_evidence,omitempty"`
-	CreatedAt      *string                                     `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt      *string                                     `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	SignInState    *string                                     `form:"sign_in_state,omitempty" json:"sign_in_state,omitempty" xml:"sign_in_state,omitempty"`
+	// Identifier of the WorkOS connection used for sign-in.
+	SignInConnectionID *string `form:"sign_in_connection_id,omitempty" json:"sign_in_connection_id,omitempty" xml:"sign_in_connection_id,omitempty"`
+	GroupsSource       *string `form:"groups_source,omitempty" json:"groups_source,omitempty" xml:"groups_source,omitempty"`
+	// Whether an administrator confirmed the Okta groups claim filter is
+	// configured.
+	GroupsClaimConfirmed *bool   `form:"groups_claim_confirmed,omitempty" json:"groups_claim_confirmed,omitempty" xml:"groups_claim_confirmed,omitempty"`
+	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // IdentityProviderSetupStepResponseBody is used to define fields on response
@@ -1254,8 +1268,13 @@ type IdentityProviderSetupStepResponseBody struct {
 	DeepLink       *string                                      `form:"deep_link,omitempty" json:"deep_link,omitempty" xml:"deep_link,omitempty"`
 	PrintedValues  []*IdentityProviderPrintedValueResponseBody  `form:"printed_values,omitempty" json:"printed_values,omitempty" xml:"printed_values,omitempty"`
 	ExpectedValues []*IdentityProviderExpectedValueResponseBody `form:"expected_values,omitempty" json:"expected_values,omitempty" xml:"expected_values,omitempty"`
-	State          *string                                      `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	LastOutcome    *IdentityProviderVerifyResultResponseBody    `form:"last_outcome,omitempty" json:"last_outcome,omitempty" xml:"last_outcome,omitempty"`
+	// Claims Speakeasy intends sign-in to carry.
+	Claims []*IdentityProviderClaimResponseBody `form:"claims,omitempty" json:"claims,omitempty" xml:"claims,omitempty"`
+	Repair *IdentityProviderRepairResponseBody  `form:"repair,omitempty" json:"repair,omitempty" xml:"repair,omitempty"`
+	// WorkOS Admin Portal intent the dashboard should open for this step.
+	PortalIntent *string                                   `form:"portal_intent,omitempty" json:"portal_intent,omitempty" xml:"portal_intent,omitempty"`
+	State        *string                                   `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	LastOutcome  *IdentityProviderVerifyResultResponseBody `form:"last_outcome,omitempty" json:"last_outcome,omitempty" xml:"last_outcome,omitempty"`
 }
 
 // IdentityProviderPrintedValueResponseBody is used to define fields on
@@ -1274,6 +1293,23 @@ type IdentityProviderExpectedValueResponseBody struct {
 	Secret *bool   `form:"secret,omitempty" json:"secret,omitempty" xml:"secret,omitempty"`
 	// Previously submitted value. Always omitted for secret values.
 	CurrentValue *string `form:"current_value,omitempty" json:"current_value,omitempty" xml:"current_value,omitempty"`
+}
+
+// IdentityProviderClaimResponseBody is used to define fields on response body
+// types.
+type IdentityProviderClaimResponseBody struct {
+	Name          *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Purpose       *string `form:"purpose,omitempty" json:"purpose,omitempty" xml:"purpose,omitempty"`
+	CarriesAccess *bool   `form:"carries_access,omitempty" json:"carries_access,omitempty" xml:"carries_access,omitempty"`
+}
+
+// IdentityProviderRepairResponseBody is used to define fields on response body
+// types.
+type IdentityProviderRepairResponseBody struct {
+	Title             *string  `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	Instructions      []string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	DeepLink          *string  `form:"deep_link,omitempty" json:"deep_link,omitempty" xml:"deep_link,omitempty"`
+	FallbackAvailable *bool    `form:"fallback_available,omitempty" json:"fallback_available,omitempty" xml:"fallback_available,omitempty"`
 }
 
 // IdentityProviderVerifyResultResponseBody is used to define fields on
@@ -1345,18 +1381,22 @@ func NewVerifySetupStepRequestBody(p *identityproviders.VerifySetupStepPayload) 
 // "create" endpoint result from a HTTP "OK" response.
 func NewCreateIdentityProviderConnectionOK(body *CreateResponseBody) *identityproviders.IdentityProviderConnection {
 	v := &identityproviders.IdentityProviderConnection{
-		ID:               *body.ID,
-		Kind:             *body.Kind,
-		TenantIdentifier: *body.TenantIdentifier,
-		DisplayName:      body.DisplayName,
-		ClientID:         body.ClientID,
-		Status:           *body.Status,
-		StatusDetail:     body.StatusDetail,
-		JwksURL:          *body.JwksURL,
-		SigningKeyKid:    *body.SigningKeyKid,
-		LastVerifiedAt:   body.LastVerifiedAt,
-		CreatedAt:        *body.CreatedAt,
-		UpdatedAt:        *body.UpdatedAt,
+		ID:                   *body.ID,
+		Kind:                 *body.Kind,
+		TenantIdentifier:     *body.TenantIdentifier,
+		DisplayName:          body.DisplayName,
+		ClientID:             body.ClientID,
+		Status:               *body.Status,
+		StatusDetail:         body.StatusDetail,
+		JwksURL:              *body.JwksURL,
+		SigningKeyKid:        *body.SigningKeyKid,
+		LastVerifiedAt:       body.LastVerifiedAt,
+		SignInState:          body.SignInState,
+		SignInConnectionID:   body.SignInConnectionID,
+		GroupsSource:         body.GroupsSource,
+		GroupsClaimConfirmed: body.GroupsClaimConfirmed,
+		CreatedAt:            *body.CreatedAt,
+		UpdatedAt:            *body.UpdatedAt,
 	}
 	v.Capabilities = make([]string, len(body.Capabilities))
 	for i, val := range body.Capabilities {
@@ -2395,6 +2435,16 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.VerifyEvidence != nil {
 		if err2 := ValidateIdentityProviderVerifyEvidenceResponseBody(body.VerifyEvidence); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.SignInState != nil {
+		if !(*body.SignInState == "not_started" || *body.SignInState == "application_created" || *body.SignInState == "passed" || *body.SignInState == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sign_in_state", *body.SignInState, []any{"not_started", "application_created", "passed", "failed"}))
+		}
+	}
+	if body.GroupsSource != nil {
+		if !(*body.GroupsSource == "token" || *body.GroupsSource == "directory") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.groups_source", *body.GroupsSource, []any{"token", "directory"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3968,8 +4018,8 @@ func ValidateIdentityProviderCapabilityReadResponseBody(body *IdentityProviderCa
 		err = goa.MergeErrors(err, goa.MissingFieldError("ok", "body"))
 	}
 	if body.Resource != nil {
-		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps"}))
+		if !(*body.Resource == "groups" || *body.Resource == "users" || *body.Resource == "apps" || *body.Resource == "sign_in_application" || *body.Resource == "sign_in_connection") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource", *body.Resource, []any{"groups", "users", "apps", "sign_in_application", "sign_in_connection"}))
 		}
 	}
 	return
@@ -4032,6 +4082,16 @@ func ValidateIdentityProviderConnectionResponseBody(body *IdentityProviderConnec
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.SignInState != nil {
+		if !(*body.SignInState == "not_started" || *body.SignInState == "application_created" || *body.SignInState == "passed" || *body.SignInState == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sign_in_state", *body.SignInState, []any{"not_started", "application_created", "passed", "failed"}))
+		}
+	}
+	if body.GroupsSource != nil {
+		if !(*body.GroupsSource == "token" || *body.GroupsSource == "directory") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.groups_source", *body.GroupsSource, []any{"token", "directory"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -4087,6 +4147,23 @@ func ValidateIdentityProviderSetupStepResponseBody(body *IdentityProviderSetupSt
 			}
 		}
 	}
+	for _, e := range body.Claims {
+		if e != nil {
+			if err2 := ValidateIdentityProviderClaimResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Repair != nil {
+		if err2 := ValidateIdentityProviderRepairResponseBody(body.Repair); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PortalIntent != nil {
+		if !(*body.PortalIntent == "sso") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.portal_intent", *body.PortalIntent, []any{"sso"}))
+		}
+	}
 	if body.State != nil {
 		if !(*body.State == "not_started" || *body.State == "awaiting_values" || *body.State == "awaiting_verification" || *body.State == "passed" || *body.State == "failed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"not_started", "awaiting_values", "awaiting_verification", "passed", "failed"}))
@@ -4126,6 +4203,39 @@ func ValidateIdentityProviderExpectedValueResponseBody(body *IdentityProviderExp
 	}
 	if body.Secret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("secret", "body"))
+	}
+	return
+}
+
+// ValidateIdentityProviderClaimResponseBody runs the validations defined on
+// IdentityProviderClaimResponseBody
+func ValidateIdentityProviderClaimResponseBody(body *IdentityProviderClaimResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Purpose == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("purpose", "body"))
+	}
+	if body.CarriesAccess == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("carries_access", "body"))
+	}
+	return
+}
+
+// ValidateIdentityProviderRepairResponseBody runs the validations defined on
+// IdentityProviderRepairResponseBody
+func ValidateIdentityProviderRepairResponseBody(body *IdentityProviderRepairResponseBody) (err error) {
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.Instructions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
+	}
+	if body.FallbackAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fallback_available", "body"))
+	}
+	if body.DeepLink != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.deep_link", *body.DeepLink, goa.FormatURI))
 	}
 	return
 }

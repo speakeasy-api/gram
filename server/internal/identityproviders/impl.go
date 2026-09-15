@@ -49,6 +49,7 @@ import (
 
 const (
 	setupStepConnect                       = "connect"
+	setupStepSignIn                        = "sign_in"
 	setupValueClientID                     = "client_id"
 	identityProviderJSONWebKeySetMaxAgeSec = 3600
 	identityProviderSigningKeyBits         = 2048
@@ -65,6 +66,7 @@ type Service struct {
 	audit      *audit.Logger
 	encryption *encryption.Client
 	okta       OktaClient
+	workos     WorkOSClient
 	publicURL  *url.URL
 }
 
@@ -82,6 +84,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
 	oktaClient OktaClient,
+	workosClient WorkOSClient,
 	publicURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identity_providers"))
@@ -94,6 +97,7 @@ func NewService(
 		audit:      auditLogger,
 		encryption: encryptionClient,
 		okta:       oktaClient,
+		workos:     workosClient,
 		publicURL:  publicURL,
 	}
 }
@@ -245,9 +249,16 @@ func (s *Service) DescribeSetup(ctx context.Context, _ *gen.DescribeSetupPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider setup").LogError(ctx, logger)
 	}
+	signInStep, err := buildSignInSetupStep(row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider setup").LogError(ctx, logger)
+	}
 	return &gen.IdentityProviderSetup{
 		ConnectionID: row.ID.String(),
-		Steps:        []*gen.IdentityProviderSetupStep{buildConnectSetupStep(row.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID), row.Status, conv.FromPGText[string](row.ClientID), lastOutcome)},
+		Steps: []*gen.IdentityProviderSetupStep{
+			buildConnectSetupStep(row.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID), row.Status, conv.FromPGText[string](row.ClientID), lastOutcome),
+			signInStep,
+		},
 	}, nil
 }
 
@@ -255,6 +266,9 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
+	}
+	if payload.StepKey == setupStepSignIn {
+		return s.submitSignInSetupStep(ctx, authCtx, logger, payload)
 	}
 	if payload.StepKey != setupStepConnect {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown identity provider setup step").LogError(ctx, logger)
@@ -530,6 +544,9 @@ func buildConnectSetupStep(tenantIdentifier, jwksURL, status string, clientID *s
 			{Label: "Administrator roles", Value: oktaAdministratorRoles, Copyable: false},
 		},
 		ExpectedValues: []*gen.IdentityProviderExpectedValue{buildExpectedSetupValue(setupValueClientID, "Client ID", false, clientID)},
+		Claims:         nil,
+		Repair:         nil,
+		PortalIntent:   nil,
 		State:          setupStepState(status),
 		LastOutcome:    lastOutcome,
 	}
@@ -569,11 +586,14 @@ func oktaAdminAppsURL(tenantIdentifier string) *string {
 
 func identityProviderConnectionSnapshot(row repo.GetIdentityProviderConnectionByOrganizationRow, outcome string) *audit.IdentityProviderConnectionSnapshot {
 	return &audit.IdentityProviderConnectionSnapshot{
-		Kind:             row.Kind,
-		TenantIdentifier: row.TenantIdentifier,
-		Status:           row.Status,
-		Outcome:          outcome,
-		Capabilities:     row.Capabilities,
-		GrantedScopes:    row.GrantedScopes,
+		Kind:                 row.Kind,
+		TenantIdentifier:     row.TenantIdentifier,
+		Status:               row.Status,
+		Outcome:              outcome,
+		Capabilities:         row.Capabilities,
+		GrantedScopes:        row.GrantedScopes,
+		SignInState:          conv.FromPGTextOrEmpty[string](row.SignInState),
+		GroupsSource:         conv.FromPGTextOrEmpty[string](row.GroupsSource),
+		GroupsClaimConfirmed: row.GroupsClaimConfirmed,
 	}
 }

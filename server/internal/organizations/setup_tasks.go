@@ -335,10 +335,9 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		// The identity provider card covers both single sign-on and directory
-		// sync, so it only completes by fact once both are configured; an admin
-		// who skips directory sync marks the card done by hand.
-		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
+		// WorkOS completes the card once both single sign-on and directory sync
+		// are configured. The guided Okta path completes it after sign-in passes.
+		completedByFact := definition.Key == "identity-provider" && ((facts.SsoConfigured && facts.DsyncConfigured) || facts.OktaSignInPassed)
 		if completedByFact {
 			status = setupTaskStatusDone
 		}

@@ -1,6 +1,7 @@
 package okta
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"encoding/json"
@@ -134,6 +135,77 @@ type Page struct {
 	RateLimit RateLimit
 }
 
+// CreateOIDCApplicationInput contains the caller-controlled OIDC application settings.
+type CreateOIDCApplicationInput struct {
+	// RedirectURIs are the allowed authorization-code callback URLs.
+	RedirectURIs []string
+}
+
+// Application is the non-secret subset of an Okta OIDC application used by Gram.
+type Application struct {
+	// ID is Okta's application instance identifier.
+	ID string `json:"id"`
+
+	// Status is the application's Okta lifecycle status.
+	Status string `json:"status"`
+
+	// Label is the application's display name.
+	Label string `json:"label"`
+
+	// ClientID is the application's public OAuth client identifier.
+	ClientID string `json:"client_id"`
+}
+
+// Group identifies an Okta group that can be assigned to an application.
+type Group struct {
+	// ID is Okta's group identifier.
+	ID string
+
+	// Name is the group's display name.
+	Name string
+}
+
+type applicationResponse struct {
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	Label       string `json:"label"`
+	Credentials struct {
+		OAuthClient struct {
+			ClientID string `json:"client_id"`
+		} `json:"oauthClient"`
+	} `json:"credentials"`
+}
+
+type createOIDCApplicationRequest struct {
+	Name        string                        `json:"name"`
+	Label       string                        `json:"label"`
+	SignOnMode  string                        `json:"signOnMode"`
+	Credentials applicationCredentialsRequest `json:"credentials"`
+	Settings    applicationSettingsRequest    `json:"settings"`
+}
+
+type applicationCredentialsRequest struct {
+	OAuthClient oauthClientCredentialsRequest `json:"oauthClient"`
+}
+
+type oauthClientCredentialsRequest struct {
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	AutoKeyRotation         bool   `json:"autoKeyRotation"`
+	PKCERequired            bool   `json:"pkce_required"`
+}
+
+type applicationSettingsRequest struct {
+	OAuthClient oauthClientSettingsRequest `json:"oauthClient"`
+}
+
+type oauthClientSettingsRequest struct {
+	ApplicationType string   `json:"application_type"`
+	GrantTypes      []string `json:"grant_types"`
+	ResponseTypes   []string `json:"response_types"`
+	RedirectURIs    []string `json:"redirect_uris"`
+	ConsentMethod   string   `json:"consent_method"`
+}
+
 type cacheKey struct {
 	connectionID uuid.UUID
 	kid          string
@@ -148,14 +220,14 @@ type cachedToken struct {
 
 // Client performs authenticated Okta API requests.
 type Client struct {
-	logger          *slog.Logger
-	httpClient      *guardian.HTTPClient
-	tokenHTTPClient *guardian.HTTPClient
-	endpoint        string
-	now             func() time.Time
-	mu              sync.Mutex
-	tokens          map[cacheKey]cachedToken
-	tokenFlight     singleflight.Group
+	logger                *slog.Logger
+	httpClient            *guardian.HTTPClient
+	nonRetryingHTTPClient *guardian.HTTPClient
+	endpoint              string
+	now                   func() time.Time
+	mu                    sync.Mutex
+	tokens                map[cacheKey]cachedToken
+	tokenFlight           singleflight.Group
 }
 
 // NewClient constructs an Okta client using a shared outbound-request policy.
@@ -182,24 +254,24 @@ func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...Cli
 		Breaker:   guardian.NoBreaker(),
 	})
 	httpClient := guardianPolicy.PooledClient(guardian.WithRetryConfig(retryConfig), resilience)
-	tokenHTTPClient := guardianPolicy.PooledClient(resilience)
+	nonRetryingHTTPClient := guardianPolicy.PooledClient(resilience)
 	refuseRedirect := func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	for _, client := range []*guardian.HTTPClient{httpClient, tokenHTTPClient} {
+	for _, client := range []*guardian.HTTPClient{httpClient, nonRetryingHTTPClient} {
 		client.Timeout = 30 * time.Second
 		client.CheckRedirect = refuseRedirect
 	}
 
 	return &Client{
-		logger:          logger,
-		httpClient:      httpClient,
-		tokenHTTPClient: tokenHTTPClient,
-		endpoint:        strings.TrimRight(opt.Endpoint, "/"),
-		now:             time.Now,
-		mu:              sync.Mutex{},
-		tokens:          make(map[cacheKey]cachedToken),
-		tokenFlight:     singleflight.Group{},
+		logger:                logger,
+		httpClient:            httpClient,
+		nonRetryingHTTPClient: nonRetryingHTTPClient,
+		endpoint:              strings.TrimRight(opt.Endpoint, "/"),
+		now:                   time.Now,
+		mu:                    sync.Mutex{},
+		tokens:                make(map[cacheKey]cachedToken),
+		tokenFlight:           singleflight.Group{},
 	}
 }
 
@@ -295,7 +367,7 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		ExpiresIn   int64  `json:"expires_in"`
 		Scope       string `json:"scope"`
 	}
-	if _, err := c.do(c.tokenHTTPClient, httpRequest, &response); err != nil {
+	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
 			c.logger.WarnContext(ctx, "Okta token request failed",
@@ -341,6 +413,217 @@ func (c *Client) ListUsers(ctx context.Context, tenantDomain, accessToken string
 // ListApplications reads one cursor-addressable page of Okta applications.
 func (c *Client) ListApplications(ctx context.Context, tenantDomain, accessToken string, page PageRequest) (Page, error) {
 	return c.list(ctx, tenantDomain, accessToken, "/api/v1/apps", page)
+}
+
+// CreateOIDCApplication creates the Speakeasy OIDC web application without supplying a client secret.
+func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, accessToken string, input CreateOIDCApplicationInput) (Application, error) {
+	payload := createOIDCApplicationRequest{
+		Name:       "oidc_client",
+		Label:      "Speakeasy",
+		SignOnMode: "OPENID_CONNECT",
+		Credentials: applicationCredentialsRequest{
+			OAuthClient: oauthClientCredentialsRequest{
+				TokenEndpointAuthMethod: "client_secret_post",
+				AutoKeyRotation:         true,
+				PKCERequired:            true,
+			},
+		},
+		Settings: applicationSettingsRequest{
+			OAuthClient: oauthClientSettingsRequest{
+				ApplicationType: "web",
+				GrantTypes:      []string{"authorization_code", "refresh_token"},
+				ResponseTypes:   []string{"code"},
+				RedirectURIs:    append([]string(nil), input.RedirectURIs...),
+				ConsentMethod:   "TRUSTED",
+			},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Application{}, fmt.Errorf("encode Okta OIDC application: %w", err)
+	}
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/apps")
+	if err != nil {
+		return Application{}, fmt.Errorf("create Okta OIDC application: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return Application{}, fmt.Errorf("create Okta OIDC application request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	var response applicationResponse
+	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
+		return Application{}, err
+	}
+	return applicationFromResponse(response), nil
+}
+
+// GetApplication retrieves an Okta OIDC application by its application instance ID.
+func (c *Client) GetApplication(ctx context.Context, tenantDomain, accessToken, applicationID string) (Application, error) {
+	if applicationID == "" {
+		return Application{}, errors.New("get Okta application: application ID is required")
+	}
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/apps/"+url.PathEscape(applicationID))
+	if err != nil {
+		return Application{}, fmt.Errorf("get Okta application: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return Application{}, fmt.Errorf("create Okta get application request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var response applicationResponse
+	if _, err := c.do(c.httpClient, httpRequest, &response); err != nil {
+		return Application{}, err
+	}
+	return applicationFromResponse(response), nil
+}
+
+// ResolveApplicationByClientID finds an OIDC application by its public OAuth client ID.
+func (c *Client) ResolveApplicationByClientID(ctx context.Context, tenantDomain, accessToken, clientID string) (Application, error) {
+	if clientID == "" {
+		return Application{}, errors.New("resolve Okta application: client ID is required")
+	}
+	filterValue := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(clientID)
+	responses, _, err := c.listApplicationResponses(ctx, tenantDomain, accessToken, `credentials.oauthClient.client_id eq "`+filterValue+`"`, "")
+	if err != nil {
+		var apiErr *APIError
+		if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+			return Application{}, err
+		}
+	}
+	for _, response := range responses {
+		if response.Credentials.OAuthClient.ClientID == clientID {
+			return applicationFromResponse(response), nil
+		}
+	}
+
+	seenCursors := make(map[string]struct{})
+	after := ""
+	for {
+		responses, next, err := c.listApplicationResponses(ctx, tenantDomain, accessToken, "", after)
+		if err != nil {
+			return Application{}, err
+		}
+		for _, response := range responses {
+			if response.Credentials.OAuthClient.ClientID == clientID {
+				return applicationFromResponse(response), nil
+			}
+		}
+		if next == "" {
+			break
+		}
+		if _, exists := seenCursors[next]; exists {
+			return Application{}, errors.New("resolve Okta application: repeated pagination cursor")
+		}
+		seenCursors[next] = struct{}{}
+		after = next
+	}
+	return Application{}, errors.New("resolve Okta application: application not found")
+}
+
+func (c *Client) listApplicationResponses(ctx context.Context, tenantDomain, accessToken, filter, after string) ([]applicationResponse, string, error) {
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/apps")
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve Okta application: %w", err)
+	}
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse Okta applications URL: %w", err)
+	}
+	query := parsed.Query()
+	query.Set("limit", "200")
+	if filter != "" {
+		query.Set("filter", filter)
+	}
+	if after != "" {
+		query.Set("after", after)
+	}
+	parsed.RawQuery = query.Encode()
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("create Okta applications request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var responses []applicationResponse
+	headers, err := c.do(c.httpClient, httpRequest, &responses)
+	if err != nil {
+		return nil, "", err
+	}
+	return responses, nextCursor(headers.Get("Link"), parsed), nil
+}
+
+// FindEveryoneGroup finds Okta's built-in Everyone group.
+func (c *Client) FindEveryoneGroup(ctx context.Context, tenantDomain, accessToken string) (Group, error) {
+	requestURL, err := c.urlFor(tenantDomain, "/api/v1/groups")
+	if err != nil {
+		return Group{}, fmt.Errorf("find Okta Everyone group: %w", err)
+	}
+	parsed, err := url.Parse(requestURL)
+	if err != nil {
+		return Group{}, fmt.Errorf("parse Okta groups URL: %w", err)
+	}
+	query := parsed.Query()
+	query.Set("filter", `type eq "BUILT_IN"`)
+	query.Set("limit", "200")
+	parsed.RawQuery = query.Encode()
+
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return Group{}, fmt.Errorf("create Okta groups request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var responses []struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Profile struct {
+			Name string `json:"name"`
+		} `json:"profile"`
+	}
+	if _, err := c.do(c.httpClient, httpRequest, &responses); err != nil {
+		return Group{}, err
+	}
+	for _, response := range responses {
+		if response.Type == "BUILT_IN" && response.Profile.Name == "Everyone" {
+			return Group{ID: response.ID, Name: response.Profile.Name}, nil
+		}
+	}
+	return Group{}, errors.New("find Okta Everyone group: group not found")
+}
+
+// AssignGroupToApplication makes an Okta application available to a group.
+func (c *Client) AssignGroupToApplication(ctx context.Context, tenantDomain, accessToken, applicationID, groupID string) error {
+	if applicationID == "" || groupID == "" {
+		return errors.New("assign Okta application group: application ID and group ID are required")
+	}
+	path := "/api/v1/apps/" + url.PathEscape(applicationID) + "/groups/" + url.PathEscape(groupID)
+	requestURL, err := c.urlFor(tenantDomain, path)
+	if err != nil {
+		return fmt.Errorf("assign Okta application group: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPut, requestURL, bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		return fmt.Errorf("create Okta application group request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+
+	var response struct{}
+	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path string, page PageRequest) (Page, error) {
@@ -519,5 +802,14 @@ func cloneToken(token Token) Token {
 		AccessToken:   token.AccessToken,
 		ExpiresAt:     token.ExpiresAt,
 		GrantedScopes: append([]string(nil), token.GrantedScopes...),
+	}
+}
+
+func applicationFromResponse(response applicationResponse) Application {
+	return Application{
+		ID:       response.ID,
+		Status:   response.Status,
+		Label:    response.Label,
+		ClientID: response.Credentials.OAuthClient.ClientID,
 	}
 }

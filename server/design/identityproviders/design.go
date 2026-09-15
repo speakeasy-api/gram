@@ -149,6 +149,10 @@ var IdentityProviderConnection = Type("IdentityProviderConnection", func() {
 	Attribute("signing_key_kid", String, "RFC 7638 thumbprint of the active signing key.")
 	Attribute("last_verified_at", String, func() { Format(FormatDateTime) })
 	Attribute("verify_evidence", IdentityProviderVerifyEvidence)
+	Attribute("sign_in_state", String, func() { Enum("not_started", "application_created", "passed", "failed") })
+	Attribute("sign_in_connection_id", String, "Identifier of the WorkOS connection used for sign-in.")
+	Attribute("groups_source", String, func() { Enum("token", "directory") })
+	Attribute("groups_claim_confirmed", Boolean, "Whether an administrator confirmed the Okta groups claim filter is configured.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
 	Required("id", "kind", "tenant_identifier", "status", "capabilities", "granted_scopes", "jwks_url", "signing_key_kid", "created_at", "updated_at")
@@ -173,9 +177,27 @@ var IdentityProviderSetupStep = Type("IdentityProviderSetupStep", func() {
 	Attribute("deep_link", String, func() { Format(FormatURI) })
 	Attribute("printed_values", ArrayOf(IdentityProviderPrintedValue))
 	Attribute("expected_values", ArrayOf(IdentityProviderExpectedValue))
+	Attribute("claims", ArrayOf(IdentityProviderClaim), "Claims Speakeasy intends sign-in to carry.")
+	Attribute("repair", IdentityProviderRepair)
+	Attribute("portal_intent", String, "WorkOS Admin Portal intent the dashboard should open for this step.", func() { Enum("sso") })
 	Attribute("state", String, func() { Enum("not_started", "awaiting_values", "awaiting_verification", "passed", "failed") })
 	Attribute("last_outcome", IdentityProviderVerifyResult)
 	Required("key", "title", "where", "instructions", "printed_values", "expected_values", "state")
+})
+
+var IdentityProviderClaim = Type("IdentityProviderClaim", func() {
+	Attribute("name", String)
+	Attribute("purpose", String)
+	Attribute("carries_access", Boolean)
+	Required("name", "purpose", "carries_access")
+})
+
+var IdentityProviderRepair = Type("IdentityProviderRepair", func() {
+	Attribute("title", String)
+	Attribute("instructions", ArrayOf(String))
+	Attribute("deep_link", String, func() { Format(FormatURI) })
+	Attribute("fallback_available", Boolean)
+	Required("title", "instructions", "fallback_available")
 })
 
 var IdentityProviderPrintedValue = Type("IdentityProviderPrintedValue", func() {
@@ -230,7 +252,7 @@ var IdentityProviderVerifyEvidence = Type("IdentityProviderVerifyEvidence", func
 
 var IdentityProviderCapabilityRead = Type("IdentityProviderCapabilityRead", func() {
 	Attribute("capability", String)
-	Attribute("resource", String, func() { Enum("groups", "users", "apps") })
+	Attribute("resource", String, func() { Enum("groups", "users", "apps", "sign_in_application", "sign_in_connection") })
 	Attribute("ok", Boolean)
 	Attribute("count", Int)
 	Attribute("detail", String)

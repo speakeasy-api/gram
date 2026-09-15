@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -45,6 +46,16 @@ type OktaClient interface {
 	ListGroups(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListUsers(context.Context, string, string, okta.PageRequest) (okta.Page, error)
 	ListApplications(context.Context, string, string, okta.PageRequest) (okta.Page, error)
+	CreateOIDCApplication(context.Context, string, string, okta.CreateOIDCApplicationInput) (okta.Application, error)
+	GetApplication(context.Context, string, string, string) (okta.Application, error)
+	ResolveApplicationByClientID(context.Context, string, string, string) (okta.Application, error)
+	FindEveryoneGroup(context.Context, string, string) (okta.Group, error)
+	AssignGroupToApplication(context.Context, string, string, string, string) error
+}
+
+// WorkOSClient is the provider boundary used by sign-in verification.
+type WorkOSClient interface {
+	ListConnections(context.Context, string) ([]workos.Connection, error)
 }
 
 type storedVerification struct {
@@ -68,6 +79,9 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
 		return nil, err
+	}
+	if payload.StepKey == setupStepSignIn {
+		return s.verifySignInSetupStep(ctx, authCtx, logger)
 	}
 	if payload.StepKey != setupStepConnect {
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown identity provider setup step").LogError(ctx, logger)

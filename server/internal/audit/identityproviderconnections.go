@@ -20,12 +20,15 @@ const (
 )
 
 type IdentityProviderConnectionSnapshot struct {
-	Kind             string   `json:"kind"`
-	TenantIdentifier string   `json:"tenant_identifier"`
-	Status           string   `json:"status"`
-	Outcome          string   `json:"outcome,omitempty"`
-	Capabilities     []string `json:"capabilities"`
-	GrantedScopes    []string `json:"granted_scopes"`
+	Kind                 string   `json:"kind"`
+	TenantIdentifier     string   `json:"tenant_identifier"`
+	Status               string   `json:"status"`
+	Outcome              string   `json:"outcome,omitempty"`
+	Capabilities         []string `json:"capabilities"`
+	GrantedScopes        []string `json:"granted_scopes"`
+	SignInState          string   `json:"sign_in_state,omitempty"`
+	GroupsSource         string   `json:"groups_source,omitempty"`
+	GroupsClaimConfirmed bool     `json:"groups_claim_confirmed"`
 }
 
 type LogIdentityProviderConnectionCreatedEvent struct {

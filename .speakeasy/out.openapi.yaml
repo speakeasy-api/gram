@@ -77170,10 +77170,25 @@ components:
             - groups
             - users
             - apps
+            - sign_in_application
+            - sign_in_connection
       required:
         - capability
         - resource
         - ok
+    IdentityProviderClaim:
+      type: object
+      properties:
+        carries_access:
+          type: boolean
+        name:
+          type: string
+        purpose:
+          type: string
+      required:
+        - name
+        - purpose
+        - carries_access
     IdentityProviderConnection:
       type: object
       properties:
@@ -77193,6 +77208,14 @@ components:
           type: array
           items:
             type: string
+        groups_claim_confirmed:
+          type: boolean
+          description: Whether an administrator confirmed the Okta groups claim filter is configured.
+        groups_source:
+          type: string
+          enum:
+            - token
+            - directory
         id:
           type: string
           format: uuid
@@ -77207,6 +77230,16 @@ components:
         last_verified_at:
           type: string
           format: date-time
+        sign_in_connection_id:
+          type: string
+          description: Identifier of the WorkOS connection used for sign-in.
+        sign_in_state:
+          type: string
+          enum:
+            - not_started
+            - application_created
+            - passed
+            - failed
         signing_key_kid:
           type: string
           description: RFC 7638 thumbprint of the active signing key.
@@ -77283,6 +77316,24 @@ components:
         - label
         - value
         - copyable
+    IdentityProviderRepair:
+      type: object
+      properties:
+        deep_link:
+          type: string
+          format: uri
+        fallback_available:
+          type: boolean
+        instructions:
+          type: array
+          items:
+            type: string
+        title:
+          type: string
+      required:
+        - title
+        - instructions
+        - fallback_available
     IdentityProviderSetup:
       type: object
       properties:
@@ -77299,6 +77350,11 @@ components:
     IdentityProviderSetupStep:
       type: object
       properties:
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/IdentityProviderClaim'
+          description: Claims Speakeasy intends sign-in to carry.
         deep_link:
           type: string
           format: uri
@@ -77314,10 +77370,17 @@ components:
           type: string
         last_outcome:
           $ref: '#/components/schemas/IdentityProviderVerifyResult'
+        portal_intent:
+          type: string
+          description: WorkOS Admin Portal intent the dashboard should open for this step.
+          enum:
+            - sso
         printed_values:
           type: array
           items:
             $ref: '#/components/schemas/IdentityProviderPrintedValue'
+        repair:
+          $ref: '#/components/schemas/IdentityProviderRepair'
         state:
           type: string
           enum:

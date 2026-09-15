@@ -102,6 +102,12 @@ type IdentityProviderCapabilityRead struct {
 	Detail     *string
 }
 
+type IdentityProviderClaim struct {
+	Name          string
+	Purpose       string
+	CarriesAccess bool
+}
+
 // IdentityProviderConnection is the result type of the identityProviders
 // service create method.
 type IdentityProviderConnection struct {
@@ -121,8 +127,15 @@ type IdentityProviderConnection struct {
 	SigningKeyKid  string
 	LastVerifiedAt *string
 	VerifyEvidence *IdentityProviderVerifyEvidence
-	CreatedAt      string
-	UpdatedAt      string
+	SignInState    *string
+	// Identifier of the WorkOS connection used for sign-in.
+	SignInConnectionID *string
+	GroupsSource       *string
+	// Whether an administrator confirmed the Okta groups claim filter is
+	// configured.
+	GroupsClaimConfirmed *bool
+	CreatedAt            string
+	UpdatedAt            string
 }
 
 type IdentityProviderExpectedValue struct {
@@ -145,6 +158,13 @@ type IdentityProviderPrintedValue struct {
 	Copyable bool
 }
 
+type IdentityProviderRepair struct {
+	Title             string
+	Instructions      []string
+	DeepLink          *string
+	FallbackAvailable bool
+}
+
 // IdentityProviderSetup is the result type of the identityProviders service
 // describeSetup method.
 type IdentityProviderSetup struct {
@@ -160,8 +180,13 @@ type IdentityProviderSetupStep struct {
 	DeepLink       *string
 	PrintedValues  []*IdentityProviderPrintedValue
 	ExpectedValues []*IdentityProviderExpectedValue
-	State          string
-	LastOutcome    *IdentityProviderVerifyResult
+	// Claims Speakeasy intends sign-in to carry.
+	Claims []*IdentityProviderClaim
+	Repair *IdentityProviderRepair
+	// WorkOS Admin Portal intent the dashboard should open for this step.
+	PortalIntent *string
+	State        string
+	LastOutcome  *IdentityProviderVerifyResult
 }
 
 type IdentityProviderSetupValue struct {
