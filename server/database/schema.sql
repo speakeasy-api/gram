@@ -2204,6 +2204,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Advertised authorization grant profiles. Empty means none recorded, not
+  -- proof that the issuer cannot support a profile or that a client is trusted.
+  authorization_grant_profiles_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Deliberately nullable with no default, unlike the capability arrays
@@ -2811,6 +2814,12 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   token_endpoint_auth_method TEXT,
   json_web_key_set_id uuid,
   scope TEXT[],
+  -- Recorded registration grant types, not authoritative provider policy.
+  -- NULL means unknown; an empty array means explicitly recorded empty.
+  grant_types TEXT[],
+  -- Provider-specific OAuth audience request parameter on authorize/token
+  -- requests, not the ID-JAG resource-AS issuer audience or RFC 8707 resource.
+  -- The signed assertion uses token_endpoint_auth_audience_format instead.
   audience TEXT,
 
   -- Which of the issuer's identifiers Gram places in the `aud` claim of an
@@ -8575,3 +8584,160 @@ CREATE TABLE IF NOT EXISTS killswitch_operations (
   CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);
+
+-- Purpose-specific downstream registrations; interactive attachments remain separate.
+-- Tombstones retain generation so an in-flight registration cannot revive an unlink.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_id_issuer_key ON remote_session_clients (id, remote_session_issuer_id);
+
+CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  user_session_issuer_id uuid NOT NULL,
+  remote_session_issuer_id uuid NOT NULL,
+  resource TEXT NOT NULL,
+  remote_session_client_id uuid,
+  generation bigint NOT NULL DEFAULT 1,
+  state TEXT NOT NULL DEFAULT 'configuration_required',
+  grant_source TEXT NOT NULL DEFAULT 'unknown',
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  claim_id uuid,
+  claimed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (id),
+  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
+  (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_session_ema_bindings (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
+
+-- Scope inheritance is conditional: project-owned parents match the project;
+-- organization-owned parents match its organization. Only remote issuers may
+-- be global. IDs and the client/issuer FK alone cannot enforce these rules.
+CREATE FUNCTION validate_remote_session_ema_binding_scope() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  -- An unlinked tombstone may outlive parent reconfiguration. Preserve it (and
+  -- the project's organization cascade), but revalidate any retarget or revival.
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.state = 'unlinked' AND NEW.state = 'unlinked'
+      AND OLD.project_id IS NOT DISTINCT FROM NEW.project_id
+      AND OLD.user_session_issuer_id IS NOT DISTINCT FROM NEW.user_session_issuer_id
+      AND OLD.remote_session_issuer_id IS NOT DISTINCT FROM NEW.remote_session_issuer_id
+      AND OLD.remote_session_client_id IS NOT DISTINCT FROM NEW.remote_session_client_id THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  -- SHARE, not KEY SHARE: scope and soft-deletion changes need not alter a
+  -- referenced key. Hold these locks until commit so a first binding cannot
+  -- race a parent reconfiguration that observes no active bindings yet.
+  PERFORM 1 FROM projects WHERE id = NEW.project_id
+    AND organization_id = NEW.organization_id AND deleted IS FALSE FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining project scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_project_scope_fkey';
+  END IF;
+  PERFORM 1 FROM user_session_issuers WHERE id = NEW.user_session_issuer_id AND deleted IS FALSE
+    AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining user issuer scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_user_issuer_scope_fkey';
+  END IF;
+  PERFORM 1 FROM remote_session_issuers WHERE id = NEW.remote_session_issuer_id AND deleted IS FALSE
+    AND (project_id = NEW.project_id OR (project_id IS NULL AND (organization_id = NEW.organization_id OR organization_id IS NULL))) FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining remote issuer scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_remote_issuer_scope_fkey';
+  END IF;
+  IF NEW.remote_session_client_id IS NOT NULL THEN
+    -- Global clients are platform-owned and cannot be selected by tenant preparation.
+    PERFORM 1 FROM remote_session_clients WHERE id = NEW.remote_session_client_id AND deleted IS FALSE
+      AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'identity-chaining client scope mismatch'
+        USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_client_scope_fkey';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER remote_session_ema_binding_scope_guard
+BEFORE INSERT OR UPDATE ON remote_session_ema_bindings
+FOR EACH ROW EXECUTE FUNCTION validate_remote_session_ema_binding_scope();
+
+-- Row locks acquired by UPDATE/DELETE serialize these lifecycle guards with
+-- preparation's scoped FOR UPDATE reads, including before the first binding.
+CREATE FUNCTION guard_remote_session_ema_lifecycle() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM remote_session_ema_bindings b
+    WHERE b.state <> 'unlinked' AND (
+      (TG_TABLE_NAME = 'remote_session_clients' AND b.remote_session_client_id = OLD.id) OR
+      (TG_TABLE_NAME = 'remote_session_issuers' AND b.remote_session_issuer_id = OLD.id) OR
+      (TG_TABLE_NAME = 'user_session_issuers' AND b.user_session_issuer_id = OLD.id) OR
+      (TG_TABLE_NAME = 'projects' AND b.project_id = OLD.id)
+    )
+  ) THEN
+    RAISE EXCEPTION 'active identity-chaining binding must be explicitly unlinked before reconfiguration' USING ERRCODE = '23503';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    -- Once explicitly unlinked there is no live credential reference to retain.
+    -- Remove tombstones before SET NULL FKs run against non-null owner columns.
+    -- A stale completion still fails because its unique claim ID no longer exists.
+    DELETE FROM remote_session_ema_bindings b WHERE b.state = 'unlinked' AND (
+      (TG_TABLE_NAME = 'remote_session_clients' AND b.remote_session_client_id = OLD.id) OR
+      (TG_TABLE_NAME = 'remote_session_issuers' AND b.remote_session_issuer_id = OLD.id) OR
+      (TG_TABLE_NAME = 'user_session_issuers' AND b.user_session_issuer_id = OLD.id) OR
+      (TG_TABLE_NAME = 'projects' AND b.project_id = OLD.id)
+    );
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER remote_session_ema_project_update_guard
+BEFORE UPDATE ON projects FOR EACH ROW
+WHEN (OLD.deleted_at IS DISTINCT FROM NEW.deleted_at OR OLD.organization_id IS DISTINCT FROM NEW.organization_id)
+EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+
+CREATE TRIGGER remote_session_ema_project_delete_guard BEFORE DELETE ON projects
+FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+
+-- grant_types records registration evidence: authorized preparation may confirm
+-- or publish it for an active binding without changing client identity/configuration.
+CREATE TRIGGER remote_session_ema_client_update_guard
+BEFORE UPDATE ON remote_session_clients FOR EACH ROW
+WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+ OR OLD.remote_session_issuer_id IS DISTINCT FROM NEW.remote_session_issuer_id OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at
+ OR OLD.audience IS DISTINCT FROM NEW.audience
+ OR OLD.client_id IS DISTINCT FROM NEW.client_id OR OLD.client_secret_encrypted IS DISTINCT FROM NEW.client_secret_encrypted
+ OR OLD.token_endpoint_auth_method IS DISTINCT FROM NEW.token_endpoint_auth_method OR OLD.json_web_key_set_id IS DISTINCT FROM NEW.json_web_key_set_id
+ OR OLD.scope IS DISTINCT FROM NEW.scope OR OLD.client_id_metadata_uri IS DISTINCT FROM NEW.client_id_metadata_uri
+ OR OLD.token_endpoint_auth_audience_format IS DISTINCT FROM NEW.token_endpoint_auth_audience_format)
+EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+CREATE TRIGGER remote_session_ema_client_delete_guard BEFORE DELETE ON remote_session_clients
+FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+CREATE TRIGGER remote_session_ema_issuer_update_guard
+BEFORE UPDATE ON remote_session_issuers FOR EACH ROW
+WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+ OR OLD.issuer IS DISTINCT FROM NEW.issuer OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at)
+EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+CREATE TRIGGER remote_session_ema_issuer_delete_guard BEFORE DELETE ON remote_session_issuers
+FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+CREATE TRIGGER remote_session_ema_user_issuer_update_guard
+BEFORE UPDATE ON user_session_issuers FOR EACH ROW
+WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
+ OR OLD.trusted_remote_session_issuer_id IS DISTINCT FROM NEW.trusted_remote_session_issuer_id OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at)
+EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
+CREATE TRIGGER remote_session_ema_user_issuer_delete_guard BEFORE DELETE ON user_session_issuers
+FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
