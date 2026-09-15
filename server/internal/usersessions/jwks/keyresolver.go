@@ -1,6 +1,7 @@
 package jwks
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -417,7 +418,10 @@ func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheStat
 // refresh flights do not coalesce with each other, so a slow fetch can
 // complete after a concurrent flight already stored a fresher (possibly
 // post-rotation) document. The atomic conditional write keeps that newer
-// result when the state has changed since this resolution began.
+// result when the state has changed since this resolution began. A failed
+// consult may update only the error metadata while this successful fetch is
+// in flight; that conflict is safe to retry once because the key material and
+// its successful-fetch metadata are still the state this fetch started from.
 func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState, result *Result) {
 	if result.Outcome != CacheOutcomeRefreshed && result.Outcome != CacheOutcomeNotModified {
 		return
@@ -431,14 +435,44 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 		LastError:   "",
 		Revision:    "",
 	}
-	_, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, state)
+	written, err := k.cache.PutIfUnchanged(ctx, source.CacheKey(), prior, state)
 	if err != nil {
-		k.logger.WarnContext(ctx, "jwks key set cache write failed",
-			attr.SlogURLFull(source.uri),
-			attr.SlogJWKSOrigin(source.origin),
-			attr.SlogError(err),
-		)
+		k.logCacheWriteFailure(ctx, source, err)
+		return
 	}
+	if written {
+		return
+	}
+
+	current, err := k.cachedState(ctx, source)
+	if err != nil {
+		k.logCacheWriteFailure(ctx, source, err)
+		return
+	}
+	if !onlyConsultFailureChanged(prior, current) {
+		return
+	}
+	_, err = k.cache.PutIfUnchanged(ctx, source.CacheKey(), current, state)
+	if err != nil {
+		k.logCacheWriteFailure(ctx, source, err)
+	}
+}
+
+func onlyConsultFailureChanged(prior, current CacheState) bool {
+	successStateMatches := bytes.Equal(current.Document, prior.Document) &&
+		current.ETag == prior.ETag &&
+		current.ExpiresAt.Equal(prior.ExpiresAt) &&
+		current.RefreshedAt.Equal(prior.RefreshedAt)
+	failureStateChanged := !current.LastErrorAt.Equal(prior.LastErrorAt) || current.LastError != prior.LastError
+	return successStateMatches && failureStateChanged
+}
+
+func (k *KeyResolver) logCacheWriteFailure(ctx context.Context, source Source, err error) {
+	k.logger.WarnContext(ctx, "jwks key set cache write failed",
+		attr.SlogURLFull(source.uri),
+		attr.SlogJWKSOrigin(source.origin),
+		attr.SlogError(err),
+	)
 }
 
 // markConsultFailure records a safe reason and attempt time without changing
