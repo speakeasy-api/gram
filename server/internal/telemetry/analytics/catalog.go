@@ -100,8 +100,11 @@ type Field struct {
 // de-duplicated sum can be expressed, plus a per-field expression over that
 // query's result.
 type Dataset struct {
-	Name        string
-	Kind        Kind
+	Name string
+	Kind Kind
+	// Grain names what one row is, as a noun: "session", "tool call". The
+	// builder shows it beside the description, and rows mode is "rows at the
+	// dataset's grain".
 	Grain       string
 	Description string
 	// TimeExpr is the column of the source query's output that carries the
