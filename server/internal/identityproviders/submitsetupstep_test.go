@@ -215,7 +215,7 @@ func TestSubmitSignInStepFallsBackToPublicClientIDResolution(t *testing.T) {
 	t.Parallel()
 
 	const manualClientID = "manual-public-client-example"
-	fake := newFakeOktaServer(t, fakeOktaNoProvision)
+	fake := newFakeOktaServer(t, fakeOktaManageDenied)
 	fake.SetSignInClientID(manualClientID)
 	ctx, ti := newTestServiceWithOktaEndpoint(t, fake.server.URL)
 	prepareActiveConnection(t, ctx, ti, fake)

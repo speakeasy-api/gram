@@ -40,6 +40,12 @@ var requiredOktaScopes = []string{
 	"okta.apps.manage",
 }
 
+var requiredOktaReadScopes = []string{
+	"okta.apps.read",
+	"okta.groups.read",
+	"okta.users.read",
+}
+
 // OktaClient is the provider boundary used by identity provider verification.
 type OktaClient interface {
 	AcquireToken(context.Context, okta.TokenRequest) (okta.Token, error)
@@ -135,6 +141,16 @@ func (s *Service) VerifySetupStep(ctx context.Context, payload *gen.VerifySetupS
 		PrivateKey:   privateKey,
 		Scopes:       append([]string(nil), requiredOktaScopes...),
 	})
+	if apiErr, ok := errors.AsType[*okta.APIError](tokenErr); ok && apiErr.Code == "invalid_scope" {
+		token, tokenErr = s.okta.AcquireToken(ctx, okta.TokenRequest{
+			ConnectionID: before.ID,
+			TenantDomain: tenantDomain,
+			ClientID:     before.ClientID.String,
+			KeyID:        signingKey.Kid,
+			PrivateKey:   privateKey,
+			Scopes:       append([]string(nil), requiredOktaReadScopes...),
+		})
+	}
 	var result *gen.IdentityProviderVerifyResult
 	tokenUsed := tokenErr == nil
 	if tokenErr != nil {

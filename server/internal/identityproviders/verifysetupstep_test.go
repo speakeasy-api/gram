@@ -33,7 +33,7 @@ const (
 	fakeOktaRefused      = "refused"
 	fakeOktaUnavailable  = "unavailable"
 	fakeOktaAppsBlocked  = "apps_blocked"
-	fakeOktaNoProvision  = "no_provisioning"
+	fakeOktaManageDenied = "manage_scope_denied"
 	fakeOktaAppInactive  = "sign_in_app_inactive"
 	fakeOktaAppForbidden = "sign_in_app_forbidden"
 	fakeOktaAppRefused   = "sign_in_app_refused"
@@ -595,8 +595,12 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		f.fail(w, err)
 		return
 	}
-	expectedScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
-	if r.Method != http.MethodPost || r.Form.Get("grant_type") != "client_credentials" || r.Form.Get("scope") != expectedScopes || r.Form.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
+	requestedScopes := r.Form.Get("scope")
+	allScopes := "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
+	readScopes := "okta.apps.read okta.groups.read okta.users.read"
+	mode := f.Mode()
+	validScopes := requestedScopes == allScopes || requestedScopes == readScopes
+	if r.Method != http.MethodPost || r.Form.Get("grant_type") != "client_credentials" || !validScopes || r.Form.Get("client_assertion_type") != "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" {
 		f.fail(w, errors.New("unexpected token request"))
 		return
 	}
@@ -623,7 +627,6 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		<-f.releaseToken
 	}
 
-	mode := f.Mode()
 	if mode == fakeOktaRefused {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -636,12 +639,14 @@ func (f *fakeOktaServer) handleToken(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"server_error","error_description":"The token service is temporarily unavailable."}`))
 		return
 	}
-	grantedScopes := expectedScopes
-	if mode == fakeOktaNoProvision {
-		grantedScopes = "okta.apps.read okta.groups.read okta.users.read"
+	if mode == fakeOktaManageDenied && requestedScopes == allScopes {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_scope","error_description":"The requested scope is not granted"}`))
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + grantedScopes + `"}`))
+	_, _ = w.Write([]byte(`{"access_token":"` + testAccessToken + `","expires_in":3600,"scope":"` + requestedScopes + `"}`))
 }
 
 func (f *fakeOktaServer) handleApplications(w http.ResponseWriter, r *http.Request) {

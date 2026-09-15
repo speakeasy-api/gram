@@ -236,7 +236,11 @@ func (s *Service) submitSignInApplication(
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, logger)
 	}
 
-	token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before)
+	tokenScopes := requiredOktaReadScopes
+	if canProvision {
+		tokenScopes = requiredOktaScopes
+	}
+	token, err := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, tokenScopes)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "error authorizing Okta sign-in setup").LogError(ctx, logger)
 	}
@@ -332,7 +336,7 @@ func (s *Service) submitSignInApplication(
 }
 
 func (s *Service) assignSignInApplicationToEveryone(ctx context.Context, organizationID string, row repo.GetIdentityProviderConnectionByOrganizationRow) error {
-	token, err := s.acquireOktaManagementToken(ctx, organizationID, row)
+	token, err := s.acquireOktaManagementToken(ctx, organizationID, row, requiredOktaScopes)
 	if err != nil {
 		return err
 	}
@@ -371,7 +375,7 @@ func (s *Service) verifySignInSetupStep(
 	reads := make([]*gen.IdentityProviderCapabilityRead, 0, 2)
 
 	var application okta.Application
-	token, tokenErr := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before)
+	token, tokenErr := s.acquireOktaManagementToken(ctx, authCtx.ActiveOrganizationID, before, requiredOktaReadScopes)
 	var applicationErr error
 	if tokenErr != nil {
 		applicationErr = tokenErr
@@ -575,6 +579,7 @@ func (s *Service) acquireOktaManagementToken(
 	ctx context.Context,
 	organizationID string,
 	row repo.GetIdentityProviderConnectionByOrganizationRow,
+	scopes []string,
 ) (okta.Token, error) {
 	if !row.ClientID.Valid || !row.SigningKeyID.Valid {
 		return okta.Token{}, errors.New("okta API Services app is not configured")
@@ -597,7 +602,7 @@ func (s *Service) acquireOktaManagementToken(
 		ClientID:     row.ClientID.String,
 		KeyID:        signingKey.Kid,
 		PrivateKey:   privateKey,
-		Scopes:       append([]string(nil), requiredOktaScopes...),
+		Scopes:       append([]string(nil), scopes...),
 	})
 	if err != nil {
 		return okta.Token{}, fmt.Errorf("acquire Okta management token: %w", err)
