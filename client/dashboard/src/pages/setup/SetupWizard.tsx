@@ -25,6 +25,7 @@ import { JourneyLayout } from "./components/journey-layout";
 import { JourneyStepsProvider } from "./components/journey-steps-provider";
 import { useJourneyView } from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
+import { SetupViewButton } from "./components/setup-view-button";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
 import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
@@ -111,6 +112,7 @@ function WizardRail({
   disabled: boolean;
   onPick: (task: SetupTask) => void;
 }): JSX.Element {
+  const [searchParams] = useSearchParams();
   const railSteps: Step[] = tasks.map((task) => ({
     id: task.key,
     title: task.title,
@@ -126,6 +128,11 @@ function WizardRail({
 
   return (
     <div>
+      {searchParams.get("from") === "workstreams" && (
+        <div className="mb-4">
+          <SetupViewButton wizard disabled={disabled} edge="start" />
+        </div>
+      )}
       <p className="text-eyebrow mb-4">
         {doneCount} of {tasks.length} tasks complete
       </p>

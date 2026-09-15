@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+import { ONBOARDING_WORKSTREAMS } from "./tasks";
 import { useOnboardingBoard } from "./use-onboarding-board";
 
 const state = vi.hoisted(() => ({
@@ -178,9 +179,12 @@ it("allows assigned readers to change status but not assignment or visibility", 
   const { result } = setup();
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
   await act(async () => {
-    expect(await result.current.assign("instrument-agents", undefined)).toBe(
-      false,
-    );
+    expect(
+      await result.current.assignWorkstream(
+        ONBOARDING_WORKSTREAMS[1]!,
+        undefined,
+      ),
+    ).toBe(false);
     expect(await result.current.setHidden("instrument-agents", true)).toBe(
       false,
     );
@@ -221,4 +225,116 @@ it("denies unassigned readers, fact completion and blocked transitions", async (
     );
   });
   expect(state.write).not.toHaveBeenCalled();
+});
+
+it("assigns every workstream task, including tasks omitted from the read, with one pending lock and refresh", async () => {
+  const { result, client } = setup();
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+  const write = Promise.withResolvers<void>();
+  const refresh = Promise.withResolvers<void>();
+  state.write.mockImplementation(() => write.promise);
+  const invalidate = vi
+    .spyOn(client, "invalidateQueries")
+    .mockReturnValue(refresh.promise);
+  let saving: Promise<boolean>;
+  await act(async () => {
+    saving = result.current.assignWorkstream(ONBOARDING_WORKSTREAMS[1]!, {
+      kind: "email",
+      email: "owner@example.test",
+    });
+  });
+  expect(state.write).toHaveBeenCalledTimes(6);
+  for (const [arg] of state.write.mock.calls) {
+    expect(arg.request.updateSetupTaskRequestBody.assignee).toEqual({
+      email: "owner@example.test",
+    });
+  }
+  expect(
+    state.write.mock.calls.map(
+      ([arg]) => arg.request.updateSetupTaskRequestBody.taskKey,
+    ),
+  ).toEqual(ONBOARDING_WORKSTREAMS[1]!.taskIds);
+  expect(result.current.isPending).toBe(true);
+  await act(async () => {
+    expect(
+      await result.current.assignWorkstream(
+        ONBOARDING_WORKSTREAMS[0]!,
+        undefined,
+      ),
+    ).toBe(false);
+    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
+      false,
+    );
+    write.resolve();
+  });
+  expect(invalidate).toHaveBeenCalledOnce();
+  expect(result.current.isPending).toBe(true);
+  await act(async () => {
+    refresh.resolve();
+    expect(await saving).toBe(true);
+  });
+  expect(result.current.isPending).toBe(false);
+});
+it("refreshes partial assignments, reports exact failures and permits a full unassign retry", async () => {
+  const { result, client } = setup();
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+  state.write
+    .mockResolvedValue(undefined)
+    .mockRejectedValueOnce(new Error("Failed"));
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  await act(async () => {
+    expect(
+      await result.current.assignWorkstream(
+        ONBOARDING_WORKSTREAMS[0]!,
+        undefined,
+      ),
+    ).toBe(false);
+  });
+  expect(result.current.writeError).toContain("1 of 3 tasks");
+  expect(result.current.writeError).toContain("2 changes were saved");
+  expect(result.current.writeErrorTaskId).toBeNull();
+  expect(invalidate).toHaveBeenCalledOnce();
+  await act(async () => {
+    expect(
+      await result.current.assignWorkstream(
+        ONBOARDING_WORKSTREAMS[0]!,
+        undefined,
+      ),
+    ).toBe(true);
+  });
+  expect(state.write).toHaveBeenCalledTimes(6);
+  expect(
+    state.write.mock.calls.every(
+      ([arg]) => arg.request.updateSetupTaskRequestBody.clearAssignee === true,
+    ),
+  ).toBe(true);
+  expect(result.current.writeError).toBeNull();
+});
+
+it("assigns one member to every gateway task including the optional task", async () => {
+  const { result } = setup();
+  await waitFor(() => expect(result.current.tasks).toHaveLength(1));
+  const workstream = ONBOARDING_WORKSTREAMS.find(
+    (stream) => stream.id === "distribute",
+  )!;
+  await act(async () => {
+    expect(
+      await result.current.assignWorkstream(workstream, {
+        kind: "user",
+        userId: "member",
+        name: "Team member",
+        email: "member@example.test",
+      }),
+    ).toBe(true);
+  });
+  expect(
+    state.write.mock.calls.map(
+      ([arg]) => arg.request.updateSetupTaskRequestBody,
+    ),
+  ).toEqual(
+    workstream.taskIds.map((taskKey) => ({
+      taskKey,
+      assignee: { userId: "member" },
+    })),
+  );
 });

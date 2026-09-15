@@ -30,9 +30,16 @@ export function MoreActions({
   triggerLoading,
   triggerDisabled,
   triggerStyle,
+  size = "default",
+  align = "default",
 }: {
   actions: Action[];
   triggerLabel?: string;
+  /** Icon-only trigger target: 32px by default, or 24px when compact. */
+  size?: "default" | "compact";
+  /** Align icon ink with the trailing content edge; the hover target extends
+   * into the parent padding. Applies only to icon-only triggers. */
+  align?: "default" | "end";
   /** Accessible name for an icon-only trigger. */
   triggerAriaLabel?: string;
   /** Shows a spinner in place of the trigger icon, disables it, and restores
@@ -73,6 +80,12 @@ export function MoreActions({
     }
   }, [triggerDisabled, triggerLoading]);
 
+  // Button centers its contents in a full-width inner span. Its sm variant
+  // makes the icon 14px; Lucide ellipsis-vertical ink extends 2 viewBox units
+  // from its center (a radius-1 circle plus a 1-unit half-stroke, on a 24 grid).
+  // Move the entire target, not the icon, so the dots stay centered on hover.
+  const edgeOffset = (size === "compact" ? 24 : 32) / 2 - (2 * 14) / 24;
+
   const wrapOnClick =
     (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
@@ -104,10 +117,17 @@ export function MoreActions({
             ref={triggerRef}
             variant="tertiary"
             size="sm"
-            className="mx-[-4px] h-8 w-8 p-0"
+            className={cn(
+              "p-0",
+              size === "compact" ? "h-6 w-6" : "h-8 w-8",
+              align === "default" && "mx-[-4px]",
+            )}
             disabled={triggerLoading || triggerDisabled}
             aria-busy={triggerLoading === true}
-            style={triggerStyle}
+            style={{
+              ...(align === "end" && { marginInlineEnd: -edgeOffset }),
+              ...triggerStyle,
+            }}
           >
             <Icon
               name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}

@@ -3,7 +3,6 @@ import { JourneyStepsProvider } from "../journey-steps-provider";
 import { useJourneyView } from "../journey-steps";
 import { Button } from "@/components/ui/Button";
 import { showPylonChat } from "@/lib/pylon";
-import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -13,9 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
-import { AssigneePicker } from "./assignee-picker";
-import type { Assignee, BoardTask } from "./board-store";
+import type { BoardTask } from "./board-store";
 import { TaskStep } from "./task-step";
+import { TaskDependencies } from "./task-dependencies";
 import {
   type OnboardingTaskId,
   TASK_STATUS_META,
@@ -90,13 +89,11 @@ function StatusSelect({
 interface TaskDialogProps {
   task: BoardTask | null;
   projectSlug?: string;
-  canAssign: boolean;
   canSetStatus: boolean;
   isPending: boolean;
   error: string | null;
   onClose: () => void;
   onSetStatus: (id: OnboardingTaskId, status: TaskStatus) => Promise<boolean>;
-  onAssign: (id: OnboardingTaskId, assignee: Assignee | undefined) => void;
 }
 
 /**
@@ -106,13 +103,11 @@ interface TaskDialogProps {
 export function TaskDialog({
   task,
   projectSlug,
-  canAssign,
   canSetStatus,
   isPending,
   error,
   onClose,
   onSetStatus,
-  onAssign,
 }: TaskDialogProps): JSX.Element {
   return (
     <Dialog
@@ -130,28 +125,19 @@ export function TaskDialog({
 
           <div className="border-border flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-6 py-3 pr-14">
             <StatusSelect
-              value={task.status}
+              value={task.verified ? "done" : task.status}
               disabled={task.verified || !canSetStatus || isPending}
               blocked={task.blockedBy.length > 0}
               onChange={(status) => void onSetStatus(task.id, status)}
-            />
-            {task.verified && (
-              <Badge variant="success" size="sm">
-                Verified
-              </Badge>
-            )}
-            <AssigneePicker
-              assignee={task.assignee}
-              onChange={(assignee) => onAssign(task.id, assignee)}
-              size="sm"
-              disabled={!canAssign || isPending}
             />
           </div>
 
           <div className="min-h-0 overflow-y-auto px-4 py-6 sm:px-8">
             {error && <p role="alert">{error}</p>}
             {task.blockedBy.length > 0 && (
-              <p>Blocked by: {task.blockedBy.join(", ")}</p>
+              <div className="mb-4">
+                <TaskDependencies dependencies={task.blockedBy} />
+              </div>
             )}
             <StepSupportProvider
               onSupport={() => {

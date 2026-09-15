@@ -56,9 +56,9 @@ export interface OnboardingTaskDefinition {
   badge?: string;
 }
 
-const IT_ADMIN = "IT admin";
-const ENGINEERING_LEAD = "Engineering lead";
-const SECURITY_LEAD = "Security lead";
+const IT_ADMIN = "IT Admin";
+const ENGINEERING_LEAD = "Engineering Lead";
+const SECURITY_LEAD = "Security Lead";
 
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
   { id: "identity-provider", suggestedOwner: IT_ADMIN },
@@ -81,6 +81,7 @@ export interface OnboardingWorkstreamDefinition {
   id: "connect" | "observe" | "distribute" | "secure";
   title: string;
   description: string;
+  suggestedOwner: string;
   taskIds: OnboardingTaskId[];
 }
 
@@ -89,12 +90,14 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
   {
     id: "connect",
     title: "Connect identity",
+    suggestedOwner: IT_ADMIN,
     description: "Authenticate people and agents. Sync IDP roles.",
     taskIds: ["identity-provider", "connect-idp", "directory-sync"],
   },
   {
     id: "observe",
     title: "Observe agents",
+    suggestedOwner: ENGINEERING_LEAD,
     description: "Instrument agents, add integrations, and verify traffic.",
     taskIds: [
       "enable-logging",
@@ -108,12 +111,14 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
   {
     id: "distribute",
     title: "MCP Gateway",
+    suggestedOwner: ENGINEERING_LEAD,
     description: "Publish and distribute approved MCP servers.",
     taskIds: ["create-marketplace", "distribute-servers", "platform-mcp"],
   },
   {
     id: "secure",
     title: "Secure agent traffic",
+    suggestedOwner: SECURITY_LEAD,
     description: "Apply the initial policy controls.",
     taskIds: ["anthropic-admin-controls", "configure-policies"],
   },

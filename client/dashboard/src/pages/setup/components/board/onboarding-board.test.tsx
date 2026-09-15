@@ -10,12 +10,16 @@ const state = vi.hoisted(() => ({
     typeof import("./use-onboarding-board").useOnboardingBoard
   >,
   search: new URLSearchParams(),
+  navigate: vi.fn(),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
 }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ setupWizard: { href: () => "/acme/setup/wizard" } }),
+}));
 vi.mock("react-router", () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => state.navigate,
   useParams: () => ({ orgSlug: "acme" }),
   useSearchParams: () => [state.search, vi.fn()],
 }));
@@ -55,6 +59,7 @@ vi.mock("../onboarding-footer", () => ({ OnboardingFooter: () => null }));
 
 beforeEach(() => {
   state.search = new URLSearchParams();
+  state.navigate.mockReset();
   state.board = {
     tasks: resolveBoardTasks(
       ONBOARDING_TASKS.map(({ id }) => ({
@@ -77,7 +82,7 @@ beforeEach(() => {
     canSetStatus: () => true,
     retry: vi.fn(),
     setStatus: vi.fn(),
-    assign: vi.fn(),
+    assignWorkstream: vi.fn(),
     setHidden: vi.fn(),
   };
 });
@@ -105,12 +110,16 @@ describe("workstreams-only onboarding", () => {
       expect(screen.queryByRole("tab", { name: "Kanban" })).toBeNull();
     },
   );
-  it("does not carry another task's write error into a dialog", () => {
+  it("routes task deep links to the wizard without a dialog", () => {
     state.board.writeError = "Task A failed";
     state.board.writeErrorTaskId = "instrument-agents";
     state.search.set("task", "connect-idp");
     renderBoard();
-    expect(screen.getByRole("dialog").textContent).toBe("connect-idp");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(state.navigate).toHaveBeenCalledWith(
+      { pathname: "/acme/setup/wizard", search: "task=connect-idp" },
+      { replace: true },
+    );
   });
   it("excludes hidden and optional tasks from required progress", () => {
     state.board.tasks = state.board.tasks.map((task) => ({
@@ -155,10 +164,14 @@ describe("workstreams-only onboarding", () => {
     expect(screen.getByText("No selected tasks")).toBeTruthy();
     expect(screen.getByText("No required tasks")).toBeTruthy();
   });
-  it("opens legacy links but not hidden tasks", () => {
+  it("routes legacy links to the wizard but not hidden tasks", () => {
     state.search.set("step", "connect-idp");
     const rendered = renderBoard();
-    expect(screen.getByRole("dialog").textContent).toBe("connect-idp");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(state.navigate).toHaveBeenCalledWith(
+      { pathname: "/acme/setup/wizard", search: "task=connect-idp" },
+      { replace: true },
+    );
     state.board.tasks = state.board.tasks.map((task) => ({
       ...task,
       hidden: true,
@@ -180,4 +193,41 @@ describe("workstreams-only onboarding", () => {
     expect(state.board.retry).toHaveBeenCalledOnce();
     expect(screen.queryByText("No selected tasks")).toBeNull();
   });
+});
+
+it("opens a card in the linear wizard with its task and project context", () => {
+  state.search.set("projectSlug", "example-project");
+  state.search.set("view", "workstreams");
+  renderBoard();
+  fireEvent.click(
+    screen.getByRole("button", { name: "instrument-agents, To Do" }),
+  );
+  expect(state.navigate).toHaveBeenCalledWith({
+    pathname: "/acme/setup/wizard",
+    search:
+      "projectSlug=example-project&task=instrument-agents&from=workstreams",
+  });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("keeps workstream progress stable when filtering to assigned cards", () => {
+  state.board.tasks = state.board.tasks.map((task) => ({
+    ...task,
+    status: task.id === "connect-idp" ? "done" : "todo",
+    assignee:
+      task.id === "identity-provider"
+        ? { kind: "email", email: "dev@example.test" }
+        : undefined,
+  }));
+  renderBoard();
+  const progress = screen.getByRole("progressbar", {
+    name: "Connect identity progress",
+  });
+  expect(progress.getAttribute("aria-valuenow")).toBe("1");
+  expect(progress.getAttribute("aria-valuemax")).toBe("3");
+  fireEvent.click(screen.getByRole("switch", { name: "Assigned to me" }));
+  expect(screen.queryByText("connect-idp")).toBeNull();
+  expect(screen.getByText("1 / 3 required tasks complete")).toBeTruthy();
+  expect(progress.getAttribute("aria-valuenow")).toBe("1");
+  expect(progress.getAttribute("aria-valuemax")).toBe("3");
 });

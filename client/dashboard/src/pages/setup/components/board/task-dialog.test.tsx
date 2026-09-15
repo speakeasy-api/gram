@@ -4,11 +4,13 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useOrgRoutes } from "@/routes";
 import { Suspense } from "react";
+import type { BoardTask } from "./board-store";
 import { TaskDialog } from "./task-dialog";
 import { ONBOARDING_TASKS, type OnboardingTaskId } from "./tasks";
 import { StepContainer, StepSupportButton } from "../step-container";
@@ -66,7 +68,11 @@ function RouteState() {
   );
 }
 
-function renderTask(id: OnboardingTaskId, projectSlug?: string) {
+function renderTask(
+  id: OnboardingTaskId,
+  projectSlug?: string,
+  overrides: Partial<BoardTask> = {},
+) {
   const definition = ONBOARDING_TASKS.find((task) => task.id === id)!;
   return render(
     <MemoryRouter initialEntries={["/example-org/setup"]}>
@@ -80,15 +86,15 @@ function renderTask(id: OnboardingTaskId, projectSlug?: string) {
           status: "todo",
           verified: false,
           hidden: false,
+          ...overrides,
         }}
         projectSlug={projectSlug}
-        canAssign={true}
+
         canSetStatus={true}
         isPending={false}
         error={null}
         onClose={vi.fn<() => void>()}
         onSetStatus={vi.fn<() => Promise<boolean>>().mockResolvedValue(true)}
-        onAssign={vi.fn<() => void>()}
       />
     </MemoryRouter>,
   );
@@ -144,13 +150,12 @@ describe("guided setup from the board dialog", () => {
             verified: true,
             hidden: false,
           }}
-          canAssign
+
           canSetStatus={false}
           isPending={false}
           error={null}
           onClose={onClose}
           onSetStatus={onSetStatus}
-          onAssign={vi.fn<() => void>()}
         />
       </MemoryRouter>,
     );
@@ -179,13 +184,12 @@ describe("guided setup from the board dialog", () => {
               verified: true,
               hidden: false,
             }}
-            canAssign
+
             canSetStatus={canSetStatus}
             isPending={false}
             error={null}
             onClose={vi.fn<() => void>()}
             onSetStatus={onSetStatus}
-            onAssign={vi.fn<() => void>()}
           />
         </MemoryRouter>,
       );
@@ -213,13 +217,12 @@ describe("guided setup from the board dialog", () => {
             verified: false,
             hidden: false,
           }}
-          canAssign
+
           canSetStatus
           isPending={false}
           error="Save failed"
           onClose={onClose}
           onSetStatus={onSetStatus}
-          onAssign={vi.fn<() => void>()}
         />
       </MemoryRouter>,
     );
@@ -249,13 +252,12 @@ describe("guided setup from the board dialog", () => {
               verified: false,
               hidden: false,
             }}
-            canAssign
+
             canSetStatus
             isPending={false}
             error={null}
             onClose={vi.fn<() => void>()}
             onSetStatus={onSetStatus}
-            onAssign={vi.fn<() => void>()}
           />
         </MemoryRouter>,
       );
@@ -288,4 +290,50 @@ describe("guided setup from the board dialog", () => {
       expect(screen.getByText("Inline task content")).toBeTruthy();
     },
   );
+});
+
+describe("TaskDialog presentation", () => {
+  it.each([true, false])(
+    "shows a single completed state (verified: %s)",
+    (verified) => {
+      renderTask("create-marketplace", undefined, { status: "done", verified });
+      expect(screen.queryByText("Verified")).toBeNull();
+      expect(screen.getAllByText("Done")).toHaveLength(1);
+      expect(
+        (screen.getByRole("combobox", { name: "Status" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(verified);
+      expect(
+        screen.queryByRole("list", { name: "Prerequisite tasks" }),
+      ).toBeNull();
+    },
+  );
+
+  it("shows named prerequisites rather than a joined warning", () => {
+    renderTask("confirm-traffic", undefined, {
+      blockedBy: ["instrument-agents", "create-marketplace"],
+    });
+    const dependencies = screen.getByRole("list", {
+      name: "Prerequisite tasks",
+    });
+    expect(within(dependencies).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      within(dependencies).getByText("Set up observability in other platforms"),
+    ).toBeTruthy();
+    expect(within(dependencies).getByText("Create marketplace")).toBeTruthy();
+    const callout = dependencies.parentElement!.parentElement!;
+    expect(callout.classList.contains("text-default-warning")).toBe(true);
+    expect(callout.className).not.toMatch(/(?:^| )(?:bg-|border|p[xy]-)/);
+    expect(dependencies.classList.contains("min-w-0")).toBe(true);
+    for (const item of within(dependencies).getAllByRole("listitem")) {
+      expect(item.classList.contains("max-w-full")).toBe(true);
+      expect(item.getAttribute("title")).toBe(item.textContent);
+      expect(item.classList.contains("truncate")).toBe(true);
+      expect(item.classList.contains("border")).toBe(true);
+      expect(item.classList.contains("bg-warning-softest")).toBe(true);
+      expect(item.classList.contains("border-warning-softest")).toBe(true);
+    }
+    expect(screen.queryByText(/Blocked by:/)).toBeNull();
+    expect(screen.queryByText("instrument-agents")).toBeNull();
+  });
 });
