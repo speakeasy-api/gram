@@ -23,7 +23,7 @@ vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => ({ isLoading: false }) }));
-vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
+vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanViewOrgSetup: () => false }));
 vi.mock("@/hooks/useNetworkIngressRollout", () => ({
   useNetworkIngressRollout: () => ({ adminRolloutEnabled: false }),
 }));

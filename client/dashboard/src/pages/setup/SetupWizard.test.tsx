@@ -2,12 +2,14 @@ import type { ReactNode } from "react";
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
+  within,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+import { MemoryRouter } from "react-router";
 import SetupWizard from "./SetupWizard";
 import { StepSection } from "./components/step-section";
 
@@ -25,7 +27,8 @@ const mocks = vi.hoisted(() => ({
   setSearchParams: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ orgSlug: "org" }),
   useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
   useNavigate: () => mocks.navigate,
@@ -38,9 +41,26 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("./components/setup-shell", () => ({
-  SetupShell: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("./components/onboarding-header", () => ({
+  OnboardingHeader: ({ children }: { children: ReactNode }) => (
+    <header>{children}</header>
+  ),
 }));
+vi.mock("./components/onboarding-footer", () => ({
+  OnboardingFooter: () => null,
+}));
+
+function render(view: ReactNode) {
+  return renderView(view, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[`/org/setup/wizard?${mocks.searchParams}`]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+}
 // A stand-in card with two real StepSections, so the rail is fed the same
 // way the real cards feed it.
 vi.mock("./components/setup-task-content", () => ({
@@ -436,4 +456,64 @@ describe("SetupWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledOnce();
   });
+});
+
+it("places the workstreams return above rail progress and keeps only a mobile header return", () => {
+  mocks.searchParams = new URLSearchParams(
+    "from=workstreams&task=anthropic-observability&step=confirm-traffic&projectSlug=selected&filter=mine",
+  );
+  render(<SetupWizard />);
+  const progress = screen.getByText("1 of 3 tasks complete");
+  const railReturn = within(progress.parentElement!).getByRole("link", {
+    name: "Workstreams",
+  });
+  expect(
+    railReturn.compareDocumentPosition(progress) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(railReturn.querySelector("svg.lucide-arrow-left")).not.toBeNull();
+  expect(railReturn.classList.contains("px-3")).toBe(true);
+  expect(railReturn.classList.contains("-ms-3")).toBe(true);
+  expect(railReturn.getAttribute("href")).toBe(
+    "/org/setup?projectSlug=selected&filter=mine",
+  );
+  expect(railReturn.closest(".md\\:block")?.classList.contains("hidden")).toBe(
+    true,
+  );
+  const headerReturns = within(screen.getByRole("banner")).getAllByRole(
+    "link",
+    { name: "Workstreams" },
+  );
+  expect(headerReturns).toHaveLength(1);
+  expect(headerReturns[0]!.classList.contains("pl-0")).toBe(false);
+  expect(headerReturns[0]!.parentElement!.className).toBe("md:hidden");
+});
+
+it("keeps the ordinary wizard view switch in the desktop header only", () => {
+  render(<SetupWizard />);
+  const link = screen.getByRole("link", { name: "Workstreams" });
+  expect(
+    within(screen.getByRole("banner")).getByRole("link", {
+      name: "Workstreams",
+    }),
+  ).toBe(link);
+  expect(link.closest(".md\\:hidden")).toBeNull();
+  expect(link.querySelector("svg.lucide-arrow-left")).toBeNull();
+});
+
+it("disables both rail and mobile return controls while a write is pending", () => {
+  mocks.searchParams = new URLSearchParams("from=workstreams");
+  mocks.updatePending = true;
+  render(<SetupWizard />);
+  expect(screen.queryByRole("link", { name: "Workstreams" })).toBeNull();
+  const controls = screen.getAllByRole("button", { name: "Workstreams" });
+  expect(controls).toHaveLength(2);
+  const progress = screen.getByText("1 of 3 tasks complete");
+  const railReturn = within(progress.parentElement!).getByRole("button", {
+    name: "Workstreams",
+  });
+  expect(railReturn.classList.contains("px-3")).toBe(true);
+  expect(railReturn.classList.contains("-ms-3")).toBe(true);
+  for (const control of controls)
+    expect(control.hasAttribute("disabled")).toBe(true);
 });
