@@ -257,6 +257,48 @@ describe("OktaSignOnSection", () => {
     ).toBeNull();
   });
 
+  it("says sign-in is waiting for its first sign-in, without calling it done", () => {
+    withStep(
+      signInStep({
+        state: "awaiting_verification",
+        lastOutcome: {
+          outcome: "pending_validation",
+          detail:
+            "Speakeasy has configured sign-in. It becomes active after the first successful sign-in through Okta.",
+          capabilities: [],
+          grantedScopes: [],
+          evidence: {
+            checkedAt: new Date("2026-09-15T12:00:00Z"),
+            reads: [],
+          },
+        },
+      }),
+    );
+    render(
+      <OktaSignOnSection
+        index={2}
+        connection={connection({ signInState: "application_created" })}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Sign-in is configured and waiting for its first sign-in",
+      ),
+    ).toBeTruthy();
+    // The server says what happens next better than we can, so its own
+    // sentence is the body rather than a footnote under ours.
+    expect(
+      screen.getByText(/becomes active after the first successful/),
+    ).toBeTruthy();
+    // Waiting is not failing: the check stays available and the step is open.
+    expect(
+      screen.getByRole("button", { name: "Check the connection" }),
+    ).toBeTruthy();
+    const section = screen.getByRole("region", { hidden: true });
+    expect(section.querySelector(".lucide-check")).toBeNull();
+  });
+
   it("shows both reads once the check passes, and completes the step", () => {
     withStep(
       signInStep({

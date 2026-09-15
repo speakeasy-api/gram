@@ -22,27 +22,46 @@ import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
+type VerifyCopy = {
+  title: string;
+  /**
+   * What the outcome means and what to do about it. Omitted where the server
+   * says that better than we can, in which case its detail is the body.
+   */
+  body?: string;
+  tone: "warning" | "info";
+};
+
 /**
- * One plain sentence per way a check can come back short. The server's own
- * `detail` says which value or scope; this says what it means and what to do,
- * so the administrator is not reading an error code.
+ * One plain sentence per way a check can come back other than passing. The
+ * server's own `detail` says which value or scope; this says what it means and
+ * what to do, so the administrator is not reading an error code. Not every
+ * outcome is a problem, so each says how it should read.
  */
-const VERIFY_COPY: Record<string, { title: string; body: string }> = {
+const VERIFY_COPY: Record<string, VerifyCopy> = {
+  pending_validation: {
+    title: "Sign-in is configured and waiting for its first sign-in",
+    tone: "info",
+  },
   unreachable: {
     title: "Speakeasy could not reach your Okta organization",
     body: "Check the organization URL, and that the address answers from outside your own network.",
+    tone: "warning",
   },
   refused: {
     title: "Okta refused the connection",
     body: "Okta answered, but would not accept what Speakeasy sent. The detail below is Okta's own reason.",
+    tone: "warning",
   },
   mismatched_value: {
     title: "Okta did not recognize what was configured",
     body: "Check the value you brought back, and the address you pasted for Speakeasy's public keys — a trailing slash is enough to break it.",
+    tone: "warning",
   },
   capability_missing: {
     title: "A scope is still missing",
     body: "Grant the missing scope on the application's Okta API Scopes tab in your console, then check again. Everything already granted keeps working.",
+    tone: "warning",
   },
 };
 
@@ -273,18 +292,24 @@ function VerifyResultBlock({
   }
 
   const copy = VERIFY_COPY[result.outcome];
+  // With nothing of our own to add, the server's sentence is the body rather
+  // than a footnote under a sentence that says less.
+  const body =
+    copy?.body ??
+    result.detail ??
+    "Speakeasy could not confirm the connection. Check the values above and try again.";
+  const quoted = copy?.body ? result.detail : undefined;
 
   return (
     <div className="space-y-3">
-      <Alert variant="warning" alignTop>
+      <Alert variant={copy?.tone ?? "warning"} alignTop>
         <div>
           <AlertTitle>{copy?.title ?? "The check did not pass"}</AlertTitle>
           <AlertDescription>
-            {copy?.body ??
-              "Speakeasy could not confirm the connection. Check the values above and try again."}
-            {result.detail ? (
+            {body}
+            {quoted ? (
               <span className="text-muted-foreground mt-1 block">
-                Okta said: {result.detail}
+                Okta said: {quoted}
               </span>
             ) : null}
           </AlertDescription>
