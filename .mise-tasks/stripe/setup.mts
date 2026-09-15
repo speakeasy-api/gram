@@ -1,7 +1,6 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE description="Provision and validate Stripe sandbox billing objects and initialize the local webhook secret"
-//USAGE flag "--listen" help="Opt this worktree into Pitchfork-managed webhook forwarding"
 
 // Idempotent: the meter is keyed on its event name and the price on its
 // lookup key, so re-running against a sandbox that already has the objects
@@ -13,7 +12,7 @@ import { $ } from "zx";
 import { execFileSync } from "node:child_process";
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
-import { localWebhookTarget, registerStripeListener } from "./helpers.mts";
+import { localWebhookTarget } from "./helpers.mts";
 import { getSetupReadiness, preflightStripeCLI } from "./readiness.mts";
 
 const METER_EVENT_NAME = "tum";
@@ -606,7 +605,6 @@ async function main() {
           quiet: true,
         })`mise set --stdin --file mise.local.toml ${name}`;
       }
-      if (process.env.usage_listen === "true") registerStripeListener();
       log.success(
         "Saved consistent test credentials and billing configuration to ignored mise.local.toml.",
       );
@@ -618,13 +616,8 @@ async function main() {
     log.info(`${check.ok ? "OK" : "ACTION"} ${check.message}`);
   const commands = [
     ["mise run stripe:status", "Check configuration and forwarding"],
-    ["mise run stripe:setup --listen", "Configure managed forwarding"],
-    ["pitchfork start stripe-listener", "Start forwarding"],
+    ["mise run stripe:listen", "Start/restart managed forwarding"],
     ["pitchfork restart server worker", "Reload saved billing credentials"],
-    [
-      "pitchfork restart stripe-listener",
-      "Restart forwarding after config changes",
-    ],
     ["pitchfork logs stripe-listener -n 50", "Inspect recent forwarding logs"],
     ["pitchfork stop stripe-listener", "Stop forwarding"],
   ] as const;

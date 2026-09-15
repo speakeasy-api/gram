@@ -36,7 +36,7 @@ for (const environment of ["production", "staging", ""]) {
       process.execPath,
       [
         "--experimental-strip-types",
-        join(root, ".mise-tasks/stripe/listen.mts"),
+        join(root, ".mise-tasks/stripe/_listen.mts"),
       ],
       {
         env: { ...process.env, GRAM_ENVIRONMENT: environment },
@@ -292,9 +292,15 @@ test("native local registration is opt-in, repeatable, and removable", () => {
     );
     writeFileSync(local, '[daemons.other]\nrun="true"\n');
     assert.equal(persistedStripeConfig(dir, env).enabled, false);
+    writeFileSync(
+      local,
+      readFileSync(local, "utf8") +
+        '[daemons.stripe-listener]\nrun="mise run stripe:listen"\n',
+    );
     registerStripeListener(dir);
     const registered = readFileSync(local, "utf8");
     assert.match(registered, /\[daemons\.stripe-listener\]/);
+    assert.match(registered, /run = "mise run stripe:_listen"/);
     assert.match(registered, /ready_cmd = "mise run stripe:status --ready"/);
     assert.match(registered, /depends = \["server"\]/);
     assert.match(registered, /\[daemons\.other\]/);
@@ -340,7 +346,7 @@ ${mode === "mismatch" ? "console.log('whsec_other');" : "console.error('expired_
       process.execPath,
       [
         "--experimental-strip-types",
-        join(root, ".mise-tasks/stripe/listen.mts"),
+        join(root, ".mise-tasks/stripe/_listen.mts"),
       ],
       {
         cwd: dir,
@@ -411,7 +417,10 @@ setInterval(() => {
   writeFileSync(join(dir, "bin/stripe"), script, { mode: 0o755 });
   const child = spawn(
     process.execPath,
-    ["--experimental-strip-types", join(root, ".mise-tasks/stripe/listen.mts")],
+    [
+      "--experimental-strip-types",
+      join(root, ".mise-tasks/stripe/_listen.mts"),
+    ],
     {
       cwd: dir,
       env: {

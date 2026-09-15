@@ -43,7 +43,7 @@ References:
    ```sh
    mise install stripe
    mise set --prompt --file mise.local.toml STRIPE_API_KEY
-   mise run stripe:setup --listen
+   mise run stripe:setup
    ```
 
    Setup preflights the managed CLI, local target and
@@ -83,18 +83,21 @@ References:
    ```sh
    mise run wake
    pitchfork restart server worker
-   # If forwarding was already running before setup/rotation:
-   pitchfork restart stripe-listener
+   mise run stripe:listen
    mise run stripe:status
    # When finished:
    mise run pause
    ```
 
-   `--listen` registers the daemon in ignored `pitchfork.local.toml` using
-   `pitchfork daemons add --local`. Without it, no Stripe daemon is configured.
-   Re-running setup without `--listen` preserves an existing opt-in. Native
-   `pitchfork start --all-local` (including wake) starts opted-in forwarding;
-   pause stops it with the other worktree daemons. Setup/status
+   Setup saves billing configuration; `mise run stripe:listen` validates it,
+   registers the daemon in ignored `pitchfork.local.toml` using native Pitchfork,
+   and starts the supervisor and listener. Repeating `stripe:listen` overwrites
+   old registrations and restarts forwarding with fresh configuration. The
+   foreground task `stripe:_listen` is hidden and used only by Pitchfork.
+   Listen does not reload server/worker: restart them after saving billing config.
+   Setup alone does not register forwarding or remove an existing registration.
+   Native `pitchfork start --all-local` (including wake) starts registered
+   forwarding; pause stops it with the other worktree daemons. Setup/status
    report missing credentials, server/listener readiness and
    remediation without printing secrets. After key/config changes, restart the
    relevant daemons with fresh mise configuration as directed by status.

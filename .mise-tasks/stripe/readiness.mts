@@ -47,7 +47,7 @@ export async function getSetupReadiness(
     add(
       "saved-config",
       false,
-      "Missing or invalid local configuration. Run stripe:setup --listen.",
+      "Missing or invalid local configuration. Run mise run stripe:setup, then mise run stripe:listen.",
     );
   }
   let targetOK = false;
@@ -84,7 +84,7 @@ export async function getSetupReadiness(
     same,
     same
       ? "Current environment agrees with saved configuration; restart server/worker after changes (running process credentials are not inspected)."
-      : "Current environment differs from saved configuration. Open a fresh mise shell and restart server, worker and stripe-listener.",
+      : "Current environment differs from saved configuration. Open a fresh mise shell, reload server/worker and run mise run stripe:listen.",
   );
   const catalog =
     /^price_/.test(local.STRIPE_PRICE_ID_TUM ?? "") &&

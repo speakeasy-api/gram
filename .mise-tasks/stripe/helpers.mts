@@ -22,7 +22,7 @@ export function registerStripeListener(root = process.cwd()): void {
         "stripe-listener",
         "--local",
         "--run",
-        "mise run stripe:listen",
+        "mise run stripe:_listen",
         "--ready-cmd",
         "mise run stripe:status --ready",
         "--depends",
@@ -32,7 +32,7 @@ export function registerStripeListener(root = process.cwd()): void {
     );
   } catch {
     throw new Error(
-      "Cannot register the listener in pitchfork.local.toml. Check Pitchfork and the local configuration, then rerun stripe:setup --listen.",
+      "Cannot register the listener in pitchfork.local.toml. Check Pitchfork and the local configuration, then rerun mise run stripe:listen.",
     );
   }
 }
@@ -103,7 +103,7 @@ export function localWebhookTarget(serverURL: string, port: string): string {
 
 export function stripeConfigIssue(config: StripeConfig): string | undefined {
   if (!config.enabled)
-    return "Listener disabled. Run mise run stripe:setup --listen to opt in.";
+    return "Listener disabled. Run mise run stripe:listen to opt in.";
   if (!/^(sk|rk)_test_[A-Za-z0-9_]+$/.test(config.key))
     return "Persist a Stripe sandbox test key with mise run stripe:setup; CLI login credentials are not used.";
   if (!/^whsec_[A-Za-z0-9]+$/.test(config.secret))
@@ -242,12 +242,12 @@ export function evaluateStripeReadiness(
   if (!state || state.fingerprint !== stripeFingerprint(config))
     return result(
       "not-running",
-      "Listener absent or configuration changed. Run mise run wake (or pitchfork restart stripe-listener).",
+      "Listener absent or configuration changed. Run mise run stripe:listen.",
     );
   if (state.phase === "expired")
     return result(
       "key-expired",
-      "Stripe API key expired (CLI-created keys expire). Run mise run stripe:setup with a fresh sandbox key, then restart stripe-listener.",
+      "Stripe API key expired (CLI-created keys expire). Run mise run stripe:setup with a fresh sandbox key, reload server/worker and run mise run stripe:listen.",
     );
   if (state.phase === "auth-failed")
     return result(
@@ -257,12 +257,12 @@ export function evaluateStripeReadiness(
   if (state.phase === "secret-mismatch")
     return result(
       "secret-mismatch",
-      "Listener signing secret differs from the persisted server secret. Run mise run stripe:setup, restart server and stripe-listener.",
+      "Listener signing secret differs from the persisted server secret. Run mise run stripe:setup, reload server/worker and run mise run stripe:listen.",
     );
   if (!alive || state.phase === "stopped")
     return result(
       "not-running",
-      "Listener stopped. Run mise run wake (or pitchfork start stripe-listener).",
+      "Listener stopped. Run mise run stripe:listen.",
     );
   if (state.phase === "disconnected")
     return result(
