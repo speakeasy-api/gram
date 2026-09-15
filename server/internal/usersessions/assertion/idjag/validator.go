@@ -1,5 +1,3 @@
-// Package idjag validates identity assertion JWT authorization grants and
-// resolves their enterprise identities to provisioned Gram users.
 package idjag
 
 import (
@@ -20,116 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
-const (
-	// Type is the protected JWT header type for an ID-JAG.
-	Type = "oauth-id-jag+jwt"
-
-	// MaxLifetime bounds how far an ID-JAG expiration can be in the future.
-	MaxLifetime = 10 * time.Minute
-
-	maxBytes = 32 * 1024
-)
-
-// Reason identifies a rejected assertion or an unavailable validation input.
-type Reason string
-
-const (
-	ReasonMalformed              Reason = "assertion_malformed"
-	ReasonTypeMismatch           Reason = "assertion_type_mismatch"
-	ReasonTrustUnavailable       Reason = "trusted_issuer_unavailable"
-	ReasonIssuerMismatch         Reason = "assertion_issuer_mismatch"
-	ReasonKeyUnknown             Reason = "assertion_key_unknown"
-	ReasonKeyUnresolvable        Reason = "assertion_key_unresolvable"
-	ReasonSignatureInvalid       Reason = "assertion_signature_invalid"
-	ReasonClaimsMalformed        Reason = "assertion_claims_malformed"
-	ReasonAudienceMismatch       Reason = "assertion_audience_mismatch"
-	ReasonResourceMismatch       Reason = "assertion_resource_mismatch"
-	ReasonClientMismatch         Reason = "assertion_client_mismatch"
-	ReasonSubjectMissing         Reason = "assertion_subject_missing"
-	ReasonEmailMissing           Reason = "assertion_email_missing"
-	ReasonExpiryMissing          Reason = "assertion_expiry_missing"
-	ReasonExpired                Reason = "assertion_expired"
-	ReasonNotYetValid            Reason = "assertion_not_yet_valid"
-	ReasonLifetimeTooLong        Reason = "assertion_lifetime_too_long"
-	ReasonIDMissing              Reason = "assertion_id_missing"
-	ReasonNotProvisioned         Reason = "subject_not_provisioned"
-	ReasonSubjectUnavailable     Reason = "subject_resolution_unavailable"
-	ReasonReplayed               Reason = "assertion_replayed"
-	ReasonReplayStoreUnavailable Reason = "assertion_replay_store_unavailable"
-	ReasonVerifierMisconfigured  Reason = "assertion_verifier_misconfigured"
-)
-
-// Error is a typed rejection. Callers may log Err but must not echo it to an
-// OAuth client: it can contain key-set URLs or storage details.
-type Error struct {
-	Reason Reason
-	Err    error
-}
-
-func (e *Error) Error() string { return fmt.Sprintf("%s: %v", e.Reason, e.Err) }
-func (e *Error) Unwrap() error { return e.Err }
-
-// ReasonOf returns the rejection reason, or an empty value for another error.
-func ReasonOf(err error) Reason {
-	if typed, ok := errors.AsType[*Error](err); ok {
-		return typed.Reason
-	}
-	return ""
-}
-
-func reject(reason Reason, err error) error { return &Error{Reason: reason, Err: err} }
-
-// ErrNotProvisioned is returned by a subject store when no active directory
-// identity maps to an active Gram member in the same organization.
-var ErrNotProvisioned = errors.New("enterprise identity is not provisioned")
-
-// ErrNoTrustedIssuer is returned when the user session issuer has no active,
-// organization-accessible trusted issuer.
-var ErrNoTrustedIssuer = errors.New("user session issuer has no trusted remote issuer")
-
-// TrustedIssuer is the issuer reached through the user session issuer's
-// configured trust link, never through a search on an assertion's iss claim.
-type TrustedIssuer struct {
-	ID      uuid.UUID
-	Issuer  string
-	JWKSURI string
-}
-
-// Store supplies the trusted-issuer link and active directory membership.
-type Store interface {
-	TrustedIssuer(ctx context.Context, organizationID string, userSessionIssuerID uuid.UUID) (TrustedIssuer, error)
-	ResolveUser(ctx context.Context, organizationID, email string) (string, error)
-}
-
-// Request contains trusted endpoint and authenticated-client values supplied
-// by the grant handler; none is taken from the unverified JWT.
-type Request struct {
-	OrganizationID      string
-	UserSessionIssuerID uuid.UUID
-	Audience            string
-	Resource            string
-	ClientID            string
-}
-
-// Claims are the verified ID-JAG values needed by a grant handler.
-type Claims struct {
-	Issuer          string
-	ExternalSubject string
-	Email           string
-	Resource        string
-	ClientID        string
-	JTI             string
-	Scope           string
-	ExpiresAt       time.Time
-}
-
-// Result is an accepted Gram user subject and its verified grant claims.
-type Result struct {
-	Subject         urn.SessionSubject
-	TrustedIssuerID uuid.UUID
-	Claims          Claims
-}
-
 // Validator checks an ID-JAG and reserves its identifier only after its
 // subject has resolved, so a transient directory failure remains retryable.
 type Validator struct {
@@ -147,13 +35,6 @@ func NewValidator(keys assertioncore.VerificationKeys, guard assertioncore.Repla
 		return nil, fmt.Errorf("idjag: replay guard hold %s is shorter than %s", guard.MaxHold(), assertioncore.ReplayHoldFor(MaxLifetime))
 	}
 	return &Validator{keys: keys, guard: guard, store: store}, nil
-}
-
-type additionalClaims struct {
-	Resource string `json:"resource"`
-	ClientID string `json:"client_id"`
-	Email    string `json:"email"`
-	Scope    string `json:"scope"`
 }
 
 // Validate authenticates and resolves a presented ID-JAG. It never mints a

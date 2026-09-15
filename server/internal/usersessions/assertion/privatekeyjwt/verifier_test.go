@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -23,7 +23,7 @@ func TestVerify_HappyPath(t *testing.T) {
 	s := newSigner(t, testKeyID)
 	result, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expectationFor(t, s))
 	require.NoError(t, err)
-	require.Equal(t, clientauth.AudienceKindIssuer, result.Audience)
+	require.Equal(t, privatekeyjwt.AudienceKindIssuer, result.Audience)
 	require.False(t, result.ExpiresAt.IsZero())
 }
 
@@ -39,7 +39,7 @@ func TestVerify_AudienceEndpointAccepted(t *testing.T) {
 
 	result, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
 	require.NoError(t, err)
-	require.Equal(t, clientauth.AudienceKindEndpoint, result.Audience)
+	require.Equal(t, privatekeyjwt.AudienceKindEndpoint, result.Audience)
 }
 
 // An assertion naming several audiences is accepted when any one of them is
@@ -67,7 +67,7 @@ func TestVerify_AudienceForAnotherServerRejected(t *testing.T) {
 	claims.Audience = jwt.Audience{"https://gram.example.com/mcp/other-tenant"}
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonAudienceMismatch)
+	requireRejected(t, err, privatekeyjwt.ReasonAudienceMismatch)
 }
 
 func TestVerify_AudienceMissingRejected(t *testing.T) {
@@ -78,7 +78,7 @@ func TestVerify_AudienceMissingRejected(t *testing.T) {
 	claims.Audience = nil
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonAudienceMismatch)
+	requireRejected(t, err, privatekeyjwt.ReasonAudienceMismatch)
 }
 
 // The canonical algorithm-confusion attack: sign HS256 using the client's own
@@ -107,7 +107,7 @@ func TestVerify_HS256WithPublicKeyRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(forged), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonMalformed)
+	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 }
 
 // An unsigned assertion proves nothing and is refused at parse time for the
@@ -121,7 +121,7 @@ func TestVerify_AlgNoneRejected(t *testing.T) {
 		"eyJpc3MiOiJodHRwczovL2NsaWVudC5leGFtcGxlLmNvbS9vYXV0aC9jbGllbnQuanNvbiJ9."
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(unsigned), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonMalformed)
+	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 }
 
 // A signature made with a key the client never published must not verify,
@@ -135,7 +135,7 @@ func TestVerify_SignatureFromForeignKeyRejected(t *testing.T) {
 	attacker := newSigner(t, testKeyID)
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(attacker.sign(t, validClaims())), expectationFor(t, published))
-	requireRejected(t, err, clientauth.ReasonSignatureInvalid)
+	requireRejected(t, err, privatekeyjwt.ReasonSignatureInvalid)
 }
 
 // A kid naming no published key is terminal for an inline key set, which has
@@ -148,7 +148,7 @@ func TestVerify_UnknownKidRejected(t *testing.T) {
 
 	expect := expectationFor(t, published)
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(other.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonKeyUnknown)
+	requireRejected(t, err, privatekeyjwt.ReasonKeyUnknown)
 }
 
 func TestVerify_IssuerSubjectMustEqualClientID(t *testing.T) {
@@ -159,12 +159,12 @@ func TestVerify_IssuerSubjectMustEqualClientID(t *testing.T) {
 	mismatchedSubject := validClaims()
 	mismatchedSubject.Subject = "https://client.example.com/oauth/other.json"
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, mismatchedSubject)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
+	requireRejected(t, err, privatekeyjwt.ReasonSubjectMismatch)
 
 	mismatchedIssuer := validClaims()
 	mismatchedIssuer.Issuer = "https://client.example.com/oauth/other.json"
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, mismatchedIssuer)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
+	requireRejected(t, err, privatekeyjwt.ReasonSubjectMismatch)
 }
 
 func TestVerify_ExpiredRejected(t *testing.T) {
@@ -175,7 +175,7 @@ func TestVerify_ExpiredRejected(t *testing.T) {
 	claims.Expiry = jwt.NewNumericDate(time.Now().Add(-10 * time.Minute))
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonExpired)
+	requireRejected(t, err, privatekeyjwt.ReasonExpired)
 }
 
 func TestVerify_MissingExpiryRejected(t *testing.T) {
@@ -186,7 +186,7 @@ func TestVerify_MissingExpiryRejected(t *testing.T) {
 	claims.Expiry = nil
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonExpiryMissing)
+	requireRejected(t, err, privatekeyjwt.ReasonExpiryMissing)
 }
 
 // An assertion valid far into the future is refused: the ceiling bounds how
@@ -199,7 +199,7 @@ func TestVerify_OverlongLifetimeRejected(t *testing.T) {
 	claims.Expiry = jwt.NewNumericDate(time.Now().Add(25 * time.Hour))
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonLifetimeTooLong)
+	requireRejected(t, err, privatekeyjwt.ReasonLifetimeTooLong)
 }
 
 // An hour is inside the ceiling, because that is what stock client libraries
@@ -209,7 +209,7 @@ func TestVerify_OneHourLifetimeAccepted(t *testing.T) {
 
 	s := newSigner(t, testKeyID)
 	claims := validClaims()
-	claims.Expiry = jwt.NewNumericDate(time.Now().Add(clientauth.DefaultMaxLifetime))
+	claims.Expiry = jwt.NewNumericDate(time.Now().Add(privatekeyjwt.DefaultMaxLifetime))
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
 	require.NoError(t, err)
@@ -223,12 +223,12 @@ func TestVerify_NotYetValidRejected(t *testing.T) {
 	future := validClaims()
 	future.NotBefore = jwt.NewNumericDate(time.Now().Add(10 * time.Minute))
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, future)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonNotYetValid)
+	requireRejected(t, err, privatekeyjwt.ReasonNotYetValid)
 
 	issuedAhead := validClaims()
 	issuedAhead.IssuedAt = jwt.NewNumericDate(time.Now().Add(10 * time.Minute))
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, issuedAhead)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonNotYetValid)
+	requireRejected(t, err, privatekeyjwt.ReasonNotYetValid)
 }
 
 // Clock drift within the tolerated skew must not break a legitimate client.
@@ -266,7 +266,7 @@ func TestVerify_MissingJTIRejected(t *testing.T) {
 	claims.ID = ""
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonIDMissing)
+	requireRejected(t, err, privatekeyjwt.ReasonIDMissing)
 }
 
 // The replay property: presenting the same assertion twice fails the second
@@ -283,7 +283,7 @@ func TestVerify_ReplayedAssertionRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), expect)
-	requireRejected(t, err, clientauth.ReasonReplayed)
+	requireRejected(t, err, privatekeyjwt.ReasonReplayed)
 }
 
 // The reservation spans every endpoint sharing a replay issuer, so an
@@ -304,7 +304,7 @@ func TestVerify_ReplaySpansEndpoints(t *testing.T) {
 	atRevoke := expectationFor(t, s)
 	atRevoke.Audiences.Endpoint = "https://gram.example.com/mcp/demo/revoke"
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), atRevoke)
-	requireRejected(t, err, clientauth.ReasonReplayed)
+	requireRejected(t, err, privatekeyjwt.ReasonReplayed)
 }
 
 // A different client's identical jti is not a replay: identifiers are only
@@ -325,11 +325,11 @@ func TestVerify_ReplayScopedToClient(t *testing.T) {
 	otherClaims.Issuer = otherClientID
 	otherClaims.Subject = otherClientID
 
-	expect := clientauth.ClientExpectation(
+	expect := privatekeyjwt.ClientExpectation(
 		otherClientID,
 		second.source(t),
 		t.Name(),
-		clientauth.Audiences{Issuer: testIssuer, Endpoint: testTokenURL},
+		privatekeyjwt.Audiences{Issuer: testIssuer, Endpoint: testTokenURL},
 	)
 	_, err = verifier.Verify(t.Context(), assertionFor(second.sign(t, otherClaims)), expect)
 	require.NoError(t, err, "another client reusing the same jti is not a replay")
@@ -339,10 +339,10 @@ func TestVerify_WrongAssertionTypeRejected(t *testing.T) {
 	t.Parallel()
 
 	s := newSigner(t, testKeyID)
-	req := clientauth.Assertion{Value: s.sign(t, validClaims()), Type: "urn:example:something-else"}
+	req := privatekeyjwt.Assertion{Value: s.sign(t, validClaims()), Type: "urn:example:something-else"}
 
 	_, err := newVerifier(t).Verify(t.Context(), req, expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonTypeUnsupported)
+	requireRejected(t, err, privatekeyjwt.ReasonTypeUnsupported)
 }
 
 func TestVerify_MissingAssertionRejected(t *testing.T) {
@@ -350,11 +350,11 @@ func TestVerify_MissingAssertionRejected(t *testing.T) {
 
 	s := newSigner(t, testKeyID)
 
-	_, err := newVerifier(t).Verify(t.Context(), clientauth.Assertion{}, expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonAssertionMissing)
+	_, err := newVerifier(t).Verify(t.Context(), privatekeyjwt.Assertion{}, expectationFor(t, s))
+	requireRejected(t, err, privatekeyjwt.ReasonAssertionMissing)
 
-	_, err = newVerifier(t).Verify(t.Context(), clientauth.Assertion{Type: clientauth.AssertionType}, expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonAssertionMissing)
+	_, err = newVerifier(t).Verify(t.Context(), privatekeyjwt.Assertion{Type: privatekeyjwt.AssertionType}, expectationFor(t, s))
+	requireRejected(t, err, privatekeyjwt.ReasonAssertionMissing)
 }
 
 func TestVerify_GarbageAssertionRejected(t *testing.T) {
@@ -363,7 +363,7 @@ func TestVerify_GarbageAssertionRejected(t *testing.T) {
 	s := newSigner(t, testKeyID)
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor("not-a-jwt"), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonMalformed)
+	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 }
 
 // An incompletely assembled Expectation is a wiring fault, and each omission
@@ -378,21 +378,21 @@ func TestVerify_MisconfiguredExpectationRejected(t *testing.T) {
 	assertion := s.sign(t, validClaims())
 
 	noAudiences := expectationFor(t, s)
-	noAudiences.Audiences = clientauth.Audiences{Issuer: "", Endpoint: ""}
+	noAudiences.Audiences = privatekeyjwt.Audiences{Issuer: "", Endpoint: ""}
 	_, err := verifier.Verify(t.Context(), assertionFor(assertion), noAudiences)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+	requireRejected(t, err, privatekeyjwt.ReasonVerifierMisconfigured)
 
 	noReplayIssuer := expectationFor(t, s)
 	noReplayIssuer.ReplayIssuer = ""
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noReplayIssuer)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+	requireRejected(t, err, privatekeyjwt.ReasonVerifierMisconfigured)
 
 	// An empty client_id would otherwise be satisfied by an assertion that
 	// simply omits iss and sub.
 	noClientID := expectationFor(t, s)
 	noClientID.ClientID = ""
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noClientID)
-	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+	requireRejected(t, err, privatekeyjwt.ReasonVerifierMisconfigured)
 }
 
 // Matching iss alone cannot authenticate a client whose sub names another.
@@ -405,7 +405,7 @@ func TestVerify_SubjectMustMatchIndependentlyOfIssuer(t *testing.T) {
 	claims.Subject = "someone-else"
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
+	requireRejected(t, err, privatekeyjwt.ReasonSubjectMismatch)
 }
 
 // A guard whose cap is shorter than the window an assertion stays acceptable
@@ -417,10 +417,10 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), clientauth.DefaultMaxReplayHold-time.Second)
+	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), privatekeyjwt.DefaultMaxReplayHold-time.Second)
 	require.NoError(t, err)
 
-	_, err = clientauth.NewVerifier(newKeyResolver(t, client), short)
+	_, err = privatekeyjwt.NewVerifier(newKeyResolver(t, client), short)
 	require.Error(t, err)
 }
 
@@ -431,7 +431,7 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 func TestMaxReplayHold_CoversAcceptanceWindow(t *testing.T) {
 	t.Parallel()
 
-	require.GreaterOrEqual(t, clientauth.DefaultMaxReplayHold, clientauth.DefaultMaxLifetime+2*clientauth.MaxSkew)
+	require.GreaterOrEqual(t, privatekeyjwt.DefaultMaxReplayHold, privatekeyjwt.DefaultMaxLifetime+2*privatekeyjwt.MaxSkew)
 }
 
 // An assertion presented without its type parameter is a malformed request,
@@ -441,10 +441,10 @@ func TestVerify_AssertionWithoutTypeRejected(t *testing.T) {
 	t.Parallel()
 
 	s := newSigner(t, testKeyID)
-	req := clientauth.Assertion{Value: s.sign(t, validClaims()), Type: ""}
+	req := privatekeyjwt.Assertion{Value: s.sign(t, validClaims()), Type: ""}
 
 	_, err := newVerifier(t).Verify(t.Context(), req, expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonTypeUnsupported)
+	requireRejected(t, err, privatekeyjwt.ReasonTypeUnsupported)
 	require.ErrorContains(t, err, "client_assertion_type is required")
 }
 
@@ -458,14 +458,14 @@ func TestVerify_OversizedAssertionRejected(t *testing.T) {
 	oversized := s.sign(t, validClaims()) + strings.Repeat("A", 8*1024)
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(oversized), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonMalformed)
+	requireRejected(t, err, privatekeyjwt.ReasonMalformed)
 	require.ErrorContains(t, err, "exceeds")
 }
 
 func TestNewVerifier_RequiresDependencies(t *testing.T) {
 	t.Parallel()
 
-	_, err := clientauth.NewVerifier(nil, nil)
+	_, err := privatekeyjwt.NewVerifier(nil, nil)
 	require.Error(t, err, "a verifier with no key resolver cannot check a signature")
 }
 
@@ -507,7 +507,7 @@ func TestVerify_NoKidResolution(t *testing.T) {
 	expect := expectationFor(t, first)
 	expect.KeySource = source
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(first.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonKeyUnknown)
+	requireRejected(t, err, privatekeyjwt.ReasonKeyUnknown)
 }
 
 // A replay store that cannot be consulted refuses the assertion with its own
@@ -524,13 +524,13 @@ func TestVerify_ReplayStoreOutageRefuses(t *testing.T) {
 	// A client pointed at nothing: every command fails at dial time.
 	dead := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
 	t.Cleanup(func() { _ = dead.Close() })
-	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), clientauth.DefaultMaxReplayHold)
+	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), privatekeyjwt.DefaultMaxReplayHold)
 	require.NoError(t, err)
-	verifier, err := clientauth.NewVerifier(newKeyResolver(t, live), guard)
+	verifier, err := privatekeyjwt.NewVerifier(newKeyResolver(t, live), guard)
 	require.NoError(t, err)
 
 	_, err = verifier.Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonReplayStoreUnavailable)
+	requireRejected(t, err, privatekeyjwt.ReasonReplayStoreUnavailable)
 }
 
 // A source that resolves to nothing usable is distinguished from a key that
@@ -546,7 +546,7 @@ func TestVerify_UnresolvableKeySourceReported(t *testing.T) {
 	expect.KeySource = broken
 
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonKeyUnresolvable)
+	requireRejected(t, err, privatekeyjwt.ReasonKeyUnresolvable)
 }
 
 // The client profile is unchanged, and this is what proves the relaxation is
@@ -560,7 +560,7 @@ func TestVerify_ClientWithoutJTIStillRejected(t *testing.T) {
 	claims.ID = ""
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
-	requireRejected(t, err, clientauth.ReasonIDMissing)
+	requireRejected(t, err, privatekeyjwt.ReasonIDMissing)
 }
 
 // A client assertion carries a jti and never consults uti, so whatever an
@@ -608,7 +608,7 @@ func TestVerify_KeyOpsMustIncludeVerify(t *testing.T) {
 
 	expect.KeySource = keySourceWithOps(t, s, `["sign"]`)
 	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
-	requireRejected(t, err, clientauth.ReasonKeyUnknown)
+	requireRejected(t, err, privatekeyjwt.ReasonKeyUnknown)
 }
 
 func TestVerify_SelectsMatchingAlgorithmWhenKidIsShared(t *testing.T) {

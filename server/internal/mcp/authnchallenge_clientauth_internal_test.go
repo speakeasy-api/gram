@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -26,6 +26,6 @@ func TestVerifyClientAssertion_NoVerifierRefuses(t *testing.T) {
 		TokenEndpointAuthMethod: pgtype.Text{String: "private_key_jwt", Valid: true},
 		ClientJwks:              []byte(`{"keys":[]}`),
 	}
-	reason := svc.verifyClientAssertion(t.Context(), testenv.NewLogger(t), &ResolvedMcpEndpoint{}, clientAssertionAtToken, row, clientauth.Assertion{Value: "x", Type: clientauth.AssertionType}, "https://gram.example.com")
+	reason := svc.verifyClientAssertion(t.Context(), testenv.NewLogger(t), &ResolvedMcpEndpoint{}, clientAssertionAtToken, row, privatekeyjwt.Assertion{Value: "x", Type: privatekeyjwt.AssertionType}, "https://gram.example.com")
 	require.Equal(t, "assertion_verifier_unavailable", reason)
 }

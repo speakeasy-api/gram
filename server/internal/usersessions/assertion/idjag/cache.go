@@ -38,13 +38,6 @@ func issuerCacheKey(organizationID string, id uuid.UUID, issuer, uri string) str
 	return url.QueryEscape(organizationID) + "|" + id.String() + "|" + url.QueryEscape(issuer) + "|" + uri
 }
 
-type issuerCacheIdentity struct {
-	organizationID string
-	id             uuid.UUID
-	issuer         string
-	uri            string
-}
-
 func splitIssuerCacheKey(key string) (issuerCacheIdentity, error) {
 	organizationText, rest, ok := strings.Cut(key, "|")
 	if !ok {
