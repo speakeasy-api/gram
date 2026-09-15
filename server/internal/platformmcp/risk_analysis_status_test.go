@@ -280,5 +280,7 @@ func TestRiskAnalysisStatusToolLiveWhenPolicyReadsUnavailable(t *testing.T) {
 	for _, d := range reg.Descriptors() {
 		names[d.Name]++
 	}
-	require.Equal(t, 1, names["get_risk_analysis_status"])
+	for _, name := range []string{"get_risk_analysis_status", "list_risk_policies", "get_risk_policy", "list_risk_exclusions"} {
+		require.Equal(t, 1, names[name], name)
+	}
 }
