@@ -149,7 +149,6 @@ func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "inferred-test", Version: "0.0.1"}, nil)
 	registrar := newRegistrar(server)
-	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})
 	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
 		return nil, explicitSchemaOutput(input), nil
 	})

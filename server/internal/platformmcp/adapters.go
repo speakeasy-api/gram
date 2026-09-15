@@ -104,8 +104,9 @@ func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgA
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
-	if a != nil {
-		a.dashboardURL = dashboardURL
+	if a != nil && validDashboardURL(dashboardURL) {
+		copyURL := *dashboardURL
+		a.dashboardURL = &copyURL
 	}
 	return a
 }

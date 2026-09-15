@@ -59,6 +59,24 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestLiveOrgAdminAuthorizerAcceptsOnlySafeDashboardURL(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"http://app.example.test", "https://user@app.example.test"} {
+		parsed, err := url.Parse(raw)
+		require.NoError(t, err)
+		authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+		require.Nil(t, authorizer.dashboardURL)
+	}
+
+	parsed, err := url.Parse("https://app.example.test/base")
+	require.NoError(t, err)
+	authorizer := NewLiveOrgAdminAuthorizer(nil, nil).WithDashboardURL(parsed)
+	require.NotNil(t, authorizer.dashboardURL)
+	parsed.Host = "mutated.example.test"
+	require.Equal(t, "app.example.test", authorizer.dashboardURL.Host)
+}
+
 func TestLiveExternalAuthorizationUsesCurrentMemberGrants(t *testing.T) {
 	t.Parallel()
 
