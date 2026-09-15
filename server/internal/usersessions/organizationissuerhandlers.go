@@ -329,17 +329,7 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
 	}
 
-	preflight, err := organizationIssuerDeletePreflight(ctx, s.logger, q, id, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	count, err := remotesessionsrepo.New(s.db).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
-	}
-	preflight.EmaBindingCount = count
-	preflight.CanDelete = preflight.CanDelete && count == 0
-	return preflight, nil
+	return organizationIssuerDeletePreflight(ctx, s.logger, q, remotesessionsrepo.New(s.db), id, authCtx.ActiveOrganizationID)
 }
 
 // DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
@@ -374,7 +364,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
 	}
 
-	preflight, err := organizationIssuerDeletePreflight(ctx, logger, txRepo, id, authCtx.ActiveOrganizationID)
+	preflight, err := organizationIssuerDeletePreflight(ctx, logger, txRepo, remotesessionsrepo.New(dbtx), id, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return err
 	}
@@ -425,7 +415,11 @@ type organizationIssuerPreflightQueries interface {
 	ListOrganizationUserSessionIssuerToolsets(context.Context, repo.ListOrganizationUserSessionIssuerToolsetsParams) ([]repo.ListOrganizationUserSessionIssuerToolsetsRow, error)
 }
 
-func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
+func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, bindings *remotesessionsrepo.Queries, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
+	count, err := bindings.CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings").LogError(ctx, logger)
+	}
 	clients, err := q.CountOrganizationUserSessionIssuerClients(ctx, repo.CountOrganizationUserSessionIssuerClientsParams{UserSessionIssuerID: id, OrganizationID: organizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count organization user session issuer clients").LogError(ctx, logger)
@@ -452,11 +446,11 @@ func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger,
 		toolsets = append(toolsets, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
 	}
 	return &orggen.OrganizationUserSessionIssuerDeletePreflight{
-		EmaBindingCount:  0,
+		EmaBindingCount:  count,
 		ClientCount:      int(clients),
 		LiveSessionCount: int(sessions),
 		McpServers:       mcpServers,
 		Toolsets:         toolsets,
-		CanDelete:        len(mcpServers) == 0 && len(toolsets) == 0,
+		CanDelete:        count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
 	}, nil
 }

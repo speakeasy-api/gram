@@ -3031,7 +3031,7 @@ func (q *Queries) GetPreparationFixtureInteractiveClient(ctx context.Context, ar
 }
 
 const getPreparationFixtureRegistration = `-- name: GetPreparationFixtureRegistration :one
-SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id WHERE b.id = $1 AND b.project_id = $2 AND b.organization_id = $3
+SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id AND (c.project_id = b.project_id OR (c.project_id IS NULL AND c.organization_id = b.organization_id)) WHERE b.id = $1 AND b.project_id = $2 AND b.organization_id = $3
 `
 
 type GetPreparationFixtureRegistrationParams struct {
