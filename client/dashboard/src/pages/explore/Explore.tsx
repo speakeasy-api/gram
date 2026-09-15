@@ -4,14 +4,26 @@ import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useState, type JSX } from "react";
-import { initialSpec, type ExploreSpec } from "./exploreModel";
+import { useMemo, useState, type JSX } from "react";
+import {
+  findDataset,
+  hasChartShape,
+  initialSpec,
+  queryBodyFromSpec,
+  type ExploreSpec,
+} from "./exploreModel";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
+import { useRunQuery } from "./useRunQuery";
+
+// A burst of edits is one query: the builder waits this long after the last
+// keystroke before asking.
+export const QUERY_DEBOUNCE_MS = 300;
 
 // Explore: ask questions of this project's agent activity. The page is
 // strictly project-scoped — the active project is the only one queried — and
@@ -41,7 +53,7 @@ function ExploreHeader(): JSX.Element {
       </div>
       <p className="text-muted-foreground text-sm">
         Pick a dataset, choose what to measure, and break it down by the fields
-        this project reports.
+        this project reports. Results follow as you build.
       </p>
     </div>
   );
@@ -113,10 +125,31 @@ function ExploreWorkbench({
   draft: ExploreSpec | null;
   onChange: (spec: ExploreSpec) => void;
 }): JSX.Element {
-  // Derived during render: until the user edits something, the builder opens
-  // on the catalog's first dataset.
-  const spec = draft ?? initialSpec(datasets);
-  if (!spec) {
+  // Until the user edits something, the builder opens on the catalog's first
+  // dataset. Memoized so the debounce below sees one value, not a new object
+  // every render.
+  const opening = useMemo(() => initialSpec(datasets), [datasets]);
+  const spec = draft ?? opening;
+
+  // Queries run as you build: every spec is structurally valid, so the only
+  // question is when. The settled spec trails the builder by the debounce,
+  // and each new one supersedes the request in flight.
+  const settled = useDebouncedValue(spec, QUERY_DEBOUNCE_MS);
+  const chartBody = useMemo(
+    () =>
+      settled && hasChartShape(settled)
+        ? queryBodyFromSpec(settled, "chart")
+        : null,
+    [settled],
+  );
+  const summaryBody = useMemo(
+    () => (settled ? queryBodyFromSpec(settled, "summary") : null),
+    [settled],
+  );
+  const chart = useRunQuery(chartBody);
+  const summary = useRunQuery(summaryBody);
+
+  if (!spec || !settled) {
     return (
       <InlineEmptyState
         icon="telescope"
@@ -128,7 +161,12 @@ function ExploreWorkbench({
   return (
     <>
       <QueryBuilder datasets={datasets} spec={spec} onChange={onChange} />
-      <ExploreResults dataset={spec.dataset} />
+      <ExploreResults
+        dataset={findDataset(datasets, settled.dataset)}
+        spec={settled}
+        chart={chart}
+        summary={summary}
+      />
     </>
   );
 }
