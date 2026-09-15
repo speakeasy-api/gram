@@ -64,6 +64,14 @@ const STATUS_TYPES: Array<{ label: string; value: ObserveStatusFilterValue }> =
 // Server, User and the date range are the most-used dimensions, so they pin as
 // always-visible pills. Role and Agent appear as pills once active; Type is
 // sheet-only (it always carries a default value and would otherwise pill).
+const DATE_DIMENSION = {
+  id: "date",
+  label: "Date range",
+  kind: "daterange",
+  pinned: true,
+  defaultPreset: DEFAULT_PRESET,
+} as const;
+
 const OBSERVE_FILTER_BASE = [
   {
     id: "server",
@@ -79,13 +87,7 @@ const OBSERVE_FILTER_BASE = [
     pinned: true,
     placeholder: "Filter by user email",
   },
-  {
-    id: "date",
-    label: "Date range",
-    kind: "daterange",
-    pinned: true,
-    defaultPreset: DEFAULT_PRESET,
-  },
+  DATE_DIMENSION,
   {
     id: "role",
     label: "Role",
@@ -150,6 +152,7 @@ export function ObserveFilterBar({
   onAccountTypeChange,
   onRefresh,
   isRefreshing,
+  dimensionsOwnedElsewhere = false,
 }: {
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
@@ -184,6 +187,13 @@ export function ObserveFilterBar({
   // pages whose data source can filter on account_type (e.g. raw logs).
   accountType?: string;
   onAccountTypeChange?: (value: string) => void;
+  /**
+   * Drop every dimension except the date range, for a page that puts the
+   * filters somewhere the reader can see all their values at once (the Tool
+   * Logs facet rail). Two controls writing the same params invite the reader
+   * to wonder which one is in charge.
+   */
+  dimensionsOwnedElsewhere?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }): JSX.Element {
@@ -426,11 +436,15 @@ export function ObserveFilterBar({
   // the caller wired handlers for. defineFilters is an identity helper, so the
   // runtime array is all the toolbar needs (values/options are keyed by id).
   const schema = useMemo(() => {
-    const dimensions: FilterDimension[] = [...OBSERVE_FILTER_BASE];
-    if (onStatusesChange) dimensions.push(STATUS_DIMENSION);
-    if (onAccountTypeChange) dimensions.push(ACCOUNT_TYPE_DIMENSION);
+    const dimensions: FilterDimension[] = dimensionsOwnedElsewhere
+      ? [DATE_DIMENSION]
+      : [...OBSERVE_FILTER_BASE];
+    if (!dimensionsOwnedElsewhere) {
+      if (onStatusesChange) dimensions.push(STATUS_DIMENSION);
+      if (onAccountTypeChange) dimensions.push(ACCOUNT_TYPE_DIMENSION);
+    }
     return defineFilters(dimensions);
-  }, [onStatusesChange, onAccountTypeChange]);
+  }, [onStatusesChange, onAccountTypeChange, dimensionsOwnedElsewhere]);
 
   // The arbitrary-attribute search/builder lives inside the sheet's "Custom
   // attributes" section (via FilterBar's customBuilder) rather than as a second
@@ -446,8 +460,11 @@ export function ObserveFilterBar({
         onClear={handleClear}
         onClearAll={handleClearAll}
         projectSlug={projectSlug}
-        customBuilder={attributeSearchControl}
+        customBuilder={
+          dimensionsOwnedElsewhere ? undefined : attributeSearchControl
+        }
         extraChips={
+          !dimensionsOwnedElsewhere &&
           localToolsExcluded && (
             <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 border border-dashed px-3 font-mono text-[11px] tracking-wide uppercase">
               Local tools excluded

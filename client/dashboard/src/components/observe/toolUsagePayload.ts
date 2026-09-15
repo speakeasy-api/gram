@@ -20,6 +20,8 @@ type ToolUsagePayloadInputs = {
   roleEmails: string[];
   selectedHookTypes: ObserveTypeFilterValue[];
   accountType: string;
+  /** Lowercased MCP client names; "unattributed" selects calls with none. */
+  clientKeys?: string[];
   from: Date;
   to: Date;
 };
@@ -48,6 +50,7 @@ export function useToolUsagePayload({
   roleEmails,
   selectedHookTypes,
   accountType,
+  clientKeys,
   from,
   to,
 }: ToolUsagePayloadInputs): ToolUsagePayload {
@@ -101,6 +104,7 @@ export function useToolUsagePayload({
       userFilters: userFilters.length > 0 ? userFilters : undefined,
       hookSources: hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
       accountType: accountType || undefined,
+      clientKeys: clientKeys && clientKeys.length > 0 ? clientKeys : undefined,
     }),
     [
       from,
@@ -112,6 +116,7 @@ export function useToolUsagePayload({
       userFilters,
       hookSourceFilters,
       accountType,
+      clientKeys,
     ],
   );
 
@@ -126,6 +131,7 @@ export function useToolUsagePayload({
       hookSourceFilters,
       selectedHookTypes,
       accountType,
+      clientKeys,
     ],
     [
       from,
@@ -137,6 +143,7 @@ export function useToolUsagePayload({
       hookSourceFilters,
       selectedHookTypes,
       accountType,
+      clientKeys,
     ],
   );
 
