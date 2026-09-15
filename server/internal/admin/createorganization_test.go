@@ -60,10 +60,13 @@ type fakeWorkOSCreator struct {
 	// external_id pointing back at Gram.
 	updateErr error
 
-	// createdNames records every name CreateOrganization was called with, in
-	// order, so a test can assert that a rejected request never reached WorkOS.
+	// createdNames records every hostname CreateOrganizationWithVerifiedDomain
+	// was called with, in order, so a test can assert that a rejected request
+	// never reached WorkOS.
 	createdNames []string
 
+	// createdDisplayNames records each derived display name passed to
+	// CreateOrganizationWithVerifiedDomain, in the same order as createdNames.
 	createdDisplayNames []string
 
 	// externalIDs records the last external_id written per WorkOS organization.
