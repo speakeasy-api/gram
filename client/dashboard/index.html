@@ -35,34 +35,15 @@
          start (preview-runtime-values.sh) from the environment the deployment
          supplies. All default to empty in the image, so any host whose
          deployment does not set them renders blanks. Under `vite dev` the
-         entrypoint never runs and these stay as literal ${...} text. -->
+         entrypoint never runs and these stay as literal ${...} text.
+         gram-is-preview and gutternote-key together gate the Gutternote
+         feedback widget, which src/gutternote-init.ts loads; the gutternote:*
+         tags are read by the widget itself. -->
     <meta name="gram-is-preview" content="${GRAM_IS_PREVIEW}" />
     <meta name="gutternote-key" content="${GRAM_GUTTERNOTE_KEY}" />
     <meta name="gutternote:branch" content="${GRAM_BRANCH}" />
     <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
     <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
-
-    <!-- Gutternote feedback widget. Loads only where the deployment sets
-         both GRAM_IS_PREVIEW=true and a key, i.e. PR preview environments.
-         Both checks fail closed on the image's empty defaults, so prod,
-         shared staging and local dev never load it, and a preview missing
-         the key loads nothing rather than a widget that cannot authenticate.
-         The key is a public client-side key (it is served in this HTML), so
-         it is configuration rather than a secret — it comes from the
-         deployment so it can be rotated without rebuilding the image. -->
-    <script>
-      (function () {
-        const meta = (name) =>
-          document.querySelector(`meta[name="${name}"]`)?.content ?? "";
-        const key = meta("gutternote-key");
-        if (meta("gram-is-preview") !== "true" || !key) return;
-        const s = document.createElement("script");
-        s.src = "https://cdn.gutternote.com/v1/widget.js";
-        s.defer = true;
-        s.dataset.gutternoteKey = key;
-        document.head.appendChild(s);
-      })();
-    </script>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
