@@ -29,6 +29,10 @@ type CreateRemoteSessionClientRequestBody struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Omit to use
+	// the issuer identifier; token_endpoint is available for providers that
+	// require the token endpoint URL.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -70,6 +74,9 @@ type UpdateRemoteSessionClientRequestBody struct {
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Change the aud claim format used in private_key_jwt assertions. Omit to
+	// leave unchanged.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -140,6 +147,9 @@ type CreateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -186,6 +196,9 @@ type CreateCimdResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -233,6 +246,9 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -280,6 +296,9 @@ type AttachUserSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -327,6 +346,9 @@ type DetachUserSessionIssuerResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -373,6 +395,9 @@ type AttachKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -419,6 +444,9 @@ type DetachKeySetResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -474,6 +502,9 @@ type GetRemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -2444,6 +2475,9 @@ type RemoteSessionClientResponseBody struct {
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Identifier used as the aud claim in private_key_jwt assertions. Null
+	// resolves to issuer.
+	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
 	// The organization JSON Web Key Set attached to this client, managed through
 	// attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
@@ -2462,13 +2496,14 @@ type RemoteSessionClientResponseBody struct {
 // "remoteSessionClients" service.
 func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemoteSessionClientPayload) *CreateRemoteSessionClientRequestBody {
 	body := &CreateRemoteSessionClientRequestBody{
-		RemoteSessionIssuerID:   p.RemoteSessionIssuerID,
-		ClientID:                p.ClientID,
-		ClientSecret:            p.ClientSecret,
-		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
-		Audience:                p.Audience,
-		ClientIDIssuedAt:        p.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   p.ClientSecretExpiresAt,
+		RemoteSessionIssuerID:           p.RemoteSessionIssuerID,
+		ClientID:                        p.ClientID,
+		ClientSecret:                    p.ClientSecret,
+		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
+		Audience:                        p.Audience,
+		ClientIDIssuedAt:                p.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           p.ClientSecretExpiresAt,
 	}
 	if p.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(p.UserSessionIssuerIds))
@@ -2512,10 +2547,11 @@ func NewCreateCimdRequestBody(p *remotesessionclients.CreateCimdPayload) *Create
 // "remoteSessionClients" service.
 func NewUpdateRemoteSessionClientRequestBody(p *remotesessionclients.UpdateRemoteSessionClientPayload) *UpdateRemoteSessionClientRequestBody {
 	body := &UpdateRemoteSessionClientRequestBody{
-		ID:                      p.ID,
-		ClientSecret:            p.ClientSecret,
-		TokenEndpointAuthMethod: p.TokenEndpointAuthMethod,
-		Audience:                p.Audience,
+		ID:                              p.ID,
+		ClientSecret:                    p.ClientSecret,
+		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
+		Audience:                        p.Audience,
 	}
 	if p.Scope != nil {
 		body.Scope = make([]string, len(p.Scope))
@@ -2563,20 +2599,21 @@ func NewAttachKeySetRequestBody(p *remotesessionclients.AttachKeySetPayload) *At
 // from a HTTP "OK" response.
 func NewCreateRemoteSessionClientRemoteSessionClientOK(body *CreateRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2746,20 +2783,21 @@ func NewCreateRemoteSessionClientGatewayError(body *CreateRemoteSessionClientGat
 // "createCimd" endpoint result from a HTTP "OK" response.
 func NewCreateCimdRemoteSessionClientOK(body *CreateCimdResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -2930,20 +2968,21 @@ func NewCreateCimdGatewayError(body *CreateCimdGatewayErrorResponseBody) *goa.Se
 // from a HTTP "OK" response.
 func NewUpdateRemoteSessionClientRemoteSessionClientOK(body *UpdateRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3114,20 +3153,21 @@ func NewUpdateRemoteSessionClientGatewayError(body *UpdateRemoteSessionClientGat
 // from a HTTP "OK" response.
 func NewAttachUserSessionIssuerRemoteSessionClientOK(body *AttachUserSessionIssuerResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3298,20 +3338,21 @@ func NewAttachUserSessionIssuerGatewayError(body *AttachUserSessionIssuerGateway
 // from a HTTP "OK" response.
 func NewDetachUserSessionIssuerRemoteSessionClientOK(body *DetachUserSessionIssuerResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3481,20 +3522,21 @@ func NewDetachUserSessionIssuerGatewayError(body *DetachUserSessionIssuerGateway
 // "attachKeySet" endpoint result from a HTTP "OK" response.
 func NewAttachKeySetRemoteSessionClientOK(body *AttachKeySetResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -3679,20 +3721,21 @@ func NewAttachKeySetGatewayError(body *AttachKeySetGatewayErrorResponseBody) *go
 // "detachKeySet" endpoint result from a HTTP "OK" response.
 func NewDetachKeySetRemoteSessionClientOK(body *DetachKeySetResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -4046,20 +4089,21 @@ func NewListRemoteSessionClientsGatewayError(body *ListRemoteSessionClientsGatew
 // a HTTP "OK" response.
 func NewGetRemoteSessionClientRemoteSessionClientOK(body *GetRemoteSessionClientResponseBody) *types.RemoteSessionClient {
 	v := &types.RemoteSessionClient{
-		ID:                      *body.ID,
-		ProjectID:               *body.ProjectID,
-		OrganizationID:          *body.OrganizationID,
-		RemoteSessionIssuerID:   *body.RemoteSessionIssuerID,
-		ClientID:                *body.ClientID,
-		ClientIDMetadataURI:     body.ClientIDMetadataURI,
-		ClientIDIssuedAt:        *body.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   body.ClientSecretExpiresAt,
-		UpstreamRejectedAt:      body.UpstreamRejectedAt,
-		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
-		JSONWebKeySetID:         body.JSONWebKeySetID,
-		Audience:                body.Audience,
-		CreatedAt:               *body.CreatedAt,
-		UpdatedAt:               *body.UpdatedAt,
+		ID:                              *body.ID,
+		ProjectID:                       *body.ProjectID,
+		OrganizationID:                  *body.OrganizationID,
+		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
+		ClientID:                        *body.ClientID,
+		ClientIDMetadataURI:             body.ClientIDMetadataURI,
+		ClientIDIssuedAt:                *body.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              body.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
+		Audience:                        body.Audience,
+		CreatedAt:                       *body.CreatedAt,
+		UpdatedAt:                       *body.UpdatedAt,
 	}
 	v.UserSessionIssuerIds = make([]string, len(body.UserSessionIssuerIds))
 	for i, val := range body.UserSessionIssuerIds {
@@ -4424,8 +4468,13 @@ func ValidateCreateRemoteSessionClientResponseBody(body *CreateRemoteSessionClie
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4489,8 +4538,13 @@ func ValidateCreateCimdResponseBody(body *CreateCimdResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4554,8 +4608,13 @@ func ValidateUpdateRemoteSessionClientResponseBody(body *UpdateRemoteSessionClie
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4619,8 +4678,13 @@ func ValidateAttachUserSessionIssuerResponseBody(body *AttachUserSessionIssuerRe
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4684,8 +4748,13 @@ func ValidateDetachUserSessionIssuerResponseBody(body *DetachUserSessionIssuerRe
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4749,8 +4818,13 @@ func ValidateAttachKeySetResponseBody(body *AttachKeySetResponseBody) (err error
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4814,8 +4888,13 @@ func ValidateDetachKeySetResponseBody(body *DetachKeySetResponseBody) (err error
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -4895,8 +4974,13 @@ func ValidateGetRemoteSessionClientResponseBody(body *GetRemoteSessionClientResp
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {
@@ -7421,8 +7505,13 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.upstream_rejected_at", *body.UpstreamRejectedAt, goa.FormatDateTime))
 	}
 	if body.TokenEndpointAuthMethod != nil {
-		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none", "private_key_jwt"}))
+		}
+	}
+	if body.TokenEndpointAuthAudienceFormat != nil {
+		if !(*body.TokenEndpointAuthAudienceFormat == "issuer" || *body.TokenEndpointAuthAudienceFormat == "token_endpoint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 		}
 	}
 	if body.JSONWebKeySetID != nil {

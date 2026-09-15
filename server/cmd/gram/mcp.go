@@ -48,6 +48,7 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -273,7 +274,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
 
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, redisClient, serverURL, auditLogger)
+	gcpIdentity := newGCPIdentity(ctx, logger, c)
+	kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
+	if err != nil {
+		return fmt.Errorf("build kms signing client factory: %w", err)
+	}
+	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, redisClient, serverURL, auditLogger, clientAssertionSigner)
 	if err != nil {
 		return err
 	}

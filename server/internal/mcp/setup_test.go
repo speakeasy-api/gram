@@ -84,6 +84,7 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
+	mcp.TestInfra = res
 
 	code := m.Run()
 
