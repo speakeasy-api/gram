@@ -8,7 +8,7 @@ import (
 type ClaudeCodeSpan struct{}
 
 func (e ClaudeCodeSpan) AppliesTo(span *otelv1.InboundSpan) bool {
-	return span.GetScope().GetName() == "com.anthropic.claude_code.tracing"
+	return isClaudeCodeScope(span.GetScope().GetName())
 }
 
 func (e ClaudeCodeSpan) InputContent(span *otelv1.InboundSpan) (key string, val genaiconv.InputMessages, err error) {
