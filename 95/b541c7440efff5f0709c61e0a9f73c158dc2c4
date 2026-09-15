@@ -1,0 +1,25 @@
+server/internal/risk/scanner.go
+  s_7e03f0f75b771f::t_3edf616d4832aa 423
+  s_7e03f0f75b771f::t_2cd7be07185ea6 432,438,537-539,559,716,824-825,853-854
+server/internal/risk/scanner_test.go
+  s_7e03f0f75b771f::t_cc0423f278d77a 336-399,1026-1036
+server/internal/risk/prompt_policy_scanner_test.go
+  s_7e03f0f75b771f::t_cc0423f278d77a 137-177
+  s_7e03f0f75b771f::t_c28d8180eebd86 6,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "95b541c7440efff5f0709c61e0a9f73c158dc2c4",
+  "prompts": {},
+  "sessions": {
+    "s_7e03f0f75b771f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-da54-7902-9dfd-7309263448a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
