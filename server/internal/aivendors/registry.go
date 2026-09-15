@@ -159,11 +159,23 @@ var registry = []Product{
 		VendorKey:   "openai",
 		DisplayName: "ChatGPT Classic",
 		Category:    CategoryAssistant,
+		// Verified 2026-09 against the Homebrew cask (chatgpt-classic
+		// 1.2026.184): Classic kept com.openai.chat, the identifier the
+		// desktop app shipped under originally, while the current ChatGPT app
+		// has moved on to com.openai.codex. So the bundle id is what tells the
+		// two apart, and it is why activity can be attributed to Classic
+		// rather than merely to "ChatGPT".
+		//
+		// The process name is the main executable, which is what an installed
+		// bundle is launched as. Its helpers (ChatGPTHelper,
+		// ChatGPTCodexUpgradeHelper) are unique to Classic too, but they are
+		// implementation detail that a release can rename; the executable
+		// matching the bundle name is the stable running signal.
 		Signatures: Signatures{
 			BundleIDs:    []string{"com.openai.chat"},
 			Binaries:     nil,
 			ConfigDirs:   nil,
-			ProcessNames: nil,
+			ProcessNames: []string{"ChatGPT Classic"},
 		},
 		VersionPlistKey: "",
 		ClientInfoNames: []string{"ChatGPT", "chatgpt"},

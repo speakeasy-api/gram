@@ -22,7 +22,10 @@ import (
 //
 // 3: ChatGPT moved from harness to assistant, and Cline gained the versioned
 // VS Code extension config dirs that detect an install without the npm CLI.
-const DefaultsVersion int32 = 3
+//
+// 4: ChatGPT Classic gained its process name, so an agent reports it as
+// running and not merely installed.
+const DefaultsVersion int32 = 4
 
 // Source says where a target in an organization's list comes from.
 type Source string

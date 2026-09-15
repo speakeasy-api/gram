@@ -110,6 +110,30 @@ func TestListVersionIsTheDefaultsRevision(t *testing.T) {
 	require.Equal(t, aitargets.DefaultsVersion, aitargets.ListVersion())
 }
 
+// ChatGPT Classic and the current ChatGPT app ship different bundle ids:
+// Classic kept com.openai.chat while the shipping app moved to
+// com.openai.codex. That is what lets a detection be attributed to Classic
+// rather than to "ChatGPT" generally, so the id is asserted here and not just
+// left to the registry. The process name is what turns an install into a
+// running signal, which is the whole point of detecting the app in use.
+func TestChatGPTClassicIsDetectableInstalledAndRunning(t *testing.T) {
+	t.Parallel()
+
+	var classic *aitargets.Target
+	for _, entry := range aitargets.Defaults() {
+		if entry.ID == "chatgpt-classic" {
+			classic = &entry
+			break
+		}
+	}
+	require.NotNil(t, classic, "chatgpt-classic must stay in the compiled-in defaults")
+
+	require.Contains(t, classic.Signatures.BundleIDs, "com.openai.chat",
+		"the bundle id Classic kept is what distinguishes it from the current ChatGPT app")
+	require.Contains(t, classic.Signatures.ProcessNames, "ChatGPT Classic",
+		"without the process name an agent can only ever report Classic as installed")
+}
+
 // builtinRow is the row BuiltInUpsertParams writes for a built-in: the
 // organization's decision about it and nothing else.
 func builtinRow(id string) repo.AiScanTarget {
