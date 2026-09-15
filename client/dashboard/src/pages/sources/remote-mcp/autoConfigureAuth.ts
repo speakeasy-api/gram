@@ -13,6 +13,7 @@ import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
+  registrationProvenance,
 } from "@/lib/proxyRegisterUpstreamClient";
 import { isNotFoundError } from "@/lib/errors";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
@@ -272,6 +273,7 @@ export async function autoConfigureRemoteMcpAuth({
             narrowTokenEndpointAuthMethod(registered.tokenEndpointAuthMethod) ??
             preferredAuthMethod,
           scope: scopes.length > 0 ? scopes : undefined,
+          ...registrationProvenance(registered),
         },
       },
       undefined,

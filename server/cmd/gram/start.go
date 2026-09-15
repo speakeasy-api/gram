@@ -511,6 +511,12 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
 		},
+		&cli.DurationFlag{
+			Name:    "remote-session-recheck-interval",
+			Usage:   "How long an idle remote session with no refresh token goes between keepalive re-checks of its stored credential; zero or negative disables the sweep",
+			EnvVars: []string{"GRAM_REMOTE_SESSION_RECHECK_INTERVAL"},
+			Value:   mcp.DefaultRemoteSessionRecheckInterval,
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -1188,6 +1194,8 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			}
 			idTokenVerifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+			remoteSessionEnricher := remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), issuerMetadataRefresher)
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -1202,8 +1210,8 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 				}),
 				remotesessions.WithIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithIssuerMetadataRefresher(issuerMetadataRefresher),
-				remotesessions.WithSessionEnricher(remotesessions.NewSessionEnricher(logger, encryptionClient, guardianPolicy, idTokenKeys,
-					ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)))),
+				remotesessions.WithSessionEnricher(remoteSessionEnricher),
+				remotesessions.WithRegistrationAuditLogger(auditLogger),
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
@@ -1287,11 +1295,14 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 					ValidationTimeout: 0,
 					AutoVerifyWait:    0,
+					RecheckInterval:   c.Duration("remote-session-recheck-interval"),
 				},
 			)
 			if err != nil {
 				return fmt.Errorf("initialize MCP service: %w", err)
 			}
+			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
+			mcpService.StartRemoteSessionRecheck(ctx)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
@@ -1771,7 +1782,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 				WithDistributionAdmission(distributionAdmission))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher)), productFeatures)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)

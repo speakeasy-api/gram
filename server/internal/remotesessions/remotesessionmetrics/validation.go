@@ -21,7 +21,7 @@ func NewValidation(logger *slog.Logger, meterProvider metric.MeterProvider) *Val
 
 	probes, err := meter.Int64Counter(
 		meterValidation,
-		metric.WithDescription("Live validation probes of stored Remote Session credentials against their upstream MCP server, by outcome and issuer URL."),
+		metric.WithDescription("Live validation probes of stored Remote Session credentials against their upstream MCP server, by outcome, trigger and issuer URL."),
 		metric.WithUnit("{probe}"),
 	)
 	if err != nil {
@@ -31,13 +31,14 @@ func NewValidation(logger *slog.Logger, meterProvider metric.MeterProvider) *Val
 	return &Validation{probes: probes}
 }
 
-// Record counts one probe by outcome (a remotesessions.ValidationOutcome) and issuer URL.
-func (m *Validation) Record(ctx context.Context, issuerURL string, outcome string) {
+// Record counts one probe by outcome (a remotesessions.ValidationOutcome), trigger and issuer URL.
+func (m *Validation) Record(ctx context.Context, issuerURL string, trigger ValidationTrigger, outcome string) {
 	if m == nil || m.probes == nil {
 		return
 	}
 	m.probes.Add(ctx, 1, metric.WithAttributes(
 		attr.OAuthIssuer(issuerURL),
+		attr.OAuthValidationTrigger(trigger),
 		attr.Outcome(outcome),
 	))
 }

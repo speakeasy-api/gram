@@ -6,6 +6,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -43,5 +44,14 @@ func (s *Service) FailAIToolBlockedIDsRead(err error) {
 func (s *Service) FailAIToolCatalogRead(err error) {
 	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string) (*aitargets.OrganizationList, error) {
 		return nil, err
+	}
+}
+
+// SetRemoteSessionRecheckPacing swaps the sweep's per-host limiter rate and claim batch for a test.
+func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32) {
+	r := s.remoteSessionRecheck
+	r.batch = batch
+	if r.limiterStore != nil {
+		r.limiter = ratelimit.New(r.limiterStore, "remote_session_recheck_host", rate)
 	}
 }

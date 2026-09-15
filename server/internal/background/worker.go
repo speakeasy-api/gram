@@ -371,11 +371,14 @@ func NewTemporalWorker(
 
 	// Identity capture is best effort: without a policy the sweep stores no identity.
 	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	var remoteSessionEnricher *remotesessions.SessionEnricher
 	if opts.GuardianPolicy != nil {
 		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
 			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.IssuerMetadataRefresher)
 		}
 	}
 
@@ -432,6 +435,7 @@ func NewTemporalWorker(
 		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
+		remoteSessionEnricher,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

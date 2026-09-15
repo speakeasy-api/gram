@@ -74,6 +74,22 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- Onboarding state is organization-scoped, independent of any project.
+-- Unlike retained records, this state has no lifetime beyond its owning organization.
+CREATE TABLE IF NOT EXISTS organization_onboarding (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  preset TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
+ON organization_onboarding (organization_id);
+
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
 -- concept.
@@ -3042,6 +3058,15 @@ WHERE deleted IS FALSE
   AND refresh_token_encrypted IS NOT NULL
   AND auto_refresh IS TRUE;
 
+-- Keepalive re-check claim (AIM-285): the no-refresh-token population ordered by
+-- its due clock, so ClaimDueRemoteSessionRecheckCandidates range-scans instead of
+-- sequentially scanning the table every tick.
+CREATE INDEX IF NOT EXISTS remote_sessions_recheck_due_idx
+ON remote_sessions ((COALESCE(last_validated_at, created_at)), id)
+WHERE deleted IS FALSE
+  AND refresh_token_encrypted IS NULL
+  AND refresh_expires_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
@@ -5542,6 +5567,11 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   user_session_issuer_id uuid,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  -- Operator-authored server instructions answered by the gateway's initialize
+  -- and server/discover responses. NULL serves Gram's built-in gateway
+  -- instructions instead, so an unset row keeps the drill-down guidance every
+  -- gateway needs. Length is validated in application code.
+  instructions TEXT,
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',

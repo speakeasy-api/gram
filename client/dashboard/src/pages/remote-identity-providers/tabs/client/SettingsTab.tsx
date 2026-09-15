@@ -6,6 +6,7 @@ import { useOrgRoutes } from "@/routes";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,7 +18,7 @@ import {
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { DeleteClientDialog } from "../../clientDialogs";
+import { DeleteClientDialog, RotateClientDialog } from "../../clientDialogs";
 import { KeySetField } from "./KeySetField";
 
 export function SettingsTab({
@@ -36,6 +37,11 @@ export function SettingsTab({
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
   const [showDelete, setShowDelete] = useState(false);
+  const [showRotate, setShowRotate] = useState(false);
+  // A rotation re-registers the client at the issuer's published registration
+  // endpoint, so the issuer decides whether one is possible at all.
+  const { data: issuer } = useOrganizationRemoteSessionIssuer({ id: issuerId });
+  const issuerRegistrationEndpoint = issuer?.registrationEndpoint ?? null;
   // The key set link saves on its own endpoint the moment it changes, while
   // these fields wait for Save. Selecting a set and immediately saving
   // private_key_jwt would otherwise race: the update can reach the server first
@@ -124,6 +130,23 @@ export function SettingsTab({
         </div>
       </div>
 
+      <div className="flex flex-col gap-2 border p-4">
+        <Text className="font-medium">Registration</Text>
+        <RegistrationStatus
+          client={client}
+          issuerRegistrationEndpoint={issuerRegistrationEndpoint}
+        />
+        {isRotatableRegistration(client) && issuerRegistrationEndpoint && (
+          <div>
+            <RequireScope scope="org:admin" level="component">
+              <Button variant="secondary" onClick={() => setShowRotate(true)}>
+                <Button.Text>Rotate client</Button.Text>
+              </Button>
+            </RequireScope>
+          </div>
+        )}
+      </div>
+
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
         <Text className="font-medium">Danger Zone</Text>
         <Text small muted>
@@ -141,6 +164,14 @@ export function SettingsTab({
         </div>
       </div>
 
+      {showRotate && (
+        <RotateClientDialog
+          clientId={client.id}
+          clientLabel={remoteSessionClientDisplayName(client)}
+          onClose={() => setShowRotate(false)}
+        />
+      )}
+
       {showDelete && (
         <DeleteClientDialog
           clientId={client.id}
@@ -153,4 +184,67 @@ export function SettingsTab({
       )}
     </div>
   );
+}
+
+// RegistrationStatus explains what a rotation would do for this client: whether
+// the identity provider publishes a registration endpoint Gram can re-register
+// it at, whether the provider has already stopped recognizing it, and when its
+// secret expires.
+function RegistrationStatus({
+  client,
+  issuerRegistrationEndpoint,
+}: {
+  client: RemoteSessionClient;
+  issuerRegistrationEndpoint: string | null;
+}): JSX.Element {
+  if (!isRotatableRegistration(client)) {
+    return (
+      <Text small muted>
+        {client.clientIdMetadataUri
+          ? "This client uses a client ID metadata document hosted by Gram. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
+          : "This client authenticates with a signed assertion bound to a key set, which dynamic registration cannot reproduce. Manage its key set instead of rotating it."}
+      </Text>
+    );
+  }
+  if (client.upstreamRejectedAt) {
+    return (
+      <Text small className="text-destructive">
+        The identity provider stopped recognizing this client on{" "}
+        {client.upstreamRejectedAt.toLocaleString()}.{" "}
+        {issuerRegistrationEndpoint
+          ? "Rotate it to register a replacement; users reconnect once afterwards."
+          : "The provider publishes no registration endpoint, so replace the client ID and secret by hand."}
+      </Text>
+    );
+  }
+  const expiryNote = client.clientSecretExpiresAt
+    ? ` The secret expires ${client.clientSecretExpiresAt.toLocaleString()}.`
+    : "";
+  if (issuerRegistrationEndpoint) {
+    return (
+      <Text small muted>
+        Gram re-registers this client at {issuerRegistrationEndpoint} if the
+        identity provider stops recognizing it or its secret expires; rotate now
+        to replace it ahead of time.{expiryNote}
+      </Text>
+    );
+  }
+  return (
+    <Text small muted>
+      The identity provider publishes no registration endpoint, so Gram cannot
+      re-register this client; replace its credentials by hand if the provider
+      stops recognizing them.{expiryNote}
+    </Text>
+  );
+}
+
+// isRotatableRegistration mirrors the server's rule: a rotation replaces a
+// dynamically registered client_id and secret, which a CIMD client (its
+// client_id is a document URL) and a private_key_jwt client (bound to a key
+// set) do not have.
+function isRotatableRegistration(client: RemoteSessionClient): boolean {
+  // The SDK enum does not list private_key_jwt until it becomes selectable,
+  // but the server already stores and refuses to rotate it.
+  const authMethod: string | undefined = client.tokenEndpointAuthMethod;
+  return !client.clientIdMetadataUri && authMethod !== "private_key_jwt";
 }

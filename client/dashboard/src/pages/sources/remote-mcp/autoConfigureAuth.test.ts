@@ -7,7 +7,10 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { autoConfigureRemoteMcpAuth } from "./autoConfigureAuth";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
-vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
+vi.mock("@/lib/proxyRegisterUpstreamClient", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/proxyRegisterUpstreamClient")
+  >()),
   proxyRegisterUpstreamClient: vi.fn(),
 }));
 
@@ -27,6 +30,8 @@ describe("autoConfigureRemoteMcpAuth", () => {
       clientId: "client-from-dcr",
       clientSecret: "secret-from-dcr",
       tokenEndpointAuthMethod: "client_secret_post",
+      clientIdIssuedAt: null,
+      clientSecretExpiresAt: null,
     });
   });
 
@@ -74,6 +79,10 @@ describe("autoConfigureRemoteMcpAuth", () => {
           clientId: "client-from-dcr",
           clientSecret: "secret-from-dcr",
           tokenEndpointAuthMethod: "client_secret_post",
+          // Lifecycle stamps from the registration, so the server can
+          // re-register the client in place once the issuer expires it.
+          clientIdIssuedAt: undefined,
+          clientSecretExpiresAt: undefined,
         }),
       },
       undefined,

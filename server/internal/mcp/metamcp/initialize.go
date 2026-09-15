@@ -1,9 +1,12 @@
 package metamcp
 
-// Instructions is the server-instructions block answered by initialize and
-// server/discover. Deliberately static and member-agnostic: clients cache
-// instructions from the handshake, and the member set is both mutable and
-// filtered per caller, so naming members here would go stale, contradict
+import "strings"
+
+// Instructions is the built-in server-instructions block answered by
+// initialize and server/discover when a gateway has no operator-authored
+// instructions of its own. Deliberately static and member-agnostic: clients
+// cache instructions from the handshake, and the member set is both mutable
+// and filtered per caller, so naming members here would go stale, contradict
 // list_servers, and disclose members a caller cannot reach. It teaches the
 // drill-down and the two rules agents get wrong; the inventory itself belongs
 // to list_servers alone.
@@ -19,3 +22,12 @@ Work from the outside in:
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 
 If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.`
+
+// ResolveInstructions returns custom instructions verbatim when nonblank,
+// otherwise falling back to the built-in gateway instructions.
+func ResolveInstructions(custom *string) string {
+	if custom == nil || strings.TrimSpace(*custom) == "" {
+		return Instructions
+	}
+	return *custom
+}

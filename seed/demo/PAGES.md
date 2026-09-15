@@ -52,6 +52,14 @@ Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
 connection.
 
+### Gateway instructions
+
+The seeded gateway leaves `instructions` NULL. Settings must display the built-in
+instructions as the editor's actual value, not a placeholder, with Save disabled
+until edited and no append/replace selector. Saved custom text replaces the
+built-in text; saving an empty editor restores the built-in instructions. This
+behavior is covered by editor tests; browser verification remains pending.
+
 ### Managed agents
 
 The Identities roster also reads these three existing registered-agent fixtures

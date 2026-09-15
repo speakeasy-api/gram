@@ -97,6 +97,38 @@ func TestIndexToolsetWorkflow_TransientFailureUsesBoundedActivityRetry(t *testin
 	require.Equal(t, 2, attempts)
 }
 
+func TestIndexToolsetWorkflow_DisabledKeyFailsWithoutRetry(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	attempts := 0
+	env.RegisterActivityWithOptions(
+		func(context.Context, activities.GenerateToolsetEmbeddingsInput) error {
+			attempts++
+			return temporal.NewNonRetryableApplicationError(
+				"platform key disabled",
+				activities.GenerateToolsetEmbeddingsKeyDisabledErrorType,
+				nil,
+			)
+		},
+		activity.RegisterOptions{Name: "GenerateToolsetEmbeddings"},
+	)
+
+	env.ExecuteWorkflow(IndexToolsetWorkflow, IndexToolsetParams{
+		ProjectID:             uuid.New(),
+		ToolsetID:             uuid.New(),
+		ToolsetSlug:           types.Slug("test-toolset"),
+		ToolsetVersion:        1,
+		DeploymentID:          uuid.New(),
+		PermanentFailureCount: 0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, 1, attempts)
+}
+
 func TestIndexToolsetWorkflow_PermanentFailureIsSuppressedAtLimit(t *testing.T) {
 	t.Parallel()
 

@@ -1108,6 +1108,8 @@ BEGIN
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-github'), 'private');
 
+  -- Leave instructions NULL so Settings starts with the editable built-in
+  -- instructions, matching the gateway's initialize and server/discover text.
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',

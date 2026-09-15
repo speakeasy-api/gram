@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -179,6 +180,66 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	require.Contains(t, result.Instructions, "Never execute a name you have not described")
 	require.Contains(t, result.Instructions, metamcp.StatusUnknown)
 	require.NotContains(t, result.Instructions, "test meta MCP")
+}
+
+func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+	const custom = "Always call list_servers first. Ticketing lives in the support member."
+	setInstructions := func(instructions pgtype.Text) {
+		_, err := metamcprepo.New(ti.conn).UpdateMetaMCPServer(ctx, metamcprepo.UpdateMetaMCPServerParams{
+			Name:                 meta.Name,
+			UserSessionIssuerID:  meta.UserSessionIssuerID,
+			Visibility:           pgtype.Text{String: "", Valid: false},
+			NetworkAccessModeSet: false,
+			NetworkAccessMode:    pgtype.Text{String: "", Valid: false},
+			InstructionsSet:      true,
+			Instructions:         instructions,
+			ID:                   meta.ID,
+			OrganizationID:       meta.OrganizationID,
+			ProjectID:            meta.ProjectID,
+		})
+		require.NoError(t, err)
+	}
+	served := func(method string) string {
+		params := map[string]any{}
+		if method == "initialize" {
+			params = map[string]any{"protocolVersion": mcpversions.Version20250326}
+		}
+		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, method, params), "", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, "method=%s body=%s", method, w.Body.String())
+
+		envelope := decodeRPCResponse(t, w)
+		var result struct {
+			Instructions string `json:"instructions"`
+		}
+		require.NoError(t, json.Unmarshal(envelope["result"], &result))
+		return result.Instructions
+	}
+
+	for _, tc := range []struct {
+		name   string
+		stored pgtype.Text
+		want   string
+	}{
+		{name: "custom replaces default", stored: conv.ToPGText(custom), want: custom},
+		{name: "reset restores default", stored: pgtype.Text{}, want: metamcp.Instructions},
+	} {
+		// Exercise setting and resetting the same endpoint sequentially.
+		setInstructions(tc.stored)
+		for _, method := range []string{"initialize", "server/discover"} {
+			require.Equal(t, tc.want, served(method), "case=%s method=%s", tc.name, method)
+		}
+	}
 }
 
 func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {

@@ -1514,8 +1514,20 @@ func (q *Queries) ListOpenRouterInvoiceSourceDays(ctx context.Context, arg ListO
 const listProjectsForToolsetIndexing = `-- name: ListProjectsForToolsetIndexing :many
 SELECT t.project_id
 FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+    AND p.organization_id = t.organization_id
+    AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
   AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (
+      SELECT 1
+      FROM openrouter_api_keys k
+      WHERE k.organization_id = t.organization_id
+        AND k.key_type = 'chat'
+        AND k.deleted IS FALSE
+        AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+  )
   AND COALESCE((
       SELECT cardinality(tv.tool_urns)
       FROM toolset_versions tv
@@ -1998,6 +2010,10 @@ WITH latest_toolsets AS (
         tv.version,
         tv.tool_urns
     FROM toolsets t
+    JOIN projects p ON p.id = t.project_id
+        AND p.organization_id = t.organization_id
+        AND p.deleted IS FALSE
+    JOIN organization_metadata om ON om.id = p.organization_id
     JOIN LATERAL (
         SELECT version, tool_urns
         FROM toolset_versions
@@ -2008,6 +2024,14 @@ WITH latest_toolsets AS (
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
       AND t.mcp_enabled IS TRUE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM openrouter_api_keys k
+          WHERE k.organization_id = t.organization_id
+            AND k.key_type = 'chat'
+            AND k.deleted IS FALSE
+            AND COALESCE(cardinality(k.disable_causes) > 0, k.disabled)
+      )
       AND t.project_id = ANY($3::uuid[])
       AND cardinality(tv.tool_urns) > 0
 ), candidates AS (

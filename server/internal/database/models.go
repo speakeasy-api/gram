@@ -1454,6 +1454,7 @@ type MetaMcpServer struct {
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
+	Instructions        pgtype.Text
 	Visibility          string
 	NetworkAccessMode   pgtype.Text
 	CreatedAt           pgtype.Timestamptz
@@ -1665,6 +1666,14 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationOnboarding struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Preset         pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
