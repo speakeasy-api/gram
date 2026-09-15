@@ -221,6 +221,11 @@ OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
+## Where the shared collector's demo-activity pipeline posts rewritten Claude
+## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
+## because localhost inside that container is the container; the port follows
+## this worktree's, which git:workinit remaps for parallel trees.
+GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
