@@ -76,19 +76,47 @@ func mcpServerFlags() []cli.Flag {
 // dependency graph stays small and explicit. It never constructs a Temporal
 // client, so it keeps serving through a Temporal outage.
 func newMCPCommand() *cli.Command {
+	shutdown := &mcpServerShutdown{
+		funcs:              nil,
+		dbClose:            func() {},
+		redisClose:         func() error { return nil },
+		clickhouseShutdown: noopShutdown,
+	}
 	flags := mcpServerFlags()
 	return &cli.Command{
-		Name:   "mcp",
-		Usage:  "Start the MCP and OAuth serving tier (no Temporal dependency)",
-		Flags:  flags,
-		Action: runMCPServer,
+		Name:  "mcp",
+		Usage: "Start the MCP and OAuth serving tier (no Temporal dependency)",
+		Flags: flags,
+		Action: func(c *cli.Context) error {
+			return runMCPServer(c, shutdown)
+		},
 		Before: func(ctx *cli.Context) error {
 			return loadConfigFromFile(ctx, flags)
+		},
+		After: func(c *cli.Context) error {
+			ctx := context.WithoutCancel(c.Context)
+			logger := PullLogger(c.Context)
+			// The datastore clients close last, after every registered
+			// shutdown func has had the chance to flush through them.
+			defer shutdown.dbClose()
+			defer o11y.LogDefer(ctx, logger, "failed to close redis client", shutdown.redisClose)
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return shutdown.clickhouseShutdown(ctx) })
+			return runShutdown(logger, c.Context, shutdown.funcs)
 		},
 	}
 }
 
-func runMCPServer(c *cli.Context) (err error) {
+// mcpServerShutdown collects what the action opens so the command's After
+// hook can release it, mirroring `gram start`. funcs run concurrently through
+// runShutdown; the datastore closers run afterwards in After.
+type mcpServerShutdown struct {
+	funcs              []func(context.Context) error
+	dbClose            func()
+	redisClose         func() error
+	clickhouseShutdown func(context.Context) error
+}
+
+func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	const serviceName = "gram-mcp"
 	serviceEnv := c.String("environment")
 	appinfo := o11y.PullAppInfo(c.Context)
@@ -104,17 +132,6 @@ func runMCPServer(c *cli.Context) (err error) {
 	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
-	// cleanup runs concurrently through runShutdown once serving stops. The
-	// datastore clients are closed by their own defers afterwards, so every
-	// cleanup func can still reach them.
-	var cleanup []func(context.Context) error
-	defer func() {
-		shutdownCtx := context.WithoutCancel(ctx)
-		if shutdownErr := runShutdown(logger, shutdownCtx, cleanup); shutdownErr != nil {
-			err = errors.Join(err, shutdownErr)
-		}
-	}()
-
 	otelShutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 		ServiceName:    serviceName,
 		ServiceVersion: shortGitSHA(),
@@ -125,14 +142,14 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("setup opentelemetry sdk: %w", err)
 	}
-	cleanup = append(cleanup, otelShutdown)
+	shutdown.funcs = append(shutdown.funcs, otelShutdown)
 	tracerProvider, meterProvider := otel.GetTracerProvider(), otel.GetMeterProvider()
 
 	db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{enableUnsafeLogging: c.Bool("unsafe-db-log")})
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
-	defer db.Close()
+	shutdown.dbClose = db.Close
 	if err := o11y.StartObservers(meterProvider, db); err != nil {
 		return fmt.Errorf("start database observers: %w", err)
 	}
@@ -141,7 +158,7 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("connect to clickhouse: %w", err)
 	}
-	defer o11y.LogDefer(context.WithoutCancel(ctx), logger, "shut down clickhouse client", func() error { return chShutdown(context.WithoutCancel(ctx)) })
+	shutdown.clickhouseShutdown = chShutdown
 
 	redisClient, err := newRedisClient(ctx, redisClientOptions{
 		redisAddr:     c.String("redis-cache-addr"),
@@ -151,14 +168,14 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
-	defer o11y.LogDefer(context.WithoutCancel(ctx), logger, "close redis client", redisClient.Close)
+	shutdown.redisClose = redisClient.Close
 	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
 
 	assetStorage, stop, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
 	if err != nil {
 		return fmt.Errorf("initialize asset storage: %w", err)
 	}
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 
 	guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
 	if err != nil {
@@ -201,12 +218,12 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("create tigris asset store: %w", err)
 	}
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 	functionsOrchestrator, stop, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, enc)
 	if err != nil {
 		return fmt.Errorf("create functions orchestrator: %w", err)
 	}
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 
 	roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 	if err != nil {
@@ -224,26 +241,26 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("create pubsub client: %w", err)
 	}
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 	publishers, stop, err := newPublishers(ctx, psbroker)
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 	toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 	sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, featureFlags)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
 	// the Temporal-backed observers `gram start` attaches.
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
-	cleanup = append(cleanup, stop)
+	shutdown.funcs = append(shutdown.funcs, stop)
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter),
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
@@ -333,7 +350,7 @@ func runMCPServer(c *cli.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	cleanup = append(cleanup, stopControl)
+	shutdown.funcs = append(shutdown.funcs, stopControl)
 
 	tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
 	if tlsEnabled {
