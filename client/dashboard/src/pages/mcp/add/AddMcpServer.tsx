@@ -172,7 +172,7 @@ export default function AddMcpServer(): JSX.Element {
 
   const connectOptions: AddOption[] = [
     {
-      href: routes.mcp.add.catalog.href(),
+      href: routes.mcp.catalog.href(),
       icon: <Blocks className="text-foreground size-10" strokeWidth={1.25} />,
       title: "From the catalog",
       description:

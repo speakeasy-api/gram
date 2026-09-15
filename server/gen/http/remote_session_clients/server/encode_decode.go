@@ -2417,6 +2417,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		ClientIDMetadataURI:     v.ClientIDMetadataURI,
 		ClientIDIssuedAt:        v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      v.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,

@@ -591,6 +591,11 @@ type CreateGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -640,6 +645,11 @@ type GetGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -681,6 +691,11 @@ type UpdateGlobalClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -3955,6 +3970,11 @@ type RemoteSessionClientResponseBody struct {
 	ClientIDIssuedAt    string  `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	// When the issuer's token endpoint last answered invalid_client for this
+	// client_id, meaning the issuer no longer recognizes the registration. Null
+	// while the registration is in good standing; cleared by a successful
+	// rotation, a successful refresh, or a replaced secret.
+	UpstreamRejectedAt *string `form:"upstream_rejected_at,omitempty" json:"upstream_rejected_at,omitempty" xml:"upstream_rejected_at,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Null resolves
 	// to client_secret_basic at runtime.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -4373,6 +4393,7 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -4430,6 +4451,7 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,
@@ -4466,6 +4488,7 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		ClientIDMetadataURI:     res.ClientIDMetadataURI,
 		ClientIDIssuedAt:        res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   res.ClientSecretExpiresAt,
+		UpstreamRejectedAt:      res.UpstreamRejectedAt,
 		TokenEndpointAuthMethod: res.TokenEndpointAuthMethod,
 		JSONWebKeySetID:         res.JSONWebKeySetID,
 		Audience:                res.Audience,

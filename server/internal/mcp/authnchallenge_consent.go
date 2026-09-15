@@ -253,6 +253,8 @@ type remoteSessionCard struct {
 	ConnectedAs string
 	// AccountChips is upstream-supplied provider context (workspace, team, login), rendered escaped on its own line.
 	AccountChips []string
+	// IdentityCaveat qualifies ConnectedAs when it was not recorded as the grant's identity; rendered as a hover note.
+	IdentityCaveat string
 
 	// TokenActive is set when the provider's introspection last reported the access token active.
 	TokenActive bool
@@ -1441,6 +1443,7 @@ func (s *Service) buildRemoteSessionCards(
 			AutoRefreshChecked:     checked,
 			ConnectedAs:            state.ConnectedAs,
 			AccountChips:           state.AccountChips,
+			IdentityCaveat:         state.IdentityCaveat,
 			TokenActive:            tokenActive,
 			TokenExpiresAt:         tokenExpiresAt,
 			TokenExpiresIn:         tokenExpiresIn,

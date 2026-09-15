@@ -39,6 +39,18 @@ func TestNewGenerateToolsetEmbeddingsError_TransientErrorRemainsRetryable(t *tes
 	require.ErrorIs(t, err, cause)
 }
 
+func TestNewGenerateToolsetEmbeddingsError_DisabledKeyIsNonRetryable(t *testing.T) {
+	t.Parallel()
+
+	err := newGenerateToolsetEmbeddingsError(openrouter.ErrPlatformKeyDisabled)
+
+	var applicationErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &applicationErr)
+	require.True(t, applicationErr.NonRetryable())
+	require.Equal(t, GenerateToolsetEmbeddingsKeyDisabledErrorType, applicationErr.Type())
+	require.ErrorIs(t, err, openrouter.ErrPlatformKeyDisabled)
+}
+
 func TestNewGenerateToolsetEmbeddingsError_SupersededRevisionIsNonRetryable(t *testing.T) {
 	t.Parallel()
 

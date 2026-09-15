@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -20,6 +21,10 @@ type AccountLabel struct {
 	// Chips are provider context read from the enrichment document: a Notion
 	// workspace, a Slack team, a GitHub login.
 	Chips []string
+
+	// Caveat qualifies an identity taken from a stored interface answer rather
+	// than the recorded identity columns; empty when the identity is recorded.
+	Caveat string
 }
 
 // Identity is the name and email on one line, without the chips; provider text is folded onto one line.
@@ -54,20 +59,82 @@ func (l AccountLabel) String() string {
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
+// tokenResponseOwner reads the Notion token-response owner (owner.user.name, owner.user.person.email).
+// A workspace-level owner carries no user and yields nothing.
+func tokenResponseOwner(extras map[string]json.RawMessage) (name, email string) {
+	raw, ok := extras["owner"]
+	if !ok {
+		return "", ""
+	}
+	var owner struct {
+		User struct {
+			Name   string `json:"name"`
+			Person struct {
+				Email string `json:"email"`
+			} `json:"person"`
+		} `json:"user"`
+	}
+	if json.Unmarshal(raw, &owner) != nil {
+		return "", ""
+	}
+	return strings.TrimSpace(owner.User.Name), strings.TrimSpace(owner.User.Person.Email)
+}
+
+// idTokenRejectedCaveat qualifies an identity shown from userinfo after the exchange rejected the grant's ID token.
+const idTokenRejectedCaveat = "Unconfirmed. The provider reported this account, but its identity proof didn't verify, so it isn't recorded for this connection."
+
+// subjectMismatchCaveat qualifies a recorded identity that a later provider answer contradicted.
+const subjectMismatchCaveat = "Out of date. The provider now reports a different account for this connection than the one recorded here. Reconnect to update it."
+
+// interfaceReasonSubjectMismatch is the fixed reason an enricher records when an answer names another account.
+const interfaceReasonSubjectMismatch = "subject mismatch"
+
 // RemoteSessionAccountLabel decides the account label from the identity columns and the enrichment document.
-func RemoteSessionAccountLabel(email, displayName string, enrichment []byte) AccountLabel {
-	label := AccountLabel{Name: conv.Default(displayName, email), Email: "", Chips: nil}
+// A JWT-sourced name is shown only alongside an email claim or an email-shaped subject.
+// Without a recorded identity, a stored userinfo answer under a rejected ID token is shown with a caveat,
+// else a Notion-style token-response owner names the account.
+func RemoteSessionAccountLabel(email, displayName, subject, source string, enrichment []byte) AccountLabel {
+	if source == IdentitySourceJWTAccessToken && email == "" {
+		if parsed, err := mail.ParseAddress(subject); err == nil && parsed.Address == subject {
+			email = subject
+		} else {
+			// Hide the identity, not independently supplied provider context.
+			displayName = ""
+		}
+	}
+	var doc enrichmentDocument
+	if len(enrichment) > 0 {
+		var parsed enrichmentDocument
+		if json.Unmarshal(enrichment, &parsed) == nil {
+			doc = parsed
+		}
+	}
+	extras := doc.TokenResponse
+	caveat := ""
+	if displayName == "" && email == "" && doc.Interfaces[IdentitySourceIDToken].Status == interfaceStatusRejected {
+		displayName, email = displayNameFromClaims(doc.Userinfo), claimString(doc.Userinfo, "email")
+		if displayName != "" || email != "" {
+			caveat = idTokenRejectedCaveat
+		}
+	}
+	if displayName == "" && email == "" {
+		displayName, email = tokenResponseOwner(extras)
+	} else if caveat == "" {
+		// Only live answers about the account contradict it; a JWT for another subject is rejected as a token, not a restatement.
+		for _, name := range []string{IdentitySourceUserinfo, IdentitySourceIntrospection} {
+			if doc.Interfaces[name].Reason == interfaceReasonSubjectMismatch {
+				caveat = subjectMismatchCaveat
+				break
+			}
+		}
+	}
+	label := AccountLabel{Name: conv.Default(displayName, email), Email: "", Chips: nil, Caveat: caveat}
 	if displayName != "" && email != "" {
 		label.Email = email
 	}
-	if len(enrichment) == 0 {
+	if extras == nil {
 		return label
 	}
-	var doc enrichmentDocument
-	if err := json.Unmarshal(enrichment, &doc); err != nil {
-		return label
-	}
-	extras := doc.TokenResponse
 	if workspace := claimString(extras, "workspace_name"); workspace != "" {
 		label.Chips = append(label.Chips, workspace)
 	}

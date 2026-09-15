@@ -907,11 +907,11 @@ func TestConsentTemplateShowsConnectedIdentity(t *testing.T) {
 	}
 
 	html := render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "grant-owner@example.com"})
-	require.Contains(t, html, "Authenticated as grant-owner@example.com")
+	require.Contains(t, html, `Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>grant-owner@example.com`)
 
 	// The identity is provider-supplied text and must render escaped.
 	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: true, ConnectedAs: "<img src=x>"})
-	require.Contains(t, html, "Authenticated as &lt;img src=x&gt;")
+	require.Contains(t, html, `Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>&lt;img src=x&gt;`)
 	require.NotContains(t, html, "<img src=x>")
 
 	html = render(t, remoteSessionCard{ClientID: "client-id", IssuerSlug: "corp-okta", Connected: false, ConnectedAs: "grant-owner@example.com"})

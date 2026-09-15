@@ -34,9 +34,17 @@ export type CreateRemoteSessionClientForm = {
    */
   clientId: string;
   /**
+   * When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+   */
+  clientIdIssuedAt?: Date | undefined;
+  /**
    * client_secret supplied by the caller. Gram encrypts before persisting.
    */
   clientSecret?: string | undefined;
+  /**
+   * When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+   */
+  clientSecretExpiresAt?: Date | undefined;
   /**
    * The owning remote_session_issuer id.
    */
@@ -66,7 +74,9 @@ export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema
 export type CreateRemoteSessionClientForm$Outbound = {
   audience?: string | undefined;
   client_id: string;
+  client_id_issued_at?: string | undefined;
   client_secret?: string | undefined;
+  client_secret_expires_at?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
   token_endpoint_auth_method?: string | undefined;
@@ -81,7 +91,13 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     clientId: z.string(),
+    clientIdIssuedAt: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     clientSecret: z.optional(z.string()),
+    clientSecretExpiresAt: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
     tokenEndpointAuthMethod: z.optional(
@@ -92,7 +108,9 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       clientId: "client_id",
+      clientIdIssuedAt: "client_id_issued_at",
       clientSecret: "client_secret",
+      clientSecretExpiresAt: "client_secret_expires_at",
       remoteSessionIssuerId: "remote_session_issuer_id",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerIds: "user_session_issuer_ids",
