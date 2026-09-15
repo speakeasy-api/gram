@@ -6,8 +6,10 @@ import (
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
@@ -74,4 +76,36 @@ func TestPreparationLifecycle_OrganizationDetachAbsentJoinIgnoresEMABinding(t *t
 	serverID := seedMCPServerInOrg(t, ctx, ti.conn, auth.ActiveOrganizationID, "ema-absent-detach")
 	err = ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{ClientID: in.ClientID.String(), McpServerID: serverID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestPreparationLifecycle_DeletePreflightsReportLiveEMABindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	// Use an explicitly linked fixture accepted by the consolidated base guard.
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	require.NoError(t, repo.New(ti.conn).SetPreparationFixtureTrust(ctx, repo.SetPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, IssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID), ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
+	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
+	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "ready", prepared.State)
+	clientPayload := &orgclientsgen.GetClientDeletePreflightPayload{ID: in.ClientID.String()}
+	issuerPayload := &orgissuersgen.GetIssuerDeletePreflightPayload{ID: in.RemoteSessionIssuerID.String()}
+	client, err := ti.service.GetClientDeletePreflight(ctx, clientPayload)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, client.EmaBindingCount)
+	require.Zero(t, client.SessionCount)
+	require.Empty(t, client.McpServerNames, "EMA-only references must be visible without interactive attachments")
+	issuer, err := ti.service.GetIssuerDeletePreflight(ctx, issuerPayload)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, issuer.EmaBindingCount)
+	require.Empty(t, issuer.McpServerNames)
+	in.ExpectedGeneration = prepared.Generation
+	_, err = ti.service.UnlinkIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	client, err = ti.service.GetClientDeletePreflight(ctx, clientPayload)
+	require.NoError(t, err)
+	require.Zero(t, client.EmaBindingCount, "unlinked tombstones are not delete blockers")
+	issuer, err = ti.service.GetIssuerDeletePreflight(ctx, issuerPayload)
+	require.NoError(t, err)
+	require.Zero(t, issuer.EmaBindingCount)
 }
