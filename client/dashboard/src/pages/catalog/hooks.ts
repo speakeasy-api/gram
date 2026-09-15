@@ -50,6 +50,15 @@ type CatalogQueryOptions = {
   throwOnError?: boolean;
 };
 
+/**
+ * How long a fetched catalog stays fresh.
+ *
+ * Exported because staleness is per-observer in react-query: a second reader of
+ * this query that does not set it refetches the registry on every mount, even
+ * though the cache entry it shares is still fresh here.
+ */
+export const CATALOG_STALE_TIME_MS = 5 * 60 * 1000;
+
 function useListMCPCatalogImpl(
   search?: string,
   registryId?: string,
@@ -70,7 +79,7 @@ function useListMCPCatalogImpl(
         registryId: registryId || undefined,
         gramProject: projectSlug,
       }),
-    staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
+    staleTime: CATALOG_STALE_TIME_MS,
     enabled: options?.enabled ?? true,
     throwOnError: options?.throwOnError,
   });

@@ -94,6 +94,8 @@ type RefreshService struct {
 	// issuerMetadata refreshes the issuer's stored metadata when a session is refreshed; nil leaves the row as is.
 	issuerMetadata *IssuerMetadataRefresher
 
+	assertions TokenEndpointAssertionSigner
+
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
 }
@@ -129,6 +131,12 @@ func WithRefreshSessionEnricher(enricher *SessionEnricher) RefreshOption {
 	}
 }
 
+// WithRefreshTokenEndpointAssertionSigner signs private_key_jwt assertions for
+// refresh grants.
+func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) RefreshOption {
+	return func(s *RefreshService) { s.assertions = signer }
+}
+
 // NewRefreshService builds the service; without a guardian policy no enricher
 // is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache, opts ...RefreshOption) *RefreshService {
@@ -142,13 +150,14 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		idTokens:       NoIDTokenVerifier(),
 		issuerMetadata: nil,
 		enricher:       nil,
+		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
-	}
-	if policy != nil {
-		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil)
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.enricher == nil && policy != nil {
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, s.issuerMetadata)
 	}
 	return s
 }

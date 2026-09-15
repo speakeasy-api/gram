@@ -59,7 +59,7 @@ export type EmployeeAIDetectionsQueryError =
  * listEmployeeAIDetections access
  *
  * @remarks
- * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+ * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
  */
 export function useEmployeeAIDetections(
   request: ListEmployeeAIDetectionsRequest,
@@ -88,7 +88,7 @@ export function useEmployeeAIDetections(
  * listEmployeeAIDetections access
  *
  * @remarks
- * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+ * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
  */
 export function useEmployeeAIDetectionsSuspense(
   request: ListEmployeeAIDetectionsRequest,

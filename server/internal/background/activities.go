@@ -245,6 +245,7 @@ func NewActivities(
 	idTokenVerifier remotesessions.IDTokenVerifier,
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
+	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -327,6 +328,7 @@ func NewActivities(
 				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
+				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 			),
 		)
 	}

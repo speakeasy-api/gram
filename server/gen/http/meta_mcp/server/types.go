@@ -44,6 +44,12 @@ type UpdateMetaMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
+	// Custom server instructions replace Gram's built-in gateway instructions in
+	// MCP initialize and server/discover responses. Omit to leave them unchanged;
+	// send an empty string to restore Gram's built-in gateway instructions.
+	// Limited to 10000 Unicode characters after removing NUL characters and
+	// trimming whitespace.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -84,6 +90,10 @@ type CreateMetaMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Gram's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -110,6 +120,10 @@ type GetMetaMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Gram's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -142,6 +156,10 @@ type UpdateMetaMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Gram's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1878,6 +1896,10 @@ type MetaMcpServerResponseBody struct {
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode string `form:"network_access_mode" json:"network_access_mode" xml:"network_access_mode"`
+	// Operator-authored server instructions returned in the gateway's MCP
+	// initialize response. Null when the gateway serves Gram's built-in
+	// instructions.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1911,6 +1933,7 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -1929,6 +1952,7 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -1966,6 +1990,7 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		UserSessionIssuerID: res.UserSessionIssuerID,
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
+		Instructions:        res.Instructions,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 		MemberCount:         res.MemberCount,
@@ -3393,6 +3418,7 @@ func NewUpdateMetaMcpServerPayload(body *UpdateMetaMcpServerRequestBody, session
 		ID:                  *body.ID,
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
+		Instructions:        body.Instructions,
 	}
 	if body.Visibility != nil {
 		visibility := types.MetaMcpServerVisibility(*body.Visibility)

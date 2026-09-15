@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 // exhaustedPage is the enqueue result of a project with nothing left to enqueue.
@@ -61,14 +62,14 @@ func TestTemporalSkillEfficacySignalerWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
 	signaler := &TemporalSkillEfficacySignaler{}
-	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), ErrTemporalUnavailable)
+	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), temporal.ErrNotConfigured)
 }
 
 func TestNilTemporalSkillEfficacySignaler(t *testing.T) {
 	t.Parallel()
 
 	var signaler *TemporalSkillEfficacySignaler
-	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), ErrTemporalUnavailable)
+	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), temporal.ErrNotConfigured)
 }
 
 func TestSkillEfficacyCoordinatorWorkflowCompletesWhenThereIsNoWork(t *testing.T) {

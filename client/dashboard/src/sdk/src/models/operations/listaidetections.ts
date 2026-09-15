@@ -15,6 +15,7 @@ export type ListAIDetectionsSecurity = {
  */
 export const Category = {
   Harness: "harness",
+  Assistant: "assistant",
   LocalModel: "local_model",
 } as const;
 /**

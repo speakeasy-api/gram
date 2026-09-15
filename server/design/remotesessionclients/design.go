@@ -9,7 +9,11 @@ import (
 )
 
 func tokenEndpointAuthMethodEnum() {
-	Enum("client_secret_basic", "client_secret_post", "none")
+	Enum("client_secret_basic", "client_secret_post", "none", "private_key_jwt")
+}
+
+func tokenEndpointAuthAudienceFormatEnum() {
+	Enum("issuer", "token_endpoint")
 }
 
 // scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
@@ -718,6 +722,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
@@ -767,6 +772,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	})
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
@@ -778,15 +784,12 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 // AttachKeySetForm backs the attachKeySet methods on both tenant client
 // services; detachKeySet needs no body and takes the id as a query parameter.
 // The link lives on its own pair of methods rather than on the create and
-// update forms for three reasons: the
+// update forms for two reasons: the
 // entitlement gate applies to this link alone and would otherwise have to fire
 // conditionally on a field's presence inside handlers the rest of the
 // organization can use ungated; the private_key_jwt coupling rule needs to tell
 // "leave unchanged" from "clear", which a Format(FormatUUID) patch attribute
-// cannot express (an empty string fails validation before a handler sees it);
-// and UpdateRemoteSessionClientForm is shared with the platform-admin
-// updateGlobalClient method, whose clients have a NULL organization_id by
-// construction and so can never hold a set.
+// cannot express (an empty string fails validation before a handler sees it).
 var AttachKeySetForm = Type("AttachKeySetForm", func() {
 	Description("Form for attaching an organization JSON Web Key Set to a remote_session_client.")
 
@@ -859,6 +862,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.", tokenEndpointAuthAudienceFormatEnum)
 	// Read-only here. The link is mutated through attachKeySet / detachKeySet
 	// rather than the create and update forms: it is entitlement-gated where the
 	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in

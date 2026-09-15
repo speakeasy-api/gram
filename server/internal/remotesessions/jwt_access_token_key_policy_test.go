@@ -65,7 +65,7 @@ func TestAccessTokenKeyPolicyDoesNotChangeIDTokenVerification(t *testing.T) {
 	})
 	require.NoError(t, err, "the access-token key policy must not change established ID-token verification")
 
-	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil)
 	result := enricher.jwtAccessToken(t.Context(), enrichmentTarget{
 		issuerID: uuid.New(), issuerURL: rsaKeyPolicyIssuer, jwksURI: rsaKeyPolicyJWKSURI, externalClientID: rsaKeyPolicyClientID,
 	}, mintRSAAccessToken(t, key, jose.RS256, "at+jwt"))
@@ -78,7 +78,7 @@ func TestAccessTokenKeyPolicyDoesNotChangeIDTokenVerification(t *testing.T) {
 func TestAccessTokenRSAAlgorithmsVerify(t *testing.T) {
 	t.Parallel()
 	key, keys, policy := newRSAKeyPolicyFixture(t, 2048)
-	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil)
+	enricher := NewSessionEnricher(testenv.NewLogger(t), nil, policy, keys, nil, nil)
 	target := enrichmentTarget{issuerID: uuid.New(), issuerURL: rsaKeyPolicyIssuer, jwksURI: rsaKeyPolicyJWKSURI, externalClientID: rsaKeyPolicyClientID}
 	result := enricher.jwtAccessToken(t.Context(), target, mintRSAAccessToken(t, key, jose.RS256, "at+jwt"))
 	require.Equal(t, interfaceStatusOK, result.Status, result.Reason)

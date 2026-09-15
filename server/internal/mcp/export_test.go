@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
@@ -125,6 +127,22 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 // RemoteChallengeManager is the manager the service registered its grant hook on.
 func (s *Service) RemoteChallengeManager() *remotesessions.ChallengeManager {
 	return s.remoteChallengeMgr
+}
+
+// FailAIToolBlockedIDsRead makes the "does this organization block anything?"
+// read behind the gateway block check fail with err.
+func (s *Service) FailAIToolBlockedIDsRead(err error) {
+	s.aiToolBlockReads.blockedTargetIDs = func(context.Context, *agentrepo.Queries, string) ([]string, error) {
+		return nil, err
+	}
+}
+
+// FailAIToolCatalogRead makes the scan-target catalog read behind the gateway
+// block check fail with err, leaving the blocked-ids read intact.
+func (s *Service) FailAIToolCatalogRead(err error) {
+	s.aiToolBlockReads.catalog = func(context.Context, *agentrepo.Queries, string) (*aitargets.OrganizationList, error) {
+		return nil, err
+	}
 }
 
 // SetRemoteSessionRecheckPacing swaps the sweep's per-host limiter rate and claim batch for a test.

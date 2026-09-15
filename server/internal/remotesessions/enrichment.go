@@ -30,7 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -149,6 +151,9 @@ type enrichmentTarget struct {
 
 	clientSecretEncrypted string
 	tokenEndpointAuth     string
+
+	// issuerUse is the issuer row snapshot a reactive metadata refresh plans from.
+	issuerUse IssuerMetadataUse
 }
 
 func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, organizationID string) enrichmentTarget {
@@ -165,6 +170,7 @@ func enrichmentTargetFromClient(row remotesessions_repo.GetRemoteSessionClientWi
 		resourceIndicatorUnsupported: row.ResourceIndicatorSupported.Valid && !row.ResourceIndicatorSupported.Bool,
 		clientSecretEncrypted:        conv.FromPGTextOrEmpty[string](row.ClientSecretEncrypted),
 		tokenEndpointAuth:            conv.FromPGTextOrEmpty[string](row.TokenEndpointAuthMethod),
+		issuerUse:                    issuerUseFromClientRow(row),
 	}
 }
 
@@ -262,22 +268,20 @@ type SessionEnricher struct {
 	// keys verifies RFC 9701 signed introspection responses; nil rejects them.
 	keys *jwks.KeyResolver
 
-	// requestIssuerMetadataRefresh is called when an advertised endpoint
-	// answers 404, so the issuer's discovery document can be re-read. AIM-260
-	// supplies the refresh; until then the request is dropped.
-	requestIssuerMetadataRefresh func(ctx context.Context, issuerID uuid.UUID)
+	// issuerMetadata re-reads the issuer's discovery document when an advertised endpoint answers 404 or 410; nil drops the request.
+	issuerMetadata *IssuerMetadataRefresher
 }
 
 // NewSessionEnricher binds the transport, client-secret decryption, per-issuer
-// budget, and key resolver an enrichment call needs.
-func NewSessionEnricher(logger *slog.Logger, enc *encryption.Client, policy *guardian.Policy, keys *jwks.KeyResolver, limiter *ratelimit.Limiter) *SessionEnricher {
+// budget, key resolver, and issuer metadata refresher an enrichment call needs.
+func NewSessionEnricher(logger *slog.Logger, enc *encryption.Client, policy *guardian.Policy, keys *jwks.KeyResolver, limiter *ratelimit.Limiter, issuerMetadata *IssuerMetadataRefresher) *SessionEnricher {
 	return &SessionEnricher{
-		logger:                       logger.With(attr.SlogComponent("remote-session-enrichment")),
-		enc:                          enc,
-		client:                       noRedirectClient(policy.PooledClient()),
-		limiter:                      limiter,
-		keys:                         keys,
-		requestIssuerMetadataRefresh: func(context.Context, uuid.UUID) {},
+		logger:         logger.With(attr.SlogComponent("remote-session-enrichment")),
+		enc:            enc,
+		client:         noRedirectClient(policy.PooledClient()),
+		limiter:        limiter,
+		keys:           keys,
+		issuerMetadata: issuerMetadata,
 	}
 }
 
@@ -307,7 +311,14 @@ func introspectionAuthMethod(advertised []string, tokenEndpointMethod string, cl
 		case TokenEndpointAuthMethodPrivateKeyJWT:
 		}
 	}
-	return ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	method, err := ResolveTokenEndpointAuthMethod(tokenEndpointMethod, clientSecret)
+	if err != nil {
+		return "", err
+	}
+	if method == TokenEndpointAuthMethodPrivateKeyJWT {
+		return "", fmt.Errorf("private_key_jwt introspection authentication is not supported")
+	}
+	return method, nil
 }
 
 // run performs one enrichment call: the endpoint and budget gates, the request build, and the read.
@@ -359,11 +370,13 @@ func (e *SessionEnricher) run(ctx context.Context, target enrichmentTarget, name
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
-	case http.StatusNotFound:
-		// The advertised endpoint has moved; discovery needs re-reading.
-		logger.WarnContext(ctx, "enrichment interface answered 404; issuer metadata refresh requested")
-		e.requestIssuerMetadataRefresh(ctx, target.issuerID)
-		res.fail("status 404")
+	case http.StatusNotFound, http.StatusGone:
+		_, oauthErrorBody := oautherr.ParseTokenError(body)
+		if upstreamEndpointMissing(resp.StatusCode, oauthErrorBody) {
+			logger.WarnContext(ctx, "enrichment interface missing; issuer metadata refresh requested", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
+			e.issuerMetadata.RequestRefresh(ctx, target.issuerUse, remotesessionmetrics.IssuerMetadataRefreshReasonEnrichmentEndpointMissing)
+		}
+		res.fail(fmt.Sprintf("status %d", resp.StatusCode))
 		return none, res
 	default:
 		res.fail(fmt.Sprintf("status %d", resp.StatusCode))
@@ -578,7 +591,16 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		form := url.Values{}
 		form.Set("token", token)
 		form.Set("token_type_hint", hint)
-		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, authMethod, target.externalClientID, clientSecret)
+		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, tokenEndpointClientAuth{
+			Method:                authMethod,
+			RemoteSessionClientID: uuid.Nil,
+			OrganizationID:        "",
+			JSONWebKeySetID:       uuid.Nil,
+			ClientID:              target.externalClientID,
+			ClientSecret:          clientSecret,
+			AssertionAudience:     "",
+			AssertionSigner:       unavailableTokenEndpointAssertionSigner{},
+		})
 		if err != nil {
 			return nil, err
 		}
