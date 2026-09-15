@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	operationListShadowAITools = "list_shadow_ai_tools"
-	operationListAIScanLibrary = "list_ai_scan_library"
+	operationListShadowAIInventory = "list_shadow_ai_inventory"
+	operationListAIScanLibrary     = "list_ai_scan_library"
 )
 
 func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
@@ -20,13 +20,13 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 		return
 	}
 	addTool(reg, &mcp.Tool{
-		Name:        operationListShadowAITools,
-		Title:       "List Shadow AI Tools",
+		Name:        operationListShadowAIInventory,
+		Title:       "List Shadow AI Inventory",
 		Description: "List the AI tools enrolled devices in this organization have been detected running, with the organization's gateway access decision for each. Covers coding harnesses, general-purpose assistants, and locally run open models; narrow with category. State is allowed, blocked, or unreviewed — a tool that publishes no client ID metadata document always reads unreviewed, because no decision about it can be enforced, and enforceable says which case a row is.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowAIToolsInput) (*mcp.CallToolResult, ListShadowAIToolsOutput, error) {
-		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListShadowAIToolsOutput, error) {
-			return service.ListTools(ctx, principal, input)
+	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowAIInventoryInput) (*mcp.CallToolResult, ListShadowAIInventoryOutput, error) {
+		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListShadowAIInventoryOutput, error) {
+			return service.ListInventory(ctx, principal, input)
 		})
 	})
 	addTool(reg, &mcp.Tool{
@@ -43,7 +43,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 
 func registerUnavailableShadowAITools(reg *Registrar) {
 	for _, tool := range []struct{ name, title, description string }{
-		{operationListShadowAITools, "List Shadow AI Tools", "List detected AI tools and their gateway access decisions. This is not switched on for your organization yet."},
+		{operationListShadowAIInventory, "List Shadow AI Inventory", "List detected AI tools and their gateway access decisions. This is not switched on for your organization yet."},
 		{operationListAIScanLibrary, "List AI Scan Library", "List the AI tools device agents probe for. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeNone}, unavailableTool(shadowAIFeature))

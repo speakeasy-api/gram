@@ -42,7 +42,7 @@ func shadowAIPrincipal() Principal {
 	return Principal{UserID: "user_1", OrganizationID: "org_1", ConnectionID: "conn_1", Generation: "g1", ClientID: "client_1", Surface: SurfacePlatformMCP}
 }
 
-func TestShadowAIListToolsProjectsTheAccessVerdict(t *testing.T) {
+func TestShadowAIListInventoryProjectsTheAccessVerdict(t *testing.T) {
 	t.Parallel()
 
 	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: []*accessgen.AIDetection{{
@@ -58,7 +58,7 @@ func TestShadowAIListToolsProjectsTheAccessVerdict(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	out, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{Category: "harness"})
+	out, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "harness"})
 	require.NoError(t, err)
 	require.Len(t, out.Tools, 1)
 	require.Equal(t, "codex", out.Tools[0].TargetID)
@@ -79,7 +79,7 @@ func TestShadowAIRefusesWithoutLiveOrgAdmin(t *testing.T) {
 	service := NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, stubAuthorizer{err: denied}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{})
+	_, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
 	require.ErrorIs(t, err, denied)
 
 	_, err = service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{})
@@ -147,13 +147,13 @@ func TestShadowAIServiceRequiresEveryDependency(t *testing.T) {
 	require.Nil(t, NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, stubAuthorizer{}, OperationBudget{}))
 }
 
-// TestShadowAIListToolsProjectsTheUnenforceableHalf covers the distinction the
+// TestShadowAIListInventoryProjectsTheUnenforceableHalf covers the distinction the
 // feature exists to make. A tool publishing no client ID metadata document
 // reads unreviewed because no decision about it can be enforced, and a
 // detection may carry no access summary at all. Both must project as
 // unreviewed with enforceable false, and the earlier test only pinned the
 // blocked-and-enforceable half.
-func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
+func TestShadowAIListInventoryProjectsTheUnenforceableHalf(t *testing.T) {
 	t.Parallel()
 
 	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: []*accessgen.AIDetection{
@@ -186,7 +186,7 @@ func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	out, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{})
+	out, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
 	require.NoError(t, err)
 	require.Len(t, out.Tools, 3)
 
@@ -205,18 +205,18 @@ func TestShadowAIListToolsProjectsTheUnenforceableHalf(t *testing.T) {
 	require.NotEqual(t, out.Tools[0].Enforceable, out.Tools[1].Enforceable)
 }
 
-// TestShadowAIListToolsRejectsUnknownCategory: an unknown category is a
+// TestShadowAIListInventoryRejectsUnknownCategory: an unknown category is a
 // mistake the caller can correct, so it must reach the invalid-argument
 // refusal rather than fall through to the read and surface as a raw handler
-// error. ListLibrary already behaved this way; ListTools did not.
-func TestShadowAIListToolsRejectsUnknownCategory(t *testing.T) {
+// error. ListLibrary already behaved this way; ListInventory did not.
+func TestShadowAIListInventoryRejectsUnknownCategory(t *testing.T) {
 	t.Parallel()
 
 	detections := &stubDetectionReader{result: &accessgen.ListAIDetectionsResult{Detections: nil}}
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err := service.ListTools(t.Context(), shadowAIPrincipal(), ListShadowAIToolsInput{Category: "not-a-category"})
+	_, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "not-a-category"})
 	require.ErrorIs(t, err, ErrShadowAIInvalid)
 	require.NotErrorIs(t, err, ErrShadowAIUnavailable, "the service is configured; only the argument is wrong")
 	require.Empty(t, detections.lastInput.OrganizationID, "the read must not run for an argument that cannot be valid")

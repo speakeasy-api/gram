@@ -92,7 +92,7 @@ func (s *ShadowAIService) admit(ctx context.Context, principal Principal) error 
 	return s.budget.Allow(ctx, principal)
 }
 
-type ListShadowAIToolsInput struct {
+type ListShadowAIInventoryInput struct {
 	Category string `json:"category,omitempty" jsonschema:"narrow to one kind of tool: harness, assistant or local_model; omit for all three"`
 }
 
@@ -113,13 +113,13 @@ type ShadowAIToolSummary struct {
 	LastSeen    string   `json:"last_seen"`
 }
 
-type ListShadowAIToolsOutput struct {
+type ListShadowAIInventoryOutput struct {
 	Tools []ShadowAIToolSummary `json:"tools"`
 }
 
-func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, input ListShadowAIToolsInput) (ListShadowAIToolsOutput, error) {
+func (s *ShadowAIService) ListInventory(ctx context.Context, principal Principal, input ListShadowAIInventoryInput) (ListShadowAIInventoryOutput, error) {
 	if err := s.admit(ctx, principal); err != nil {
-		return ListShadowAIToolsOutput{}, err
+		return ListShadowAIInventoryOutput{}, err
 	}
 	// Validated here rather than left to the read: the access service rejects
 	// an unknown category with a generic bad-request error, which the tool
@@ -127,14 +127,14 @@ func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, in
 	// invalid-argument refusal ListLibrary gives for the same mistake.
 	category := strings.TrimSpace(input.Category)
 	if category != "" && !slices.Contains(aitargets.KnownCategories(), aitargets.Category(category)) {
-		return ListShadowAIToolsOutput{}, ErrShadowAIInvalid
+		return ListShadowAIInventoryOutput{}, ErrShadowAIInvalid
 	}
 	result, err := s.detections.ReadAIDetections(ctx, access.AIDetectionsReadInput{
 		OrganizationID: principal.OrganizationID,
 		Category:       category,
 	})
 	if err != nil {
-		return ListShadowAIToolsOutput{}, fmt.Errorf("read shadow ai detections: %w", err)
+		return ListShadowAIInventoryOutput{}, fmt.Errorf("read shadow ai detections: %w", err)
 	}
 	tools := make([]ShadowAIToolSummary, 0, len(result.Detections))
 	for _, detection := range result.Detections {
@@ -158,7 +158,7 @@ func (s *ShadowAIService) ListTools(ctx context.Context, principal Principal, in
 		}
 		tools = append(tools, summary)
 	}
-	return ListShadowAIToolsOutput{Tools: tools}, nil
+	return ListShadowAIInventoryOutput{Tools: tools}, nil
 }
 
 type ListAIScanLibraryInput struct {
