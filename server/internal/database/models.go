@@ -2341,6 +2341,8 @@ type RemoteSessionIssuer struct {
 	JwksUri                                    pgtype.Text
 	Jwks                                       []byte
 	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
 	JwksCacheExpiresAt                         pgtype.Timestamptz
 	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
