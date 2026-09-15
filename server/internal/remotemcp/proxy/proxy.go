@@ -145,6 +145,10 @@ type UpstreamResponseRetry struct {
 
 type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
 
+// ForwardErrorRetryer selects a replacement upstream after a recoverable
+// transport failure.
+type ForwardErrorRetryer func(ctx context.Context, err error) (*UpstreamResponseRetry, error)
+
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
 // request so the SessionID and interceptor state stay tied to a single
@@ -233,6 +237,17 @@ type Proxy struct {
 	// response headers arrive but before any response is relayed to the user.
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
+
+	// ForwardErrorRetryer may replace the upstream target once when the
+	// forward fails with a transport-level error before any response
+	// headers arrive. The retryer owns replay safety: it must only request
+	// a retry for failures where the request cannot have reached the
+	// backend (e.g. dial-phase errors). Returning a non-nil error replaces
+	// the classified forward error; returning (nil, nil) keeps it. The
+	// response and transport retryers are each consulted at most once, so
+	// mixed failure modes can produce at most three total forward attempts.
+	// It is used by tunneled MCP to evict routes whose gateway address is dead.
+	ForwardErrorRetryer ForwardErrorRetryer
 
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
@@ -944,7 +959,7 @@ func (p *Proxy) forwardRequest(
 		// inside the http.Client error chain.
 		timedOut := !phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, p.classifyForwardError(ctx, err, timedOut)
+		return nil, nil, classifyForwardError(err, timedOut)
 	}
 
 	// Atomically transition out of the headers-phase window. Stop returning
@@ -955,7 +970,7 @@ func (p *Proxy) forwardRequest(
 	if !phaseTimer.Stop() {
 		_ = resp.Body.Close()
 		forwardCancel()
-		return nil, nil, p.classifyForwardError(ctx, context.DeadlineExceeded, true)
+		return nil, nil, classifyForwardError(context.DeadlineExceeded, true)
 	}
 
 	if isEventStream(resp.Header) {
@@ -993,28 +1008,51 @@ func (p *Proxy) forwardRequestWithRetry(
 	body func() io.Reader,
 	validate func(*http.Request) error,
 ) (*http.Request, *http.Response, error) {
-	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
-	if err != nil || p.UpstreamResponseRetryer == nil {
-		return upstreamReq, upstreamResp, err
-	}
+	forwardErrorRetried := false
+	upstreamResponseRetried := false
 
-	retry, err := p.UpstreamResponseRetryer(ctx, upstreamResp)
-	if err != nil {
-		// Callers bail on err before they register their Body.Close defer,
-		// so an open response returned alongside an error is leaked — it
-		// would pin the upstream connection until the phase timer fires.
-		// Close it here and return no response.
+	for {
+		upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
+		if err != nil {
+			if forwardErrorRetried || p.ForwardErrorRetryer == nil {
+				return upstreamReq, upstreamResp, p.logForwardError(ctx, err)
+			}
+			forwardErrorRetried = true
+
+			retry, retryerErr := p.ForwardErrorRetryer(ctx, err)
+			if retryerErr != nil {
+				return upstreamReq, nil, retryerErr
+			}
+			if retry == nil {
+				return upstreamReq, upstreamResp, p.logForwardError(ctx, err)
+			}
+			p.RemoteURL = retry.RemoteURL
+			p.Headers = retry.Headers
+			continue
+		}
+
+		if upstreamResponseRetried || p.UpstreamResponseRetryer == nil {
+			return upstreamReq, upstreamResp, nil
+		}
+		upstreamResponseRetried = true
+
+		retry, retryerErr := p.UpstreamResponseRetryer(ctx, upstreamResp)
+		if retryerErr != nil {
+			// Callers bail on err before they register their Body.Close defer,
+			// so an open response returned alongside an error is leaked — it
+			// would pin the upstream connection until the phase timer fires.
+			// Close it here and return no response.
+			o11y.NoLogDefer(upstreamResp.Body.Close)
+			return upstreamReq, nil, retryerErr
+		}
+		if retry == nil {
+			return upstreamReq, upstreamResp, nil
+		}
 		o11y.NoLogDefer(upstreamResp.Body.Close)
-		return upstreamReq, nil, err
-	}
-	if retry == nil {
-		return upstreamReq, upstreamResp, nil
-	}
-	o11y.NoLogDefer(upstreamResp.Body.Close)
 
-	p.RemoteURL = retry.RemoteURL
-	p.Headers = retry.Headers
-	return p.forwardRequest(ctx, r, body(), validate)
+		p.RemoteURL = retry.RemoteURL
+		p.Headers = retry.Headers
+	}
 }
 
 // relaySSEStream parses Server-Sent Events from the upstream body, relays

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,7 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
+const (
+	initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`
+	deadLoopbackURL   = "http://127.0.0.1:0"
+)
 
 func TestServerIdentity_DistinguishesTunneledBackend(t *testing.T) {
 	t.Parallel()
@@ -71,6 +75,7 @@ func newProxyForTest(t *testing.T, upstreamURL string) *proxy.Proxy {
 		Headers:                            nil,
 		AuthorizationOverride:              "",
 		UpstreamResponseRetryer:            nil,
+		ForwardErrorRetryer:                nil,
 		UpstreamResponseInterceptor:        nil,
 		UserRequestObservationInterceptors: nil,
 		UserRequestInterceptors:            nil,
@@ -2810,4 +2815,143 @@ func TestProxy_Post_UpstreamResponseInterceptorErrorAbortsBeforeFlush(t *testing
 	require.Error(t, err)
 	require.Equal(t, http.StatusOK, rr.Code, "recorder default; nothing was written via WriteHeader")
 	require.Empty(t, rr.Body.String(), "no body may reach the client when the interceptor fails closed")
+}
+
+func TestProxy_Post_ForwardErrorRetryerFailsOverOnDeadDial(t *testing.T) {
+	t.Parallel()
+
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, deadLoopbackURL)
+	var logs bytes.Buffer
+	p.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	var retryerSawErr error
+	p.ForwardErrorRetryer = func(_ context.Context, forwardErr error) (*proxy.UpstreamResponseRetry, error) {
+		retryerSawErr = forwardErr
+		return &proxy.UpstreamResponseRetry{RemoteURL: upstream.URL, Headers: nil}, nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, initializeRequest, gotBody, "retried forward must replay the full request body")
+	require.Error(t, retryerSawErr, "retryer must receive the classified forward error")
+	require.Empty(t, logs.String(), "a recovered transport error must not be logged as terminal")
+}
+func TestProxy_Post_ForwardErrorRetryComposesWithResponseRetry(t *testing.T) {
+	t.Parallel()
+
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(final.Close)
+
+	replacement := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(replacement.Close)
+
+	p := newProxyForTest(t, deadLoopbackURL)
+	var forwardRetries atomic.Int32
+	p.ForwardErrorRetryer = func(context.Context, error) (*proxy.UpstreamResponseRetry, error) {
+		forwardRetries.Add(1)
+		return &proxy.UpstreamResponseRetry{RemoteURL: replacement.URL, Headers: nil}, nil
+	}
+	var responseRetries atomic.Int32
+	p.UpstreamResponseRetryer = func(context.Context, *http.Response) (*proxy.UpstreamResponseRetry, error) {
+		responseRetries.Add(1)
+		return &proxy.UpstreamResponseRetry{RemoteURL: final.URL, Headers: nil}, nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int32(1), forwardRetries.Load())
+	require.Equal(t, int32(1), responseRetries.Load())
+}
+
+func TestProxy_Post_ResponseRetryComposesWithForwardErrorRetry(t *testing.T) {
+	t.Parallel()
+
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+	}))
+	t.Cleanup(final.Close)
+
+	initial := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Gram-Tunnel-Error", "no-live-session")
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(initial.Close)
+
+	p := newProxyForTest(t, initial.URL)
+	var responseRetries atomic.Int32
+	p.UpstreamResponseRetryer = func(context.Context, *http.Response) (*proxy.UpstreamResponseRetry, error) {
+		responseRetries.Add(1)
+		return &proxy.UpstreamResponseRetry{RemoteURL: deadLoopbackURL, Headers: nil}, nil
+	}
+	var forwardRetries atomic.Int32
+	p.ForwardErrorRetryer = func(context.Context, error) (*proxy.UpstreamResponseRetry, error) {
+		forwardRetries.Add(1)
+		return &proxy.UpstreamResponseRetry{RemoteURL: final.URL, Headers: nil}, nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int32(1), responseRetries.Load())
+	require.Equal(t, int32(1), forwardRetries.Load())
+}
+
+func TestProxy_Post_ForwardErrorRetryerErrorReplacesForwardError(t *testing.T) {
+	t.Parallel()
+
+	p := newProxyForTest(t, deadLoopbackURL)
+	sentinel := errors.New("route store unavailable")
+	p.ForwardErrorRetryer = func(context.Context, error) (*proxy.UpstreamResponseRetry, error) {
+		return nil, sentinel
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.ErrorIs(t, p.Post(rr, req), sentinel)
+}
+
+func TestProxy_Post_ForwardErrorRetryerNilKeepsForwardError(t *testing.T) {
+	t.Parallel()
+
+	p := newProxyForTest(t, deadLoopbackURL)
+	p.ForwardErrorRetryer = func(context.Context, error) (*proxy.UpstreamResponseRetry, error) {
+		return nil, nil
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
 }
