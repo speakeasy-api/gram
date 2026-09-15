@@ -160,7 +160,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		opt(s)
 	}
 	if s.enricher == nil && policy != nil {
-		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, s.issuerMetadata)
+		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
 	}
 	return s
 }

@@ -342,7 +342,7 @@ func NewChallengeManager(
 	}
 	manager.revoker.assertions = manager.assertions
 	if manager.enricher == nil {
-		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, manager.issuerMetadata)
+		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
@@ -1557,11 +1557,17 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 	// An issuer with no published key set cannot have its tokens verified;
 	// that is a configuration state, not an event worth a warning per grant.
 	if tok.IDToken != "" && issuer.JwksUri.Valid && issuer.JwksUri.String != "" {
+		transport, terr := issuerTunnelTransport(m.tunnels, issuer.TunneledMcpServerID)
+		if terr != nil {
+			logIdentityFailure(ctx, logger, "id token not verified; key set transport unavailable", terr, attr.SlogRemoteSessionClientID(clientRowID.String()))
+			transport = nil
+		}
 		identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      issuer.IssuerUrl,
 			clientID:    externalClientID,
 			jwksURI:     issuer.JwksUri.String,
 			fetchScope:  issuer.RemoteSessionIssuerID.String(),
+			transport:   transport,
 			signingAlgs: issuer.IDTokenSigningAlgValuesSupported,
 			nonce:       nonce,
 			subject:     "",

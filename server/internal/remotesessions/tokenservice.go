@@ -760,11 +760,17 @@ func (s *RefreshService) restateIdentity(
 	var access jwtAccessTokenResult
 	idTokenRejected := storedInterfaceRecords(sess.Enrichment)[IdentitySourceIDToken].Status == interfaceStatusRejected
 	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
+		transport, err := issuerTunnelTransport(s.tunnels, client.TunneledMcpServerID)
+		if err != nil {
+			logIdentityFailure(ctx, s.logger, "refresh id token not verified; key set transport unavailable", err, attrs...)
+			transport = nil
+		}
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      client.IssuerUrl,
 			clientID:    client.ExternalClientID,
 			jwksURI:     client.JwksUri.String,
 			fetchScope:  client.RemoteSessionIssuerID.String(),
+			transport:   transport,
 			signingAlgs: client.IDTokenSigningAlgValuesSupported,
 			nonce:       "",
 			subject:     previousSubject,

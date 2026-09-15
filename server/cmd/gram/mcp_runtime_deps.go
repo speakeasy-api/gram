@@ -60,7 +60,7 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 	verifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
 	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
 	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
-		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), refresher)
+		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), tunnels, refresher)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, cache.NewRedisCacheAdapter(redisClient), serverURL,
 		remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
 			return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)

@@ -412,7 +412,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		if options.enrichmentRate != nil {
 			enrichmentLimiter = ratelimit.New(store, "test_enrichment_"+slugSuffix, *options.enrichmentRate)
 		}
-		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, issuerMetadata)
+		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, nil, issuerMetadata)
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
