@@ -377,7 +377,7 @@ export interface AgentProviderIconProps {
 // Pi (pi.dev) — the agent is named for the letter, so the mark is a geometric
 // pi glyph drawn as paths so it needs no font. Uses currentColor like the
 // sibling icons.
-export function PiIcon({ className }: { className?: string }): JSX.Element {
+function PiIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
