@@ -3288,6 +3288,18 @@ type UserSessionIssuerCimdClient struct {
 	Deleted             bool
 }
 
+type WorkloadAgentAssignment struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type WorkloadIdentityAdmission struct {
 	ID               uuid.UUID
 	OrganizationID   string
