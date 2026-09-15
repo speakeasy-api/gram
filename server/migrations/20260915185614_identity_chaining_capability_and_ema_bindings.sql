@@ -87,6 +87,12 @@ CREATE TRIGGER "remote_session_ema_user_issuer_update_guard" BEFORE UPDATE ON "u
 -- Create "validate_remote_session_ema_binding_scope" function
 CREATE FUNCTION "validate_remote_session_ema_binding_scope" () RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  -- Unlink releases the credential reference, not the downstream provenance.
+  -- Otherwise the composite client/issuer FK blocks a later client move, or
+  -- cascading it would silently retarget the tombstone to another resource AS.
+  IF NEW.state = 'unlinked' THEN
+    NEW.remote_session_client_id := NULL;
+  END IF;
   -- An unlinked tombstone may outlive parent reconfiguration. Preserve it (and
   -- the project's organization cascade), but revalidate any retarget or revival.
   IF TG_OP = 'UPDATE' THEN
@@ -102,8 +108,7 @@ BEGIN
     IF OLD.state = 'unlinked' AND NEW.state = 'unlinked'
       AND OLD.project_id IS NOT DISTINCT FROM NEW.project_id
       AND OLD.user_session_issuer_id IS NOT DISTINCT FROM NEW.user_session_issuer_id
-      AND OLD.remote_session_issuer_id IS NOT DISTINCT FROM NEW.remote_session_issuer_id
-      AND OLD.remote_session_client_id IS NOT DISTINCT FROM NEW.remote_session_client_id THEN
+      AND OLD.remote_session_issuer_id IS NOT DISTINCT FROM NEW.remote_session_issuer_id THEN
       RETURN NEW;
     END IF;
   END IF;

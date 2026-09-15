@@ -233,7 +233,7 @@ func TestEMABindingScope(t *testing.T) {
 			require.NoError(t, err)
 			_, err = tx.Exec(ctx, mutation)
 			require.NoError(t, err)
-			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'ready', generation = generation + 1")
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'ready', generation = generation + 1, remote_session_client_id = fixture_scope_id(1)")
 			require.NoError(t, err)
 			_, err = tx.Exec(ctx, noop)
 			require.NoError(t, err)
@@ -283,6 +283,52 @@ UPDATE remote_session_clients SET client_secret_expires_at = '2000-01-01' WHERE 
 			_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT revival")
 			require.NoError(t, err)
 		}
+	})
+
+	t.Run("unlink_releases_client_without_retargeting_tombstone", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		move := "UPDATE remote_session_clients SET remote_session_issuer_id = fixture_scope_id(4) WHERE id = fixture_scope_id(1)"
+		_, err = tx.Exec(ctx, "SAVEPOINT move_client")
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, move)
+		requireEMAScopeError(t, err)
+		require.ErrorContains(t, err, "active identity-chaining binding must be explicitly unlinked")
+		_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT move_client")
+		require.NoError(t, err)
+		unlinked, err := tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1
+ WHERE project_id = fixture_scope_id(1) AND generation = 1`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, unlinked.RowsAffected())
+		_, err = tx.Exec(ctx, move)
+		require.NoError(t, err)
+		var preserved bool
+		err = tx.QueryRow(ctx, `SELECT remote_session_client_id IS NULL AND remote_session_issuer_id = fixture_scope_id(6)
+ AND resource = 'https://resource.example.invalid' AND state = 'unlinked' AND generation = 2
+ FROM remote_session_ema_bindings WHERE project_id = fixture_scope_id(1)`).Scan(&preserved)
+		require.NoError(t, err)
+		require.True(t, preserved)
+		stale, err := tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', remote_session_client_id = fixture_scope_id(1)
+ WHERE project_id = fixture_scope_id(1) AND generation = 1`)
+		require.NoError(t, err)
+		require.Zero(t, stale.RowsAffected())
+		_, err = tx.Exec(ctx, "SAVEPOINT revive")
+		require.NoError(t, err)
+		// Even a current-generation revival cannot attach a client that now
+		// belongs to another resource AS. The old issuer pair stays authoritative.
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', generation = 3,
+ remote_session_client_id = fixture_scope_id(1) WHERE project_id = fixture_scope_id(1) AND generation = 2`)
+		requireEMAScopeError(t, err)
+		_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT revive")
+		require.NoError(t, err)
+		// A correctly scoped replacement for the original AS can be selected.
+		revived, err := tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', generation = 3,
+ remote_session_client_id = fixture_scope_id(4) WHERE project_id = fixture_scope_id(1) AND generation = 2`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, revived.RowsAffected())
 	})
 
 	t.Run("generation_is_binding_incarnation", func(t *testing.T) {
