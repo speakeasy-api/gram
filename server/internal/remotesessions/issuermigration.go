@@ -486,13 +486,14 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // is the whole of the operation apart from soft-deleting the source, which each
 // surface does with its own scoped delete query.
 //
-// The three guards are the reason this is shared rather than duplicated. Endpoint
+// The four guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
 // authorization server it was established with, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
 // remote_session_issuer) invariant, which no database constraint expresses.
 // Trusted user-session-issuer references must be explicitly unlinked or
-// re-linked rather than silently following a migration. A surface that drifted
+// re-linked rather than silently following a migration. EMA bindings likewise
+// require explicit unlinking before migration. A surface that drifted
 // on any guard would not merely behave differently, it would be less safe.
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and

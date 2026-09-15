@@ -1059,8 +1059,9 @@ func TestIssuerMetadataRefresh_Reproject_KeepsOperatorSetColumns(t *testing.T) {
 	fetchedAt := now.Add(-2 * time.Hour).Truncate(time.Microsecond)
 	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: document, fetchedAt: &fetchedAt, lastError: "", errorAt: nil, errorURL: ""})
 	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
-		ID:               id.String(),
-		UserinfoEndpoint: conv.PtrEmpty("https://operator.example.com/userinfo"),
+		ID:                                  id.String(),
+		AuthorizationGrantProfilesSupported: []string{"urn:ietf:params:oauth:grant-profile:id-jag"},
+		UserinfoEndpoint:                    conv.PtrEmpty("https://operator.example.com/userinfo"),
 		AuthorizationResponseIssParameterSupported: conv.PtrEmpty(true),
 	})
 	require.NoError(t, err)
@@ -1071,6 +1072,7 @@ func TestIssuerMetadataRefresh_Reproject_KeepsOperatorSetColumns(t *testing.T) {
 	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, after.AuthorizationGrantProfilesSupported)
 	require.True(t, after.AuthorizationResponseIssParameterSupported.Valid)
 	require.True(t, after.AuthorizationResponseIssParameterSupported.Bool, "an operator-set flag survives a document that omits it")
 	require.Equal(t, "https://operator.example.com/userinfo", after.UserinfoEndpoint.String, "an operator-set endpoint survives a document that omits it")
@@ -1290,4 +1292,36 @@ func TestIssuerMetadataRefresh_FlowRowReprojectionFlagMatchesTheStoredRow(t *tes
 	require.NoError(t, err)
 	require.False(t, flow.MetadataNeedsReprojection, "a refreshed row has every capability column set")
 	require.True(t, flow.MetadataFetchedAt.Valid)
+	// With every other capability projected, malformed profiles alone must
+	// trigger reprojection in both SQL read surfaces and the Go planner.
+	malformed := strings.TrimSuffix(document, "}") + `,"authorization_grant_profiles_supported":null}`
+	setIssuerMetadataTracking(t, ctx, ti, issuerID, metadataTracking{document: malformed})
+	flow, err = repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, clientRowID)
+	require.NoError(t, err)
+	require.True(t, flow.MetadataNeedsReprojection)
+	require.True(t, remotesessions.IssuerMetadataUseFromRow(loadIssuerByID(t, ctx, ti, issuerID)).NeedsReprojection)
+}
+
+func TestIssuerMetadataRefresh_Reproject_KeepsExplicitEmptyOperatorProfiles(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := statusServer(t, http.StatusInternalServerError)
+	id := createProjectIssuer(t, ctx, ti, "reproject-empty-profiles", upstream.URL)
+	document := `{"issuer":"` + upstream.URL + `","authorization_endpoint":"` + upstream.URL + `/authorize","token_endpoint":"` + upstream.URL + `/token","authorization_grant_profiles_supported":["urn:ietf:params:oauth:grant-profile:id-jag"]}`
+	fetchedAt := time.Now().Add(-2 * time.Hour).Truncate(time.Microsecond)
+	setIssuerMetadataTracking(t, ctx, ti, id, metadataTracking{document: document, fetchedAt: &fetchedAt})
+	stale := refreshCandidate(t, ctx, ti, id)
+	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{ID: id.String(), AuthorizationGrantProfilesSupported: []string{}})
+	require.NoError(t, err)
+	outcome, err := refresher.Reproject(ctx, stale)
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected, outcome, "an older candidate reloads the operator-edited document")
+	outcome, err = refresher.Reproject(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojected, outcome)
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, []string{}, after.AuthorizationGrantProfilesSupported)
+	require.Equal(t, fetchedAt, after.MetadataFetchedAt.Time, "operator edits must not claim a fresh discovery")
+	require.False(t, reprojectDue(t, ctx, ti, id, time.Now()))
 }

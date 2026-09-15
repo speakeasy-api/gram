@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -469,4 +470,52 @@ func TestPreparationDCRIntegration_CIMDProvenanceRequiresGeneration(t *testing.T
 	require.Equal(t, "published_acceptance_unverified", published.State)
 	require.Greater(t, published.Generation, manual.Generation)
 	require.Equal(t, "cimd_published", published.GrantSource)
+}
+
+func TestPreparationDCRIntegration_UnlinkWaitsForDurableSubmission(t *testing.T) {
+	t.Parallel()
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"serialized-client","client_secret":"serialized-secret","token_endpoint_auth_method":"client_secret_basic","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"]}`))
+	}))
+	t.Cleanup(server.Close)
+	ctx, ti, in, _ := preparationDCRFixture(t, server.URL)
+	type outcome struct {
+		result *remotesessions.PreparationResult
+		err    error
+	}
+	finished := make(chan outcome, 1)
+	go func() { r, err := ti.service.PrepareIdentityChaining(ctx, in); finished <- outcome{r, err} }()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("registration did not start")
+	}
+	// Another service cannot cancel the incarnation while its provider write is
+	// in flight. Its lock wait must time out, not unlink and orphan the response.
+	waitCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	_, err := restartPreparationService(t, ti).UnlinkIdentityChaining(waitCtx, in)
+	require.Error(t, err)
+	releaseOnce.Do(func() { close(release) })
+	completed := <-finished
+	require.NoError(t, completed.err)
+	require.Equal(t, "ready", completed.result.State)
+	require.NotEqual(t, uuid.Nil, completed.result.ClientID)
+	in.ExpectedGeneration = completed.result.Generation
+	unlinked, err := ti.service.UnlinkIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "unlinked", unlinked.State)
+	require.Equal(t, completed.result.Generation+1, unlinked.Generation)
+	// The successful registration remains available for explicit reconciliation.
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	count, err := repo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, repo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count)
 }

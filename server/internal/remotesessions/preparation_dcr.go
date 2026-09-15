@@ -13,11 +13,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -35,6 +37,9 @@ type preparationDCRResponse struct {
 // No response body, client secret or management token becomes a diagnostic.
 func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
 	var result preparationDCRResponse
+	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return result, "manual_setup_required"
+	}
 	if s.policy == nil {
 		return result, "indeterminate"
 	}
@@ -104,14 +109,15 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 	}
 	return "ready"
 }
-func (s *Service) finishPreparationDCR(ctx context.Context, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (*PreparationResult, error) {
+func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (*PreparationResult, error) {
 	var emptyClient repo.RemoteSessionClient
+	// The caller holds the connection-scoped binding lock, not a transaction.
 	response, state := s.submitPreparationDCR(ctx, in, issuer.RegistrationEndpoint.String, method)
 	// Persist an outcome even if the requesting connection has gone away. If this
 	// process dies before commit, the durable claim becomes indeterminate on read.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	tx, err := s.db.Begin(saveCtx)
+	tx, err := conn.Begin(saveCtx)
 	if err != nil {
 		return preparationResult(claim, issuer, emptyClient, "indeterminate"), err
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +71,7 @@ func TestAIM63DiscoveryEvidence(t *testing.T) {
 			doc, err := DiscoverIssuerMetadata(t.Context(), policy, server.URL+"/tenant")
 			require.NoError(t, err)
 			require.Equal(t, orEmptySlice(tc.profiles), doc.AuthorizationGrantProfilesSupported)
-			require.Equal(t, append([]string(nil), tc.grants...), doc.GrantTypesSupported)
+			require.Equal(t, slices.Clone(tc.grants), doc.GrantTypesSupported)
 		})
 	}
 }
