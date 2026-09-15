@@ -29,7 +29,7 @@ func accessorTestRecord(scope, eventName string, attributes ...*otelv1.InboundLo
 	}).Build()
 }
 
-const claudeScope = "com.anthropic.claude_code.tracing"
+const claudeScope = "com.anthropic.claude_code.events"
 
 func TestClaudeCodeLogEventAccessors(t *testing.T) {
 	t.Parallel()

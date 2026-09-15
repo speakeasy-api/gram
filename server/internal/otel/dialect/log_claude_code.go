@@ -10,8 +10,19 @@ import (
 
 type ClaudeCodeLog struct{}
 
+// Claude Code names every instrumentation scope it owns under one prefix: the
+// meter is com.anthropic.claude_code, the event logger
+// com.anthropic.claude_code.events (observed from a 2.1 CLI), and tracing
+// adds its own suffix. Matching the prefix recognises all of them, and
+// whatever the CLI adds next, as Claude Code.
+const claudeCodeScopePrefix = "com.anthropic.claude_code"
+
+func isClaudeCodeScope(name string) bool {
+	return strings.HasPrefix(name, claudeCodeScopePrefix)
+}
+
 func (ClaudeCodeLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
-	return record.GetScope().GetName() == "com.anthropic.claude_code.tracing"
+	return isClaudeCodeScope(record.GetScope().GetName())
 }
 
 func (ClaudeCodeLog) InputContent(record *otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
