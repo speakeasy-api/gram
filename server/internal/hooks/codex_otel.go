@@ -432,11 +432,16 @@ func (s *Service) codexOTELSessionAttribution(ctx context.Context, memo map[stri
 	}
 	// An agent keeps only safe surface fields: no classification or writeback.
 	if isAgentActor(ctx) {
-		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(id.SessionID), &cached); err != nil || cached.ServiceName != "Codex" {
-			return none
+		if meta, ok := memo[id.SessionID]; ok {
+			return meta
 		}
-		return agentSessionView(cached, id.OrgID, id.ProjectID)
+		view := none
+		var cached SessionMetadata
+		if err := s.cache.Get(ctx, sessionCacheKey(id.SessionID), &cached); err == nil && cached.ServiceName == "Codex" {
+			view = agentSessionView(cached, id.OrgID, id.ProjectID)
+		}
+		memo[id.SessionID] = view
+		return view
 	}
 	if meta, ok := memo[id.SessionID]; ok && sameCodexIdentity(meta.UserEmail, id.Email) {
 		return meta

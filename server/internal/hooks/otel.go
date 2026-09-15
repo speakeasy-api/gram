@@ -47,6 +47,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 
 	// Tee the export into the OTel event feed pipeline before the per-client
 	// split below, so every client's records in the batch are mirrored.
+	sanitizeTeedLogsPayload(ctx, payload)
 	s.teeOTELLogsToEventFeed(ctx, payload, orgID, projectID)
 
 	// Codex resources persist as a raw log stream like Claude's; they carry no

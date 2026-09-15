@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -104,6 +106,56 @@ var selfReportedIdentityKeys = []attr.Key{
 	attr.AccountEmailKey,
 	attr.ExternalOrgIDKey,
 	attr.DeviceIDKey,
+	attr.AccountTypeKey,
+	attr.BillingModeKey,
+}
+
+// strippedTeeKey reports whether a raw OTLP attribute must be dropped from the
+// event-feed copy: spoofed actor keys always, identity keys for agents.
+func strippedTeeKey(key string, agent bool) bool {
+	if key == string(attr.AuthorizationActorTypeKey) || key == string(attr.AuthorizationActorIDKey) {
+		return true
+	}
+	return agent && slices.Contains(selfReportedIdentityKeys, attr.Key(key))
+}
+
+// sanitizeTeedLogsPayload applies the stored-row attribution rules to a raw
+// OTLP export before it is teed, so the event-feed copy matches the rows.
+func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
+	if payload == nil {
+		return
+	}
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	agent := ok && actor.Type == urn.PrincipalTypeAgent
+	for _, resourceLog := range payload.ResourceLogs {
+		if resourceLog == nil {
+			continue
+		}
+		if resourceLog.Resource != nil {
+			resourceLog.Resource.Attributes = slices.DeleteFunc(resourceLog.Resource.Attributes, func(a *gen.OTELResourceAttribute) bool {
+				return a != nil && strippedTeeKey(a.Key, agent)
+			})
+		}
+		for _, scopeLog := range resourceLog.ScopeLogs {
+			if scopeLog == nil {
+				continue
+			}
+			for _, record := range scopeLog.LogRecords {
+				if record == nil {
+					continue
+				}
+				record.Attributes = slices.DeleteFunc(record.Attributes, func(a *gen.OTELAttribute) bool {
+					return a != nil && strippedTeeKey(a.Key, agent)
+				})
+				if agent {
+					record.Attributes = append(record.Attributes,
+						&gen.OTELAttribute{Key: string(attr.AuthorizationActorTypeKey), Value: &gen.OTELAttributeValue{StringValue: new(string(actor.Type)), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
+						&gen.OTELAttribute{Key: string(attr.AuthorizationActorIDKey), Value: &gen.OTELAttributeValue{StringValue: new(actor.ID), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
+					)
+				}
+			}
+		}
+	}
 }
 
 // stripAgentIdentity removes self-reported identity from attrs when an agent

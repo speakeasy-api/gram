@@ -8,9 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -418,6 +421,66 @@ func TestClearAgentAccountIdentity(t *testing.T) {
 	require.Empty(t, meta.UserAccountID)
 	require.Empty(t, meta.ObservedUserEmail)
 	require.Equal(t, "host", meta.Hostname, "surface fields stay")
+}
+
+func teeHasAttr(attrs []*otelv1.InboundLogRecord_KeyValue, key string) bool {
+	for _, kv := range attrs {
+		if kv.GetKey() == key {
+			return true
+		}
+	}
+	return false
+}
+
+func TestLogs_AgentEventFeedCopyMatchesSanitizedRows(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	var published []*otelv1.InboundLogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.InboundLogRecord)
+		require.True(t, ok)
+		published = append(published, record)
+	}).Return(gcp.NewSuccessPublishResult())
+	ti.service.otelLogPublisher = publisher
+
+	agentCtx := agentKeyContext(t, ctx, ti)
+	actor, ok := contextvalues.AuthenticatedActor(agentCtx)
+	require.True(t, ok)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	err := ti.service.Logs(agentCtx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{
+			resourceStrAttr("service.name", "claude-code"),
+			resourceStrAttr("user.email", "resource-human@example.com"),
+		},
+		&gen.OTELScope{Name: new("claude-code"), Version: new("1.0.0")},
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(timestamp)),
+			Body:         &gen.OTELLogBody{StringValue: new("agent request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "agent-tee-"+uuid.NewString()),
+				strAttr("user.id", "human-id"),
+				strAttr("user.email", "human@example.com"),
+				strAttr("gram.account_type", "team"),
+				strAttr("gram.billing_mode", "metered"),
+				strAttr("gram.authorization.actor.id", "spoofed"),
+			},
+		},
+	))
+	require.NoError(t, err)
+	ti.service.otelTeeDrains.Wait()
+
+	require.Len(t, published, 1)
+	record := published[0]
+	for _, key := range []string{"user.id", "user.email", "gram.account_type", "gram.billing_mode"} {
+		require.False(t, teeHasAttr(record.GetAttributes(), key), "event-feed copy drops %s", key)
+	}
+	require.False(t, teeHasAttr(record.GetResource().GetAttributes(), "user.email"))
+	require.Equal(t, "claude-code", teeAttrByKey(t, record.GetResource().GetAttributes(), "service.name").GetStringValue())
+	require.Equal(t, "agent", teeAttrByKey(t, record.GetAttributes(), "gram.authorization.actor.type").GetStringValue())
+	require.Equal(t, actor.ID, teeAttrByKey(t, record.GetAttributes(), "gram.authorization.actor.id").GetStringValue())
 }
 
 func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {
