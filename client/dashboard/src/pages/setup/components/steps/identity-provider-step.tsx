@@ -21,6 +21,7 @@ import { cn, getServerURL } from "@/lib/utils";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { OktaConnectSection } from "./okta-connect-section";
+import { OktaSignOnSection } from "./okta-sign-on-section";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
 
@@ -108,13 +109,17 @@ export function IdentityProviderStep({
           connection={connection}
           isLoadingConnection={identityProvider.isPending}
         />
-        <SingleSignOnSection
-          index={2}
-          configured={!!onboardingStatus?.ssoConfigured}
-          isLoading={isLoading}
-          provider={provider}
-          locked={guided}
-        />
+        {guided ? (
+          <OktaSignOnSection index={2} connection={connection} />
+        ) : (
+          <SingleSignOnSection
+            index={2}
+            configured={!!onboardingStatus?.ssoConfigured}
+            isLoading={isLoading}
+            provider={provider}
+            locked={false}
+          />
+        )}
         <DirectorySyncSection
           index={3}
           configured={!!onboardingStatus?.dsyncConfigured}

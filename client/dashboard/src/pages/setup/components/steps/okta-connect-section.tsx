@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import type { IdentityProviderFieldOutcome } from "@gram/client/models/components/identityproviderfieldoutcome.js";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useCreateIdentityProviderMutation } from "@gram/client/react-query/createIdentityProvider.js";
 import { useDeleteIdentityProviderMutation } from "@gram/client/react-query/deleteIdentityProvider.js";
 import { invalidateAllIdentityProvider } from "@gram/client/react-query/identityProvider.js";
@@ -22,25 +21,12 @@ import {
 } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { errorMessage, isUnavailable } from "./identity-provider-errors";
 import { IdentityProviderSetupStepPanel } from "./identity-provider-setup-step";
 import { OktaConnectionSummary } from "./okta-connection-summary";
 
 /** The step this slice drives. Phase 2 adds its own alongside it. */
 const CONNECT_STEP_KEY = "connect";
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
-}
-
-/**
- * Verification is stubbed until the backend's check lands. Matched on the base
- * error class, not ServiceError: the SDK only decodes a typed body for 4XX,
- * 500 and 502, so a 503 arrives as whichever GramError it fell back to.
- */
-function isUnavailable(error: unknown): boolean {
-  return error instanceof GramError && error.statusCode === 503;
-}
 
 // Asking for the tenant first is what lets every later instruction be a link
 // into the administrator's own console rather than a description of it.

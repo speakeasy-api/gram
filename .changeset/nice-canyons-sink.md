@@ -1,0 +1,6 @@
+---
+"dashboard": minor
+---
+
+Build the single sign-on sub-step of the guided Okta path. It unlocks once the Okta connection itself is live, and shows what sign-in will carry about each person as configuration rather than as something already observed, with the claim that carries access marked. Speakeasy creates the sign-in application in Okta from a single action; the provider connection is then finished in the setup portal, where the client secret goes straight from the Okta screen the deep link opens into the portal, so Speakeasy never receives it and has no field for it. The check reads both sides back and reports them as two rows, the application in Okta and Speakeasy's sign-in provider. The groups claim is guided separately: the instructions, a deep link, and a choice between confirming the claim is set or reading group membership from the directory instead, replaced by a record of whichever way it was settled. A refused check now leads on what happened rather than guessing why, with the server's own reason underneath.
+  

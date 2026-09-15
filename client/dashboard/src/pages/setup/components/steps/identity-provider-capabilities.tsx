@@ -31,22 +31,42 @@ const CAPABILITY_COPY: Record<string, CapabilityCopy> = {
   },
 };
 
-function capabilityCopy(capability: string): CapabilityCopy {
+/**
+ * Two reads can prove one capability, so where the resource is what tells them
+ * apart it names the row. Sign-on is the case: creating the application is one
+ * capability, read back in Okta and again in Speakeasy.
+ */
+const RESOURCE_COPY: Record<string, CapabilityCopy> = {
+  sign_in_application: {
+    label: "Sign-in application in Okta",
+    access: "Create",
+    usedBy: "Single sign-on",
+  },
+  sign_in_connection: {
+    label: "Speakeasy's sign-in provider",
+    access: "Create",
+    usedBy: "Single sign-on",
+  },
+};
+
+function rowCopy(read: IdentityProviderCapabilityRead): CapabilityCopy {
   // A capability this build has no copy for is still worth showing: the read
   // either worked or it did not, and inventing a friendly name would be worse
   // than printing what the server called it.
   return (
-    CAPABILITY_COPY[capability] ?? {
-      label: capability,
+    RESOURCE_COPY[read.resource] ??
+    CAPABILITY_COPY[read.capability] ?? {
+      label: read.capability,
       access: "—",
       usedBy: "—",
     }
   );
 }
 
+/** The badge: what came back, short enough to sit on one line. */
 function readResult(read: IdentityProviderCapabilityRead): string {
-  if (!read.ok) return read.detail ?? "No answer";
-  if (read.count === undefined) return "Answered";
+  if (!read.ok) return "No answer";
+  if (read.count === undefined) return "Active";
   return `${read.count.toLocaleString()} ${read.resource}`;
 }
 
@@ -56,32 +76,37 @@ const columns: Column<IdentityProviderCapabilityRead>[] = [
     header: "Capability",
     width: "2fr",
     render: (read) => (
-      <Text className="font-medium">
-        {capabilityCopy(read.capability).label}
-      </Text>
+      <Text className="font-medium">{rowCopy(read).label}</Text>
     ),
   },
   {
     key: "access",
     header: "Access",
     width: "1fr",
-    render: (read) => <Text>{capabilityCopy(read.capability).access}</Text>,
+    render: (read) => <Text>{rowCopy(read).access}</Text>,
   },
   {
     key: "usedBy",
     header: "Used by",
     width: "1.5fr",
-    render: (read) => (
-      <Text muted>{capabilityCopy(read.capability).usedBy}</Text>
-    ),
+    render: (read) => <Text muted>{rowCopy(read).usedBy}</Text>,
   },
   {
     key: "result",
     header: "Last read",
     render: (read) => (
-      <Badge variant={read.ok ? "success" : "warning"} background size="sm">
-        <Badge.Text>{readResult(read)}</Badge.Text>
-      </Badge>
+      <div className="space-y-1">
+        <Badge variant={read.ok ? "success" : "warning"} background size="sm">
+          <Badge.Text>{readResult(read)}</Badge.Text>
+        </Badge>
+        {/* The server's own words for what it saw, which for a read with no
+            count to report is the only detail there is. */}
+        {read.detail ? (
+          <Text variant="small" muted>
+            {read.detail}
+          </Text>
+        ) : null}
+      </div>
     ),
   },
 ];
