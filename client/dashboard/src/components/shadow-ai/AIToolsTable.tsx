@@ -29,7 +29,7 @@ const STATUS_FILTER_OPTIONS = [
 const TAB_NOUNS: Record<string, string> = {
   harness: "harnesses",
   assistant: "assistants",
-  local_model: "open models",
+  local_model: "local models",
 };
 
 const TOOL_FILTERS = defineFilters([
@@ -102,7 +102,8 @@ export function AIToolsTable({
   // Which tab this is. Pushed to the server so the read is narrowed there
   // rather than fetching the whole inventory and hiding half of it.
   category: "harness" | "assistant" | "local_model";
-  // False on the Models tab: a local model never connects to the gateway,
+  // False on the Local Models tab: a local model never connects to the
+  // gateway,
   // so a decision about it would have nothing behind it. Everyone who reaches
   // this table is an organization admin (the section is gated on org:admin,
   // as the read behind it requires), so this is about the tab, not the viewer.
@@ -150,7 +151,7 @@ export function AIToolsTable({
     ];
 
     // Attribution is independent of whether a decision can be made here:
-    // an admin reading the Models tab still wants to know how many people
+    // an admin reading the Local Models tab still wants to know how many people
     // and devices run each model.
     base.push(
       {

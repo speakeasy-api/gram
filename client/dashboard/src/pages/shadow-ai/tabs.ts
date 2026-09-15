@@ -22,6 +22,6 @@ export const shadowAIBreadcrumbSubstitutions: Record<string, string> = {
   [SHADOW_AI_SEGMENT]: "Shadow AI",
   [TAB_VALUES.harnesses]: "Harnesses",
   [TAB_VALUES.assistants]: "Assistants",
-  [TAB_VALUES.models]: "Models",
+  [TAB_VALUES.models]: "Local Models",
   [TAB_VALUES.mcps]: "MCPs",
 };

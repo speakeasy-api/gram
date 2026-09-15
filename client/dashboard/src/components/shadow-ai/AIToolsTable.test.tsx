@@ -62,7 +62,7 @@ describe("AIToolsTable", () => {
     vi.clearAllMocks();
   });
 
-  // The Models tab passes canDecide={false} because nothing about a local
+  // The Local Models tab passes canDecide={false} because nothing about a local
   // model can be enforced, not because the admin reading it may see less.
   it("keeps the attribution columns on a tab where nothing can be decided", () => {
     renderTable(<AIToolsTable category="local_model" canDecide={false} />);

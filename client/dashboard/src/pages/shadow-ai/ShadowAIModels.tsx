@@ -6,7 +6,7 @@ export default function ShadowAIModels(): JSX.Element {
   return (
     <ShadowAISection activeTab="models">
       <Page.Section>
-        <Page.Section.Title area="">Models</Page.Section.Title>
+        <Page.Section.Title area="">Local Models</Page.Section.Title>
         <Page.Section.Description>
           Open models that enrolled devices run locally. These never speak MCP
           to Gram, so there is nothing for the gateway to allow or block — this

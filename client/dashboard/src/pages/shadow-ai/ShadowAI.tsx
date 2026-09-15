@@ -89,7 +89,7 @@ export function ShadowAISection({
                   <Link to={routes.shadowAI.assistants.href()}>Assistants</Link>
                 </PageTabsTrigger>
                 <PageTabsTrigger value={TAB_VALUES.models} asChild>
-                  <Link to={routes.shadowAI.models.href()}>Models</Link>
+                  <Link to={routes.shadowAI.models.href()}>Local Models</Link>
                 </PageTabsTrigger>
                 <PageTabsTrigger value={TAB_VALUES.mcps} asChild>
                   <Link to={routes.shadowAI.mcps.href()}>MCPs</Link>
