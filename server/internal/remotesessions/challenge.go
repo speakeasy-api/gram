@@ -119,19 +119,12 @@ type RemoteLoginState struct {
 	// AssertionIssuer is the RFC 8414 issuer identifier captured with the
 	// authorization request. It is the default private_key_jwt audience. Empty
 	// for an in-flight state minted by a server from before AIM-156.
-	AssertionIssuer     string `json:"assertion_issuer,omitempty"`
-	TunneledMcpServerID string `json:"tunneled_mcp_server_id,omitempty"`
-
-	// TransportSelected marks TunneledMcpServerID as the security-sensitive
-	// transport snapshot chosen before the authorization redirect. An empty
-	// tunnel ID snapshots direct egress. False identifies legacy cached states
-	// that must fall back to the issuer's current persisted binding.
-	TransportSelected bool                `json:"transport_selected,omitempty"`
-	RedirectURI       string              `json:"redirect_uri"`
-	CodeVerifier      string              `json:"code_verifier"`
-	Resource          string              `json:"resource,omitempty"`
-	Subject           *urn.SessionSubject `json:"subject,omitempty"`
-	McpSlug           string              `json:"mcp_slug"`
+	AssertionIssuer string              `json:"assertion_issuer,omitempty"`
+	RedirectURI     string              `json:"redirect_uri"`
+	CodeVerifier    string              `json:"code_verifier"`
+	Resource        string              `json:"resource,omitempty"`
+	Subject         *urn.SessionSubject `json:"subject,omitempty"`
+	McpSlug         string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
@@ -400,7 +393,6 @@ type Client struct {
 
 	AuthorizationEndpoint string
 	TokenEndpoint         string
-	TunneledMcpServerID   uuid.NullUUID
 	// ClientScope is the client's stored scope (PRM scopes_supported at
 	// registration, or an operator's); the base of the request when non-empty.
 	ClientScope           []string
@@ -557,7 +549,6 @@ func (m *ChallengeManager) ListClients(
 			ClientAssertionIssuer:            clientAssertionIssuer(r.IssuerMetadata, r.IssuerUrl),
 			AuthorizationEndpoint:            conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:                    conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			TunneledMcpServerID:              r.TunneledMcpServerID,
 			ClientScope:                      r.ClientScope,
 			IssuerScopesSupported:            r.ScopesSupported,
 			IssuerScopeOverride:              r.ScopeOverride,
@@ -926,8 +917,6 @@ func (m *ChallengeManager) mintAuthorization(
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
 		AssertionIssuer:       client.ClientAssertionIssuer,
-		TunneledMcpServerID:   conv.PtrValOr(conv.FromNullableUUID(client.TunneledMcpServerID), ""),
-		TransportSelected:     true,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
 		Resource:              parent.Resource,
@@ -1116,22 +1105,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 
-	// Bind the code exchange to the transport selected before redirecting the
-	// user. A binding change during the OAuth flow must not reroute the code or
-	// client credentials. Cached states created before TransportSelected existed
-	// retain their historical behavior by using the issuer's current binding.
-	tunnelID := clientRow.TunneledMcpServerID
-	if state.TransportSelected {
-		tunnelID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		if state.TunneledMcpServerID != "" {
-			parsed, perr := uuid.Parse(state.TunneledMcpServerID)
-			if perr != nil {
-				return none, oops.E(oops.CodeUnauthorized, perr, "remote login state has an invalid tunnel binding").LogError(ctx, logger)
-			}
-			tunnelID = uuid.NullUUID{UUID: parsed, Valid: true}
-		}
-	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, tunnelID)
+	// The exchange rides the issuer's binding as it stands now, like every other
+	// back-channel call. Nothing snapshots the transport at redirect time: only
+	// a platform admin can move a binding, so a change landing mid-flow is an
+	// operator repointing the issuer, and the route this exchange takes is
+	// whichever one they chose.
+	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
 	if err != nil {
 		return none, oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
 	}
@@ -1180,7 +1159,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if !stranded {
 			return
 		}
-		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken, tunnelID)
+		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
 	}()
 
 	identity, interfaces, jwtAccess := m.identityFromExchange(ctx, logger, tok, client.ID, client.ClientID, state.Resource, state.Nonce, state.OrganizationID)

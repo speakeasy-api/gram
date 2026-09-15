@@ -445,7 +445,7 @@ func TestUpstreamRevoker_PrivateKeyJWTUsesTokenEndpointAudience(t *testing.T) {
 	require.NoError(t, err)
 
 	signer := &revocationAssertionSigner{}
-	newTestUpstreamRevoker(t, ti, signer).RevokeUnstoredDetached(ctx, fx.clientID, fx.accessToken, fx.refreshToken, uuid.NullUUID{})
+	newTestUpstreamRevoker(t, ti, signer).RevokeUnstoredDetached(ctx, fx.clientID, fx.accessToken, fx.refreshToken)
 
 	calls, form, authHdr := spy.snapshot()
 	require.Equal(t, 1, calls)
@@ -503,7 +503,7 @@ func TestRevokeUnstoredDetached_RevokesPairThatWasNeverStored(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored", upstream.URL+"/revoke", "s3cret", true)
 
-	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh", uuid.NullUUID{})
+	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh")
 
 	calls, form, _ := spy.snapshot()
 	require.Equal(t, 1, calls, "exactly one RFC 7009 request")
@@ -513,13 +513,16 @@ func TestRevokeUnstoredDetached_RevokesPairThatWasNeverStored(t *testing.T) {
 	require.Equal(t, "s3cret", form.Get("client_secret"))
 }
 
-func TestRevokeUnstoredDetached_UsesCallbackTransportSnapshot(t *testing.T) {
+// A tunnel-bound issuer is unreachable from cloud egress by definition, so the
+// stranded-pair cleanup rides the tunnel too. No route is published here, so
+// the revocation must stop rather than dial the issuer directly.
+func TestRevokeUnstoredDetached_UsesIssuerTunnelBinding(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
-	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored-snapshot", upstream.URL+"/revoke", "s3cret", true)
+	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored-tunneled", upstream.URL+"/revoke", "s3cret", true)
 
 	tunnelID := seedTunneledMcpServer(t, ctx, ti)
 	_, err := ti.service.UpdateRemoteSessionIssuer(withAdmin(t, ctx), &issuersgen.UpdateRemoteSessionIssuerPayload{
@@ -528,13 +531,10 @@ func TestRevokeUnstoredDetached_UsesCallbackTransportSnapshot(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The callback exchanged this pair directly before the issuer gained a
-	// tunnel binding. Cleanup must use that snapshot rather than the new route.
-	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh", uuid.NullUUID{})
+	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh")
 
-	calls, form, _ := spy.snapshot()
-	require.Equal(t, 1, calls)
-	require.Equal(t, "unstored-refresh", form.Get("token"))
+	calls, _, _ := spy.snapshot()
+	require.Zero(t, calls, "a tunnel-bound issuer must not be revoked over direct egress")
 }
 
 // Most upstreams advertise no revocation_endpoint. That must be a silent no-op,
