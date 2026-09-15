@@ -1,7 +1,6 @@
 ---
 "dashboard": minor
 "server": minor
-"hooks": minor
 ---
 
 Capture Pi (pi.dev) sessions, and enforce policy on them, alongside the agents
