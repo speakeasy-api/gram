@@ -31,6 +31,35 @@
     <meta property="og:site_name" content="Speakeasy" />
     <meta property="og:locale" content="en_US" />
 
+    <!-- Deployment provenance, substituted by the container entrypoint at
+         start (40-admin-server-url.sh) from the environment the deployment
+         supplies. All four default to empty in the image, so any host whose
+         deployment does not set them renders blanks. Under `vite dev` the
+         entrypoint never runs and these stay as literal ${...} text. -->
+    <meta name="gram-is-preview" content="${GRAM_IS_PREVIEW}" />
+    <meta name="gutternote:branch" content="${GRAM_BRANCH}" />
+    <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
+    <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
+
+    <!-- Gutternote feedback widget. Loads only where the deployment sets
+         GRAM_IS_PREVIEW=true, i.e. PR preview environments. The exact-match
+         check fails closed: the image default is empty, so prod, shared
+         staging and local dev never load it. The key is a public
+         client-side key, like the PostHog and Datadog tokens in
+         TelemetryProvider.tsx. -->
+    <script>
+      if (
+        document.querySelector('meta[name="gram-is-preview"]')?.content ===
+        "true"
+      ) {
+        const s = document.createElement("script");
+        s.src = "https://cdn.gutternote.com/v1/widget.js";
+        s.defer = true;
+        s.dataset.gutternoteKey = "GUTTERNOTE_KEY_TODO";
+        document.head.appendChild(s);
+      }
+    </script>
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
