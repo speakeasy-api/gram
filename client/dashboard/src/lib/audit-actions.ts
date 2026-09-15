@@ -74,6 +74,10 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "identity_provider_connection:created",
+  "identity_provider_connection:deleted",
+  "identity_provider_connection:updated",
+  "identity_provider_connection:verified",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -350,6 +354,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "identity_provider_connection:created":
+      return "created identity provider connection";
+    case "identity_provider_connection:deleted":
+      return "deleted identity provider connection";
+    case "identity_provider_connection:updated":
+      return "updated identity provider connection";
+    case "identity_provider_connection:verified":
+      return "verified identity provider connection";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":

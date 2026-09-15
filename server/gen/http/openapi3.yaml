@@ -26655,6 +26655,563 @@ paths:
             x-speakeasy-name-override: resolve
             x-speakeasy-react-hook:
                 name: Identity
+    /rpc/identityProviders.create:
+        post:
+            description: Create the organization's identity provider connection and Speakeasy-held signing key.
+            operationId: createIdentityProvider
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRequestBody2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: create identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateIdentityProvider
+    /rpc/identityProviders.delete:
+        delete:
+            description: Delete an identity provider connection and its signing keys.
+            operationId: deleteIdentityProvider
+            parameters:
+                - allowEmptyValue: true
+                  description: Identity provider connection id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Identity provider connection id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: delete identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteIdentityProvider
+    /rpc/identityProviders.describeSetup:
+        get:
+            description: Describe the guided setup steps for the organization's identity provider connection.
+            operationId: describeIdentityProviderSetup
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityProviderSetup'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: describeSetup identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: describeSetup
+            x-speakeasy-react-hook:
+                name: IdentityProviderSetup
+    /rpc/identityProviders.get:
+        get:
+            description: Get the organization's live identity provider connection, when configured.
+            operationId: getIdentityProvider
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetIdentityProviderResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: get identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: IdentityProvider
+    /rpc/identityProviders.submitSetupStep:
+        post:
+            description: Submit administrator-provided values for an identity provider setup step.
+            operationId: submitIdentityProviderSetupStep
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitSetupStepRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SubmitSetupStepResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: submitSetupStep identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: submitSetupStep
+            x-speakeasy-react-hook:
+                name: SubmitIdentityProviderSetupStep
+    /rpc/identityProviders.verifySetupStep:
+        post:
+            description: Verify an identity provider setup step.
+            operationId: verifyIdentityProviderSetupStep
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/VerifySetupStepRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityProviderVerifyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: verifySetupStep identityProviders
+            tags:
+                - identityProviders
+            x-speakeasy-name-override: verifySetupStep
+            x-speakeasy-react-hook:
+                name: VerifyIdentityProviderSetupStep
     /rpc/instances.get:
         get:
             description: Load all relevant data for an instance of a toolset and environment
@@ -75985,6 +76542,20 @@ components:
                     description: Optional free-form user identifier
             required:
                 - embed_origin
+        CreateRequestBody2:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: Identity provider kind.
+                    enum:
+                        - okta
+                tenant_url:
+                    type: string
+                    description: HTTPS URL of the identity provider tenant.
+            required:
+                - kind
+                - tenant_url
         CreateRequestRequestBody:
             type: object
             properties:
@@ -79451,6 +80022,12 @@ components:
                 - time_series
                 - skill_time_series
                 - skill_breakdown
+        GetIdentityProviderResult:
+            type: object
+            properties:
+                connection:
+                    $ref: '#/components/schemas/IdentityProviderConnection'
+            description: The organization's live identity provider connection, when configured.
         GetInstanceForm:
             type: object
             properties:
@@ -80952,6 +81529,241 @@ components:
                 - emails
                 - external_user_ids
                 - directory
+        IdentityProviderCapabilityRead:
+            type: object
+            properties:
+                capability:
+                    type: string
+                count:
+                    type: integer
+                    format: int64
+                detail:
+                    type: string
+                ok:
+                    type: boolean
+                resource:
+                    type: string
+                    enum:
+                        - groups
+                        - users
+                        - apps
+            required:
+                - capability
+                - resource
+                - ok
+        IdentityProviderConnection:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        type: string
+                created_at:
+                    type: string
+                    format: date-time
+                display_name:
+                    type: string
+                granted_scopes:
+                    type: array
+                    items:
+                        type: string
+                id:
+                    type: string
+                    format: uuid
+                jwks_url:
+                    type: string
+                    description: Absolute URL of the Speakeasy-hosted public JSON Web Key Set.
+                    format: uri
+                kind:
+                    type: string
+                    enum:
+                        - okta
+                last_verified_at:
+                    type: string
+                    format: date-time
+                signing_key_kid:
+                    type: string
+                    description: RFC 7638 thumbprint of the active signing key.
+                status:
+                    type: string
+                    enum:
+                        - pending
+                        - awaiting_verification
+                        - active
+                        - failed
+                status_detail:
+                    type: string
+                tenant_identifier:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+                verify_evidence:
+                    $ref: '#/components/schemas/IdentityProviderVerifyEvidence'
+            description: An organization identity provider connection. Credentials and private signing material are never returned.
+            required:
+                - id
+                - kind
+                - tenant_identifier
+                - status
+                - capabilities
+                - granted_scopes
+                - jwks_url
+                - signing_key_kid
+                - created_at
+                - updated_at
+        IdentityProviderExpectedValue:
+            type: object
+            properties:
+                key:
+                    type: string
+                label:
+                    type: string
+                secret:
+                    type: boolean
+            required:
+                - key
+                - label
+                - secret
+        IdentityProviderFieldOutcome:
+            type: object
+            properties:
+                detail:
+                    type: string
+                key:
+                    type: string
+                outcome:
+                    type: string
+                    enum:
+                        - accepted
+                        - rejected
+            required:
+                - key
+                - outcome
+                - detail
+        IdentityProviderPrintedValue:
+            type: object
+            properties:
+                copyable:
+                    type: boolean
+                label:
+                    type: string
+                value:
+                    type: string
+            required:
+                - label
+                - value
+                - copyable
+        IdentityProviderSetup:
+            type: object
+            properties:
+                connection_id:
+                    type: string
+                    format: uuid
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderSetupStep'
+            required:
+                - connection_id
+                - steps
+        IdentityProviderSetupStep:
+            type: object
+            properties:
+                deep_link:
+                    type: string
+                    format: uri
+                expected_values:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderExpectedValue'
+                instructions:
+                    type: array
+                    items:
+                        type: string
+                key:
+                    type: string
+                last_outcome:
+                    $ref: '#/components/schemas/IdentityProviderVerifyResult'
+                printed_values:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderPrintedValue'
+                state:
+                    type: string
+                    enum:
+                        - not_started
+                        - awaiting_values
+                        - awaiting_verification
+                        - passed
+                        - failed
+                title:
+                    type: string
+                where:
+                    type: string
+                    enum:
+                        - their_console
+                        - our_page
+            required:
+                - key
+                - title
+                - where
+                - instructions
+                - printed_values
+                - expected_values
+                - state
+        IdentityProviderSetupValue:
+            type: object
+            properties:
+                key:
+                    type: string
+                value:
+                    type: string
+            required:
+                - key
+                - value
+        IdentityProviderVerifyEvidence:
+            type: object
+            properties:
+                checked_at:
+                    type: string
+                    format: date-time
+                reads:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderCapabilityRead'
+            required:
+                - checked_at
+                - reads
+        IdentityProviderVerifyResult:
+            type: object
+            properties:
+                capabilities:
+                    type: array
+                    items:
+                        type: string
+                detail:
+                    type: string
+                evidence:
+                    $ref: '#/components/schemas/IdentityProviderVerifyEvidence'
+                granted_scopes:
+                    type: array
+                    items:
+                        type: string
+                outcome:
+                    type: string
+                    enum:
+                        - passed
+                        - unreachable
+                        - refused
+                        - mismatched_value
+                        - capability_missing
+            required:
+                - outcome
+                - detail
+                - capabilities
+                - granted_scopes
+                - evidence
         InferenceSpendCap:
             type: object
             properties:
@@ -94014,6 +94826,34 @@ components:
             required:
                 - id
                 - sentiment
+        SubmitSetupStepRequestBody:
+            type: object
+            properties:
+                step_key:
+                    type: string
+                    description: Setup step key.
+                values:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderSetupValue'
+                    description: Values collected for this step.
+            required:
+                - step_key
+                - values
+        SubmitSetupStepResult:
+            type: object
+            properties:
+                field_outcomes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IdentityProviderFieldOutcome'
+                next_step_key:
+                    type: string
+                step:
+                    $ref: '#/components/schemas/IdentityProviderSetupStep'
+            required:
+                - step
+                - field_outcomes
         SuggestCustomDetectionRuleRequestBody:
             type: object
             properties:
@@ -99339,6 +100179,14 @@ components:
             description: Result of a live 'who am I' probe against a platform credential's resolved identity.
             required:
                 - verified
+        VerifySetupStepRequestBody:
+            type: object
+            properties:
+                step_key:
+                    type: string
+                    description: Setup step key.
+            required:
+                - step_key
         VerifyURLForm:
             type: object
             properties:
@@ -99540,6 +100388,8 @@ tags:
       description: Receives hook events from coding assistants for tool usage observability.
     - name: identity
       description: Resolves the identifiers Gram records activity under into a single identity.
+    - name: identityProviders
+      description: Manage organization identity provider connections used by Speakeasy onboarding.
     - name: instances
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations

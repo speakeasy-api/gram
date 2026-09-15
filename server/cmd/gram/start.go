@@ -76,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
+	"github.com/speakeasy-api/gram/server/internal/identityproviders"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
@@ -1624,6 +1625,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, serverURL))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,

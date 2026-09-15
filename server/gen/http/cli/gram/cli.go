@@ -46,6 +46,7 @@ import (
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
+	identityprovidersc "github.com/speakeasy-api/gram/server/gen/http/identity_providers/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
@@ -134,6 +135,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"identity resolve",
+		"identity-providers (create|get|describe-setup|submit-setup-step|verify-setup-step|delete)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1386,6 +1388,36 @@ func ParseEndpoint(
 		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
 		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
 		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
+
+		identityProvidersFlags = flag.NewFlagSet("identity-providers", flag.ContinueOnError)
+
+		identityProvidersCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
+		identityProvidersCreateBodyFlag         = identityProvidersCreateFlags.String("body", "REQUIRED", "")
+		identityProvidersCreateSessionTokenFlag = identityProvidersCreateFlags.String("session-token", "", "")
+		identityProvidersCreateApikeyTokenFlag  = identityProvidersCreateFlags.String("apikey-token", "", "")
+
+		identityProvidersGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		identityProvidersGetSessionTokenFlag = identityProvidersGetFlags.String("session-token", "", "")
+		identityProvidersGetApikeyTokenFlag  = identityProvidersGetFlags.String("apikey-token", "", "")
+
+		identityProvidersDescribeSetupFlags            = flag.NewFlagSet("describe-setup", flag.ExitOnError)
+		identityProvidersDescribeSetupSessionTokenFlag = identityProvidersDescribeSetupFlags.String("session-token", "", "")
+		identityProvidersDescribeSetupApikeyTokenFlag  = identityProvidersDescribeSetupFlags.String("apikey-token", "", "")
+
+		identityProvidersSubmitSetupStepFlags            = flag.NewFlagSet("submit-setup-step", flag.ExitOnError)
+		identityProvidersSubmitSetupStepBodyFlag         = identityProvidersSubmitSetupStepFlags.String("body", "REQUIRED", "")
+		identityProvidersSubmitSetupStepSessionTokenFlag = identityProvidersSubmitSetupStepFlags.String("session-token", "", "")
+		identityProvidersSubmitSetupStepApikeyTokenFlag  = identityProvidersSubmitSetupStepFlags.String("apikey-token", "", "")
+
+		identityProvidersVerifySetupStepFlags            = flag.NewFlagSet("verify-setup-step", flag.ExitOnError)
+		identityProvidersVerifySetupStepBodyFlag         = identityProvidersVerifySetupStepFlags.String("body", "REQUIRED", "")
+		identityProvidersVerifySetupStepSessionTokenFlag = identityProvidersVerifySetupStepFlags.String("session-token", "", "")
+		identityProvidersVerifySetupStepApikeyTokenFlag  = identityProvidersVerifySetupStepFlags.String("apikey-token", "", "")
+
+		identityProvidersDeleteFlags            = flag.NewFlagSet("delete", flag.ExitOnError)
+		identityProvidersDeleteIDFlag           = identityProvidersDeleteFlags.String("id", "REQUIRED", "")
+		identityProvidersDeleteSessionTokenFlag = identityProvidersDeleteFlags.String("session-token", "", "")
+		identityProvidersDeleteApikeyTokenFlag  = identityProvidersDeleteFlags.String("apikey-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -4447,6 +4479,14 @@ func ParseEndpoint(
 	identityFlags.Usage = identityUsage
 	identityResolveFlags.Usage = identityResolveUsage
 
+	identityProvidersFlags.Usage = identityProvidersUsage
+	identityProvidersCreateFlags.Usage = identityProvidersCreateUsage
+	identityProvidersGetFlags.Usage = identityProvidersGetUsage
+	identityProvidersDescribeSetupFlags.Usage = identityProvidersDescribeSetupUsage
+	identityProvidersSubmitSetupStepFlags.Usage = identityProvidersSubmitSetupStepUsage
+	identityProvidersVerifySetupStepFlags.Usage = identityProvidersVerifySetupStepUsage
+	identityProvidersDeleteFlags.Usage = identityProvidersDeleteUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -5131,6 +5171,8 @@ func ParseEndpoint(
 			svcf = hooksFlags
 		case "identity":
 			svcf = identityFlags
+		case "identity-providers":
+			svcf = identityProvidersFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -6021,6 +6063,28 @@ func ParseEndpoint(
 			switch epn {
 			case "resolve":
 				epf = identityResolveFlags
+
+			}
+
+		case "identity-providers":
+			switch epn {
+			case "create":
+				epf = identityProvidersCreateFlags
+
+			case "get":
+				epf = identityProvidersGetFlags
+
+			case "describe-setup":
+				epf = identityProvidersDescribeSetupFlags
+
+			case "submit-setup-step":
+				epf = identityProvidersSubmitSetupStepFlags
+
+			case "verify-setup-step":
+				epf = identityProvidersVerifySetupStepFlags
+
+			case "delete":
+				epf = identityProvidersDeleteFlags
 
 			}
 
@@ -8555,6 +8619,28 @@ func ParseEndpoint(
 			case "resolve":
 				endpoint = c.Resolve()
 				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
+			}
+		case "identity-providers":
+			c := identityprovidersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = identityprovidersc.BuildCreatePayload(*identityProvidersCreateBodyFlag, *identityProvidersCreateSessionTokenFlag, *identityProvidersCreateApikeyTokenFlag)
+			case "get":
+				endpoint = c.Get()
+				data, err = identityprovidersc.BuildGetPayload(*identityProvidersGetSessionTokenFlag, *identityProvidersGetApikeyTokenFlag)
+			case "describe-setup":
+				endpoint = c.DescribeSetup()
+				data, err = identityprovidersc.BuildDescribeSetupPayload(*identityProvidersDescribeSetupSessionTokenFlag, *identityProvidersDescribeSetupApikeyTokenFlag)
+			case "submit-setup-step":
+				endpoint = c.SubmitSetupStep()
+				data, err = identityprovidersc.BuildSubmitSetupStepPayload(*identityProvidersSubmitSetupStepBodyFlag, *identityProvidersSubmitSetupStepSessionTokenFlag, *identityProvidersSubmitSetupStepApikeyTokenFlag)
+			case "verify-setup-step":
+				endpoint = c.VerifySetupStep()
+				data, err = identityprovidersc.BuildVerifySetupStepPayload(*identityProvidersVerifySetupStepBodyFlag, *identityProvidersVerifySetupStepSessionTokenFlag, *identityProvidersVerifySetupStepApikeyTokenFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = identityprovidersc.BuildDeletePayload(*identityProvidersDeleteIDFlag, *identityProvidersDeleteSessionTokenFlag, *identityProvidersDeleteApikeyTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15650,6 +15736,150 @@ func identityResolveUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+// identityProvidersUsage displays the usage of the identity-providers command
+// and its subcommands.
+func identityProvidersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization identity provider connections used by Speakeasy onboarding.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity-providers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Create the organization's identity provider connection and Speakeasy-held signing key.`)
+	fmt.Fprintln(os.Stderr, `    get: Get the organization's live identity provider connection, when configured.`)
+	fmt.Fprintln(os.Stderr, `    describe-setup: Describe the guided setup steps for the organization's identity provider connection.`)
+	fmt.Fprintln(os.Stderr, `    submit-setup-step: Submit administrator-provided values for an identity provider setup step.`)
+	fmt.Fprintln(os.Stderr, `    verify-setup-step: Verify an identity provider setup step.`)
+	fmt.Fprintln(os.Stderr, `    delete: Delete an identity provider connection and its signing keys.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s identity-providers COMMAND --help\n", os.Args[0])
+}
+func identityProvidersCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create the organization's identity provider connection and Speakeasy-held signing key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers create --body '{\n      \"kind\": \"okta\",\n      \"tenant_url\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's live identity provider connection, when configured.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers get --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersDescribeSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers describe-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Describe the guided setup steps for the organization's identity provider connection.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers describe-setup --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersSubmitSetupStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers submit-setup-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Submit administrator-provided values for an identity provider setup step.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers submit-setup-step --body '{\n      \"step_key\": \"abc123\",\n      \"values\": [\n         {\n            \"key\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersVerifySetupStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers verify-setup-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Verify an identity provider setup step.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers verify-setup-step --body '{\n      \"step_key\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func identityProvidersDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-providers delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an identity provider connection and its signing keys.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-providers delete --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

@@ -267,6 +267,12 @@ trackedFiles:
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
+  src/funcs/identityProvidersCreate.ts: {}
+  src/funcs/identityProvidersDelete.ts: {}
+  src/funcs/identityProvidersDescribeSetup.ts: {}
+  src/funcs/identityProvidersGet.ts: {}
+  src/funcs/identityProvidersSubmitSetupStep.ts: {}
+  src/funcs/identityProvidersVerifySetupStep.ts: {}
   src/funcs/identityResolve.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
@@ -857,6 +863,7 @@ trackedFiles:
   src/models/components/createremotesessionclientform.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createrequestbody.ts: {}
+  src/models/components/createrequestbody2.ts: {}
   src/models/components/createrequestrequestbody.ts: {}
   src/models/components/createresponsebody.ts: {}
   src/models/components/createriskexclusionrequestbody.ts: {}
@@ -973,6 +980,7 @@ trackedFiles:
   src/models/components/geteventvolumeresult.ts: {}
   src/models/components/gethookssummarypayload.ts: {}
   src/models/components/gethookssummaryresult.ts: {}
+  src/models/components/getidentityproviderresult.ts: {}
   src/models/components/getinstanceresult.ts: {}
   src/models/components/getintegrationresult.ts: {}
   src/models/components/getkeyusageresponsebody.ts: {}
@@ -1036,6 +1044,16 @@ trackedFiles:
   src/models/components/httptooldefinition.ts: {}
   src/models/components/identitydirectory.ts: {}
   src/models/components/identitymodel.ts: {}
+  src/models/components/identityprovidercapabilityread.ts: {}
+  src/models/components/identityproviderconnection.ts: {}
+  src/models/components/identityproviderexpectedvalue.ts: {}
+  src/models/components/identityproviderfieldoutcome.ts: {}
+  src/models/components/identityproviderprintedvalue.ts: {}
+  src/models/components/identityprovidersetup.ts: {}
+  src/models/components/identityprovidersetupstep.ts: {}
+  src/models/components/identityprovidersetupvalue.ts: {}
+  src/models/components/identityproviderverifyevidence.ts: {}
+  src/models/components/identityproviderverifyresult.ts: {}
   src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
@@ -1530,6 +1548,8 @@ trackedFiles:
   src/models/components/stripesubscription.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
+  src/models/components/submitsetupsteprequestbody.ts: {}
+  src/models/components/submitsetupstepresult.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
   src/models/components/suggestexclusionrequestbody.ts: {}
@@ -1700,6 +1720,7 @@ trackedFiles:
   src/models/components/verifykmskeyresult.ts: {}
   src/models/components/verifyonboardinghookssetupresult.ts: {}
   src/models/components/verifyplatformcredentialresult.ts: {}
+  src/models/components/verifysetupsteprequestbody.ts: {}
   src/models/components/verifyurlform.ts: {}
   src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
@@ -1766,6 +1787,7 @@ trackedFiles:
   src/models/operations/createglobalremotesessionclient.ts: {}
   src/models/operations/createglobalremotesessionissuer.ts: {}
   src/models/operations/createglobaltoolvariationgroup.ts: {}
+  src/models/operations/createidentityprovider.ts: {}
   src/models/operations/createjsonwebkeyset.ts: {}
   src/models/operations/createlitellminstance.ts: {}
   src/models/operations/createmcpapprovalrequest.ts: {}
@@ -1827,6 +1849,7 @@ trackedFiles:
   src/models/operations/deleteglobalremotesessionclient.ts: {}
   src/models/operations/deleteglobalremotesessionissuer.ts: {}
   src/models/operations/deleteglobalvariation.ts: {}
+  src/models/operations/deleteidentityprovider.ts: {}
   src/models/operations/deletejsonwebkeyset.ts: {}
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
@@ -1859,6 +1882,7 @@ trackedFiles:
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/deleteusersessionissuercimdclient.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
+  src/models/operations/describeidentityprovidersetup.ts: {}
   src/models/operations/detachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/detachremotesessionclientkeyset.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
@@ -1920,6 +1944,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
+  src/models/operations/getidentityprovider.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getjsonwebkeyset.ts: {}
@@ -2289,6 +2314,7 @@ trackedFiles:
   src/models/operations/startplatformmcponboarding.ts: {}
   src/models/operations/startplatformmcponboardingsetup.ts: {}
   src/models/operations/submitfeedback.ts: {}
+  src/models/operations/submitidentityprovidersetupstep.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
@@ -2380,6 +2406,7 @@ trackedFiles:
   src/models/operations/verifygcpiamcredential.ts: {}
   src/models/operations/verifygcpiamplatformcredential.ts: {}
   src/models/operations/verifygcpkmskey.ts: {}
+  src/models/operations/verifyidentityprovidersetupstep.ts: {}
   src/models/operations/verifyonboardinghookssetup.ts: {}
   src/models/operations/verifyremotemcpurl.ts: {}
   src/models/operations/verifyusersessionissuercimdclienturl.ts: {}
@@ -2496,6 +2523,7 @@ trackedFiles:
   src/react-query/createGlobalRemoteSessionClient.ts: {}
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
   src/react-query/createGlobalToolVariationGroup.ts: {}
+  src/react-query/createIdentityProvider.ts: {}
   src/react-query/createJsonWebKeySet.ts: {}
   src/react-query/createKillswitch.ts: {}
   src/react-query/createLiteLLMInstance.ts: {}
@@ -2551,6 +2579,7 @@ trackedFiles:
   src/react-query/deleteGlobalRemoteSessionClient.ts: {}
   src/react-query/deleteGlobalRemoteSessionIssuer.ts: {}
   src/react-query/deleteGlobalVariation.ts: {}
+  src/react-query/deleteIdentityProvider.ts: {}
   src/react-query/deleteJsonWebKeySet.ts: {}
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
@@ -2759,6 +2788,10 @@ trackedFiles:
   src/react-query/identity.ts: {}
   src/react-query/identityAccess.core.ts: {}
   src/react-query/identityAccess.ts: {}
+  src/react-query/identityProvider.core.ts: {}
+  src/react-query/identityProvider.ts: {}
+  src/react-query/identityProviderSetup.core.ts: {}
+  src/react-query/identityProviderSetup.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
@@ -3218,6 +3251,7 @@ trackedFiles:
   src/react-query/startMcpResearch.ts: {}
   src/react-query/startPlatformMCPOnboarding.ts: {}
   src/react-query/startPlatformMCPOnboardingSetup.ts: {}
+  src/react-query/submitIdentityProviderSetupStep.ts: {}
   src/react-query/summarizeChat.ts: {}
   src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
@@ -3343,6 +3377,7 @@ trackedFiles:
   src/react-query/verifyGcpIamCredential.ts: {}
   src/react-query/verifyGcpIamPlatformCredential.ts: {}
   src/react-query/verifyGcpKmsKey.ts: {}
+  src/react-query/verifyIdentityProviderSetupStep.ts: {}
   src/react-query/verifyOnboardingHooksSetup.core.ts: {}
   src/react-query/verifyOnboardingHooksSetup.ts: {}
   src/react-query/verifyRemoteMcpURL.ts: {}
@@ -3389,6 +3424,7 @@ trackedFiles:
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
   src/sdk/identity.ts: {}
+  src/sdk/identityproviders.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/jsonwebkeysets.ts: {}
@@ -4136,6 +4172,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createIdentityProvider:
+    speakeasy-default-create-identity-provider:
+      requestBody:
+        application/json: {"kind": "okta", "tenant_url": "https://black-soliloquy.info"}
+      responses:
+        "200":
+          application/json: {"capabilities": ["<value 1>", "<value 2>"], "created_at": "2024-06-06T07:58:12.254Z", "granted_scopes": [], "id": "d91e99c7-8748-4c38-a3ce-3c984320e544", "jwks_url": "https://rectangular-husband.org", "kind": "okta", "signing_key_kid": "<id>", "status": "active", "tenant_identifier": "<value>", "updated_at": "2025-07-25T09:53:53.433Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createJsonWebKeySet:
     speakeasy-default-create-json-web-key-set:
       requestBody:
@@ -4835,6 +4882,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteIdentityProvider:
+    speakeasy-default-delete-identity-provider:
+      parameters:
+        query:
+          id: "d9bb4737-e65a-4a15-938e-f944d2430ccc"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   deleteJsonWebKeySet:
     speakeasy-default-delete-json-web-key-set:
       parameters:
@@ -5234,6 +5291,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  describeIdentityProviderSetup:
+    speakeasy-default-describe-identity-provider-setup:
+      responses:
+        "200":
+          application/json: {"connection_id": "8f4fed31-f6be-4c77-970c-22d9e1ebf243", "steps": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   detachOrganizationRemoteSessionClientKeySet:
     speakeasy-default-detach-organization-remote-session-client-key-set:
       parameters:
@@ -5986,6 +6052,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getIdentityProvider:
+    speakeasy-default-get-identity-provider:
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getInferenceSpendCaps:
     speakeasy-default-get-inference-spend-caps:
       responses:
@@ -10335,6 +10410,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  submitIdentityProviderSetupStep:
+    speakeasy-default-submit-identity-provider-setup-step:
+      requestBody:
+        application/json: {"step_key": "<value>", "values": []}
+      responses:
+        "200":
+          application/json: {"field_outcomes": [], "step": {"expected_values": [{"key": "<key>", "label": "<value>", "secret": false}], "instructions": ["<value 1>", "<value 2>"], "key": "<key>", "printed_values": [{"copyable": false, "label": "<value>", "value": "<value>"}], "state": "awaiting_verification", "title": "<value>", "where": "their_console"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   submitRiskBlockFeedback:
     speakeasy-default-submit-risk-block-feedback:
       requestBody:
@@ -11447,6 +11533,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  verifyIdentityProviderSetupStep:
+    speakeasy-default-verify-identity-provider-setup-step:
+      requestBody:
+        application/json: {"step_key": "<value>"}
+      responses:
+        "200":
+          application/json: {"capabilities": [], "detail": "<value>", "evidence": {"checked_at": "2024-11-11T21:24:48.991Z", "reads": []}, "granted_scopes": ["<value 1>"], "outcome": "mismatched_value"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   verifyOnboardingHooksSetup:
     speakeasy-default-verify-onboarding-hooks-setup:
       responses:
