@@ -34,14 +34,16 @@ import (
 // recordingEmailSender captures transactional sends so tests can assert on
 // access-request notification emails without a live Loops client.
 type recordingEmailSender struct {
-	mu       sync.Mutex
-	sent     []loops.SendTransactionalInput
-	failSend bool
+	mu        sync.Mutex
+	attempted []loops.SendTransactionalInput
+	sent      []loops.SendTransactionalInput
+	failSend  bool
 }
 
 func (r *recordingEmailSender) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.attempted = append(r.attempted, input)
 	if r.failSend {
 		return errors.New("recording email sender rejected send")
 	}
@@ -59,6 +61,12 @@ func (r *recordingEmailSender) Sent() []loops.SendTransactionalInput {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]loops.SendTransactionalInput(nil), r.sent...)
+}
+
+func (r *recordingEmailSender) Attempts() []loops.SendTransactionalInput {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]loops.SendTransactionalInput(nil), r.attempted...)
 }
 
 var (

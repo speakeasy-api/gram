@@ -96,6 +96,10 @@ func TestListChallenges_ReturnsCHData(t *testing.T) {
 	require.Equal(t, "user:test-user", c.PrincipalUrn)
 	require.Equal(t, "deny", c.Outcome)
 	require.Equal(t, "org:admin", c.Scope)
+	require.Equal(t, map[string]string{
+		"resource_kind": "org",
+		"resource_id":   authCtx.ActiveOrganizationID,
+	}, c.Selector)
 
 	// No resolution yet.
 	require.Nil(t, c.ResolvedAt)

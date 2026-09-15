@@ -126,14 +126,12 @@ WHERE organization_id = @organization_id
   AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days';
 
 -- name: LockChallengeResolutions :exec
--- Serializes resolution for every challenge in a batch. Sorting the distinct IDs
--- gives overlapping batches one lock order, so two admins cannot grant different
--- roles for the same unresolved challenge or deadlock on reversed input.
-SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || challenge_id, 0))
-FROM (
-  SELECT DISTINCT unnest(@challenge_ids::text[]) AS challenge_id
-  ORDER BY challenge_id
-) AS challenge_locks;
+-- One organization-scoped lock serializes challenge resolution without consuming
+-- one shared lock entry per challenge in large buckets. Resolution traffic is rare,
+-- and this keeps concurrent batches bounded and deterministic.
+SELECT pg_advisory_xact_lock(hashtextextended(
+  jsonb_build_array('access.challenge-resolution', @organization_id::text)::text, 0
+));
 
 -- name: InsertChallengeResolutions :many
 -- Creates resolution records for one or more denied challenges.
@@ -455,14 +453,18 @@ ORDER BY ora.workos_user_id;
 
 -- name: LockOrganizationUserRelationship :one
 -- Serializes AddMemberRoleTx, UpdateMemberRoles, and connected-member sends.
--- Bulk role assignment and deletion lock the same rows by WorkOS user ID.
+-- Lock both rows so membership deletion and user soft-deletion cannot race the
+-- active-state check. User deletion and membership deletion each need one of
+-- these rows and therefore wait until this role mutation commits.
 -- Provider event ingestion does not participate; not a lock for all writers.
-SELECT id
-FROM organization_user_relationships
-WHERE organization_id = @organization_id
-  AND user_id = sqlc.arg(user_id)::text
-  AND deleted IS FALSE
-FOR UPDATE;
+SELECT our.id
+FROM organization_user_relationships AS our
+JOIN users ON users.id = our.user_id
+WHERE our.organization_id = @organization_id
+  AND our.user_id = sqlc.arg(user_id)::text
+  AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
+FOR UPDATE OF users, our;
 
 -- name: LockMemberRoleSync :exec
 -- Cross-process serialization of RoleManager sends, including legacy unlinked members.

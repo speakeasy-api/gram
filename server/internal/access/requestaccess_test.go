@@ -85,5 +85,6 @@ func TestService_RequestAccess_AllNotificationsFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 0, result.SentToCount)
+	require.Len(t, ti.emailSender.Attempts(), 1)
 	require.Empty(t, ti.emailSender.Sent())
 }

@@ -14,6 +14,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestResolveChallenge_Unauthorized(t *testing.T) {
@@ -102,15 +103,16 @@ func TestResolveChallenge_RoleAssignedAddsCustomRoleAndPreservesExistingRoles(t 
 	resourceKind := authz.ResourceKindOrg
 
 	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
-		ApikeyToken:    nil,
-		SessionToken:   nil,
-		ChallengeIds:   []string{challengeID},
-		PrincipalUrn:   principalURN,
-		Scope:          string(authz.ScopeOrgRead),
-		ResourceKind:   &resourceKind,
-		ResourceID:     &orgID,
-		ResolutionType: "role_assigned",
-		RoleSlug:       &roleSlug,
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &orgID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -127,6 +129,31 @@ func TestResolveChallenge_RoleAssignedAddsCustomRoleAndPreservesExistingRoles(t 
 	require.NoError(t, err)
 	require.Len(t, members.Members, 1)
 	require.ElementsMatch(t, []string{existingRoleID, targetRoleID}, members.Members[0].RoleIds)
+}
+
+func TestResolveChallenge_RoleAssignedRequiresFullRoleConfirmation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	roleSlug := "editor"
+
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{uuid.NewString()},
+		PrincipalUrn:            "user:denied-user",
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            nil,
+		ResourceID:              nil,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(false),
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.ErrorContains(t, err, "assigning a role grants all of its permissions")
 }
 
 func TestResolveChallenge_RoleAssignedRejectsRoleThatDoesNotCoverResource(t *testing.T) {
@@ -151,15 +178,16 @@ func TestResolveChallenge_RoleAssignedRejectsRoleThatDoesNotCoverResource(t *tes
 	resourceKind := authz.ResourceKindProject
 
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
-		ApikeyToken:    nil,
-		SessionToken:   nil,
-		ChallengeIds:   []string{challengeID},
-		PrincipalUrn:   principalURN,
-		Scope:          string(authz.ScopeProjectRead),
-		ResourceKind:   &resourceKind,
-		ResourceID:     &challengedProjectID,
-		ResolutionType: "role_assigned",
-		RoleSlug:       &roleSlug,
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeProjectRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &challengedProjectID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
 	})
 	require.Error(t, err)
 
@@ -196,17 +224,99 @@ func TestResolveChallenge_RoleAssignedRejectsLegacySelectorlessChallenge(t *test
 	resourceKind := authz.ResourceKindOrg
 
 	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
-		ApikeyToken:    nil,
-		SessionToken:   nil,
-		ChallengeIds:   []string{challengeID},
-		PrincipalUrn:   principalURN,
-		Scope:          string(authz.ScopeOrgRead),
-		ResourceKind:   &resourceKind,
-		ResourceID:     &orgID,
-		ResolutionType: "role_assigned",
-		RoleSlug:       &roleSlug,
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &orgID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
 	})
 	require.Error(t, err)
+
+	resolutions, queryErr := accessrepo.New(ti.conn).ListChallengeResolutions(ctx, accessrepo.ListChallengeResolutionsParams{
+		OrganizationID: orgID,
+		ChallengeIds:   []string{challengeID},
+	})
+	require.NoError(t, queryErr)
+	require.Empty(t, resolutions)
+}
+
+func TestResolveChallenge_RoleAssignedRejectsSelectorMissingResourceKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	userID := "malformed-selector-user"
+	workosUserID := "workos-malformed-selector-user"
+	membershipID := "membership-malformed-selector-user"
+	principalURN := "user:" + userID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_reader", "Reader", "reader", "Reads the organization"))
+	seedGrant(t, ctx, ti.conn, orgID, seededRolePrincipal(t, ctx, ti.conn, orgID, "reader"), authz.ScopeOrgRead, orgID)
+	seedConnectedUser(t, ctx, ti.conn, orgID, userID, "malformed-selector@example.test", "Malformed Selector", workosUserID, membershipID)
+
+	challengeID := uuid.NewString()
+	insertCHChallengeRowWithSelector(t, ti, orgID, challengeID, "deny", principalURN, string(authz.ScopeOrgRead), "", "", `{"tool":"read"}`, &userID, nil)
+	roleSlug := "reader"
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            nil,
+		ResourceID:              nil,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.ErrorContains(t, err, "challenge selector is no longer valid")
+}
+
+func TestResolveChallenge_RoleAssignedRejectsDeletedUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+	userID := "deleted-denied-user"
+	workosUserID := "workos-deleted-denied-user"
+	membershipID := "membership-deleted-denied-user"
+	principalURN := "user:" + userID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_reader", "Reader", "reader", "Reads the organization"))
+	seedGrant(t, ctx, ti.conn, orgID, seededRolePrincipal(t, ctx, ti.conn, orgID, "reader"), authz.ScopeOrgRead, orgID)
+	seedConnectedUser(t, ctx, ti.conn, orgID, userID, "deleted-denied@example.test", "Deleted Denied User", workosUserID, membershipID)
+	seedRoleAssignment(t, ctx, ti.conn, orgID, userID, mockMember(mockidp.MockOrgID, membershipID, workosUserID, "reader"))
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUser(ctx, userID))
+
+	challengeID := uuid.NewString()
+	insertCHChallenge(t, ti, orgID, challengeID, "deny", principalURN, string(authz.ScopeOrgRead))
+	roleSlug := "reader"
+	resourceKind := authz.ResourceKindOrg
+	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &orgID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 
 	resolutions, queryErr := accessrepo.New(ti.conn).ListChallengeResolutions(ctx, accessrepo.ListChallengeResolutionsParams{
 		OrganizationID: orgID,
@@ -414,15 +524,16 @@ func TestResolveChallenge_TransactionPersistsResolutionAndAuditLog(t *testing.T)
 
 	// Resolve a challenge via the service (which uses a transaction internally).
 	result, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
-		ApikeyToken:    nil,
-		SessionToken:   nil,
-		ChallengeIds:   []string{challengeID},
-		PrincipalUrn:   principalURN,
-		Scope:          string(authz.ScopeOrgRead),
-		ResourceKind:   &resourceKind,
-		ResourceID:     &orgID,
-		ResolutionType: "role_assigned",
-		RoleSlug:       &roleSlug,
+		ApikeyToken:             nil,
+		SessionToken:            nil,
+		ChallengeIds:            []string{challengeID},
+		PrincipalUrn:            principalURN,
+		Scope:                   string(authz.ScopeOrgRead),
+		ResourceKind:            &resourceKind,
+		ResourceID:              &orgID,
+		ResolutionType:          "role_assigned",
+		RoleSlug:                &roleSlug,
+		RoleAssignmentConfirmed: new(true),
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Resolutions, 1)

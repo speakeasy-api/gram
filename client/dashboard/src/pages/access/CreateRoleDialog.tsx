@@ -1,8 +1,6 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
+import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
+import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-
-import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
   SheetContent,
@@ -11,55 +9,57 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { cn } from "@/lib/utils";
-import { useOrganization } from "@/contexts/Auth";
-import type { Role } from "@gram/client/models/components/role.js";
-import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
-import {
-  invalidateAllMembers,
-  useMembers,
-} from "@gram/client/react-query/members.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
-import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
-import { useListScopes } from "@gram/client/react-query/listScopes.js";
-import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert } from "@/components/ui/Alert";
-import { Dialog } from "@/components/ui/Dialog";
-import { Button } from "@/components/ui/Button";
-import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
-import { useOrgRoutes } from "@/routes";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import {
-  getSelectableMembers,
-  isMemberLockedToRole,
-  membersWithRole,
-} from "./changeRoleState";
-import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { PermissionScopeControl } from "./PermissionScopeControl";
-import { RolePermissionsSection } from "./RolePermissionsSection";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
-import type { Selector } from "@gram/client/models/components/selector.js";
-import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
-import {
-  isProjectSelectableResourceType,
-  isUnrestrictedResourceType,
-} from "./types";
-import {
-  isSaveDisabled,
-  grantKeysString as grantKeysStringFn,
-  computeRuleLabel,
-} from "./roleDialogState";
 import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
+import {
+  computeRuleLabel,
+  grantKeysString as grantKeysStringFn,
+  isSaveDisabled,
+} from "./roleDialogState";
+import {
+  getSelectableMembers,
+  isMemberLockedToRole,
+  membersWithRole,
+} from "./changeRoleState";
+import {
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members.js";
+import {
+  isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+} from "./types";
+import { useMemo, useState } from "react";
+
+import { Alert } from "@/components/ui/Alert";
+import { AnyField } from "@/components/moon/any-field";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { InputField } from "@/components/moon/input-field";
+import { Link } from "react-router";
+import { PermissionScopeControl } from "./PermissionScopeControl";
+import type { Role } from "@gram/client/models/components/role.js";
+import { RolePermissionsSection } from "./RolePermissionsSection";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { useAgents } from "@gram/client/react-query/agents.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useListScopes } from "@gram/client/react-query/listScopes.js";
+import { useOrgRoutes } from "@/routes";
+import { useOrganization } from "@/contexts/Auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 //
@@ -126,6 +126,7 @@ interface CreateRoleDialogProps {
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
   onRoleCreated?: (role: Role) => void;
+  confirmAssignmentFor?: string;
   presentation?: RoleEditorPresentation;
 }
 
@@ -134,6 +135,7 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
+  confirmAssignmentFor,
   presentation = "sheet",
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
@@ -154,6 +156,7 @@ export function CreateRoleDialog({
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
+  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
@@ -296,6 +299,7 @@ export function CreateRoleDialog({
 
   const saveDisabled =
     !scopeDefinitions ||
+    (!!confirmAssignmentFor && !assignmentConfirmed) ||
     isSaveDisabled({
       isMutating,
       isEditing,
@@ -565,6 +569,7 @@ export function CreateRoleDialog({
     setInitialDescription("");
     setInitialGrantKeys("");
     setShowMembers(false);
+    setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
     setEditingScopeSlug(null);
@@ -1045,26 +1050,44 @@ export function CreateRoleDialog({
       )}
 
       {(dialogStep === "form" || isPage) && (
-        <Footer className="border-border flex-row justify-end border-t">
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={saveDisabled}>
-            {isMutating && (
-              <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
-              </Button.LeftIcon>
-            )}
-            <Button.Text>
-              {isMutating
-                ? isEditing
-                  ? "Saving\u2026"
-                  : "Creating\u2026"
-                : isEditing
-                  ? "Save Changes"
-                  : "Create Role"}
-            </Button.Text>
-          </Button>
+        <Footer className="border-border flex-col border-t">
+          {confirmAssignmentFor && !isEditing && (
+            <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
+              <Checkbox
+                checked={assignmentConfirmed}
+                onCheckedChange={(checked) =>
+                  setAssignmentConfirmed(checked === true)
+                }
+                aria-label="Confirm role assignment"
+                className="mt-0.5"
+              />
+              <Text variant="body" className="text-sm">
+                Assign <strong>{confirmAssignmentFor}</strong> to this role
+                after creation. I reviewed all permissions configured above.
+              </Text>
+            </label>
+          )}
+          <div className="flex justify-end gap-2 self-stretch">
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={saveDisabled}>
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving\u2026"
+                    : "Creating\u2026"
+                  : isEditing
+                    ? "Save Changes"
+                    : "Create Role"}
+              </Button.Text>
+            </Button>
+          </div>
         </Footer>
       )}
     </Frame>

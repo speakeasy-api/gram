@@ -42,6 +42,10 @@ export type ResolveChallengeForm = {
    */
   resourceKind?: string | undefined;
   /**
+   * Confirms the administrator reviewed and accepts every permission granted by the complete role. New clients should send true when resolution_type=role_assigned; omission remains accepted for compatibility with existing clients.
+   */
+  roleAssignmentConfirmed?: boolean | undefined;
+  /**
    * Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
    */
   roleSlug?: string | undefined;
@@ -63,6 +67,7 @@ export type ResolveChallengeForm$Outbound = {
   resolution_type: string;
   resource_id?: string | undefined;
   resource_kind?: string | undefined;
+  role_assignment_confirmed?: boolean | undefined;
   role_slug?: string | undefined;
   scope: string;
 };
@@ -78,6 +83,7 @@ export const ResolveChallengeForm$outboundSchema: z.ZodMiniType<
     resolutionType: ResolveChallengeFormResolutionType$outboundSchema,
     resourceId: z.optional(z.string()),
     resourceKind: z.optional(z.string()),
+    roleAssignmentConfirmed: z.optional(z.boolean()),
     roleSlug: z.optional(z.string()),
     scope: z.string(),
   }),
@@ -88,6 +94,7 @@ export const ResolveChallengeForm$outboundSchema: z.ZodMiniType<
       resolutionType: "resolution_type",
       resourceId: "resource_id",
       resourceKind: "resource_kind",
+      roleAssignmentConfirmed: "role_assignment_confirmed",
       roleSlug: "role_slug",
     });
   }),

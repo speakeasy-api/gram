@@ -123,6 +123,11 @@ type ResolveChallengeRequestBody struct {
 	// Custom role slug to add to the denied user before resolving (required when
 	// resolution_type=role_assigned).
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. New clients should send true when
+	// resolution_type=role_assigned; omission remains accepted for compatibility
+	// with existing clients.
+	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -5389,6 +5394,9 @@ type AuthzChallengeResponseBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// Resource ID of the check.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 	// Roles the principal had loaded.
 	RoleSlugs []string `form:"role_slugs,omitempty" json:"role_slugs,omitempty" xml:"role_slugs,omitempty"`
 	// Total grants evaluated.
@@ -5671,12 +5679,13 @@ func NewRequestAccessRequestBody(p *access.RequestAccessPayload) *RequestAccessR
 // of the "resolveChallenge" endpoint of the "access" service.
 func NewResolveChallengeRequestBody(p *access.ResolveChallengePayload) *ResolveChallengeRequestBody {
 	body := &ResolveChallengeRequestBody{
-		PrincipalUrn:   p.PrincipalUrn,
-		Scope:          p.Scope,
-		ResourceKind:   p.ResourceKind,
-		ResourceID:     p.ResourceID,
-		ResolutionType: p.ResolutionType,
-		RoleSlug:       p.RoleSlug,
+		PrincipalUrn:            p.PrincipalUrn,
+		Scope:                   p.Scope,
+		ResourceKind:            p.ResourceKind,
+		ResourceID:              p.ResourceID,
+		ResolutionType:          p.ResolutionType,
+		RoleSlug:                p.RoleSlug,
+		RoleAssignmentConfirmed: p.RoleAssignmentConfirmed,
 	}
 	if p.ChallengeIds != nil {
 		body.ChallengeIds = make([]string, len(p.ChallengeIds))

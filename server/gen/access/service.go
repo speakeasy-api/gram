@@ -237,6 +237,9 @@ type AuthzChallenge struct {
 	ResourceKind *string
 	// Resource ID of the check.
 	ResourceID *string
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string
 	// Roles the principal had loaded.
 	RoleSlugs []string
 	// Total grants evaluated.
@@ -668,6 +671,11 @@ type ResolveChallengePayload struct {
 	// Custom role slug to add to the denied user before resolving (required when
 	// resolution_type=role_assigned).
 	RoleSlug *string
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. New clients should send true when
+	// resolution_type=role_assigned; omission remains accepted for compatibility
+	// with existing clients.
+	RoleAssignmentConfirmed *bool
 }
 
 // ResolveChallengesResult is the result type of the access service

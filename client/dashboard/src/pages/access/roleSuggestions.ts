@@ -1,6 +1,11 @@
 /** Pure helpers for suggesting roles that satisfy a requested scope. */
 
-import { resourceKindForScope, selectorMatches } from "@/hooks/useRBAC";
+import {
+  resourceKindForScope,
+  selectorMatches,
+  selectorMatchesStrict,
+} from "@/hooks/useRBAC";
+
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant } from "@gram/client/models/components/rolegrant.js";
 
@@ -32,15 +37,15 @@ function grantScopeCovers(grantScope: string, scope: string): boolean {
  * selectors is unrestricted; otherwise at least one selector must match the
  * resource (wildcards included), mirroring server-side selector matching.
  */
-function grantCoversResource(
+function grantCoversSelector(
   grant: RoleGrant,
-  scope: string,
-  resourceId: string | undefined,
+  check: Record<string, string>,
+  strict: boolean,
 ): boolean {
-  if (!resourceId || !grant.selectors) return true;
-  const check = { resourceKind: resourceKindForScope(scope), resourceId };
+  if (!grant.selectors) return true;
+  const matches = strict ? selectorMatchesStrict : selectorMatches;
   return grant.selectors.some((selector) =>
-    selectorMatches(
+    matches(
       Object.fromEntries(
         Object.entries(selector).filter(
           (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -51,6 +56,22 @@ function grantCoversResource(
   );
 }
 
+function grantCoversResource(
+  grant: RoleGrant,
+  scope: string,
+  resourceId: string | undefined,
+  projectId: string | undefined,
+  strict: boolean,
+): boolean {
+  if (!resourceId) return true;
+  const check: Record<string, string> = {
+    resourceKind: resourceKindForScope(scope),
+    resourceId,
+  };
+  if (projectId) check.projectId = projectId;
+  return grantCoversSelector(grant, check, strict);
+}
+
 /**
  * Roles whose grants include the requested scope (for the requested resource,
  * when one is given), preserving role order.
@@ -59,12 +80,60 @@ export function rolesCoveringScope(
   roles: Role[],
   scope: string,
   resourceId?: string,
+  projectId?: string,
 ): Role[] {
   return roles.filter((role) =>
     role.grants.some(
       (grant) =>
         grantScopeCovers(grant.scope, scope) &&
-        grantCoversResource(grant, scope, resourceId),
+        grantCoversResource(grant, scope, resourceId, projectId, false),
+    ),
+  );
+}
+
+function normalizeCapturedSelector(
+  selector: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(selector).map(([key, value]) => [
+      key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
+      value,
+    ]),
+  );
+}
+
+/**
+ * Challenge assignment must match every captured selector dimension.
+ * Tool-specific or wrong-project roles stay hidden rather than being offered
+ * and rejected by the server after confirmation.
+ */
+export function rolesCoveringChallengeScopes(
+  roles: Role[],
+  challenges: Array<{
+    scope: string;
+    selector?: Record<string, string>;
+  }>,
+): Role[] {
+  const captured = challenges.map(({ scope, selector }) => ({
+    scope,
+    selector: selector ? normalizeCapturedSelector(selector) : undefined,
+  }));
+  if (
+    captured.length === 0 ||
+    captured.some(
+      ({ selector }) => !selector?.resourceKind || !selector.resourceId,
+    )
+  ) {
+    return [];
+  }
+
+  return roles.filter((role) =>
+    captured.every(({ scope, selector }) =>
+      role.grants.some(
+        (grant) =>
+          grantScopeCovers(grant.scope, scope) &&
+          grantCoversSelector(grant, selector!, true),
+      ),
     ),
   );
 }
