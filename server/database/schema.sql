@@ -8617,6 +8617,62 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_sess
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
 
+-- Scope inheritance is conditional: project-owned parents match the project;
+-- organization-owned parents match its organization. Only remote issuers may
+-- be global. IDs and the client/issuer FK alone cannot enforce these rules.
+CREATE FUNCTION validate_remote_session_ema_binding_scope() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  -- An unlinked tombstone may outlive parent reconfiguration. Preserve it (and
+  -- the project's organization cascade), but revalidate any retarget or revival.
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.state = 'unlinked' AND NEW.state = 'unlinked'
+      AND OLD.project_id IS NOT DISTINCT FROM NEW.project_id
+      AND OLD.user_session_issuer_id IS NOT DISTINCT FROM NEW.user_session_issuer_id
+      AND OLD.remote_session_issuer_id IS NOT DISTINCT FROM NEW.remote_session_issuer_id
+      AND OLD.remote_session_client_id IS NOT DISTINCT FROM NEW.remote_session_client_id THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  -- SHARE, not KEY SHARE: scope and soft-deletion changes need not alter a
+  -- referenced key. Hold these locks until commit so a first binding cannot
+  -- race a parent reconfiguration that observes no active bindings yet.
+  PERFORM 1 FROM projects WHERE id = NEW.project_id
+    AND organization_id = NEW.organization_id AND deleted IS FALSE FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining project scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_project_scope_fkey';
+  END IF;
+  PERFORM 1 FROM user_session_issuers WHERE id = NEW.user_session_issuer_id AND deleted IS FALSE
+    AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining user issuer scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_user_issuer_scope_fkey';
+  END IF;
+  PERFORM 1 FROM remote_session_issuers WHERE id = NEW.remote_session_issuer_id AND deleted IS FALSE
+    AND (project_id = NEW.project_id OR (project_id IS NULL AND (organization_id = NEW.organization_id OR organization_id IS NULL))) FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'identity-chaining remote issuer scope mismatch'
+      USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_remote_issuer_scope_fkey';
+  END IF;
+  IF NEW.remote_session_client_id IS NOT NULL THEN
+    -- Global clients are platform-owned and cannot be selected by tenant preparation.
+    PERFORM 1 FROM remote_session_clients WHERE id = NEW.remote_session_client_id AND deleted IS FALSE
+      AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'identity-chaining client scope mismatch'
+        USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_client_scope_fkey';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER remote_session_ema_binding_scope_guard
+BEFORE INSERT OR UPDATE ON remote_session_ema_bindings
+FOR EACH ROW EXECUTE FUNCTION validate_remote_session_ema_binding_scope();
+
 -- Row locks acquired by UPDATE/DELETE serialize these lifecycle guards with
 -- preparation's scoped FOR UPDATE reads, including before the first binding.
 CREATE FUNCTION guard_remote_session_ema_lifecycle() RETURNS trigger
@@ -8657,6 +8713,8 @@ EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 CREATE TRIGGER remote_session_ema_project_delete_guard BEFORE DELETE ON projects
 FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 
+-- grant_types records registration evidence: authorized preparation may confirm
+-- or publish it for an active binding without changing client identity/configuration.
 CREATE TRIGGER remote_session_ema_client_update_guard
 BEFORE UPDATE ON remote_session_clients FOR EACH ROW
 WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id

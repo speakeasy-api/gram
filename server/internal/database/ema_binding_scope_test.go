@@ -1,0 +1,220 @@
+//nolint:glint // Schema regression tests exercise constraints with raw SQL.
+package database_test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/require"
+)
+
+const emaScopeFixtures = `
+INSERT INTO organization_metadata (id, name, slug) VALUES
+ ('fixture-org-a', 'Fixture A', 'fixture-a'), ('fixture-org-b', 'Fixture B', 'fixture-b');
+INSERT INTO projects (id, name, slug, organization_id)
+SELECT ('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid,
+ 'Fixture ' || n, 'fixture-' || n, CASE WHEN n = 3 THEN 'fixture-org-b' ELSE 'fixture-org-a' END
+FROM generate_series(1, 3) n;
+CREATE FUNCTION fixture_scope_id(n integer) RETURNS uuid LANGUAGE sql AS $$
+ SELECT ('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid;
+$$;
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
+SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
+ CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
+ 'fixture-' || n, 'chain', interval '1 hour' FROM generate_series(1,6) n;
+INSERT INTO remote_session_issuers (id, project_id, organization_id, slug, issuer)
+SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
+ CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
+ 'fixture-' || n, 'https://issuer.example.invalid/' || n FROM generate_series(1,6) n;
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
+SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
+ CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
+ fixture_scope_id(6), 'fixture-' || n FROM generate_series(1,6) n;
+`
+
+const emaScopeInsert = `INSERT INTO remote_session_ema_bindings
+ (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id, resource)
+ VALUES (fixture_scope_id(1), 'fixture-org-a', fixture_scope_id(1), fixture_scope_id(6), fixture_scope_id(1), 'https://resource.example.invalid')`
+
+func requireEMAScopeError(t *testing.T, err error) {
+	t.Helper()
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "23503", pgErr.Code)
+}
+
+func TestEMABindingScope(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	container, clone, err := testenv.NewTestPostgres(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, container.Terminate(context.Background())) })
+	pool, err := clone(t, "ema_scope")
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, emaScopeFixtures)
+	require.NoError(t, err)
+
+	// Project / organization user issuers; project / organization / global
+	// remote issuers. Client-less in-progress bindings are valid at every tier.
+	for u := 1; u <= 6; u++ {
+		for r := 1; r <= 6; r++ {
+			t.Run(fmt.Sprintf("issuers_%d_%d", u, r), func(t *testing.T) {
+				tx, err := pool.Begin(ctx)
+				require.NoError(t, err)
+				defer func() { _ = tx.Rollback(ctx) }()
+				_, err = tx.Exec(ctx, `INSERT INTO remote_session_ema_bindings
+ (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
+ VALUES (fixture_scope_id(1), 'fixture-org-a', fixture_scope_id($1), fixture_scope_id($2), 'https://resource.example.invalid')`, u, r)
+				if (u == 1 || u == 4) && (r == 1 || r == 4 || r == 6) {
+					require.NoError(t, err)
+				} else {
+					requireEMAScopeError(t, err)
+				}
+			})
+		}
+	}
+	for c := 1; c <= 6; c++ {
+		t.Run(fmt.Sprintf("client_%d", c), func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET remote_session_client_id = fixture_scope_id($1)`, c)
+			if c == 1 || c == 4 {
+				require.NoError(t, err)
+			} else {
+				requireEMAScopeError(t, err)
+			}
+		})
+	}
+	for name, mutation := range map[string]string{
+		"user_issuer":          "user_session_issuer_id = fixture_scope_id(2)",
+		"remote_issuer":        "remote_session_issuer_id = fixture_scope_id(2)",
+		"client_issuer_pair":   "remote_session_issuer_id = fixture_scope_id(1)",
+		"project_organization": "organization_id = 'fixture-org-b'",
+	} {
+		t.Run("retarget_"+name, func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET "+mutation)
+			requireEMAScopeError(t, err)
+		})
+	}
+	t.Run("tombstone_and_grant_evidence", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		// Evidence publication is not a credential/configuration mutation.
+		_, err = tx.Exec(ctx, `UPDATE remote_session_clients SET grant_types = ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'] WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
+UPDATE projects SET organization_id = 'fixture-org-b' WHERE id = fixture_scope_id(1);
+UPDATE user_session_issuers SET project_id = fixture_scope_id(2) WHERE id = fixture_scope_id(1);
+UPDATE remote_session_ema_bindings SET updated_at = clock_timestamp()`)
+		require.NoError(t, err)
+		var generation int64
+		var org string
+		err = tx.QueryRow(ctx, `SELECT organization_id, generation FROM remote_session_ema_bindings`).Scan(&org, &generation)
+		require.NoError(t, err)
+		require.Equal(t, "fixture-org-b", org)
+		require.EqualValues(t, 2, generation)
+		_, err = tx.Exec(ctx, "SAVEPOINT revive")
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready'`)
+		requireEMAScopeError(t, err)
+		_, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT revive; DELETE FROM projects WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+		var count int
+		err = tx.QueryRow(ctx, `SELECT count(*) FROM remote_session_ema_bindings`).Scan(&count)
+		require.NoError(t, err)
+		require.Zero(t, count)
+	})
+
+	t.Run("foreign_key_lookup_indexes", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		// Populate distinct projects and clients so the normal planner (without
+		// disabling sequential scans) can demonstrate both selective prefixes.
+		_, err = tx.Exec(ctx, `
+INSERT INTO projects (id, name, slug, organization_id)
+SELECT fixture_scope_id(n), 'Index fixture', 'index-' || n, 'fixture-org-a' FROM generate_series(100, 5099) n;
+INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id)
+SELECT fixture_scope_id(n), 'fixture-org-a', fixture_scope_id(6), 'index-' || n FROM generate_series(100, 5099) n;
+INSERT INTO remote_session_ema_bindings
+ (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id, resource)
+SELECT fixture_scope_id(n), 'fixture-org-a', fixture_scope_id(4), fixture_scope_id(6), fixture_scope_id(n),
+ 'https://resource.example.invalid' FROM generate_series(100, 5099) n;
+ANALYZE remote_session_ema_bindings;`)
+		require.NoError(t, err)
+		for _, tc := range []struct{ predicate, index string }{
+			{"organization_id = 'fixture-org-a' AND project_id = fixture_scope_id(1)", "remote_session_ema_bindings_resource_key"},
+			{"remote_session_client_id = fixture_scope_id(1) AND remote_session_issuer_id = fixture_scope_id(6)", "remote_session_ema_bindings_client_idx"},
+		} {
+			var plan string
+			err = tx.QueryRow(ctx, "EXPLAIN (FORMAT JSON) SELECT 1 FROM remote_session_ema_bindings WHERE "+tc.predicate).Scan(&plan)
+			require.NoError(t, err)
+			require.Contains(t, plan, tc.index)
+			require.NotContains(t, plan, "Seq Scan")
+		}
+	})
+
+	// Exercise both race orderings against every locked parent, including the
+	// first binding (where a parent guard initially has no child row to find).
+	for name, mutation := range map[string]string{
+		"project":       "UPDATE projects SET organization_id = 'fixture-org-b' WHERE id = fixture_scope_id(1)",
+		"user_issuer":   "UPDATE user_session_issuers SET project_id = fixture_scope_id(2) WHERE id = fixture_scope_id(1)",
+		"remote_issuer": "UPDATE remote_session_issuers SET project_id = fixture_scope_id(2) WHERE id = fixture_scope_id(6)",
+		"client":        "UPDATE remote_session_clients SET project_id = fixture_scope_id(2) WHERE id = fixture_scope_id(1)",
+	} {
+		for _, parentFirst := range []bool{true, false} {
+			t.Run(fmt.Sprintf("race_%s_parent_first_%t", name, parentFirst), func(t *testing.T) {
+				pool, err := clone(t, fmt.Sprintf("ema_%s_%t", name, parentFirst))
+				require.NoError(t, err)
+				_, err = pool.Exec(ctx, emaScopeFixtures)
+				require.NoError(t, err)
+				first, second := emaScopeInsert, mutation
+				if parentFirst {
+					first, second = second, first
+				}
+				tx, err := pool.Begin(ctx)
+				require.NoError(t, err)
+				defer func() { _ = tx.Rollback(ctx) }()
+				_, err = tx.Exec(ctx, first)
+				require.NoError(t, err)
+				conn, err := pool.Acquire(ctx)
+				require.NoError(t, err)
+				defer conn.Release()
+				done := make(chan error, 1)
+				waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+				go func() { _, err := conn.Exec(waitCtx, second); done <- err }()
+				waitForEMAScopeLock(t, pool, conn.Conn().PgConn().PID())
+				require.NoError(t, tx.Commit(ctx))
+				requireEMAScopeError(t, <-done)
+			})
+		}
+	}
+}
+
+func waitForEMAScopeLock(t *testing.T, pool *pgxpool.Pool, pid uint32) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := pool.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock')`, pid).Scan(&waiting)
+		return err == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+}
