@@ -997,6 +997,45 @@ url = "https://github.com/astral-sh/ruff/releases/download/0.16.1/ruff-x86_64-pc
 url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/495779128"
 provenance = "github-attestations"
 
+[[tools.stripe]]
+version = "1.50.11"
+backend = "aqua:stripe/stripe-cli"
+
+[tools.stripe."platforms.linux-arm64"]
+checksum = "sha256:816023515eead49134c165e949d21d56fd61050f689a53f0fd77d07ca41ec1c6"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449214"
+
+[tools.stripe."platforms.linux-arm64-musl"]
+checksum = "sha256:816023515eead49134c165e949d21d56fd61050f689a53f0fd77d07ca41ec1c6"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449214"
+
+[tools.stripe."platforms.linux-x64"]
+checksum = "sha256:a99c81b67ca7c322958fc19b46b5f906b15d22e9934a644b09038c29f53cd8b2"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449213"
+
+[tools.stripe."platforms.linux-x64-musl"]
+checksum = "sha256:a99c81b67ca7c322958fc19b46b5f906b15d22e9934a644b09038c29f53cd8b2"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449213"
+
+[tools.stripe."platforms.macos-arm64"]
+checksum = "sha256:4de3a0e34e513f1ff728dbb9136874814a0fe0039fa3246a190016cacd4f4792"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_mac-os_arm64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555448491"
+
+[tools.stripe."platforms.macos-x64"]
+checksum = "sha256:b534ae1cde5c4b3b67874e5b8cdade3ce52b3af56d653fae37684f480a0427f8"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_mac-os_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555448492"
+
+[tools.stripe."platforms.windows-x64"]
+checksum = "sha256:bf73139afde22682029c611185834ca6b51c7407b1fbc3afdfdb28c9fa92004a"
+url = "https://github.com/stripe/stripe-cli/releases/download/v1.50.11/stripe_1.50.11_windows_x86_64.zip"
+url_api = "https://api.github.com/repos/stripe/stripe-cli/releases/assets/555449017"
+
 [[tools.uv]]
 version = "0.12.1"
 backend = "aqua:astral-sh/uv"
