@@ -389,18 +389,22 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, err
 	}
 
-	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), payload.ServerSlug)
+	return s.readShadowMCPInventoryServer(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+}
+
+func (s *Service) readShadowMCPInventoryServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverSlug string) (*gen.ShadowMCPInventoryServer, error) {
+	inventoryRow, err := shadowMCPInventoryURLForSlug(ctx, telemetryrepo.New(s.chConn), projectID.String(), serverSlug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
 	if inventoryRow == nil {
 		// A server can be known only through its approval request — asked
 		// for, never observed in traffic — and its page must still resolve.
-		return s.shadowMCPServerFromApprovalRequest(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
+		return s.shadowMCPServerFromApprovalRequest(ctx, organizationID, projectID, serverSlug)
 	}
 
 	return s.ReadShadowMCPInventoryTarget(ctx, ShadowMCPInventoryTargetInput{
-		OrganizationID: ac.ActiveOrganizationID,
+		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		TargetKind:     shadowMCPTargetKindServerURL,
 		TargetKey:      inventoryRow.CanonicalServerURL,

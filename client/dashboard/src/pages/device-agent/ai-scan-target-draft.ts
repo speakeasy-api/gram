@@ -4,7 +4,7 @@ import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/componen
 // Form state and rules for the scan target editor; the rules mirror the
 // server's aitargets.Validate.
 
-export type TargetCategory = "harness" | "local_model";
+export type TargetCategory = "harness" | "assistant" | "local_model";
 
 export const TARGET_CATEGORIES: ReadonlyArray<{
   value: TargetCategory;
@@ -18,6 +18,12 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
       "An agentic coding tool or AI IDE, such as Claude Code or Cursor.",
   },
   {
+    value: "assistant",
+    label: "Assistant",
+    description:
+      "A general-purpose AI assistant or agent, such as Goose or Hermes.",
+  },
+  {
     value: "local_model",
     label: "Local model",
     description: "A local model runtime, such as Ollama or LM Studio.",
@@ -27,8 +33,7 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
 // The form edits the name, category, binaries, config dirs, and process
 // names. The other fields ride along from an existing target so an edit never
 // wipes them: the id is derived from the name on create and fixed afterwards,
-// and bundle ids, the plist key, and the served flag are only set outside the
-// form.
+// and bundle ids and the plist key are only set outside the form.
 export type Draft = {
   id: string;
   displayName: string;
@@ -38,7 +43,6 @@ export type Draft = {
   configDirs: string[];
   processNames: string[];
   versionPlistKey: string;
-  enabled: boolean;
 };
 
 export type DraftErrors = Partial<Record<keyof Draft, string>>;
@@ -60,21 +64,24 @@ export function emptyDraft(): Draft {
     configDirs: [],
     processNames: [],
     versionPlistKey: "",
-    enabled: true,
   };
 }
 
+// draftFromTarget seeds the editor from an existing target. The category is
+// carried through as-is: the API types it as a closed enum over the same
+// values as TargetCategory, so a server-side addition breaks this assignment
+// at compile time rather than silently rewriting the target's category on the
+// next upsert.
 export function draftFromTarget(target: AiScanTarget): Draft {
   return {
     id: target.id,
     displayName: target.displayName,
-    category: target.category === "local_model" ? "local_model" : "harness",
+    category: target.category,
     bundleIds: [...target.signatures.bundleIds],
     binaries: [...target.signatures.binaries],
     configDirs: [...target.signatures.configDirs],
     processNames: [...target.signatures.processNames],
     versionPlistKey: target.versionPlistKey ?? "",
-    enabled: target.enabled,
   };
 }
 
@@ -187,7 +194,6 @@ export function draftToUpsertBody(draft: Draft): UpsertAiScanTargetRequestBody {
       processNames: draft.processNames,
     },
     versionPlistKey: plistKey === "" ? undefined : plistKey,
-    enabled: draft.enabled,
   };
 }
 

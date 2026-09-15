@@ -24,23 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  DeleteDeviceAgentAiScanTargetRequest,
-  DeleteDeviceAgentAiScanTargetSecurity,
-} from "../models/operations/deletedeviceagentaiscantarget.js";
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type DeleteDeviceAgentAiScanTargetMutationVariables = {
-  request: DeleteDeviceAgentAiScanTargetRequest;
-  security?: DeleteDeviceAgentAiScanTargetSecurity | undefined;
+export type DeleteAiScanTargetMutationVariables = {
+  request: DeleteAiScanTargetRequest;
+  security?: DeleteAiScanTargetSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type DeleteDeviceAgentAiScanTargetMutationData =
-  DeleteAiScanTargetResult;
+export type DeleteAiScanTargetMutationData = DeleteAiScanTargetResult;
 
-export type DeleteDeviceAgentAiScanTargetMutationError =
+export type DeleteAiScanTargetMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -55,46 +54,46 @@ export type DeleteDeviceAgentAiScanTargetMutationError =
  * deleteAiScanTarget agent
  *
  * @remarks
- * Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
+ * Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
  */
-export function useDeleteDeviceAgentAiScanTargetMutation(
+export function useDeleteAiScanTargetMutation(
   options?: MutationHookOptions<
-    DeleteDeviceAgentAiScanTargetMutationData,
-    DeleteDeviceAgentAiScanTargetMutationError,
-    DeleteDeviceAgentAiScanTargetMutationVariables
+    DeleteAiScanTargetMutationData,
+    DeleteAiScanTargetMutationError,
+    DeleteAiScanTargetMutationVariables
   >,
 ): UseMutationResult<
-  DeleteDeviceAgentAiScanTargetMutationData,
-  DeleteDeviceAgentAiScanTargetMutationError,
-  DeleteDeviceAgentAiScanTargetMutationVariables
+  DeleteAiScanTargetMutationData,
+  DeleteAiScanTargetMutationError,
+  DeleteAiScanTargetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildDeleteDeviceAgentAiScanTargetMutation(client, options),
+    ...buildDeleteAiScanTargetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyDeleteDeviceAgentAiScanTarget(): MutationKey {
+export function mutationKeyDeleteAiScanTarget(): MutationKey {
   return ["@gram/client", "agent", "deleteAiScanTarget"];
 }
 
-export function buildDeleteDeviceAgentAiScanTargetMutation(
+export function buildDeleteAiScanTargetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: DeleteDeviceAgentAiScanTargetMutationVariables,
-  ) => Promise<DeleteDeviceAgentAiScanTargetMutationData>;
+    variables: DeleteAiScanTargetMutationVariables,
+  ) => Promise<DeleteAiScanTargetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyDeleteDeviceAgentAiScanTarget(),
-    mutationFn: function deleteDeviceAgentAiScanTargetMutationFn({
+    mutationKey: mutationKeyDeleteAiScanTarget(),
+    mutationFn: function deleteAiScanTargetMutationFn({
       request,
       security,
       options,
-    }): Promise<DeleteDeviceAgentAiScanTargetMutationData> {
+    }): Promise<DeleteAiScanTargetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

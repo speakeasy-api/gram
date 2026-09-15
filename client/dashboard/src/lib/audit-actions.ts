@@ -29,6 +29,7 @@ export const AUDIT_ACTIONS = [
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
   "ai_integration:upsert",
+  "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
   "asset:create",
@@ -315,6 +316,9 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated AI integration schedule";
     case "ai_integration:retry_schedule":
       return "retried AI integration sync";
+
+    case "ai_tool_decision:set":
+      return "decided AI tool access for";
 
     case "api_key:create":
       return "created API key";

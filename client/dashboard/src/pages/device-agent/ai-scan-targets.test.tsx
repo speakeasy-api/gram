@@ -19,7 +19,7 @@ type MutationOptions<T> = {
 
 type MutationResult = {
   listVersion: number;
-  target: Pick<AiScanTarget, "id" | "enabled">;
+  target: Pick<AiScanTarget, "id">;
 };
 
 const mocks = vi.hoisted(() => ({
@@ -42,7 +42,11 @@ const targets: AiScanTarget[] = [
       configDirs: [],
       processNames: [],
     },
-    enabled: true,
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
+    },
     origin: "organization",
     customized: false,
     createdAt: new Date("2026-09-09T00:00:00Z"),
@@ -58,7 +62,11 @@ const targets: AiScanTarget[] = [
       configDirs: ["~/.aider"],
       processNames: ["aider"],
     },
-    enabled: true,
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
+    },
     origin: "default",
     customized: false,
   },
@@ -72,7 +80,11 @@ const targets: AiScanTarget[] = [
       configDirs: [],
       processNames: [],
     },
-    enabled: false,
+    gatewayClient: {
+      cimdVendorKeys: [],
+      clientInfoNames: [],
+      oauthClientIds: [],
+    },
     origin: "default",
     customized: true,
     createdAt: new Date("2026-09-08T00:00:00Z"),
@@ -101,24 +113,22 @@ vi.mock("@/components/ui/Table", () => ({
     </div>
   ),
 }));
-vi.mock("@gram/client/react-query/deviceAgentAiScanTargets.js", () => ({
-  invalidateAllDeviceAgentAiScanTargets: mocks.invalidateList,
-  useDeviceAgentAiScanTargets: () => ({
+vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
+  invalidateAllAiScanTargets: mocks.invalidateList,
+  useAiScanTargets: () => ({
     data: { listVersion: 11, etag: "etag", targets },
     isLoading: false,
     error: null,
   }),
 }));
-vi.mock("@gram/client/react-query/upsertDeviceAgentAiScanTarget.js", () => ({
-  useUpsertDeviceAgentAiScanTargetMutation: (
-    options: MutationOptions<MutationResult>,
-  ) => {
+vi.mock("@gram/client/react-query/upsertAiScanTarget.js", () => ({
+  useUpsertAiScanTargetMutation: (options: MutationOptions<MutationResult>) => {
     mocks.upsertOptions.push(options);
     return { mutate: mocks.upsertMutate, isPending: false };
   },
 }));
-vi.mock("@gram/client/react-query/deleteDeviceAgentAiScanTarget.js", () => ({
-  useDeleteDeviceAgentAiScanTargetMutation: () => ({
+vi.mock("@gram/client/react-query/deleteAiScanTarget.js", () => ({
+  useDeleteAiScanTargetMutation: () => ({
     mutate: mocks.deleteMutate,
     isPending: false,
   }),
@@ -153,20 +163,18 @@ describe("AiScanTargetsSection", () => {
     );
   }
 
-  it("lists defaults and custom targets with their source and status", () => {
+  it("lists built-in and custom targets with their source", () => {
     renderPage();
 
     const aider = within(screen.getByTestId("aider"));
     expect(aider.getByText("Aider")).toBeDefined();
     expect(aider.getByText("Speakeasy default")).toBeDefined();
-    expect(aider.getByText("Served")).toBeDefined();
     expect(
       aider.getByText("1 binary · 1 config dir · 1 process name"),
     ).toBeDefined();
 
     const classic = within(screen.getByTestId("chatgpt-classic"));
     expect(classic.getByText("Speakeasy default")).toBeDefined();
-    expect(classic.getByText("Disabled")).toBeDefined();
 
     const acme = within(screen.getByTestId("acme-tool"));
     expect(acme.getByText("Custom")).toBeDefined();
@@ -174,56 +182,31 @@ describe("AiScanTargetsSection", () => {
     expect(screen.getByText(/List version 11/)).toBeDefined();
   });
 
-  it("switches a default off by customizing it under its own id", () => {
+  // A built-in is probed for as long as it is in Speakeasy's catalog, so an
+  // organization has no per-row action on one: no menu at all, not an empty
+  // one.
+  it("offers no row actions on a built-in", () => {
     renderPage();
 
-    openRowActions("aider");
-    expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
-    expect(mocks.upsertMutate).toHaveBeenCalledWith({
-      request: {
-        upsertAiScanTargetRequestBody: {
-          id: "aider",
-          displayName: "Aider",
-          category: "harness",
-          signatures: {
-            bundleIds: [],
-            binaries: ["aider"],
-            configDirs: ["~/.aider"],
-            processNames: ["aider"],
-          },
-          versionPlistKey: undefined,
-          enabled: false,
-        },
-      },
-    });
-  });
-
-  it("switches a customized default back on by dropping the customization", () => {
-    renderPage();
-
-    openRowActions("chatgpt-classic");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Enable" }));
-    expect(mocks.deleteMutate).toHaveBeenCalledWith({
-      request: { deleteAiScanTargetRequestBody: { id: "chatgpt-classic" } },
-    });
+    for (const testId of ["aider", "chatgpt-classic"]) {
+      expect(
+        within(screen.getByTestId(testId)).queryByRole("button", {
+          name: "Open menu",
+        }),
+      ).toBeNull();
+    }
     expect(mocks.upsertMutate).not.toHaveBeenCalled();
+    expect(mocks.deleteMutate).not.toHaveBeenCalled();
   });
 
-  it("toggles a custom target in place", () => {
+  it("offers edit and delete on a target the organization added", () => {
     renderPage();
 
     openRowActions("acme-tool");
-    fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
-    expect(mocks.upsertMutate).toHaveBeenCalledWith({
-      request: {
-        upsertAiScanTargetRequestBody: expect.objectContaining({
-          id: "acme-tool",
-          enabled: false,
-        }),
-      },
-    });
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeDefined();
+    expect(screen.queryByRole("menuitem", { name: "Disable" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Enable" })).toBeNull();
   });
 
   it("asks before deleting a custom target and then deletes", () => {
@@ -275,7 +258,6 @@ describe("AiScanTargetsSection", () => {
             processNames: [],
           },
           versionPlistKey: undefined,
-          enabled: true,
         },
       },
     });
@@ -284,7 +266,7 @@ describe("AiScanTargetsSection", () => {
     await act(async () => {
       await mocks.upsertOptions[0]?.onSuccess({
         listVersion: 12,
-        target: { id: "chatgpt-desktop", enabled: true },
+        target: { id: "chatgpt-desktop" },
       });
     });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(

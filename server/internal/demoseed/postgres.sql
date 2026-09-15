@@ -745,6 +745,44 @@ BEGIN
      'demo-acct-lucas-personal', 'user_demo_lucas_personal',
      'lucas.meyer@personal.example', 'personal', 'flat_rate');
 
+  -- Shadow AI access decisions (the AI Tools tab of the Shadow AI section).
+  -- Three states, because a column where every row reads the same tells the
+  -- reader nothing about what the page is for:
+  --   claude-code is approved and enforceable — it publishes a CIMD document,
+  --     so a decision on it actually reaches the gateway;
+  --   codex is blocked and enforceable, the case the block warning is about;
+  --   hermes-agent is approved and enforceable, so the Assistants tab shows a
+  --     decision rather than a column of unreviewed;
+  --   zed is approved and goose blocked — both publish CIMD, so both decisions
+  --     reach the gateway, and together with codex they keep the Harnesses
+  --     status column from being one answer repeated;
+  --   cline, continue, warp and msty publish nothing, so they stay unreviewed
+  --     however they are detected — which is the majority case and should look
+  --     like the majority case;
+  --   cursor, openclaw, aider, ollama and lmstudio are left without rows.
+  --     Cursor and OpenClaw are the case worth seeing: they publish no CIMD
+  --     document, so Gram cannot recognize them at the gateway and refuses to
+  --     record any decision about them. They read unreviewed, and that is the
+  --     honest answer rather than a block that enforces nothing.
+  DELETE FROM ai_scan_targets WHERE organization_id = demo_org;
+
+  -- The decided built-ins carry no definition: the compiled-in one stays
+  -- authoritative, so a later registry revision still reaches this org.
+  INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+  VALUES
+    (demo_org, 'claude-code', 'approved',
+     'Standard issue for the platform team.'),
+    (demo_org, 'codex', 'blocked',
+     'Not covered by the vendor review. Ask in #ai-tooling if you need it.'),
+    (demo_org, 'hermes-agent', 'approved',
+     'Reviewed with the research team. Publishes a client ID metadata '
+     || 'document, so the approval is enforced at the gateway.'),
+    (demo_org, 'zed', 'approved',
+     'Approved for the platform team after the editor review.'),
+    (demo_org, 'goose', 'blocked',
+     'Runs arbitrary local commands under its own extensions. Blocked until '
+     || 'the extension policy lands.');
+
   -- MDM inventory (the identity Accounts & devices tab, and the device
   -- coverage widgets). One Jamf-shaped integration holding the fleet: mostly
   -- MacBooks, one Windows laptop, and deliberate gaps — a machine whose agent
@@ -2747,6 +2785,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND subject_urn NOT LIKE 'agent:%';
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
+  END IF;
+
+  -- The Shadow AI status column is only worth looking at when it shows more
+  -- than one answer. Only a decided tool gets a row here — unreviewed IS the
+  -- absence of one — so the table stores just the two decided states, and
+  -- both have to survive the reseed with their full complement of rows.
+  SELECT count(*) INTO stray FROM ai_scan_targets
+  WHERE organization_id = demo_org AND status = 'approved';
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: % approved AI tools, expected 3', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM ai_scan_targets
+  WHERE organization_id = demo_org AND status = 'blocked';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: % blocked AI tools, expected 2', stray;
+  END IF;
+
+  -- Anything else in the column would be a row the seed no longer means to
+  -- write: an undecided overlay row renders as unreviewed and is
+  -- indistinguishable on the page from a tool nobody has touched.
+  SELECT count(*) INTO stray FROM ai_scan_targets
+  WHERE organization_id = demo_org AND status NOT IN ('approved', 'blocked');
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % AI tool rows carry a status other than approved or blocked', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

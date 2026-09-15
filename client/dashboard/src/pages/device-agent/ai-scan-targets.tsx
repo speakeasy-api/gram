@@ -10,12 +10,12 @@ import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import type { UpsertAiScanTargetRequestBody } from "@gram/client/models/components/upsertaiscantargetrequestbody.js";
-import { useDeleteDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/deleteDeviceAgentAiScanTarget.js";
+import { useDeleteAiScanTargetMutation } from "@gram/client/react-query/deleteAiScanTarget.js";
 import {
-  invalidateAllDeviceAgentAiScanTargets,
-  useDeviceAgentAiScanTargets,
-} from "@gram/client/react-query/deviceAgentAiScanTargets.js";
-import { useUpsertDeviceAgentAiScanTargetMutation } from "@gram/client/react-query/upsertDeviceAgentAiScanTarget.js";
+  invalidateAllAiScanTargets,
+  useAiScanTargets,
+} from "@gram/client/react-query/aiScanTargets.js";
+import { useUpsertAiScanTargetMutation } from "@gram/client/react-query/upsertAiScanTarget.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -27,7 +27,6 @@ import {
 import {
   categoryLabel,
   draftFromTarget,
-  draftToUpsertBody,
   emptyDraft,
   signatureSummary,
   type Draft,
@@ -43,9 +42,10 @@ export function AiScanTargetsSection(): JSX.Element {
           AI scan targets
         </Heading>
         <Text muted small>
-          The AI tools this organization's device agents probe for. Speakeasy
-          keeps the defaults current; add your own targets or switch a default
-          off. Changes reach agents on their next policy poll.
+          The AI tools this organization's device agents probe for. Every target
+          listed here is probed for: Speakeasy keeps its built-in targets
+          current, and you can add targets of your own for anything they miss.
+          Changes reach agents on their next policy poll.
         </Text>
       </div>
       <Catalog />
@@ -65,7 +65,7 @@ type EditorState = { mode: EditorMode; draft: Draft } | null;
 
 function Catalog(): JSX.Element {
   const queryClient = useQueryClient();
-  const list = useDeviceAgentAiScanTargets(undefined, undefined, {
+  const list = useAiScanTargets(undefined, undefined, {
     throwOnError: false,
   });
   const [search, setSearch] = useState("");
@@ -74,9 +74,9 @@ function Catalog(): JSX.Element {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
 
-  const invalidate = () => invalidateAllDeviceAgentAiScanTargets(queryClient);
+  const invalidate = () => invalidateAllAiScanTargets(queryClient);
 
-  const save = useUpsertDeviceAgentAiScanTargetMutation({
+  const save = useUpsertAiScanTargetMutation({
     onSuccess: async (result) => {
       toast.success(
         `Saved ${result.target.id}. List version ${result.listVersion} reaches agents on their next poll.`,
@@ -89,19 +89,7 @@ function Catalog(): JSX.Element {
       setEditorError(errorMessage(err, "Failed to save the target"));
     },
   });
-  const toggle = useUpsertDeviceAgentAiScanTargetMutation({
-    onSuccess: async (result) => {
-      toast.success(
-        `${result.target.enabled ? "Enabled" : "Disabled"} ${result.target.id}.`,
-      );
-      await invalidate();
-    },
-    onError: (err) => {
-      toast.error(errorMessage(err, "Failed to update the target"));
-    },
-    onSettled: () => setPendingId(null),
-  });
-  const remove = useDeleteDeviceAgentAiScanTargetMutation({
+  const remove = useDeleteAiScanTargetMutation({
     onSuccess: async () => {
       toast.success("Target deleted.");
       setDeleting(null);
@@ -109,16 +97,6 @@ function Catalog(): JSX.Element {
     },
     onError: (err) => {
       toast.error(errorMessage(err, "Failed to delete the target"));
-    },
-    onSettled: () => setPendingId(null),
-  });
-  const restore = useDeleteDeviceAgentAiScanTargetMutation({
-    onSuccess: async () => {
-      toast.success("Speakeasy default restored.");
-      await invalidate();
-    },
-    onError: (err) => {
-      toast.error(errorMessage(err, "Failed to restore the default"));
     },
     onSettled: () => setPendingId(null),
   });
@@ -135,43 +113,14 @@ function Catalog(): JSX.Element {
   }, [list.data, search]);
 
   const mutationPending =
-    pendingId !== null ||
-    save.isPending ||
-    toggle.isPending ||
-    remove.isPending ||
-    restore.isPending;
+    pendingId !== null || save.isPending || remove.isPending;
 
-  // A default is switched off by customizing it under its own id, and
-  // switched back on by dropping that customization so Speakeasy's copy is
-  // served again. Organization targets toggle in place.
-  const toggleAction = (row: AiScanTarget): Action => {
-    const restoresDefault = isDefault(row) && !row.enabled;
-    return {
-      icon: row.enabled ? "ban" : "play",
-      label: row.enabled ? "Disable" : "Enable",
-      disabled: mutationPending,
-      onClick: () => {
-        if (mutationPending) return;
-        setPendingId(row.id);
-        if (restoresDefault) {
-          restore.mutate({
-            request: { deleteAiScanTargetRequestBody: { id: row.id } },
-          });
-          return;
-        }
-        const body = draftToUpsertBody(draftFromTarget(row));
-        toggle.mutate({
-          request: {
-            upsertAiScanTargetRequestBody: { ...body, enabled: !row.enabled },
-          },
-        });
-      },
-    };
-  };
-
+  // A built-in's definition is Speakeasy's, and it is probed for as long as it
+  // is in the catalog, so an organization has nothing to act on: no row
+  // actions at all. A target the organization added is edited or deleted.
   const rowActions = (row: AiScanTarget): Action[] => {
     if (isDefault(row)) {
-      return [toggleAction(row)];
+      return [];
     }
     return [
       {
@@ -183,7 +132,6 @@ function Catalog(): JSX.Element {
           setEditor({ mode: "edit", draft: draftFromTarget(row) });
         },
       },
-      toggleAction(row),
       {
         icon: "trash",
         label: "Delete",
@@ -241,21 +189,6 @@ function Catalog(): JSX.Element {
       render: (row) => <Text small>{signatureSummary(row)}</Text>,
     },
     {
-      key: "status",
-      header: "Status",
-      width: "110px",
-      render: (row) =>
-        row.enabled ? (
-          <Badge variant="success" className="shrink-0">
-            <Badge.Text>Served</Badge.Text>
-          </Badge>
-        ) : (
-          <Badge variant="neutral" background className="shrink-0">
-            <Badge.Text>Disabled</Badge.Text>
-          </Badge>
-        ),
-    },
-    {
       key: "updated",
       header: "Updated",
       width: "140px",
@@ -269,13 +202,19 @@ function Catalog(): JSX.Element {
       key: "actions",
       header: "",
       width: "56px",
-      render: (row) => (
-        <MoreActions
-          actions={rowActions(row)}
-          triggerLoading={pendingId === row.id}
-          triggerDisabled={mutationPending}
-        />
-      ),
+      // A built-in has no actions, so its cell stays empty rather than
+      // offering a menu with nothing in it.
+      render: (row) => {
+        const actions = rowActions(row);
+        if (actions.length === 0) return null;
+        return (
+          <MoreActions
+            actions={actions}
+            triggerLoading={pendingId === row.id}
+            triggerDisabled={mutationPending}
+          />
+        );
+      },
     },
   ];
 
