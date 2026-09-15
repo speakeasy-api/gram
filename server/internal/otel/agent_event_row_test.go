@@ -546,3 +546,85 @@ func TestAgentEventRowFromLogReadsMCPAttributionFromToolParameters(t *testing.T)
 	require.Equal(t, "assistants-dev", row.MCPServerName)
 	require.Equal(t, "whoami", row.MCPToolName)
 }
+
+// The raw payload captures and the session's own compaction, as a 2.1 CLI
+// reports them once OTEL_LOG_RAW_API_BODIES is set.
+func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
+	t.Parallel()
+
+	t.Run("it lands a response body beside the request it answers", func(t *testing.T) {
+		t.Parallel()
+		record := agentEventTestLog(claudeCodeScopeName, "",
+			logEventTestKV("event.name", "api_response_body"),
+			logEventTestKV("session.id", "session-1"),
+			logEventTestKV("request_id", "req_011"),
+			logEventTestKV("model", "claude-sonnet-4"),
+			logEventTestKV("query_source", "compact"),
+			logEventTestKV("body", `{"content":[{"type":"text","text":"done"}]}`),
+			agentEventTestIntKV("body_length", 42),
+		)
+
+		row, skip := agentEventRowFromLog(record, testObservedAt)
+		require.Empty(t, skip)
+		require.Equal(t, dialect.EventTypeAPIResponseBody, row.EventType)
+		require.Equal(t, "req_011", row.EventID, "the same subject as the api_request it answers")
+		require.Equal(t, "claude-sonnet-4", row.Model)
+		require.Equal(t, "compact", row.QuerySource)
+		require.Empty(t, row.Outcome, "the request states the outcome, not its payload")
+		require.Contains(t, row.Attributes, `"body"`, "the payload stays in the attributes")
+	})
+
+	t.Run("it keeps a request body under its own record id", func(t *testing.T) {
+		t.Parallel()
+		record := agentEventTestLog(claudeCodeScopeName, "",
+			logEventTestKV("event.name", "api_request_body"),
+			logEventTestKV("session.id", "session-1"),
+			logEventTestKV("model", "claude-sonnet-4"),
+			logEventTestKV("body", `{"messages":[]}`),
+		)
+
+		row, skip := agentEventRowFromLog(record, testObservedAt)
+		require.Empty(t, skip)
+		require.Equal(t, dialect.EventTypeAPIRequestBody, row.EventType)
+		require.Equal(t, "record-1", row.EventID, "the producer gives a request body no id of its own")
+	})
+
+	t.Run("it projects a compaction with its duration and outcome", func(t *testing.T) {
+		t.Parallel()
+		record := agentEventTestLog(claudeCodeScopeName, "",
+			logEventTestKV("event.name", "compaction"),
+			logEventTestKV("session.id", "session-1"),
+			logEventTestKV("trigger", "auto"),
+			agentEventTestBoolKV("success", true),
+			agentEventTestDoubleKV("duration_ms", 2500),
+			agentEventTestIntKV("pre_tokens", 150_000),
+			agentEventTestIntKV("post_tokens", 20_000),
+		)
+
+		row, skip := agentEventRowFromLog(record, testObservedAt)
+		require.Empty(t, skip)
+		require.Equal(t, dialect.EventTypeCompaction, row.EventType)
+		require.Equal(t, "compaction", row.RawEventName)
+		require.Equal(t, "session-1", row.SessionID)
+		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
+		require.Equal(t, int64(2_500_000_000), row.DurationNano)
+		require.Zero(t, row.InputTokens, "compaction's token counts are not a request's usage")
+		require.Zero(t, row.OutputTokens)
+		require.Contains(t, row.Attributes, `"pre_tokens":150000`)
+	})
+
+	t.Run("it records why a compaction failed", func(t *testing.T) {
+		t.Parallel()
+		record := agentEventTestLog(claudeCodeScopeName, "",
+			logEventTestKV("event.name", "compaction"),
+			logEventTestKV("trigger", "manual"),
+			agentEventTestBoolKV("success", false),
+			logEventTestKV("error", "context window exceeded"),
+		)
+
+		row, skip := agentEventRowFromLog(record, testObservedAt)
+		require.Empty(t, skip)
+		require.Equal(t, string(dialect.OutcomeError), row.Outcome)
+		require.Equal(t, "context window exceeded", row.OutcomeMessage)
+	})
+}

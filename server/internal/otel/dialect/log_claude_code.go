@@ -142,6 +142,12 @@ func claudeCodeEventType(name string) string {
 		return EventTypeToolCallResult
 	case "tool_decision":
 		return EventTypeToolDecision
+	case "api_request_body":
+		return EventTypeAPIRequestBody
+	case "api_response_body":
+		return EventTypeAPIResponseBody
+	case "compaction":
+		return EventTypeCompaction
 	}
 	return EventTypeUnclassified
 }
@@ -171,6 +177,13 @@ func (ClaudeCodeLog) SubjectID(record *otelv1.InboundLogRecord) (string, string,
 	case EventTypeAPIRequest, EventTypeAPIError, EventTypeAPIRefusal:
 		key, value := getOneLogAttrAny(record, "request_id", "client_request_id")
 		return key, value, nil
+	case EventTypeAPIResponseBody:
+		// A response body names the request it answers, so it lands beside
+		// that request. A request body is given no id of its own, and a
+		// compaction is not about anything but itself, so both keep the
+		// record id they were delivered under.
+		key, value := getOneLogAttr(record, "request_id")
+		return key, value, nil
 	case EventTypeToolCallResult, EventTypeToolDecision:
 		key, value := getOneLogAttr(record, "tool_use_id")
 		return key, value, nil
@@ -194,8 +207,9 @@ func (ClaudeCodeLog) ToolName(record *otelv1.InboundLogRecord) (string, string, 
 }
 
 // Outcome is implied by the event for API events, stated by success on a
-// tool result, and rejected when a tool decision said no. An accepted
-// decision has no outcome of its own: the result row carries it.
+// tool result and on a compaction, and rejected when a tool decision said
+// no. An accepted decision has no outcome of its own: the result row carries
+// it, and neither does a captured payload: the request it belongs to does.
 func (ClaudeCodeLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, name := claudeCodeEventName(record)
 	switch claudeCodeEventType(name) {
@@ -205,7 +219,7 @@ func (ClaudeCodeLog) Outcome(record *otelv1.InboundLogRecord) (string, string, e
 		return key, OutcomeError, nil
 	case EventTypeAPIRefusal:
 		return key, OutcomeRefused, nil
-	case EventTypeToolCallResult:
+	case EventTypeToolCallResult, EventTypeCompaction:
 		successKey, success, present := getOneLogBool(record, "success")
 		if !present {
 			return "", "", nil
@@ -226,7 +240,7 @@ func (ClaudeCodeLog) Outcome(record *otelv1.InboundLogRecord) (string, string, e
 func (ClaudeCodeLog) OutcomeMessage(record *otelv1.InboundLogRecord) (string, string, error) {
 	_, name := claudeCodeEventName(record)
 	switch claudeCodeEventType(name) {
-	case EventTypeAPIError:
+	case EventTypeAPIError, EventTypeCompaction:
 		key, value := claudeCodeContent(record, "error")
 		return key, value, nil
 	case EventTypeToolCallResult:
