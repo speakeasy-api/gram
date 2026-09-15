@@ -2133,6 +2133,8 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 	require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
 	require.Nil(t, draft.JwksURI, "the sibling issuer cannot supply a key URL")
 	require.Nil(t, draft.UserinfoEndpoint, "the sibling issuer cannot supply userinfo")
+	require.Empty(t, draft.ClaimsSupported, "the sibling issuer cannot supply claims")
+	require.False(t, draft.BackchannelLogoutSupported, "the sibling issuer cannot supply logout capabilities")
 }
 
 // A document naming no issuer cannot be tied to the primary, so it
@@ -2241,6 +2243,39 @@ func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuerMismatch(t *
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+// Isolate the OIDC mismatch: an exact OAuth document remains usable, while
+// absent OAuth metadata leaves no acceptable candidate. Neither admits OIDC fields.
+func TestFetchRemoteSessionIssuerMetadata_IsolatesOIDCTrailingSlashMismatch(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusOK, http.StatusNotFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var oauthStatus atomic.Int32
+			oauthStatus.Store(int32(status))
+			var server *httptest.Server
+			server = metadataServer(t, metadataServerOptions{
+				oauthStatus: &oauthStatus,
+				mutateOIDC:  func(doc map[string]any) { doc["issuer"] = server.URL + "/" },
+			})
+			draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
+			if status == http.StatusNotFound {
+				requireOopsCode(t, err, oops.CodeInvalid)
+				require.Nil(t, draft, "the mismatched OIDC candidate cannot stand alone")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+			require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+			require.Equal(t, []string{"read", "write"}, draft.ScopesSupported)
+			require.Nil(t, draft.JwksURI)
+			require.Nil(t, draft.UserinfoEndpoint)
+			require.Empty(t, draft.ClaimsSupported)
+			require.False(t, draft.BackchannelLogoutSupported, "OIDC mismatch cannot contribute capabilities to an exact OAuth candidate")
+		})
+	}
 }
 
 // A flag the RFC 8414 document states explicitly, even as false, is never
