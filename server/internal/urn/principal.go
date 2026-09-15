@@ -21,7 +21,7 @@ const (
 	PrincipalTypeAgent PrincipalType = "agent"
 	// PrincipalTypeSystem is a Gram component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
 	PrincipalTypeSystem PrincipalType = "system"
-	// PrincipalTypeWorkload is a machine an external issuer vouched for, identified by its workload_issuers row and the subject that issuer asserted. It holds no grants of its own; it inherits the permission policies of the agents assigned to it.
+	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agents.
 	PrincipalTypeWorkload PrincipalType = "workload"
 )
 
@@ -252,8 +252,7 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	// A workload principal carries the same identity as its session subject,
-	// so it shares that subject's cap rather than the generic segment bound.
+	// Workload principals share the workload session subject's id cap.
 	maxIDLength := maxSegmentLength
 	if u.Type == PrincipalTypeWorkload {
 		maxIDLength = MaxWorkloadSubjectIDLength
