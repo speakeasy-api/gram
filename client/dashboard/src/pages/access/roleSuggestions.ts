@@ -51,7 +51,13 @@ function grantCoversSelector(
         (entry): entry is [string, string] => typeof entry[1] === "string",
       ),
     );
-    if (rejectProjectScopedWithoutProject && normalized.projectId) return false;
+    if (
+      rejectProjectScopedWithoutProject &&
+      normalized.projectId &&
+      normalized.projectId !== "*"
+    ) {
+      return false;
+    }
     return matches(normalized, check);
   });
 }

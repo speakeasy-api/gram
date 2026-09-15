@@ -718,7 +718,7 @@ type MemberRoleState struct {
 
 // MemberRoleValidation runs after the member and role are resolved in the
 // current organization and after the complete active role set is read under lock.
-type MemberRoleValidation func(MemberRoleState) error
+type MemberRoleValidation func(MemberRoleState, localRole) error
 
 // MemberRoleAddResult is the safe local result of an additive role assignment.
 type MemberRoleAddResult struct {
@@ -990,7 +990,7 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	slices.Sort(roleIDs)
 	if validate != nil {
 		state := MemberRoleState{MemberID: connected.ID, RoleIDs: slices.Clone(roleIDs)}
-		if err := validate(state); err != nil {
+		if err := validate(state, role); err != nil {
 			return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
 		}
 	}

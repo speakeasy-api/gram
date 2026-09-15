@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -1406,90 +1405,72 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 	if err != nil {
 		return "", MemberRoleReconciliation{}, err
 	}
-	if isSystemRole(role.Slug) {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "challenge resolution only assigns custom roles").LogError(ctx, s.logger)
-	}
-	roleID, err := uuid.Parse(role.ID)
-	if err != nil {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "parse challenge role id").LogError(ctx, s.logger)
-	}
-	if _, err := repo.New(tx).LockOrganizationRoleByID(ctx, repo.LockOrganizationRoleByIDParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ID:             roleID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, ErrRoleNotFound, "custom role not found").LogError(ctx, s.logger)
-		}
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "lock challenge role").LogError(ctx, s.logger)
-	}
-	lockedRole, err := s.roleMgr.GetRoleByIDTx(ctx, tx, authCtx.ActiveOrganizationID, roleID.String())
-	if err != nil {
-		return "", MemberRoleReconciliation{}, err
-	}
-	if lockedRole.Slug != *payload.RoleSlug || lockedRole.IsSystem {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeConflict, nil, "selected role changed; refresh and try again").LogError(ctx, s.logger)
-	}
-	rolePrincipal, err := urn.ParsePrincipal(lockedRole.PrincipalUrn)
-	if err != nil {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "parse challenge role principal").LogError(ctx, s.logger)
-	}
-	roleGrants, err := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, []urn.Principal{rolePrincipal})
-	if err != nil {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load selected role grants").LogError(ctx, s.logger)
-	}
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, principal.ID)
-	if err != nil {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "resolve challenged user principals").LogError(ctx, s.logger)
-	}
-	principals = append(principals, rolePrincipal)
-	resultingGrants, err := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, principals)
-	if err != nil {
-		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load resulting member grants").LogError(ctx, s.logger)
-	}
-	for _, challenge := range challenges {
-		if challenge.Selector == "" {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeConflict, nil, "this older challenge cannot grant access; dismiss it and retry the denied action").LogError(ctx, s.logger)
-		}
-		selector, err := challengeSelector(challenge)
-		if err != nil {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeConflict, err, "challenge selector is no longer valid").LogError(ctx, s.logger)
-		}
-		dimensions := make(map[string]string, len(selector)-2)
-		for key, value := range selector {
-			if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
-				dimensions[key] = value
-			}
-		}
-		check := authz.Check{
-			Scope:        authz.Scope(challenge.Scope),
-			ResourceKind: challenge.ResourceKind,
-			ResourceID:   challenge.ResourceID,
-			Dimensions:   dimensions,
-		}
-		roleAllows, err := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
-		if err != nil {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "challenge cannot be granted through this role").LogError(ctx, s.logger)
-		}
-		if !roleAllows {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
-		}
-		resultAllows, err := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
-		if err != nil {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "resulting access cannot be evaluated").LogError(ctx, s.logger)
-		}
-		if !resultAllows {
-			return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "an existing exclusion still blocks this access").LogError(ctx, s.logger)
-		}
-	}
 
-	_, reconciliation, err := s.roleMgr.AddMemberRoleTx(ctx, tx, authCtx.ActiveOrganizationID, principal.ID, lockedRole.ID, RoleAuditActor{
+	_, reconciliation, err := s.roleMgr.AddMemberRoleTx(ctx, tx, authCtx.ActiveOrganizationID, principal.ID, role.ID, RoleAuditActor{
 		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		DisplayName: authCtx.Email,
-	}, nil)
+	}, func(_ MemberRoleState, lockedRole localRole) error {
+		if lockedRole.Slug != *payload.RoleSlug {
+			return oops.E(oops.CodeConflict, nil, "selected role changed; refresh and try again").LogError(ctx, s.logger)
+		}
+		rolePrincipal, parseErr := urn.ParsePrincipal(lockedRole.PrincipalURN)
+		if parseErr != nil {
+			return oops.E(oops.CodeUnexpected, parseErr, "parse challenge role principal").LogError(ctx, s.logger)
+		}
+		roleGrants, loadErr := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, []urn.Principal{rolePrincipal})
+		if loadErr != nil {
+			return oops.E(oops.CodeUnexpected, loadErr, "load selected role grants").LogError(ctx, s.logger)
+		}
+		principals, resolveErr := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, principal.ID)
+		if resolveErr != nil {
+			return oops.E(oops.CodeUnexpected, resolveErr, "resolve challenged user principals").LogError(ctx, s.logger)
+		}
+		principals = append(principals, rolePrincipal)
+		resultingGrants, loadErr := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, principals)
+		if loadErr != nil {
+			return oops.E(oops.CodeUnexpected, loadErr, "load resulting member grants").LogError(ctx, s.logger)
+		}
+		for _, challenge := range challenges {
+			if challenge.Selector == "" {
+				return oops.E(oops.CodeConflict, nil, "this older challenge cannot grant access; dismiss it and retry the denied action").LogError(ctx, s.logger)
+			}
+			selector, selectorErr := challengeSelector(challenge)
+			if selectorErr != nil {
+				return oops.E(oops.CodeConflict, selectorErr, "challenge selector is no longer valid").LogError(ctx, s.logger)
+			}
+			dimensions := make(map[string]string, len(selector)-2)
+			for key, value := range selector {
+				if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
+					dimensions[key] = value
+				}
+			}
+			check := authz.Check{
+				Scope:        authz.Scope(challenge.Scope),
+				ResourceKind: challenge.ResourceKind,
+				ResourceID:   challenge.ResourceID,
+				Dimensions:   dimensions,
+			}
+			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
+			if authorizeErr != nil {
+				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
+			}
+			if !roleAllows {
+				return oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
+			}
+			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
+			if authorizeErr != nil {
+				return oops.E(oops.CodeBadRequest, authorizeErr, "resulting access cannot be evaluated").LogError(ctx, s.logger)
+			}
+			if !resultAllows {
+				return oops.E(oops.CodeBadRequest, nil, "an existing exclusion still blocks this access").LogError(ctx, s.logger)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return "", MemberRoleReconciliation{}, err
 	}
-	return lockedRole.Slug, reconciliation, nil
+	return role.Slug, reconciliation, nil
 }
 
 func challengeSelector(challenge chrepo.ChallengeSummary) (authz.Selector, error) {

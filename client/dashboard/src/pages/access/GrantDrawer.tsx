@@ -1,4 +1,25 @@
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
+import type { Role } from "@gram/client/models/components/role.js";
+import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
+import {
+  invalidateAllChallenges,
+  useChallenges,
+} from "@gram/client/react-query/challenges.js";
+import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { useQueryClient } from "@tanstack/react-query";
+import {
   ArrowLeft,
   Check,
   ChevronRight,
@@ -6,34 +27,14 @@ import {
   Plus,
   Users,
 } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/Sheet";
+import { useState } from "react";
+import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
+import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import {
   canAssignChallengeRole,
   principalDisplayName,
 } from "./challengeHelpers";
-
-import { Button } from "@/components/ui/Button";
-import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { ResolveChallengeFormResolutionType } from "@gram/client/models/components/resolvechallengeform.js";
-import type { Role } from "@gram/client/models/components/role.js";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
-import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
-import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { rolesCoveringChallengeScopes } from "./roleSuggestions";
-import { useChallenges } from "@gram/client/react-query/challenges.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
-import { useState } from "react";
 import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";

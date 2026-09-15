@@ -1,6 +1,8 @@
-import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
-import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import { AnyField } from "@/components/moon/any-field";
+import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
   SheetContent,
@@ -9,57 +11,55 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { cn } from "@/lib/utils";
+import { useOrganization } from "@/contexts/Auth";
+import type { Role } from "@gram/client/models/components/role.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
+import {
+  invalidateAllMembers,
+  useMembers,
+} from "@gram/client/react-query/members.js";
+import { useAgents } from "@gram/client/react-query/agents.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { useListScopes } from "@gram/client/react-query/listScopes.js";
+import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
+import { Alert } from "@/components/ui/Alert";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
+import { useOrgRoutes } from "@/routes";
+import { ArrowLeft, Bot, Check, ChevronRight, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  getSelectableMembers,
+  isMemberLockedToRole,
+  membersWithRole,
+} from "./changeRoleState";
+import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { PermissionScopeControl } from "./PermissionScopeControl";
+import { RolePermissionsSection } from "./RolePermissionsSection";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Selector } from "@gram/client/models/components/selector.js";
+import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
+import {
+  isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+} from "./types";
+import {
+  isSaveDisabled,
+  grantKeysString as grantKeysStringFn,
+  computeRuleLabel,
+} from "./roleDialogState";
 import {
   applyRemoveRule,
   diffGrants,
   grantsFromRole,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
-import {
-  computeRuleLabel,
-  grantKeysString as grantKeysStringFn,
-  isSaveDisabled,
-} from "./roleDialogState";
-import {
-  getSelectableMembers,
-  isMemberLockedToRole,
-  membersWithRole,
-} from "./changeRoleState";
-import {
-  invalidateAllMembers,
-  useMembers,
-} from "@gram/client/react-query/members.js";
-import {
-  isProjectSelectableResourceType,
-  isUnrestrictedResourceType,
-} from "./types";
-import { useMemo, useState } from "react";
-
-import { Alert } from "@/components/ui/Alert";
-import { AnyField } from "@/components/moon/any-field";
-import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { Dialog } from "@/components/ui/Dialog";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { InputField } from "@/components/moon/input-field";
-import { Link } from "react-router";
-import { PermissionScopeControl } from "./PermissionScopeControl";
-import type { Role } from "@gram/client/models/components/role.js";
-import { RolePermissionsSection } from "./RolePermissionsSection";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
-import type { Selector } from "@gram/client/models/components/selector.js";
-import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
-import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
-import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { useListScopes } from "@gram/client/react-query/listScopes.js";
-import { useOrgRoutes } from "@/routes";
-import { useOrganization } from "@/contexts/Auth";
-import { useQueryClient } from "@tanstack/react-query";
-import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 //
@@ -320,9 +320,15 @@ export function CreateRoleDialog({
 
   // ─── Scope / grant operations ─────────────────────────────────
 
-  const toggleScope = (scope: Scope) => {
+  const updateGrants = (
+    update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
+  ) => {
     setAssignmentConfirmed(false);
-    setGrants((prev) => {
+    setGrants(update);
+  };
+
+  const toggleScope = (scope: Scope) => {
+    updateGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
@@ -382,8 +388,7 @@ export function CreateRoleDialog({
       const hasContent =
         draftRule.selectors === null || draftRule.selectors.length > 0;
       if (hasContent) {
-        setAssignmentConfirmed(false);
-        setGrants((prev) => {
+        updateGrants((prev) => {
           const grant = prev[editingScopeSlug] ?? {
             scope: editingScopeSlug,
             rules: [],
@@ -432,8 +437,7 @@ export function CreateRoleDialog({
   // "All servers" is the unrestricted rule, which the model stores as null
   // selectors rather than as a list naming everything.
   const resetRuleToAll = (scopeSlug: string) => {
-    setAssignmentConfirmed(false);
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       return {
@@ -449,8 +453,7 @@ export function CreateRoleDialog({
   };
 
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
-    setAssignmentConfirmed(false);
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       const result = applyRemoveRule(grant, ruleIndex);

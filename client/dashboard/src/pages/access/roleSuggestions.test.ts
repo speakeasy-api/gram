@@ -31,6 +31,18 @@ describe("rolesCoveringScope", () => {
           selectors: undefined,
         },
       ]),
+      role("all-projects", [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            {
+              resourceKind: "mcp",
+              resourceId: "server-a",
+              projectId: "*",
+            },
+          ],
+        },
+      ]),
       role("same-project", [
         {
           scope: "mcp:connect",
@@ -61,13 +73,13 @@ describe("rolesCoveringScope", () => {
       rolesCoveringScope(roles, "mcp:connect", "server-a", "project-a").map(
         (item) => item.slug,
       ),
-    ).toEqual(["unrestricted", "same-project"]);
+    ).toEqual(["unrestricted", "all-projects", "same-project"]);
 
     expect(
       rolesCoveringScope(roles, "mcp:connect", "server-a").map(
         (item) => item.slug,
       ),
-    ).toEqual(["unrestricted"]);
+    ).toEqual(["unrestricted", "all-projects"]);
   });
 });
 

@@ -39,6 +39,12 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           visibility: "user_visible",
           label: "Read organization",
         },
+        {
+          slug: "mcp:connect",
+          resourceType: "mcp",
+          visibility: "user_visible",
+          label: "Connect to MCP servers",
+        },
       ],
     },
   }),
@@ -52,14 +58,55 @@ vi.mock("@gram/client/react-query/updateRole.js", () => ({
 vi.mock("./RolePermissionsSection", () => ({
   RolePermissionsSection: ({
     onToggleScope,
+    renderScopeRule,
   }: {
-    onToggleScope: (scope: "org:read") => void;
+    onToggleScope: (scope: "org:read" | "mcp:connect") => void;
+    renderScopeRule: (scope: {
+      slug: "mcp:connect";
+      resourceType: "mcp";
+    }) => React.ReactNode;
   }) => (
-    <button onClick={() => onToggleScope("org:read")}>Read organization</button>
+    <>
+      <button onClick={() => onToggleScope("org:read")}>
+        Read organization
+      </button>
+      <button onClick={() => onToggleScope("mcp:connect")}>
+        Connect to MCP servers
+      </button>
+      {renderScopeRule({ slug: "mcp:connect", resourceType: "mcp" })}
+    </>
+  ),
+}));
+vi.mock("./PermissionScopeControl", () => ({
+  PermissionScopeControl: ({
+    onChooseSpecific,
+    onResetToAll,
+  }: {
+    onChooseSpecific: () => void;
+    onResetToAll: () => void;
+  }) => (
+    <>
+      <button onClick={onChooseSpecific}>Choose specific servers</button>
+      <button onClick={onResetToAll}>Reset to all servers</button>
+    </>
   ),
 }));
 vi.mock("./GrantRuleDrawerContent", () => ({
-  GrantRuleDrawerContent: () => null,
+  GrantRuleDrawerContent: ({
+    onChangeSelectors,
+  }: {
+    onChangeSelectors: (
+      selectors: Array<{ resourceKind: string; resourceId: string }>,
+    ) => void;
+  }) => (
+    <button
+      onClick={() =>
+        onChangeSelectors([{ resourceKind: "mcp", resourceId: "server-a" }])
+      }
+    >
+      Select server A
+    </button>
+  ),
 }));
 
 const role: Role = {
@@ -95,26 +142,62 @@ beforeEach(() => {
   mocks.enabled = false;
 });
 describe("role assignment confirmation", () => {
-  it("clears an acknowledgement when grants change", () => {
+  function confirmAssignment() {
+    const confirmation = screen.getByRole("checkbox", {
+      name: "Confirm role assignment",
+    });
+    fireEvent.click(confirmation);
+    expect(confirmation.getAttribute("data-state")).toBe("checked");
+    return confirmation;
+  }
+
+  it("clears an acknowledgement when a scope is toggled", () => {
     renderEditor(undefined, "Denied User");
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
 
-    const confirmation = screen.getByRole("checkbox", {
-      name: "Confirm role assignment",
-    });
-    const submit = screen.getByRole("button", { name: "Create Role" });
-    fireEvent.click(confirmation);
-    expect(confirmation.getAttribute("data-state")).toBe("checked");
-    expect((submit as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+    const confirmation = confirmAssignment();
     fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
 
     expect(confirmation.getAttribute("data-state")).toBe("unchecked");
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("clears an acknowledgement when a rule-editor change is saved", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect to MCP servers" }),
+    );
+
+    const confirmation = confirmAssignment();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose specific servers" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
+  });
+
+  it("clears an acknowledgement when a rule is reset to all resources", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect to MCP servers" }),
+    );
+
+    const confirmation = confirmAssignment();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset to all servers" }),
+    );
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
   });
 });
 

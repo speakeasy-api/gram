@@ -1,3 +1,15 @@
+import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
+import { useOrganization } from "@/contexts/Auth";
+import { useOrgRoutes } from "@/routes";
+import { Alert } from "@/components/ui/Alert";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   Link,
   Navigate,
@@ -5,22 +17,9 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  PageTabsList,
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-} from "@/components/ui/Tabs";
-
-import { Alert } from "@/components/ui/Alert";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { RolesTab } from "./RolesTab";
-import { useOrgRoutes } from "@/routes";
-import { useOrganization } from "@/contexts/Auth";
-import { useRoles } from "@gram/client/react-query/roles.js";
 
 // Member management lives on the Team page; this page is roles and the
 // challenges they produced.
