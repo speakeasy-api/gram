@@ -58,10 +58,8 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 	case urn.SessionSubjectKindAnonymous, urn.SessionSubjectKindAgent:
 		// anonymous and agent subjects have no resolved display name
 	case urn.SessionSubjectKindWorkload:
-		// A workload's name is its issuer and external subject, which this
-		// row does not join, so there is nothing to resolve here. subjectType
-		// already reports "workload", so the caller is named by kind even
-		// with no display name to resolve.
+		// The session row does not join the workload issuer, so there is no
+		// display name; subjectType names the caller.
 	}
 
 	var revokedAt *string

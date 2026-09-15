@@ -117,10 +117,8 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 	case urn.SessionSubjectKindAnonymous:
 		return b.withIdentity(ctx, KindAnonymous, "")
 	case urn.SessionSubjectKindWorkload:
-		// No provenance kind describes a workload, so the request is marked
-		// unattributed rather than borrowing another kind's meaning. Cleared
-		// rather than left as found: provenance already on ctx belongs to
-		// some other credential, not to this workload.
+		// No provenance kind describes a workload. Provenance already on ctx
+		// belongs to another credential, so it is cleared.
 		return b.withoutIdentity(ctx)
 	default:
 		return ctx

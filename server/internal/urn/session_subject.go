@@ -23,30 +23,19 @@ const (
 	SessionSubjectKindWorkload  SessionSubjectKind = "workload"
 )
 
-// MaxWorkloadExternalSubjectLength is how much of a workload subject's id
-// segment is left for the external subject once the issuer reference and its
-// delimiter are accounted for.
-//
-// Exported because the useful place to enforce it is where an operator admits
-// a workload identity, not where a session is minted. A subject too long to
-// fit is a configuration problem, and rejecting it at admission puts the error
-// in front of the person who can shorten it; discovering it at token exchange
-// instead produces a workload that authenticates correctly and then cannot
-// hold a session, with nothing in the failure naming the cause.
+// MaxWorkloadExternalSubjectLength is the room left for the external subject
+// in a workload subject's id, after the issuer uuid and its delimiter. Exported
+// so admission can reject an over-long subject where an operator can fix it,
+// rather than at token exchange.
 const MaxWorkloadExternalSubjectLength = MaxWorkloadSubjectIDLength - uuidStringLength - len(delimiter)
 
-// MaxWorkloadSubjectIDLength is the byte limit for a workload subject's id
-// segment. It is higher than MaxSessionSubjectIDLength because the external
-// subject is chosen by the workload's platform, not by Gram: an AWS IAM role or
-// user ARN alone can carry a path of up to 512 characters.
-//
-// Still bounded. The subject is stored in indexed columns, whose B-tree entries
-// Postgres caps at roughly 2.7 KB, and it travels in bearer tokens, which
-// proxies commonly cap near 8 KB of headers.
+// MaxWorkloadSubjectIDLength is the byte limit for a workload subject's id. It
+// exceeds MaxSessionSubjectIDLength because the platform picks the external
+// subject, and an AWS IAM ARN can carry a 512-character path. It stays under
+// Postgres's ~2.7 KB B-tree entry limit and common ~8 KB header limits.
 const MaxWorkloadSubjectIDLength = 1024
 
-// uuidStringLength is the width of a uuid in its canonical text form, so the
-// budget above is derived rather than written down as a number.
+// uuidStringLength is the length of a uuid in canonical text form.
 const uuidStringLength = 36
 
 var sessionSubjectKinds = map[SessionSubjectKind]struct{}{
@@ -104,19 +93,10 @@ func NewAnonymousSubject(mcpSessionID string) SessionSubject {
 // NewWorkloadSubject constructs a
 // `workload:<workloadIssuerID>:<externalSubject>` session subject.
 //
-// Both halves are load-bearing. A `sub` is unique within the issuer that
-// minted it and never across issuers, so an identity carrying only the
-// external subject would let two workloads vouched for by two different
-// issuers collide — one machine's session, grants, and audit trail attributed
-// to another.
-//
-// The issuer is named by its workload_issuers row id rather than by its URL,
-// and the row id is what makes this identity stable. Grants are written
-// against it, so it has to survive a discovery refresh and an in-place URL
-// edit without changing; naming the URL would let either of those silently
-// repoint an existing principal. Deleting and re-registering an issuer is
-// deliberately a new identity, which is the one case where the grants should
-// stop matching. A uuid is also bounded in length where an issuer URL is not.
+// A `sub` is unique only within its issuer, so the issuer is part of the
+// identity. It is named by its workload_issuers row id rather than its URL, so
+// the identity survives a discovery refresh or URL edit; re-registering an
+// issuer is a new identity.
 func NewWorkloadSubject(workloadIssuerID uuid.UUID, externalSubject string) SessionSubject {
 	s := SessionSubject{
 		Kind:    SessionSubjectKindWorkload,
@@ -128,10 +108,8 @@ func NewWorkloadSubject(workloadIssuerID uuid.UUID, externalSubject string) Sess
 	return s
 }
 
-// Workload splits a `workload:` subject back into the issuer it was vouched
-// for by and the external subject that issuer asserted. It reports an error
-// for any other kind, so a caller cannot read a user or api key subject as a
-// workload by accident.
+// Workload splits a `workload:` subject into its issuer id and external
+// subject. It returns an error for any other kind.
 func (u SessionSubject) Workload() (uuid.UUID, string, error) {
 	if err := u.validate(); err != nil {
 		return uuid.Nil, "", err
@@ -148,10 +126,8 @@ func (u SessionSubject) Workload() (uuid.UUID, string, error) {
 	return issuerID, externalSubject, nil
 }
 
-// splitWorkloadID parses a workload id segment into its two halves. Split on
-// the first delimiter only: external subjects from these platforms are
-// themselves colon-heavy (`repo:owner/name:ref:refs/heads/main`), so
-// everything after the issuer reference belongs to the subject verbatim.
+// splitWorkloadID splits a workload id on the first delimiter only, since
+// external subjects often contain colons (`repo:owner/name:ref:refs/heads/main`).
 func splitWorkloadID(id string) (uuid.UUID, string, error) {
 	parts := strings.SplitN(id, delimiter, 2)
 	if len(parts) != 2 {
@@ -164,11 +140,7 @@ func splitWorkloadID(id string) (uuid.UUID, string, error) {
 		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference must be a uuid", ErrInvalid)
 	}
 	if issuerID == uuid.Nil {
-		// The nil uuid parses like any other but names no issuer: every
-		// workload_issuers row is minted by generate_uuidv7. Accepting
-		// it would let an uninitialised issuer reference produce a
-		// valid-looking subject, which is the collision this kind carries an
-		// issuer to prevent, wearing the shape of a real one.
+		// The nil uuid parses but names no workload_issuers row.
 		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference is the nil uuid", ErrInvalid)
 	}
 	if externalSubject == "" {
@@ -337,10 +309,8 @@ func (u *SessionSubject) validate() error {
 	}
 
 	if u.Kind == SessionSubjectKindWorkload {
-		// Structural, not cosmetic: an id that does not split into an issuer
-		// and a subject cannot say which issuer vouched for the workload, and
-		// a subject that carries no issuer is exactly the collision this kind
-		// exists to prevent.
+		// An id that does not split into an issuer and a subject cannot say
+		// which issuer vouched for the workload.
 		if _, _, splitErr := splitWorkloadID(u.ID); splitErr != nil {
 			u.err = splitErr
 			return u.err

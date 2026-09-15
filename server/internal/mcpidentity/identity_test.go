@@ -64,9 +64,7 @@ func TestValidatorBoundaryValidatedSessions(t *testing.T) {
 	}
 }
 
-// A workload session proves a machine an external issuer vouched for, which no
-// provenance kind describes. Borrowing another kind would hand downstream
-// enforcement a meaning the credential does not carry, so the request stays
+// No provenance kind describes a workload session, so the request stays
 // unattributed.
 func TestValidatorBoundaryLeavesWorkloadSessionUnattributed(t *testing.T) {
 	t.Parallel()
@@ -76,9 +74,8 @@ func TestValidatorBoundaryLeavesWorkloadSessionUnattributed(t *testing.T) {
 	require.False(t, ok)
 }
 
-// Provenance already on the context belongs to whichever credential stamped
-// it. A workload session must not inherit it, or enforcement would treat the
-// machine as that earlier principal.
+// Provenance already on the context belongs to another credential, so a
+// workload session must not inherit it.
 func TestValidatorBoundaryWorkloadSessionClearsEarlierProvenance(t *testing.T) {
 	t.Parallel()
 
