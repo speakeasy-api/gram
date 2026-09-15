@@ -365,10 +365,6 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if changed && (b.RemoteSessionClientID.Valid || b.ClaimID.Valid || b.State == "unlinked") && in.ExpectedGeneration != b.Generation {
 		return preparationResult(b, issuer, client, "configuration_required"), nil
 	}
-	if changed {
-		b.Generation++
-	}
-	b.RequestedScopes = in.Scopes
 	if selected == uuid.Nil {
 		if in.Mechanism != "dcr" {
 			return preparationResult(b, issuer, client, "configuration_required"), nil
@@ -380,6 +376,11 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if !urls.IsAbsoluteHTTPSOrLoopback(issuer.RegistrationEndpoint.String) {
 			return preparationResult(b, issuer, client, "manual_setup_required"), nil
 		}
+		// Only mutate the returned binding once the request can be persisted.
+		if changed {
+			b.Generation++
+		}
+		b.RequestedScopes = in.Scopes
 		b.State = "in_progress"
 		b.ClaimID = conv.ToNullUUID(uuid.New())
 		b.ClaimedAt = conv.ToPGTimestamptz(time.Now())
@@ -472,6 +473,12 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if grants == nil {
 		source = "unknown"
 	}
+	// All configuration-required exits above return the persisted generation
+	// and scopes, not a prospective transition that will be rolled back.
+	if changed {
+		b.Generation++
+	}
+	b.RequestedScopes = in.Scopes
 	b.RemoteSessionClientID = conv.ToNullUUID(client.ID)
 	b.State = state
 	b.GrantSource = source

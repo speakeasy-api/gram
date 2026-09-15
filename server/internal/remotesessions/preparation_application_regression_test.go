@@ -62,3 +62,52 @@ func TestPreparationFixtureRegistrationScopesJoinedClient(t *testing.T) {
 	_, err = q.GetPreparationFixtureRegistration(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
+
+func TestPreparationRejectedChangesReturnPersistedBinding(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"explicit_client_dcr", "unsupported_cimd", "unsupported_scopes", "missing_selection", "unsupported_dcr"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, in := preparationFixture(t)
+			preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
+			prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
+			require.NoError(t, err)
+			require.Equal(t, "ready", prepared.State)
+			in.ExpectedGeneration = prepared.Generation
+			if scenario == "missing_selection" || scenario == "unsupported_dcr" {
+				prepared, err = ti.service.UnlinkIdentityChaining(ctx, in)
+				require.NoError(t, err)
+				in.ExpectedGeneration = prepared.Generation
+				in.ClientID = uuid.Nil
+			}
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			q := repo.New(ti.conn)
+			key := repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
+			before, err := q.GetEMABinding(ctx, key)
+			require.NoError(t, err)
+			in.Scopes = []string{"unconfigured-scope"}
+			want := "manual_setup_required"
+			switch scenario {
+			case "explicit_client_dcr":
+				in.Mechanism = "dcr"
+				want = "configuration_required"
+			case "unsupported_cimd":
+				in.Mechanism = "cimd"
+			case "missing_selection":
+				in.Mechanism = "manual"
+				want = "configuration_required"
+			case "unsupported_dcr":
+				in.Mechanism = "dcr"
+				in.TokenEndpointAuthMethod = "none"
+			}
+			rejected, err := ti.service.PrepareIdentityChaining(ctx, in)
+			require.NoError(t, err)
+			require.Equal(t, want, rejected.State)
+			require.Equal(t, before.Generation, rejected.Generation)
+			require.Equal(t, before.RequestedScopes, rejected.Scopes)
+			after, err := q.GetEMABinding(ctx, key)
+			require.NoError(t, err)
+			require.Equal(t, before, after, "rejected changes must not mutate the durable binding")
+		})
+	}
+}

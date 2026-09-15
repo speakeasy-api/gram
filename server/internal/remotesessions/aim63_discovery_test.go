@@ -2,6 +2,7 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -151,5 +152,45 @@ func TestAIM63ProfilesNeedReprojection(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, issuerProfilesNeedReprojection(repo.RemoteSessionIssuer{Metadata: []byte(tc.metadata), AuthorizationGrantProfilesSupported: tc.stored}))
 		})
+	}
+}
+
+func TestAIM63DiscoverySkipsUntrustedCandidates(t *testing.T) {
+	t.Parallel()
+	for _, identity := range []string{"missing", "mismatched", "endpointless_mismatch"} {
+		for _, usable := range []bool{false, true} {
+			t.Run(identity+"/usable="+fmt.Sprint(usable), func(t *testing.T) {
+				t.Parallel()
+				var server *httptest.Server
+				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					doc := map[string]any{"issuer": "https://untrusted.example", "grant_types_supported": []string{"untrusted-grant"}, "authorization_endpoint": "https://untrusted.example/authorize", "token_endpoint": "https://untrusted.example/token"}
+					if identity == "missing" {
+						delete(doc, "issuer")
+					}
+					if identity == "endpointless_mismatch" {
+						delete(doc, "authorization_endpoint")
+						delete(doc, "token_endpoint")
+					}
+					if usable && r.URL.Path == "/.well-known/openid-configuration" {
+						doc = map[string]any{"issuer": server.URL, "authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token"}
+					}
+					assert.NoError(t, json.NewEncoder(w).Encode(doc))
+				}))
+				defer server.Close()
+				policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+				require.NoError(t, err)
+				result, err := DiscoverIssuerMetadata(t.Context(), policy, server.URL)
+				if !usable {
+					var untrusted *untrustedDocumentError
+					require.ErrorAs(t, err, &untrusted)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, server.URL, result.Issuer)
+				require.Equal(t, server.URL+"/token", result.TokenEndpoint)
+				require.NotContains(t, result.GrantTypesSupported, "untrusted-grant", "mismatched candidates cannot contribute metadata")
+			})
+		}
 	}
 }
