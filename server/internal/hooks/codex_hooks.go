@@ -39,7 +39,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session id first.
-	namespaceAgentSession(ctx, payload.SessionID)
+	if sessionID, changed := scopedSessionPtr(ctx, payload.SessionID); changed {
+		scoped := *payload
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
 
 	logger := s.logger.With(
 		attr.SlogHookSource("codex"),

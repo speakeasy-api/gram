@@ -220,15 +220,17 @@ func TestIngest_AgentKeyPersistsChatWithoutHumanIdentity(t *testing.T) {
 	payload.Source.UserEmail = &humanEmail
 	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
 
-	_, err := ti.service.Ingest(agentKeyContext(t, ctx, ti), payload)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	_, err := ti.service.Ingest(agentCtx, payload)
 	require.NoError(t, err)
 
-	chat, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	agentChatID := sessionIDToUUID(agentSessionID(agentCtx, sessionID))
+	chat, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{ID: agentChatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err, "agent sessions are stored, not skipped")
 	require.False(t, chat.UserID.Valid, "a self-reported email never attributes an agent session to a human")
 	require.False(t, chat.ExternalUserID.Valid)
 
-	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: agentChatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
 }
@@ -873,7 +875,7 @@ func TestClaude_GrantedAgentKeyAccepted(t *testing.T) {
 	sessionID := "granted-claude-" + uuid.NewString()
 	_, err := ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
 	require.NoError(t, err)
-	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+	requireAgentChat(t, ti, agentSessionID(agentCtx, sessionID), *authCtx.ProjectID)
 }
 
 func TestCursor_GrantedAgentKeyAccepted(t *testing.T) {
@@ -895,7 +897,7 @@ func TestCursor_GrantedAgentKeyAccepted(t *testing.T) {
 	prompt := "granted cursor prompt"
 	_, err = ti.service.Cursor(authed, &gen.CursorPayload{HookEventName: "beforeSubmitPrompt", ConversationID: &sessionID, Prompt: &prompt})
 	require.NoError(t, err)
-	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+	requireAgentChat(t, ti, agentSessionID(authed, sessionID), *authCtx.ProjectID)
 }
 
 func TestCodex_GrantedAgentKeyAccepted(t *testing.T) {
@@ -911,7 +913,7 @@ func TestCodex_GrantedAgentKeyAccepted(t *testing.T) {
 	prompt := "granted codex prompt"
 	_, err = ti.service.Codex(authed, &gen.CodexPayload{HookEventName: "UserPromptSubmit", SessionID: &sessionID, Prompt: &prompt})
 	require.NoError(t, err)
-	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+	requireAgentChat(t, ti, agentSessionID(authed, sessionID), *authCtx.ProjectID)
 }
 
 func TestIngest_GrantedAgentKeyAccepted(t *testing.T) {
@@ -934,7 +936,7 @@ func TestIngest_GrantedAgentKeyAccepted(t *testing.T) {
 
 	_, err := ti.service.Ingest(t.Context(), payload)
 	require.NoError(t, err)
-	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+	requireAgentChat(t, ti, agentSessionID(agentCtx, sessionID), *authCtx.ProjectID)
 }
 
 func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {
@@ -997,9 +999,11 @@ func TestIngest_AgentSessionStartDoesNotSeedSessionCache(t *testing.T) {
 	payload := canonicalIngestPayload("claude", "session.started", sessionID)
 	payload.Source.Hostname = &hostname
 
-	_, err := ti.service.Ingest(agentKeyContext(t, ctx, ti), payload)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	_, err := ti.service.Ingest(agentCtx, payload)
 	require.NoError(t, err)
 
 	var cached SessionMetadata
 	require.Error(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached), "agent sessions never seed the human-keyed cache")
+	require.Error(t, ti.service.cache.Get(ctx, sessionCacheKey(agentSessionID(agentCtx, sessionID)), &cached), "nor their own scoped key")
 }

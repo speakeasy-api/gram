@@ -279,7 +279,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	}
 
 	// Scope the session id before anything reads it: the actor is known now.
-	namespaceAgentSession(ctx, payload.SessionID)
+	if sessionID, changed := scopedSessionPtr(ctx, payload.SessionID); changed {
+		scoped := *payload
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
 
 	// service.name lives in cached SessionMetadata seeded by the OTEL Logs
 	// endpoint. May be empty for the first hooks of a session (before OTEL

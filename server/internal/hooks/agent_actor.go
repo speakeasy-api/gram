@@ -228,11 +228,18 @@ func scopeSessionAttrs(ctx context.Context, attrs map[attr.Key]any) {
 	}
 }
 
-// namespaceAgentSession rewrites a payload session id in place for agent actors.
-func namespaceAgentSession(ctx context.Context, sessionID *string) {
-	if sessionID != nil {
-		*sessionID = agentSessionID(ctx, strings.TrimSpace(*sessionID))
+// scopedSessionPtr returns a fresh pointer to sessionID's agentSessionID and
+// whether it changed. Callers copy their payload before storing it: payloads
+// and their pointers may be shared with the caller or in-flight goroutines.
+func scopedSessionPtr(ctx context.Context, sessionID *string) (*string, bool) {
+	if sessionID == nil {
+		return nil, false
 	}
+	scoped := agentSessionID(ctx, *sessionID)
+	if scoped == *sessionID {
+		return sessionID, false
+	}
+	return &scoped, true
 }
 
 // otelSessionKeys are the raw OTLP log attributes that carry a session id.
@@ -261,9 +268,11 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 			continue
 		}
 		if resourceLog.Resource != nil {
-			resourceLog.Resource.Attributes = slices.DeleteFunc(resourceLog.Resource.Attributes, func(a *gen.OTELResourceAttribute) bool {
+			if kept := slices.DeleteFunc(resourceLog.Resource.Attributes, func(a *gen.OTELResourceAttribute) bool {
 				return a != nil && strippedTeeKey(a.Key, agent)
-			})
+			}); len(kept) != len(resourceLog.Resource.Attributes) {
+				resourceLog.Resource.Attributes = kept
+			}
 		}
 		for _, scopeLog := range resourceLog.ScopeLogs {
 			if scopeLog == nil {
@@ -273,9 +282,11 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 				if record == nil {
 					continue
 				}
-				record.Attributes = slices.DeleteFunc(record.Attributes, func(a *gen.OTELAttribute) bool {
+				if kept := slices.DeleteFunc(record.Attributes, func(a *gen.OTELAttribute) bool {
 					return a != nil && strippedTeeKey(a.Key, agent)
-				})
+				}); len(kept) != len(record.Attributes) {
+					record.Attributes = kept
+				}
 				for _, a := range record.Attributes {
 					if a != nil && a.Value != nil && a.Value.StringValue != nil && slices.Contains(otelSessionKeys, a.Key) {
 						if scoped := agentSessionID(ctx, *a.Value.StringValue); scoped != *a.Value.StringValue {

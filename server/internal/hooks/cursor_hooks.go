@@ -44,8 +44,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session ids first.
-	namespaceAgentSession(ctx, payload.ConversationID)
-	namespaceAgentSession(ctx, payload.SessionID)
+	conversationID, conversationChanged := scopedSessionPtr(ctx, payload.ConversationID)
+	sessionID, sessionChanged := scopedSessionPtr(ctx, payload.SessionID)
+	if conversationChanged || sessionChanged {
+		scoped := *payload
+		scoped.ConversationID = conversationID
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
 
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
