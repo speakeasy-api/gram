@@ -236,6 +236,16 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			_ = conn.Conn().Close(context.Background())
 		}
 	}()
+	// The shared registration lock closes the preflight-to-HTTP race with
+	// interactive rotation. Reject foreign IDs before taking its global key.
+	if _, err := lockRepo.GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org), IncludeOrganizational: true, IncludeGlobal: true}); err != nil {
+		return nil, preparationLookupError(err, "remote issuer not found")
+	}
+	releaseRegistration, err := lockRegistrationIssuer(ctx, conn, in.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer registration")
+	}
+	defer releaseRegistration()
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")

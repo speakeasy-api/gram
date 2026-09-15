@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"io"
 	"log/slog"
 	"net/http"
@@ -232,17 +233,25 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
 
-	issuerLockConn, err := r.db.Acquire(ctx)
+	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("acquire issuer rotation lock connection: %w", err)
 	}
-	issuerLockRepo := repo.New(issuerLockConn)
+	q := repo.New(conn)
 	lockedIssuerID := initial.RemoteSessionClient.RemoteSessionIssuerID
-	if err := issuerLockRepo.LockRemoteSessionIssuerForClientBindingSession(ctx, lockedIssuerID); err != nil {
+	releaseRegistration, err := lockRegistrationIssuer(ctx, conn, lockedIssuerID)
+	if err != nil {
+		conn.Release()
+		return zero, fmt.Errorf("lock issuer registration for rotation: %w", err)
+	}
+	releaseRegistration = sync.OnceFunc(releaseRegistration)
+	defer releaseRegistration()
+	if err := q.LockRemoteSessionIssuerForClientBindingSession(ctx, lockedIssuerID); err != nil {
 		// Cancellation can race PostgreSQL granting a session lock. Remove the
 		// connection from the pool and close it so an ambiguous acquisition can
 		// never return a lock-owning session for unrelated work.
-		rawConn := issuerLockConn.Hijack()
+		releaseRegistration()
+		rawConn := conn.Hijack()
 		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 		closeErr := rawConn.Close(closeCtx)
 		cancel()
@@ -257,19 +266,20 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			return nil
 		}
 		issuerLockReleased = true
+		releaseRegistration()
 
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-		_, unlockErr := issuerLockRepo.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
+		_, unlockErr := q.UnlockRemoteSessionIssuerForClientBindingSession(releaseCtx, lockedIssuerID)
 		cancel()
 		if unlockErr == nil {
-			issuerLockConn.Release()
+			conn.Release()
 			return nil
 		}
 
 		// A failed unlock leaves the session's lock state ambiguous. Discard the
 		// connection instead of returning a potentially lock-owning session to
 		// the pool for unrelated work.
-		rawConn := issuerLockConn.Hijack()
+		rawConn := conn.Hijack()
 		closeCtx, closeCancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 		closeErr := rawConn.Close(closeCtx)
 		closeCancel()
@@ -290,7 +300,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, ErrClientRotationInProgress
 	}
 
-	row, err := issuerLockRepo.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	row, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("reload remote session client under issuer rotation lock: %w", err)
 	}
@@ -356,7 +366,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			return zero, fmt.Errorf("probe issuer for client registration: %w", err)
 		}
 		if recognized {
-			if _, err := issuerLockRepo.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
+			if _, err := q.ClearRemoteSessionClientUpstreamRejected(ctx, repo.ClearRemoteSessionClientUpstreamRejectedParams{ID: current.ID, ClientID: current.ClientID}); err != nil {
 				logger.WarnContext(ctx, "failed to clear the upstream rejection marker on a client the issuer still recognizes", attr.SlogError(err))
 			}
 			logger.WarnContext(ctx, "issuer still recognizes the client registration; rotation skipped and rejection marker cleared")
@@ -408,14 +418,14 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		secretExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	}
 
-	dbtx, err := issuerLockConn.Begin(ctx)
+	dbtx, err := conn.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin client rotation transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
-	// Re-check under the same client row lock as preparation after the network
-	// call. A newly installed binding wins over this stale rotation completion.
+	// Re-check lifecycle scope after HTTP. The registration session lock has
+	// prevented EMA preparation from installing a binding during submission.
 	if err := guardEMABindingsForClient(ctx, txRepo, rotationOrganizationID, current.ProjectID.UUID, current.ID); err != nil {
 		return zero, err
 	}

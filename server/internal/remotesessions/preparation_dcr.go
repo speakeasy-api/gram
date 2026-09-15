@@ -37,7 +37,7 @@ type preparationDCRResponse struct {
 // No response body, client secret or management token becomes a diagnostic.
 func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
 	var result preparationDCRResponse
-	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+	if (method != "client_secret_basic" && method != "client_secret_post") || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, "manual_setup_required"
 	}
 	if s.policy == nil {
@@ -85,7 +85,7 @@ func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput,
 	return result, validatePreparationDCR(result, in.Scopes, method)
 }
 func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
-	if strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || result.TokenEndpointAuthMethod != method || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
+	if (method != "client_secret_basic" && method != "client_secret_post") || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || result.TokenEndpointAuthMethod != method || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
 		return "indeterminate"
 	}
 	// A provider response can narrow scope, never broaden the requested set.
