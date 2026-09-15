@@ -456,9 +456,7 @@ func TestSessionSubject_RoundTrip(t *testing.T) {
 	require.Equal(t, original.String(), fromDB.String())
 }
 
-// The subject shapes these platforms actually mint are colon-heavy, and the
-// grammar splits on the first colon only. Asserted against real values rather
-// than trusting that reasoning.
+// Platform subjects are colon-heavy, and the id splits on the first colon only.
 func TestWorkloadSubject_RoundTripsRealPlatformSubjects(t *testing.T) {
 	t.Parallel()
 
@@ -490,8 +488,7 @@ func TestWorkloadSubject_RoundTripsRealPlatformSubjects(t *testing.T) {
 	}
 }
 
-// The kind has to survive every transport a session subject travels on, not
-// just String/Parse.
+// The kind round-trips through every transport a session subject uses.
 func TestWorkloadSubject_RoundTripsThroughJSONAndTheValuer(t *testing.T) {
 	t.Parallel()
 
@@ -515,7 +512,7 @@ func TestWorkloadSubject_RoundTripsThroughJSONAndTheValuer(t *testing.T) {
 }
 
 // Two workloads sharing a sub across different issuers must produce different
-// session subjects. This is the whole reason the kind carries an issuer.
+// session subjects.
 func TestWorkloadSubject_OneSubjectFromTwoIssuersDiffers(t *testing.T) {
 	t.Parallel()
 
@@ -527,8 +524,7 @@ func TestWorkloadSubject_OneSubjectFromTwoIssuersDiffers(t *testing.T) {
 		"an identical sub vouched for by another issuer is another workload")
 }
 
-// A malformed workload id must be rejected rather than accepted as an opaque
-// string, or the kind would carry no guarantee that an issuer is present.
+// A malformed workload id is rejected, not accepted as an opaque string.
 func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
 	t.Parallel()
 
@@ -536,9 +532,8 @@ func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
 		"no issuer reference":    "workload:repo-acme-payments-api",
 		"issuer is not a uuid":   "workload:not-a-uuid:repo:acme/payments-api",
 		"empty external subject": "workload:0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f:",
-		// The nil uuid parses like any other, so it has to be rejected by
-		// name: no workload_issuers row is ever the nil uuid, and an
-		// uninitialised reference must not produce a valid-looking subject.
+		// No workload_issuers row has the nil uuid, so it is rejected even
+		// though it parses.
 		"nil uuid issuer": "workload:00000000-0000-0000-0000-000000000000:repo:acme/api",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -550,8 +545,7 @@ func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
 	}
 }
 
-// Workload() must refuse a subject of another kind, so a user or api key
-// subject cannot be read as a workload by accident.
+// Workload() refuses a subject of another kind.
 func TestSessionSubject_WorkloadRefusesOtherKinds(t *testing.T) {
 	t.Parallel()
 
@@ -562,9 +556,7 @@ func TestSessionSubject_WorkloadRefusesOtherKinds(t *testing.T) {
 	require.Error(t, err)
 }
 
-// The id segment is capped and over-long ids are rejected outright rather than
-// truncated, so the budget left for the external subject is a real limit that
-// admission has to enforce before a session is ever minted.
+// Over-long workload ids are rejected, not truncated.
 func TestWorkloadSubject_ExternalSubjectBudgetIsEnforced(t *testing.T) {
 	t.Parallel()
 
@@ -579,9 +571,8 @@ func TestWorkloadSubject_ExternalSubjectBudgetIsEnforced(t *testing.T) {
 	require.Error(t, err, "a subject one byte over the budget must be rejected, not truncated")
 }
 
-// Platform subjects can outgrow the shared URN cap: an AWS IAM role ARN may
-// carry a path of up to 512 characters, and GovCloud lengthens the partition.
-// Only the workload kind gets the larger cap.
+// AWS IAM ARNs can exceed the 128-byte cap other kinds keep, so only the
+// workload kind gets the larger one.
 func TestWorkloadSubject_AcceptsSubjectsLongerThanOtherKinds(t *testing.T) {
 	t.Parallel()
 

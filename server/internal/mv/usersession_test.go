@@ -103,9 +103,8 @@ func TestBuildUserSessionView_AnonymousHasNoName(t *testing.T) {
 	require.Nil(t, got.SubjectDisplayName)
 }
 
-// A workload is named by its issuer and external subject, which the session
-// row does not join, so the view reports the kind and no display name rather
-// than borrowing a user or api key column.
+// The session row does not join the workload issuer, so the view reports the
+// kind with no display name.
 func TestBuildUserSessionView_WorkloadIsNamedByKind(t *testing.T) {
 	t.Parallel()
 
