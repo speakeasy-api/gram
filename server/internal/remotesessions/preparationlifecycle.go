@@ -11,41 +11,51 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// Guards run in the mutation transaction. Preparation takes these same row
-// locks before installing a binding, so count-then-write cannot race preparation.
-// Callers must authorize the selected object's ownership before invoking them.
-func guardEMABindingsForClient(ctx context.Context, r *repo.Queries, organizationID string, clientID uuid.UUID) error {
-	if err := lockClientForEMALifecycle(ctx, r, clientID); err != nil {
+// Guards run in the mutation transaction. Exact tier-qualified row locks
+// revalidate ownership after any wait; project ownership comes from projects,
+// since legacy project-owned rows can have a NULL organization_id.
+func guardEMABindingsForClient(ctx context.Context, r *repo.Queries, organizationID string, projectID, clientID uuid.UUID) error {
+	organizationID, err := lifecycleOrganization(ctx, r, organizationID, projectID)
+	if err != nil {
 		return err
 	}
-	count, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: organizationID, ProjectID: uuid.Nil})
+	if _, err := r.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: projectID, OrganizationID: organizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	count, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: organizationID, ProjectID: projectID})
 	return requireNoEMABindings(count, err)
 }
 
-// The caller must authorize ownership before taking this ID-only lock.
-func lockClientForEMALifecycle(ctx context.Context, r *repo.Queries, clientID uuid.UUID) error {
-	if _, err := r.LockRemoteSessionClientForSessionWrite(ctx, clientID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "lock identity-chaining client references")
-	}
-	return nil
-}
-
-func guardEMABindingsForIssuer(ctx context.Context, r *repo.Queries, organizationID string, issuerID uuid.UUID) error {
-	_, err := r.GetTenantRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = r.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
-	}
+func guardEMABindingsForIssuer(ctx context.Context, r *repo.Queries, organizationID string, projectID, issuerID uuid.UUID) error {
+	organizationID, err := lifecycleOrganization(ctx, r, organizationID, projectID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "lock identity-chaining issuer references")
+		return err
 	}
-	count, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: issuerID, OrganizationID: organizationID, ProjectID: uuid.Nil})
+	if _, err := r.LockEMAIssuerForLifecycle(ctx, repo.LockEMAIssuerForLifecycleParams{ID: issuerID, ProjectID: projectID, OrganizationID: organizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	count, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: issuerID, OrganizationID: organizationID, ProjectID: projectID})
 	return requireNoEMABindings(count, err)
+}
+
+// Rotation and migration can start from an already-authorized legacy row.
+// Resolve its missing organization without making the project a wildcard.
+func lifecycleOrganization(ctx context.Context, r *repo.Queries, organizationID string, projectID uuid.UUID) (string, error) {
+	if projectID != uuid.Nil && organizationID == "" {
+		organizationID, err := r.GetEMAProjectOrganization(ctx, projectID)
+		if err != nil {
+			return "", lifecycleLockError(err)
+		}
+		return organizationID, nil
+	}
+	return organizationID, nil
+}
+
+func lifecycleLockError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "identity-chaining configuration no longer belongs to the requested scope")
+	}
+	return oops.E(oops.CodeUnexpected, err, "lock identity-chaining configuration")
 }
 
 func requireNoEMABindings(count int64, err error) error {

@@ -1,6 +1,7 @@
 package projects_test
 
 import (
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -35,4 +36,6 @@ func TestProjectsService_DeleteProjectActiveEMABindingConflict(t *testing.T) {
 	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: project.ID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: "unlinked", GrantSource: "unknown", RequestedScopes: []string{}})
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
+	_, err = projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "successful deletion must hide the project")
 }

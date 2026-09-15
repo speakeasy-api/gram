@@ -547,7 +547,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
 		return nil, err
 	}
 
@@ -846,18 +846,19 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 	// silently succeeding against the org-scoped delete below. Platform issuers
 	// are excluded for the same reason: a tenant must never delete one, and
 	// CountRemoteSessionClientsByIssuerID below is unscoped by organization.
-	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  false,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
 		return err
 	}
 
@@ -1008,7 +1009,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		}
 	}
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
 		return nil, err
 	}
 

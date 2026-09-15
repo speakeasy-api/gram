@@ -329,7 +329,15 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 
 	// EMA grants describe this exact registration. Ordinary interactive rotation
 	// must not silently replace it with an authorization-code-only registration.
-	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: current.OrganizationID.String, ProjectID: uuid.Nil})
+	ownerOrganizationID := current.OrganizationID.String
+	if current.ProjectID.Valid {
+		ownerOrganizationID = conv.Default(ownerOrganizationID, params.OrganizationID)
+	}
+	rotationOrganizationID, err := lifecycleOrganization(ctx, q, ownerOrganizationID, current.ProjectID.UUID)
+	if err != nil {
+		return zero, err
+	}
+	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: rotationOrganizationID, ProjectID: current.ProjectID.UUID})
 	if err := requireNoEMABindings(emaCount, err); err != nil {
 		return zero, err
 	}
@@ -408,7 +416,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	txRepo := repo.New(dbtx)
 	// Re-check under the same client row lock as preparation after the network
 	// call. A newly installed binding wins over this stale rotation completion.
-	if err := guardEMABindingsForClient(ctx, txRepo, current.OrganizationID.String, current.ID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, rotationOrganizationID, current.ProjectID.UUID, current.ID); err != nil {
 		return zero, err
 	}
 

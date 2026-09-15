@@ -640,7 +640,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
 	}
 
@@ -980,7 +980,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
 		return err
 	}
 

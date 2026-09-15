@@ -388,7 +388,7 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
 		return nil, err
 	}
 
@@ -507,7 +507,7 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	// first" would point a platform admin at clients they cannot see or remove.
 	// Reporting the two counts distinctly tells them which blockers are theirs
 	// (the global clients) and which belong to tenants.
-	if err := guardEMABindingsForIssuer(ctx, txRepo, "", issuerID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, txRepo, "", uuid.Nil, issuerID); err != nil {
 		return err
 	}
 
@@ -1171,7 +1171,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, repo.New(dbtx), "", clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, repo.New(dbtx), "", uuid.Nil, clientID); err != nil {
 		return nil, err
 	}
 
@@ -1229,7 +1229,7 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, "", clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, "", uuid.Nil, clientID); err != nil {
 		return err
 	}
 

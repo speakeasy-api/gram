@@ -3688,17 +3688,26 @@ RETURNING *;
 -- Global clients are platform-owned: tenant preparation must not mutate their
 -- credentials or grant evidence. Keep this lock scoped like SetEMAClientGrants.
 -- name: LockEMAClient :one
-SELECT * FROM remote_session_clients WHERE id = @id AND deleted IS FALSE
-AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;
+SELECT * FROM remote_session_clients WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
 
 -- name: LockEMAIssuer :one
-SELECT * FROM remote_session_issuers WHERE id = @id AND deleted IS FALSE
-AND (project_id = @project_id OR (project_id IS NULL AND (organization_id = @organization_id OR organization_id IS NULL))) FOR UPDATE;
+SELECT * FROM remote_session_issuers WHERE remote_session_issuers.id = @id AND remote_session_issuers.deleted IS FALSE
+AND ((remote_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_issuers.project_id IS NULL AND (remote_session_issuers.organization_id = sqlc.narg('organization_id') OR remote_session_issuers.organization_id IS NULL))) FOR UPDATE;
 
 -- name: SetEMAClientGrants :one
 UPDATE remote_session_clients SET grant_types = sqlc.narg('grant_types')::text[], updated_at = clock_timestamp()
-WHERE id = @id AND deleted IS FALSE
-AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) RETURNING *;
+WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id'))) RETURNING *;
 
 -- name: CountActiveEMABindingsForClient :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state <> 'unlinked'
@@ -3713,8 +3722,11 @@ SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = 
 AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
 
 -- name: LockEMAUserIssuer :one
-SELECT id FROM user_session_issuers WHERE id = @id AND deleted IS FALSE
-AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;
+SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = @id AND user_session_issuers.deleted IS FALSE
+AND ((user_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
 
 -- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
@@ -3736,8 +3748,8 @@ SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id;
 UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret
 WHERE id = @id AND project_id = @project_id;
 
--- name: ExpirePreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET client_secret_expires_at = clock_timestamp() - interval '1 second'
+-- name: SetPreparationFixtureClientSecretExpiry :exec
+UPDATE remote_session_clients SET client_secret_expires_at = @expires_at
 WHERE id = @id AND project_id = @project_id;
 
 -- Scoped fixtures for DCR preparation and lifecycle integration tests.
@@ -3812,3 +3824,57 @@ DELETE FROM remote_session_issuers WHERE id = @id AND project_id = @project_id;
 
 -- name: DeletePreparationFixtureUserIssuer :exec
 DELETE FROM user_session_issuers WHERE id = @id AND project_id = @project_id;
+
+-- Lifecycle mutations target an exact ownership tier, not inherited objects.
+-- A NULL organization on a legacy project-owned row is resolved via projects.
+-- name: LockEMAClientForLifecycle :one
+SELECT id FROM remote_session_clients c WHERE c.id = @id AND c.deleted IS FALSE
+AND ((c.project_id = @project_id::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND c.project_id IS NULL
+    AND (c.organization_id = @organization_id::text OR (@organization_id::text = '' AND c.organization_id IS NULL))))
+FOR UPDATE;
+
+-- name: LockEMAIssuerForLifecycle :one
+SELECT id FROM remote_session_issuers i WHERE i.id = @id AND i.deleted IS FALSE
+AND ((i.project_id = @project_id::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = i.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND i.project_id IS NULL
+    AND (i.organization_id = @organization_id::text OR (@organization_id::text = '' AND i.organization_id IS NULL))))
+FOR UPDATE;
+
+-- Internal lifecycle callers may start from a legacy row without organization_id.
+-- name: GetEMAProjectOrganization :one
+SELECT organization_id FROM projects WHERE id = @project_id AND deleted IS FALSE FOR SHARE;
+
+-- name: LockProjectUserIssuerForDetach :one
+SELECT id FROM user_session_issuers u WHERE u.id = @id AND u.deleted IS FALSE
+AND u.project_id = @project_id::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+) FOR UPDATE;
+
+-- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u, projects p
+WHERE link.remote_session_client_id = @remote_session_client_id
+AND link.user_session_issuer_id = @user_session_issuer_id
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND u.project_id = @project_id::uuid
+AND p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id));
+
+-- name: MovePreparationFixtureClientProject :execrows
+UPDATE remote_session_clients SET project_id = @target_project_id
+WHERE id = @id AND project_id = @project_id;
+
+-- name: MovePreparationFixtureUserIssuerProject :execrows
+UPDATE user_session_issuers SET project_id = @target_project_id
+WHERE id = @id AND project_id = @project_id;
+
+-- name: MovePreparationFixtureRemoteIssuerProject :execrows
+UPDATE remote_session_issuers SET project_id = @target_project_id
+WHERE id = @id AND project_id = @project_id;

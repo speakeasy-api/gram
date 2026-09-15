@@ -1893,6 +1893,38 @@ func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx c
 	return err
 }
 
+const detachProjectRemoteSessionClientFromUserSessionIssuer = `-- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u, projects p
+WHERE link.remote_session_client_id = $1
+AND link.user_session_issuer_id = $2
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND u.project_id = $3::uuid
+AND p.id = u.project_id AND p.organization_id = $4::text AND p.deleted IS FALSE
+AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
+`
+
+type DetachProjectRemoteSessionClientFromUserSessionIssuerParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+}
+
+func (q *Queries) DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachProjectRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachProjectRemoteSessionClientFromUserSessionIssuer,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const detachRemoteSessionClientFromUserSessionIssuer = `-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = $1
@@ -1970,21 +2002,6 @@ func (q *Queries) EnsureEMABinding(ctx context.Context, arg EnsureEMABindingPara
 		arg.RemoteSessionIssuerID,
 		arg.Resource,
 	)
-	return err
-}
-
-const expirePreparationFixtureClientSecret = `-- name: ExpirePreparationFixtureClientSecret :exec
-UPDATE remote_session_clients SET client_secret_expires_at = clock_timestamp() - interval '1 second'
-WHERE id = $1 AND project_id = $2
-`
-
-type ExpirePreparationFixtureClientSecretParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.NullUUID
-}
-
-func (q *Queries) ExpirePreparationFixtureClientSecret(ctx context.Context, arg ExpirePreparationFixtureClientSecretParams) error {
-	_, err := q.db.Exec(ctx, expirePreparationFixtureClientSecret, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -2448,6 +2465,18 @@ func (q *Queries) GetEMABinding(ctx context.Context, arg GetEMABindingParams) (R
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getEMAProjectOrganization = `-- name: GetEMAProjectOrganization :one
+SELECT organization_id FROM projects WHERE id = $1 AND deleted IS FALSE FOR SHARE
+`
+
+// Internal lifecycle callers may start from a legacy row without organization_id.
+func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getEMAProjectOrganization, projectID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getGlobalRemoteSessionClientByID = `-- name: GetGlobalRemoteSessionClientByID :one
@@ -7056,8 +7085,11 @@ func (q *Queries) LockEMABinding(ctx context.Context, arg LockEMABindingParams) 
 }
 
 const lockEMAClient = `-- name: LockEMAClient :one
-SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE id = $1 AND deleted IS FALSE
-AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3)) FOR UPDATE
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE remote_session_clients.id = $1 AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = $2 AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = $3 AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = $3)) FOR UPDATE
 `
 
 type LockEMAClientParams struct {
@@ -7104,9 +7136,37 @@ func (q *Queries) LockEMAClient(ctx context.Context, arg LockEMAClientParams) (R
 	return i, err
 }
 
+const lockEMAClientForLifecycle = `-- name: LockEMAClientForLifecycle :one
+SELECT id FROM remote_session_clients c WHERE c.id = $1 AND c.deleted IS FALSE
+AND ((c.project_id = $2::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id
+    AND p.organization_id = $3::text AND p.deleted IS FALSE FOR SHARE
+)) OR ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND c.project_id IS NULL
+    AND (c.organization_id = $3::text OR ($3::text = '' AND c.organization_id IS NULL))))
+FOR UPDATE
+`
+
+type LockEMAClientForLifecycleParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Lifecycle mutations target an exact ownership tier, not inherited objects.
+// A NULL organization on a legacy project-owned row is resolved via projects.
+func (q *Queries) LockEMAClientForLifecycle(ctx context.Context, arg LockEMAClientForLifecycleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMAClientForLifecycle, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockEMAIssuer = `-- name: LockEMAIssuer :one
-SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted FROM remote_session_issuers WHERE id = $1 AND deleted IS FALSE
-AND (project_id = $2 OR (project_id IS NULL AND (organization_id = $3 OR organization_id IS NULL))) FOR UPDATE
+SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted FROM remote_session_issuers WHERE remote_session_issuers.id = $1 AND remote_session_issuers.deleted IS FALSE
+AND ((remote_session_issuers.project_id = $2 AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_issuers.project_id
+    AND p.organization_id = $3 AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_issuers.project_id IS NULL AND (remote_session_issuers.organization_id = $3 OR remote_session_issuers.organization_id IS NULL))) FOR UPDATE
 `
 
 type LockEMAIssuerParams struct {
@@ -7174,9 +7234,35 @@ func (q *Queries) LockEMAIssuer(ctx context.Context, arg LockEMAIssuerParams) (R
 	return i, err
 }
 
+const lockEMAIssuerForLifecycle = `-- name: LockEMAIssuerForLifecycle :one
+SELECT id FROM remote_session_issuers i WHERE i.id = $1 AND i.deleted IS FALSE
+AND ((i.project_id = $2::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = i.project_id
+    AND p.organization_id = $3::text AND p.deleted IS FALSE FOR SHARE
+)) OR ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND i.project_id IS NULL
+    AND (i.organization_id = $3::text OR ($3::text = '' AND i.organization_id IS NULL))))
+FOR UPDATE
+`
+
+type LockEMAIssuerForLifecycleParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockEMAIssuerForLifecycle(ctx context.Context, arg LockEMAIssuerForLifecycleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMAIssuerForLifecycle, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockEMAUserIssuer = `-- name: LockEMAUserIssuer :one
-SELECT id FROM user_session_issuers WHERE id = $1 AND deleted IS FALSE
-AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3)) FOR UPDATE
+SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = $1 AND user_session_issuers.deleted IS FALSE
+AND ((user_session_issuers.project_id = $2 AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
+    AND p.organization_id = $3 AND p.deleted IS FALSE FOR SHARE
+)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = $3)) FOR UPDATE
 `
 
 type LockEMAUserIssuerParams struct {
@@ -7262,6 +7348,27 @@ type LockPreparationFixtureIssuerParams struct {
 
 func (q *Queries) LockPreparationFixtureIssuer(ctx context.Context, arg LockPreparationFixtureIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockPreparationFixtureIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockProjectUserIssuerForDetach = `-- name: LockProjectUserIssuerForDetach :one
+SELECT id FROM user_session_issuers u WHERE u.id = $1 AND u.deleted IS FALSE
+AND u.project_id = $2::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id
+    AND p.organization_id = $3::text AND p.deleted IS FALSE FOR SHARE
+) FOR UPDATE
+`
+
+type LockProjectUserIssuerForDetachParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectUserIssuerForDetach(ctx context.Context, arg LockProjectUserIssuerForDetachParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectUserIssuerForDetach, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -7806,6 +7913,25 @@ func (q *Queries) MarkTrustedIssuerJWKSConsultFailure(ctx context.Context, arg M
 	return result.RowsAffected(), nil
 }
 
+const movePreparationFixtureClientProject = `-- name: MovePreparationFixtureClientProject :execrows
+UPDATE remote_session_clients SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureClientProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureClientProject(ctx context.Context, arg MovePreparationFixtureClientProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureClientProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const movePreparationFixtureIssuerTier = `-- name: MovePreparationFixtureIssuerTier :execrows
 UPDATE remote_session_issuers SET project_id=NULL WHERE id = $1 AND project_id = $2
 `
@@ -7817,6 +7943,44 @@ type MovePreparationFixtureIssuerTierParams struct {
 
 func (q *Queries) MovePreparationFixtureIssuerTier(ctx context.Context, arg MovePreparationFixtureIssuerTierParams) (int64, error) {
 	result, err := q.db.Exec(ctx, movePreparationFixtureIssuerTier, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const movePreparationFixtureRemoteIssuerProject = `-- name: MovePreparationFixtureRemoteIssuerProject :execrows
+UPDATE remote_session_issuers SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureRemoteIssuerProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureRemoteIssuerProject(ctx context.Context, arg MovePreparationFixtureRemoteIssuerProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureRemoteIssuerProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const movePreparationFixtureUserIssuerProject = `-- name: MovePreparationFixtureUserIssuerProject :execrows
+UPDATE user_session_issuers SET project_id = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type MovePreparationFixtureUserIssuerProjectParams struct {
+	TargetProjectID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+}
+
+func (q *Queries) MovePreparationFixtureUserIssuerProject(ctx context.Context, arg MovePreparationFixtureUserIssuerProjectParams) (int64, error) {
+	result, err := q.db.Exec(ctx, movePreparationFixtureUserIssuerProject, arg.TargetProjectID, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -8398,8 +8562,11 @@ func (q *Queries) SetEMABinding(ctx context.Context, arg SetEMABindingParams) (R
 
 const setEMAClientGrants = `-- name: SetEMAClientGrants :one
 UPDATE remote_session_clients SET grant_types = $1::text[], updated_at = clock_timestamp()
-WHERE id = $2 AND deleted IS FALSE
-AND (project_id = $3 OR (project_id IS NULL AND organization_id = $4)) RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+WHERE remote_session_clients.id = $2 AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = $3 AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = $4 AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = $4)) RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SetEMAClientGrantsParams struct {
@@ -8637,6 +8804,22 @@ type SetPreparationFixtureClientSecretParams struct {
 
 func (q *Queries) SetPreparationFixtureClientSecret(ctx context.Context, arg SetPreparationFixtureClientSecretParams) error {
 	_, err := q.db.Exec(ctx, setPreparationFixtureClientSecret, arg.Secret, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setPreparationFixtureClientSecretExpiry = `-- name: SetPreparationFixtureClientSecretExpiry :exec
+UPDATE remote_session_clients SET client_secret_expires_at = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetPreparationFixtureClientSecretExpiryParams struct {
+	ExpiresAt pgtype.Timestamptz
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) SetPreparationFixtureClientSecretExpiry(ctx context.Context, arg SetPreparationFixtureClientSecretExpiryParams) error {
+	_, err := q.db.Exec(ctx, setPreparationFixtureClientSecretExpiry, arg.ExpiresAt, arg.ID, arg.ProjectID)
 	return err
 }
 

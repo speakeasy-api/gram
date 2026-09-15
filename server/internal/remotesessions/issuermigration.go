@@ -418,7 +418,7 @@ type trustedUserSessionIssuerReference struct {
 // source onto target. The caller has already loaded both issuers scoped to the
 // organization and validated the scope ladder.
 func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target repo.RemoteSessionIssuer) (migratePreflight, error) {
-	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: source.ID, OrganizationID: source.OrganizationID.String, ProjectID: uuid.Nil})
+	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: source.ID, OrganizationID: source.OrganizationID.String, ProjectID: source.ProjectID.UUID})
 	if err != nil {
 		return migratePreflight{}, fmt.Errorf("count identity-chaining bindings: %w", err)
 	}
@@ -524,7 +524,7 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // have re-read both issuers under a row lock, so that the rows validated here
 // cannot change before the transaction commits.
 func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
-	if err := guardEMABindingsForIssuer(ctx, r, source.OrganizationID.String, source.ID); err != nil {
+	if err := guardEMABindingsForIssuer(ctx, r, source.OrganizationID.String, source.ProjectID.UUID, source.ID); err != nil {
 		return 0, err
 	}
 

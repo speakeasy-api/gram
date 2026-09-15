@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -67,7 +68,7 @@ func TestPreparationIntegration_ManualGrantEvidence(t *testing.T) {
 			recorded, err := repo.New(ti.conn).GetPreparationFixtureClientGrants(ctx, repo.GetPreparationFixtureClientGrantsParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 			require.NoError(t, err)
 			require.Equal(t, tc.grants, recorded, "preparation must not infer grants")
-			in.ConfirmGrants = []string{preparationJWTGrant}
+			in.ConfirmGrants = []string{preparationJWTGrant, preparationJWTGrant}
 			in.ExpectedGeneration = result.Generation
 			confirmed, err := ti.service.PrepareIdentityChaining(ctx, in)
 			require.NoError(t, err)
@@ -280,17 +281,17 @@ func TestPreparationIntegration_ReadRevalidatesExpiredCredential(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	// Set expiry before binding, then let time advance without reconfiguring it.
+	err := repo.New(ti.conn).SetPreparationFixtureClientSecretExpiry(ctx, repo.SetPreparationFixtureClientSecretExpiryParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(3 * time.Second))})
+	require.NoError(t, err)
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, "ready", prepared.State)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	// Simulate time advancing past an otherwise unchanged credential's expiry.
-	err = repo.New(ti.conn).ExpirePreparationFixtureClientSecret(ctx, repo.ExpirePreparationFixtureClientSecretParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-	require.NoError(t, err)
-	current, err := ti.service.ReadIdentityChaining(ctx, in)
-	require.NoError(t, err)
-	require.Equal(t, "manual_setup_required", current.State, "a historical ready binding cannot make an expired credential ready")
-	require.Equal(t, prepared.Generation, current.Generation)
+	require.Eventually(t, func() bool {
+		current, err := ti.service.ReadIdentityChaining(ctx, in)
+		return err == nil && current.State == "manual_setup_required" && current.Generation == prepared.Generation
+	}, 10*time.Second, 100*time.Millisecond, "a historical ready binding cannot make an expired credential ready")
 }
 
 func TestPreparationIntegration_ResourceAssociationAndTrailingSlash(t *testing.T) {
