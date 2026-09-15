@@ -47,12 +47,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -124,7 +124,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
-			riskscan.NewNoop(traceProvider),
+			mcpriskscan.NewNoop(traceProvider),
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
@@ -369,15 +369,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	requestNumBytes := int64(len(requestBodyBytes))
 
-	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
-
 	interceptor := newResponseInterceptor(w)
 
-	target := riskscan.Target{Surface: riskscan.SurfaceInstances, ServerID: "", ToolsetID: ""}
+	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceInstances, ServerID: "", ToolsetID: ""}
 	if toolset != nil {
 		target.ToolsetID = toolset.ID
 	}
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, toolconfig.ToolCallEnv{
+	err = s.toolProxy.Do(ctx, interceptor, requestBodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP

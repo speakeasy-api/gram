@@ -17,8 +17,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -284,7 +284,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				riskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider),
 			)
 
 			// Create response recorder
@@ -292,10 +292,10 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -415,7 +415,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				riskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider),
 			)
 
 			// Create response recorder
@@ -423,10 +423,10 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -767,7 +767,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				riskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider),
 			)
 
 			// Create response recorder
@@ -775,10 +775,10 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -989,7 +989,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				riskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider),
 			)
 
 			// Create response recorder
@@ -997,10 +997,10 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, toolCallBodyBytes, toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1331,7 +1331,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				policy,
 				funcs,
 				nil,
-				riskscan.NewNoop(tracerProvider),
+				mcpriskscan.NewNoop(tracerProvider),
 			)
 
 			// Create response recorder
@@ -1339,10 +1339,10 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := toolconfig.NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), toolconfig.ToolCallEnv{
+			err = proxy.Do(ctx, recorder, []byte(tt.toolCallBody), toolconfig.ToolCallEnv{
 				SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 				UserConfig: ciEnv,
-			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+			}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1444,7 +1444,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 
 	// Execute the resource read
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
-	target := riskscan.Target{Surface: riskscan.SurfaceResourceRead, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceResourceRead, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
 	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
@@ -1456,10 +1456,11 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 	// Verify the response was proxied correctly
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Test resource content", recorder.Body.String())
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfaceResourceRead, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfaceResourceRead, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: target.ServerID, ToolsetID: target.ToolsetID, ToolName: "", ResourceURI: descriptor.URI,
-		PromptName: "", Phase: riskscan.PhaseBeforeRead,
+		PromptName: "", Phase: mcpriskscan.PhaseBeforeRead,
+		Payload: nil,
 	}}, scan.events)
 }
 
@@ -1602,18 +1603,19 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 
 	// Execute the proxy call
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: ciEnv,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceInstances, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceInstances, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"result": "success"}`, recorder.Body.String())
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfaceInstances, OrganizationID: tool.OrganizationID, ProjectID: tool.ProjectID,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfaceInstances, OrganizationID: tool.OrganizationID, ProjectID: tool.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: tool.Name, ResourceURI: "",
-		PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+		PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(bodyBytes),
 	}}, scan.events)
 
 	// Verify trailers were proxied through
@@ -1678,16 +1680,16 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	recorder := httptest.NewRecorder()
 	logAttrs := tm.HTTPLogAttributes{}
 
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, logAttrs, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, logAttrs, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	require.JSONEq(t, `{
@@ -1746,15 +1748,15 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	recorder := httptest.NewRecorder()
 
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	require.JSONEq(t, string(bodyBytes), string(platformExecutor.requestBody))
@@ -1800,17 +1802,18 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		scan,
 	)
 
-	err = proxy.Do(ctx, httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, httptest.NewRecorder(), []byte(`{}`), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfacePlatformMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfacePlatformMCP, ServerID: "", ToolsetID: ""})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
 	require.ErrorIs(t, err, platformExecutor.err)
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfacePlatformMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfacePlatformMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: descriptor.Name, ResourceURI: "",
-		PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+		PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
 	spans := recorder.Ended()
 	require.Len(t, spans, 1)
@@ -1889,7 +1892,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create response recorder
@@ -1900,10 +1903,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 	userConfig.Set("API_KEY", "test-user-api-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1976,7 +1979,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create response recorder
@@ -1988,10 +1991,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	userConfig.Set("ANOTHER_VAR", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2074,7 +2077,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2101,10 +2104,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 	userConfig.Set("SECRET_KEY", "also-should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2187,7 +2190,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create response recorder
@@ -2198,11 +2201,11 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	systemEnv.Set("SYSTEM_API_KEY", "system-secret-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2272,7 +2275,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		policy,
 		funcs,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	recorder := httptest.NewRecorder()
@@ -2282,11 +2285,11 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	systemEnv.Set("X_API_KEY", "my-api-key")
 	systemEnv.Set("X_CUSTOM_HEADER", "custom-value")
 
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2369,7 +2372,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2396,11 +2399,11 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	systemEnv.Set("NOT_IN_PLAN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2484,7 +2487,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		policy,
 		funcs,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create response recorder
@@ -2498,10 +2501,10 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -2583,7 +2586,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2613,10 +2616,10 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 	userConfig.Set("API_KEY", "user-override-key")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2702,7 +2705,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2727,10 +2730,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 	userConfig.Set("OAUTH_TOKEN", "user-oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2815,7 +2818,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2840,10 +2843,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 	userConfig.Set("OTHER_VAR", "some-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -2928,7 +2931,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -2956,10 +2959,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 	userConfig.Set("BEARER_TOKEN", "user-bearer-token")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3047,7 +3050,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -3074,10 +3077,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 	userConfig.Set("OAUTH_TOKEN", "oauth-token-value")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)
@@ -3161,7 +3164,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
-		riskscan.NewNoop(tracerProvider),
+		mcpriskscan.NewNoop(tracerProvider),
 	)
 
 	// Create request body
@@ -3186,10 +3189,10 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	userConfig.Set("OAUTH_TOKEN", "should-not-be-sent")
 
 	// Execute the proxy call
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(ctx, recorder, bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: userConfig,
-	}, toolCallPlan, tm.HTTPLogAttributes{}, riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedEnvironment)

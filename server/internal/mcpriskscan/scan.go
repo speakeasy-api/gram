@@ -1,5 +1,5 @@
-// Package riskscan observes mediated MCP operations without changing their outcomes.
-package riskscan
+// Package mcpriskscan observes mediated MCP operations without changing their outcomes.
+package mcpriskscan
 
 import (
 	"context"
@@ -36,7 +36,9 @@ type Target struct {
 	ToolsetID string
 }
 
-// Event contains identifiers only, never arguments, credentials or response bodies.
+// Event carries identifiers and caller-supplied request arguments, not transport
+// credentials or resolved secrets. Response bodies are absent: every current seam
+// runs before execution, reading, or rendering.
 type Event struct {
 	// Surface identifies the observed serving route.
 	Surface string
@@ -53,7 +55,7 @@ type Event struct {
 	// ToolsetID is the resolved toolset row ID, empty when unavailable.
 	ToolsetID string
 
-	// ToolName is the execution name, empty for resources and prompts.
+	// ToolName is the resolved name, or stable proxy URN name for external MCP; empty for resources and prompts.
 	ToolName string
 
 	// ResourceURI identifies a resource read, empty for other operations.
@@ -64,6 +66,11 @@ type Event struct {
 
 	// Phase identifies the point reached, not a policy decision.
 	Phase string
+
+	// Payload borrows already-materialized request arguments: json.RawMessage for
+	// tool calls or map[string]string for prompts. Hooks must not mutate it.
+	// Resource reads leave it nil because they have no meaningful request body.
+	Payload any
 }
 
 // Hook observes a seam without returning a decision or modifying its request.
@@ -77,23 +84,25 @@ type noop struct {
 
 // NewNoop records reachability only; it performs no risk evaluation.
 func NewNoop(provider trace.TracerProvider) Hook {
-	return &noop{tracer: provider.Tracer("github.com/speakeasy-api/gram/server/internal/riskscan")}
+	return &noop{tracer: provider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpriskscan")}
 }
 
 func (n *noop) Scan(ctx context.Context, event Event) {
 	identity, stamped := mcpidentity.FromContext(ctx)
-	_, span := n.tracer.Start(ctx, "risk.scan", trace.WithAttributes(
-		attribute.String("gram.risk.scan.surface", event.Surface),
-		attribute.String("gram.risk.scan.phase", event.Phase),
+	// Deliberately select identifiers only. Payload can contain customer data;
+	// never serialize the event or attach its payload to tracing.
+	_, span := n.tracer.Start(ctx, "mcp.risk.scan", trace.WithAttributes(
+		attribute.String("gram.mcp.risk.scan.surface", event.Surface),
+		attribute.String("gram.mcp.risk.scan.phase", event.Phase),
 		attr.OrganizationID(event.OrganizationID),
 		attr.ProjectID(event.ProjectID),
 		attr.McpServerID(event.ServerID),
 		attr.ToolsetID(event.ToolsetID),
 		attr.ToolName(event.ToolName),
 		attr.ResourceURI(event.ResourceURI),
-		attribute.String("gram.risk.scan.prompt_name", event.PromptName),
-		attribute.Bool("gram.risk.scan.identity_stamped", stamped),
-		attribute.String("gram.risk.scan.principal_kind", string(identity.Kind())),
+		attribute.String("gram.mcp.risk.scan.prompt_name", event.PromptName),
+		attribute.Bool("gram.mcp.risk.scan.identity_stamped", stamped),
+		attribute.String("gram.mcp.risk.scan.principal_kind", string(identity.Kind())),
 		attr.UserID(identity.UserID()),
 	))
 	span.End()

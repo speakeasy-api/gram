@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,17 +12,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 type captureRiskScan struct {
-	events []riskscan.Event
+	events []mcpriskscan.Event
 }
 
-func (s *captureRiskScan) Scan(_ context.Context, event riskscan.Event) {
+func (s *captureRiskScan) Scan(_ context.Context, event mcpriskscan.Event) {
 	s.events = append(s.events, event)
 }
 
@@ -49,9 +49,9 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 		HeaderParams: nil, QueryParams: nil, PathParams: nil,
 		RequestContentType: NullString{Value: "application/json", Valid: true}, ResponseFilter: nil,
 	})
-	target := riskscan.Target{Surface: riskscan.SurfaceHostedMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
+	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: uuid.NewString(), ToolsetID: uuid.NewString()}
 	recorder := httptest.NewRecorder()
-	err = proxy.Do(t.Context(), recorder, bytes.NewBufferString(`{"body":{"selection":"unchanged"}}`), toolconfig.ToolCallEnv{
+	err = proxy.Do(t.Context(), recorder, json.RawMessage(`{"body":{"selection":"unchanged"}}`), toolconfig.ToolCallEnv{
 		SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "", GramEmail: "", GramChatID: "", MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}, plan, tm.HTTPLogAttributes{}, target)
@@ -59,10 +59,11 @@ func TestToolProxy_RiskScanHTTPPreservesUpstreamResponse(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
 	require.JSONEq(t, `{"error":"invalid selection"}`, recorder.Body.String())
 	require.JSONEq(t, `{"selection":"unchanged"}`, string(received))
-	require.Equal(t, []riskscan.Event{{
+	require.Equal(t, []mcpriskscan.Event{{
 		Surface: target.Surface, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
 		ServerID: target.ServerID, ToolsetID: target.ToolsetID, ToolName: descriptor.Name,
-		ResourceURI: "", PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(`{"body":{"selection":"unchanged"}}`),
 	}}, scan.events)
 }
 
@@ -81,10 +82,11 @@ func TestToolProxy_RiskScanExternalMCPPreservesResult(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"content":[{"type":"text","text":"result"}]}`, recorder.Body.String())
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
-		ServerID: "", ToolsetID: "", ToolName: "search",
-		ResourceURI: "", PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		ServerID: "", ToolsetID: "", ToolName: descriptor.URN.Name,
+		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
 }
 
@@ -103,10 +105,11 @@ func TestToolProxy_RiskScanExternalMCPPreservesToolError(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.JSONEq(t, `{"content":[{"type":"text","text":"result"}],"isError":true}`, recorder.Body.String())
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
-		ServerID: "", ToolsetID: "", ToolName: "search",
-		ResourceURI: "", PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: descriptor.OrganizationID, ProjectID: descriptor.ProjectID,
+		ServerID: "", ToolsetID: "", ToolName: descriptor.URN.Name,
+		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(`{}`),
 	}}, scan.events)
 }
 
@@ -121,9 +124,10 @@ func TestToolProxy_RiskScanPromptPreservesRendering(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "Summarize sample", recorder.Body.String())
-	require.Equal(t, []riskscan.Event{{
-		Surface: riskscan.SurfaceHostedMCP, OrganizationID: plan.Descriptor.OrganizationID, ProjectID: plan.Descriptor.ProjectID,
+	require.Equal(t, []mcpriskscan.Event{{
+		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: plan.Descriptor.OrganizationID, ProjectID: plan.Descriptor.ProjectID,
 		ServerID: "", ToolsetID: "", ToolName: plan.Descriptor.Name,
-		ResourceURI: "", PromptName: "", Phase: riskscan.PhaseBeforeExecution,
+		ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+		Payload: json.RawMessage(`{"arguments":{"topic":"sample"}}`),
 	}}, scan.events)
 }

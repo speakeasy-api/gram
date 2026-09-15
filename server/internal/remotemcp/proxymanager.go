@@ -14,11 +14,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
@@ -68,7 +68,7 @@ type ProxyManager struct {
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
-	riskScan       riskscan.Hook
+	riskScan       mcpriskscan.Hook
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -126,7 +126,7 @@ func NewProxyManager(
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
-		riskScan:                              riskscan.NewNoop(tracerProvider),
+		riskScan:                              mcpriskscan.NewNoop(tracerProvider),
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            mcpMetrics,
 		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
@@ -288,8 +288,8 @@ func (f *ProxyManager) BuildTarget(
 	}
 	toolsCallReqInterceptors = append(toolsCallReqInterceptors, &toolsCallRiskScanInterceptor{
 		hook: f.riskScan,
-		event: riskscan.Event{
-			Surface:        riskscan.SurfaceRemoteMCP,
+		event: mcpriskscan.Event{
+			Surface:        mcpriskscan.SurfaceRemoteMCP,
 			OrganizationID: organizationID,
 			ProjectID:      projectID,
 			ServerID:       identity.McpServerID,
@@ -297,7 +297,8 @@ func (f *ProxyManager) BuildTarget(
 			ToolName:       "",
 			ResourceURI:    "",
 			PromptName:     "",
-			Phase:          riskscan.PhaseBeforeExecution,
+			Phase:          mcpriskscan.PhaseBeforeExecution,
+			Payload:        nil,
 		},
 	})
 

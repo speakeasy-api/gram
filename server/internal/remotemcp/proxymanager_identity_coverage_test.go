@@ -5,15 +5,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestProxyBuildOption_ToolsCallIdentityCoverage(t *testing.T) {
 	t.Parallel()
 
-	manager := &ProxyManager{riskScan: riskscan.NewNoop(testenv.NewTracerProvider(t))}
+	manager := &ProxyManager{riskScan: mcpriskscan.NewNoop(testenv.NewTracerProvider(t))}
 	build := func(options ...BuildOption) *proxy.Proxy {
 		return manager.BuildTarget(
 			testenv.NewLogger(t),

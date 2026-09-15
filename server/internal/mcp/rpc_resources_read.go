@@ -24,11 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -203,7 +203,7 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
-	target := riskscan.Target{Surface: riskscan.SurfaceResourceRead, ServerID: "", ToolsetID: toolset.ID}
+	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceResourceRead, ServerID: "", ToolsetID: toolset.ID}
 	if payload.mcpServerID != nil {
 		target.ServerID = payload.mcpServerID.String()
 	}

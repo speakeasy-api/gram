@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
@@ -80,7 +81,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -108,7 +108,7 @@ type Service struct {
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
-	riskScan                  riskscan.Hook
+	riskScan                  mcpriskscan.Hook
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries
@@ -389,7 +389,7 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
-	riskScan := riskscan.NewNoop(tracerProvider)
+	riskScan := mcpriskscan.NewNoop(tracerProvider)
 	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)

@@ -11,14 +11,15 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -27,13 +28,39 @@ const riskScanServerID = "0198a0b0-0000-7000-8000-000000000001"
 const riskScanRequest = " {\n  \"jsonrpc\": \"2.0\", \"id\": 7, \"method\": \"tools/call\", \"params\": {\"name\": \"lookup\", \"arguments\": {\"query\": \"sample\"}, \"_meta\": {\"progressToken\": \"p\"}}\n}\n"
 
 type recordingRemoteRiskScan struct {
-	events []riskscan.Event
+	events []mcpriskscan.Event
 	calls  atomic.Int32
 }
 
-func (r *recordingRemoteRiskScan) Scan(_ context.Context, event riskscan.Event) {
+func (r *recordingRemoteRiskScan) Scan(_ context.Context, event mcpriskscan.Event) {
 	r.events = append(r.events, event)
 	r.calls.Add(1)
+}
+
+func TestToolsCallRiskScanNoopDoesNotRejectUnclassifiedCall(t *testing.T) {
+	t.Parallel()
+	interceptor := &toolsCallRiskScanInterceptor{
+		hook: mcpriskscan.NewNoop(testenv.NewTracerProvider(t)),
+		event: mcpriskscan.Event{
+			Surface: mcpriskscan.SurfaceRemoteMCP, OrganizationID: "", ProjectID: "", ServerID: "",
+			ToolsetID: "", ToolName: "", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
+			Payload: nil,
+		},
+	}
+	// The request phase decoded Params, but there is no known tool schema,
+	// target identity, or stamped principal for the hook to classify.
+	call := &proxy.ToolsCallRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      "unclassified-operation",
+			Arguments: json.RawMessage(`{"unrecognized_shape":[true,7]}`),
+			Meta:      nil,
+		},
+		UserRequest: nil,
+	}
+	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), call),
+		"an observation-only hook must never reject an unclassifiable call")
+	require.Equal(t, "unclassified-operation", call.Params.Name)
+	require.JSONEq(t, `{"unrecognized_shape":[true,7]}`, string(call.Params.Arguments))
 }
 
 func TestProxyManagerRiskScanPreservesJSONExchange(t *testing.T) {
@@ -121,8 +148,8 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 		t.Fatal("request did not reach upstream")
 	}
 	if scanned {
-		require.Equal(t, []riskscan.Event{{
-			Surface:        riskscan.SurfaceRemoteMCP,
+		require.Equal(t, []mcpriskscan.Event{{
+			Surface:        mcpriskscan.SurfaceRemoteMCP,
 			OrganizationID: "org-test",
 			ProjectID:      "project-test",
 			ServerID:       riskScanServerID,
@@ -130,7 +157,8 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 			ToolName:       "lookup",
 			ResourceURI:    "",
 			PromptName:     "",
-			Phase:          riskscan.PhaseBeforeExecution,
+			Phase:          mcpriskscan.PhaseBeforeExecution,
+			Payload:        json.RawMessage(`{"query": "sample"}`),
 		}}, recorded.events)
 	} else {
 		require.Empty(t, recorded.events)
@@ -166,7 +194,7 @@ func assertRiskScanSelectionRejection(t *testing.T, request string, code int64) 
 	require.Empty(t, recorded.events)
 }
 
-func newRiskScanTestProxy(t *testing.T, upstreamURL string, hook riskscan.Hook, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
+func newRiskScanTestProxy(t *testing.T, upstreamURL string, hook mcpriskscan.Hook, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
 	t.Helper()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)

@@ -35,9 +35,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/riskscan"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
 )
 
@@ -128,7 +128,7 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
-	riskScan      riskscan.Hook
+	riskScan      mcpriskscan.Hook
 }
 
 func NewToolProxy(
@@ -141,7 +141,7 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
-	riskScan riskscan.Hook,
+	riskScan mcpriskscan.Hook,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -163,11 +163,11 @@ func NewToolProxy(
 func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
-	requestBody io.Reader,
+	requestBody json.RawMessage,
 	env toolconfig.ToolCallEnv,
 	plan *ToolCallPlan,
 	attrs tm.HTTPLogAttributes,
-	target riskscan.Target,
+	target mcpriskscan.Target,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -201,10 +201,10 @@ func (tp *ToolProxy) Do(
 
 	toolName := plan.Descriptor.Name
 	if plan.Kind == ToolKindExternalMCP {
-		toolName = plan.ExternalMCP.ToolName
+		toolName = plan.Descriptor.URN.Name
 	}
 
-	tp.riskScan.Scan(ctx, riskscan.Event{
+	tp.riskScan.Scan(ctx, mcpriskscan.Event{
 		Surface:        target.Surface,
 		OrganizationID: plan.Descriptor.OrganizationID,
 		ProjectID:      plan.Descriptor.ProjectID,
@@ -213,22 +213,24 @@ func (tp *ToolProxy) Do(
 		ToolName:       toolName,
 		ResourceURI:    "",
 		PromptName:     "",
-		Phase:          riskscan.PhaseBeforeExecution,
+		Phase:          mcpriskscan.PhaseBeforeExecution,
+		Payload:        requestBody,
 	})
 
+	body := bytes.NewReader(requestBody)
 	switch plan.Kind {
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").LogError(ctx, tp.logger)
 	case ToolKindFunction:
-		return tp.doFunction(ctx, logger.With(attr.SlogComponent("gateway-function-caller")), w, requestBody, env, plan.Descriptor, plan.Function, attrs)
+		return tp.doFunction(ctx, logger.With(attr.SlogComponent("gateway-function-caller")), w, body, env, plan.Descriptor, plan.Function, attrs)
 	case ToolKindHTTP:
-		return tp.doHTTP(ctx, logger.With(attr.SlogComponent("gateway-http-caller")), w, requestBody, env, plan.Descriptor, plan.HTTP, attrs)
+		return tp.doHTTP(ctx, logger.With(attr.SlogComponent("gateway-http-caller")), w, body, env, plan.Descriptor, plan.HTTP, attrs)
 	case ToolKindPrompt:
-		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, requestBody, env, plan.Descriptor, plan.Prompt)
+		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, body, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
-		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
+		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, body, env, plan, attrs)
 	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
+		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, body, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
