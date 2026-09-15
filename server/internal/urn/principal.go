@@ -21,7 +21,7 @@ const (
 	PrincipalTypeAgent PrincipalType = "agent"
 	// PrincipalTypeSystem is a Gram component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
 	PrincipalTypeSystem PrincipalType = "system"
-	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agents.
+	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agent.
 	PrincipalTypeWorkload PrincipalType = "workload"
 )
 
