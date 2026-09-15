@@ -41,12 +41,6 @@
     <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
     <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
 
-    <!-- Gutternote feedback widget, on PR previews only. The same entrypoint
-         composes the whole tag, so this expands to nothing at all unless the
-         deployment set both GRAM_IS_PREVIEW=true and a key — prod, shared
-         staging and local dev get no tag. -->
-    ${GRAM_GUTTERNOTE_SCRIPT}
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -93,5 +87,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Gutternote feedback widget, on PR previews only. Placed before </body>
+         as its docs require. The container entrypoint composes the whole tag
+         (41-preview-runtime-values.sh), so this expands to nothing at all
+         unless the deployment set both GRAM_IS_PREVIEW=true and a key — prod,
+         shared staging and local dev get no tag. -->
+    ${GRAM_GUTTERNOTE_SCRIPT}
   </body>
 </html>
