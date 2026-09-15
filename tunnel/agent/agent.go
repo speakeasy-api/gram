@@ -235,7 +235,12 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		} else {
 			req.URL.Path = originalPath
 			req.URL.RawPath = originalRawPath
-			req.URL.RawQuery = originalRawQuery
+			// The inbound path wins over the pinned one, but the pinned
+			// query does not lose with it: TUNNEL_LOCAL_MCP_URL may carry
+			// credentials the local origin authenticates every request by,
+			// and a tunneled OAuth call arrives on the issuer's own path.
+			// Merged the way httputil's director merges it, target first.
+			req.URL.RawQuery = mergeRawQuery(target.RawQuery, originalRawQuery)
 			req.URL.ForceQuery = originalForceQuery
 		}
 	}
@@ -261,6 +266,20 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		proxy.ServeHTTP(w, r)
 	})
 	return mux
+}
+
+// mergeRawQuery combines the query pinned on the proxy target with the one the
+// inbound request carried, matching httputil.NewSingleHostReverseProxy's own
+// director: the target's parameters come first, and either side may be empty.
+func mergeRawQuery(targetRawQuery, inboundRawQuery string) string {
+	switch {
+	case targetRawQuery == "":
+		return inboundRawQuery
+	case inboundRawQuery == "":
+		return targetRawQuery
+	default:
+		return targetRawQuery + "&" + inboundRawQuery
+	}
 }
 
 func fullJitter(d time.Duration) time.Duration {

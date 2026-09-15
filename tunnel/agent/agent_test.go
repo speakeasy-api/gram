@@ -75,6 +75,68 @@ func TestAgentPreservesNonRootInboundPathAndQuery(t *testing.T) {
 	require.NotEqual(t, "/mcp/oauth/token", gotPath)
 }
 
+func TestAgentKeepsPinnedTargetQueryOnNonRootInboundPath(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	agent, err := New(Config{
+		GatewayURL:     "wss://example.test/connect",
+		APIKey:         "gram_tunnel_test",
+		LocalMCPURL:    upstream.URL + "/mcp?api_key=x",
+		ServiceVersion: "1.0.0",
+		Metadata:       map[string]string{},
+		MinBackoff:     0,
+		MaxBackoff:     0,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token?tenant=y", nil)
+	agent.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "/oauth/token", gotPath)
+	require.Equal(t, "api_key=x&tenant=y", gotQuery,
+		"a tunneled OAuth call must keep the credentials pinned in TUNNEL_LOCAL_MCP_URL")
+}
+
+func TestAgentKeepsPinnedTargetQueryWhenInboundHasNone(t *testing.T) {
+	t.Parallel()
+
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	agent, err := New(Config{
+		GatewayURL:     "wss://example.test/connect",
+		APIKey:         "gram_tunnel_test",
+		LocalMCPURL:    upstream.URL + "/mcp?api_key=x",
+		ServiceVersion: "1.0.0",
+		Metadata:       map[string]string{},
+		MinBackoff:     0,
+		MaxBackoff:     0,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", nil)
+	agent.handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "api_key=x", gotQuery)
+}
+
 func TestAgentPreservesNonRootInboundRawPath(t *testing.T) {
 	t.Parallel()
 
