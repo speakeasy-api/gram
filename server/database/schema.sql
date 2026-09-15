@@ -2359,6 +2359,12 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   organization_id TEXT,
+  -- Stable FK target for project, organization, and platform-global scope.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
@@ -2383,6 +2389,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
     FOREIGN KEY (trusted_remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL
 );
 
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_attachment_scope_key
+ON user_session_issuers (id, attachment_scope);
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
@@ -2824,6 +2833,12 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   organization_id TEXT,
+  -- Stable FK target for project, organization, and platform-global scope.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
   remote_session_issuer_id uuid NOT NULL,
 
   client_id TEXT NOT NULL,
@@ -2935,6 +2950,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   )
 );
 
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
+ON remote_session_clients (id, attachment_scope);
 CREATE INDEX IF NOT EXISTS remote_session_clients_organization_id_idx
 ON remote_session_clients (organization_id)
 WHERE deleted IS FALSE;
@@ -2959,6 +2977,8 @@ ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_se
 -- been granted to a single Gram subject
 CREATE TABLE IF NOT EXISTS remote_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Changes on fresh OAuth authorization, never on token refresh.
+  grant_generation bigint NOT NULL DEFAULT 1,
   subject_urn TEXT NOT NULL,
   user_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
@@ -3030,6 +3050,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   CONSTRAINT remote_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_issuer_id_key
+ON remote_sessions (remote_session_client_id, user_session_issuer_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
 ON remote_sessions (subject_urn, remote_session_client_id)
@@ -4461,6 +4484,70 @@ ON agents (organization_id, owner_user_id);
 -- Supports owner-loss latching across every organization, including deleted agents.
 CREATE INDEX IF NOT EXISTS agents_owner_all_idx
 ON agents (owner_user_id);
+
+-- Bind a concrete user-owned session, never an agent credential or inbound code.
+CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  organization_id TEXT NOT NULL,
+  principal_id UUID NOT NULL,
+  user_session_issuer_id UUID NOT NULL,
+  remote_session_client_id UUID NOT NULL,
+  remote_session_id UUID NOT NULL,
+  -- Filled by the trigger, then pinned to the parent by composite foreign keys.
+  issuer_attachment_scope TEXT NOT NULL,
+  client_attachment_scope TEXT NOT NULL,
+  grant_generation bigint NOT NULL,
+  attached_by_subject_id TEXT NOT NULL,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT principal_remote_session_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT principal_remote_session_bindings_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_principal_tenant_fkey FOREIGN KEY (organization_id, principal_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_session_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, user_session_issuer_id, id) ON DELETE CASCADE,
+  -- Scope checks bind the copied FK keys to this attachment's tenant. The
+  -- client may be platform-global, but its issuer must belong to this tenant.
+  CONSTRAINT principal_remote_session_bindings_issuer_scope_check CHECK (
+    issuer_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id)
+  ),
+  CONSTRAINT principal_remote_session_bindings_client_scope_check CHECK (
+    client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+  )
+);
+
+-- Capture scope without changing the attachment insert API. The composite
+-- foreign keys, not this lookup's snapshot, enforce concurrent parent changes.
+CREATE OR REPLACE FUNCTION set_principal_remote_session_binding_scopes()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  SELECT attachment_scope INTO NEW.issuer_attachment_scope
+  FROM user_session_issuers WHERE id = NEW.user_session_issuer_id;
+  SELECT attachment_scope INTO NEW.client_attachment_scope
+  FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER principal_remote_session_bindings_scopes
+BEFORE INSERT OR UPDATE ON principal_remote_session_bindings
+FOR EACH ROW EXECUTE FUNCTION set_principal_remote_session_binding_scopes();
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_remote_session_bindings_active_key
+ON principal_remote_session_bindings (project_id, principal_id, user_session_issuer_id, remote_session_client_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_session_idx
+ON principal_remote_session_bindings (remote_session_id);
+
+CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_project_idx
+ON principal_remote_session_bindings (project_id);
 
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
