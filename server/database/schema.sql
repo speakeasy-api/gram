@@ -1840,6 +1840,68 @@ CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
 ON oauth_proxy_providers (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS identity_provider_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  tenant_identifier TEXT NOT NULL,
+  display_name TEXT,
+  status TEXT NOT NULL,
+  status_detail TEXT,
+  capabilities TEXT[] NOT NULL DEFAULT '{}',
+  last_verified_at timestamptz,
+  verify_evidence JSONB,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT identity_provider_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT identity_provider_connections_id_kind_key UNIQUE (id, kind),
+  CONSTRAINT identity_provider_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS identity_provider_connections_organization_id_key
+ON identity_provider_connections (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS identity_provider_signing_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  identity_provider_connection_id uuid NOT NULL,
+  kid TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  public_jwk JSONB NOT NULL,
+  private_key_encrypted TEXT NOT NULL,
+  state TEXT NOT NULL,
+  activated_at timestamptz,
+  retired_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT identity_provider_signing_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT identity_provider_signing_keys_connection_id_kid_key UNIQUE (identity_provider_connection_id, kid),
+  CONSTRAINT identity_provider_signing_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT identity_provider_signing_keys_connection_id_fkey FOREIGN KEY (identity_provider_connection_id) REFERENCES identity_provider_connections (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS okta_identity_provider_connections (
+  identity_provider_connection_id uuid NOT NULL,
+  identity_provider_connections_kind TEXT NOT NULL DEFAULT 'okta',
+  okta_domain TEXT NOT NULL,
+  auth_method TEXT NOT NULL,
+  client_id TEXT,
+  signing_key_id uuid,
+  granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT okta_idp_connections_pkey PRIMARY KEY (identity_provider_connection_id),
+  CONSTRAINT okta_idp_connections_kind_check CHECK (identity_provider_connections_kind = 'okta'),
+  CONSTRAINT okta_idp_connections_signing_key_id_fkey FOREIGN KEY (signing_key_id) REFERENCES identity_provider_signing_keys (id) ON DELETE SET NULL,
+  CONSTRAINT okta_idp_connections_connection_kind_fkey FOREIGN KEY (identity_provider_connection_id, identity_provider_connections_kind) REFERENCES identity_provider_connections (id, kind) ON DELETE CASCADE
+);
+
 -- Sharable records for how to authenticate into an external service, such as
 -- any ambient infrastructure environment or customer-managed product. This is
 -- implemented using the Class Table Inheritance pattern with provider acting

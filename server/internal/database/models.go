@@ -1124,6 +1124,41 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type IdentityProviderConnection struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	Kind             string
+	TenantIdentifier string
+	DisplayName      pgtype.Text
+	Status           string
+	StatusDetail     pgtype.Text
+	Capabilities     []string
+	LastVerifiedAt   pgtype.Timestamptz
+	VerifyEvidence   []byte
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
+type IdentityProviderSigningKey struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	Kid                          string
+	Algorithm                    string
+	PublicJwk                    []byte
+	PrivateKeyEncrypted          string
+	State                        string
+	ActivatedAt                  pgtype.Timestamptz
+	RetiredAt                    pgtype.Timestamptz
+	LastUsedAt                   pgtype.Timestamptz
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string
@@ -1540,6 +1575,18 @@ type OauthProxyServer struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type OktaIdentityProviderConnection struct {
+	IdentityProviderConnectionID    uuid.UUID
+	IdentityProviderConnectionsKind string
+	OktaDomain                      string
+	AuthMethod                      string
+	ClientID                        pgtype.Text
+	SigningKeyID                    uuid.NullUUID
+	GrantedScopes                   []string
+	CreatedAt                       pgtype.Timestamptz
+	UpdatedAt                       pgtype.Timestamptz
 }
 
 type OpenrouterApiKey struct {
