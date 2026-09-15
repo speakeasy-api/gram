@@ -192,6 +192,7 @@ func registerSetupResources(reg *Registrar, resources []SetupResource, now func(
 			MIMEType:    "text/markdown",
 			Size:        int64(len(resource.Text)),
 		}, ResourceMeta{
+			Authorization: ExternalAuthorizationOrgAdmin,
 			// Both audiences: a reviewed guide carries no connection-scoped or
 			// project-scoped state, so the assistant can read exactly what an
 			// external client reads. Anything less would leave the resource

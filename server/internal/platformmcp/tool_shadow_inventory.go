@@ -19,7 +19,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 		Title:       "List Shadow MCP Inventory",
 		Description: "List privacy-safe observed or requested MCP targets in an explicit project. Pending reviews appear before observed targets on the first page. Raw URLs, local commands, people, principals, policies, evidence, and research traces are never returned; use the short-lived opaque target reference to inspect one review.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowMCPInventoryInput) (*mcp.CallToolResult, ListShadowMCPInventoryOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowMCPInventoryInput) (*mcp.CallToolResult, ListShadowMCPInventoryOutput, error) {
 		return shadowInventoryToolCall(ctx, func(principal Principal) (ListShadowMCPInventoryOutput, error) {
 			return service.List(ctx, principal, input)
 		})
@@ -29,7 +29,7 @@ func registerShadowInventoryTools(reg *Registrar, service *ShadowInventoryServic
 		Title:       "Get Shadow MCP Review",
 		Description: "Inspect the closed, privacy-safe evidence and review state for one opaque Shadow MCP target from list_shadow_mcp_inventory. Returns aggregate declarations, gaps, advisory counts, and research coverage only; never raw target values, requesters, evidence documents, findings text, citations, or research traces.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetShadowMCPReviewInput) (*mcp.CallToolResult, GetShadowMCPReviewOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetShadowMCPReviewInput) (*mcp.CallToolResult, GetShadowMCPReviewOutput, error) {
 		return shadowInventoryToolCall(ctx, func(principal Principal) (GetShadowMCPReviewOutput, error) {
 			return service.GetReview(ctx, principal, input)
 		})
@@ -41,7 +41,7 @@ func registerUnavailableShadowInventoryTools(reg *Registrar) {
 		{"list_shadow_mcp_inventory", "List Shadow MCP Inventory", "List privacy-safe Shadow MCP inventory. This is not switched on for your organization yet."},
 		{"get_shadow_mcp_review", "Get Shadow MCP Review", "Inspect one privacy-safe Shadow MCP review. This is not switched on for your organization yet."},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("shadow_mcp_inventory"))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations()}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("shadow_mcp_inventory"))
 	}
 }
 

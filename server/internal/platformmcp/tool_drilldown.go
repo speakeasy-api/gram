@@ -19,7 +19,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "MCP Calls by Tool and Outcome",
 		Description: drilldownPreamble + "Break its calls down by tool and outcome over a recent window, so a failing server can be narrowed to the tool responsible. Constraints: server-side totals per tool only; there is no free-text filter and no attribute selection.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPEventsInput) (*mcp.CallToolResult, QueryMCPEventsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPEventsInput) (*mcp.CallToolResult, QueryMCPEventsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, QueryMCPEventsOutput{}, err
@@ -39,7 +39,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "MCP Server Users",
 		Description: drilldownPreamble + "List the people observed using it, newest first, with masked identities, categorical activity and error evidence, and short-lived references for a focused follow-up. Constraints: individual call counts and raw identities are never returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListMCPUsageUsersInput) (*mcp.CallToolResult, ListMCPUsageUsersOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListMCPUsageUsersInput) (*mcp.CallToolResult, ListMCPUsageUsersOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListMCPUsageUsersOutput{}, err
@@ -59,7 +59,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "Recent MCP Calls",
 		Description: drilldownPreamble + "List individual calls, newest first, each reduced to a reference you can quote when escalating, plus when it happened, which tool it called, and how it ended. Narrow by outcome. Constraints: this is not a log reader — no arguments, results, bodies, headers, URLs, or identities are returned, and references expire and are bound to this session.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPTracesInput) (*mcp.CallToolResult, QueryMCPTracesOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPTracesInput) (*mcp.CallToolResult, QueryMCPTracesOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, QueryMCPTracesOutput{}, err
@@ -79,7 +79,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "MCP Server Totals",
 		Description: drilldownPreamble + "Return its totals over a recent window: call volume, failures, failure rate, average latency, and active users. Constraints: every value is aggregated server-side to the window named in the result; no per-bucket series is returned.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPMetricsInput) (*mcp.CallToolResult, QueryMCPMetricsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPMetricsInput) (*mcp.CallToolResult, QueryMCPMetricsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, QueryMCPMetricsOutput{}, err
@@ -99,7 +99,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		Title:       "One Person's MCP Server Status",
 		Description: drilldownPreamble + "Use a person reference from list_mcp_usage_users to show which tools that person was observed using and whether errors were observed. Constraints: categorical evidence only, no individual call counts or raw identity; the reference expires and is bound to this session, server, project, and window.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMCPStatusInput) (*mcp.CallToolResult, GetUserMCPStatusOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMCPStatusInput) (*mcp.CallToolResult, GetUserMCPStatusOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetUserMCPStatusOutput{}, err
@@ -132,6 +132,6 @@ func registerUnavailableDrilldownTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("diagnostics"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("diagnostics"))
 	}
 }
