@@ -1293,13 +1293,53 @@ CREATE TABLE IF NOT EXISTS device_agent_configurations (
   CONSTRAINT device_agent_configurations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- device_agent_ai_scan_targets holds an organization's own additions to the
--- Shadow AI scan target catalog its device agents probe for, and its
--- overrides of the Speakeasy defaults compiled into the server. A row whose
--- id matches a default replaces that default for the organization, which is
--- how a default is disabled; any other row is an extra target. The served
--- list is the defaults overlaid with these rows. Category and signature
--- shapes are validated in application code.
+-- ai_scan_targets is an organization's overlay on the Shadow AI scan target
+-- catalog its device agents probe for. A row is whatever the organization has
+-- said about one target: an extra tool it added, or its decision about a
+-- built-in compiled into the server.
+--
+-- The definition columns are filled only for a target the organization added.
+-- A row under a built-in's id carries no definition — the built-in's own stays
+-- authoritative, so a registry update still reaches an organization that has
+-- decided about it. Only status and rationale come from the row in that case.
+--
+-- status is one table with the target rather than beside it so that deciding
+-- about a tool and editing it are one write under one lock, and a decision
+-- cannot outlive the target it names. Its values are validated in application
+-- code, as are the category and signature shapes.
+CREATE TABLE IF NOT EXISTS ai_scan_targets (
+  organization_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+
+  display_name TEXT,
+  category TEXT,
+  bundle_ids TEXT[] NOT NULL DEFAULT '{}',
+  binaries TEXT[] NOT NULL DEFAULT '{}',
+  config_dirs TEXT[] NOT NULL DEFAULT '{}',
+  process_names TEXT[] NOT NULL DEFAULT '{}',
+  version_plist_key TEXT,
+  -- Recognizes the same tool again when it calls the MCP gateway. The first
+  -- two match verified credentials; client_info_names is self-reported and
+  -- detection-only.
+  cimd_vendor_keys TEXT[] NOT NULL DEFAULT '{}',
+  oauth_client_ids TEXT[] NOT NULL DEFAULT '{}',
+  client_info_names TEXT[] NOT NULL DEFAULT '{}',
+
+  -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
+  -- blocked. Who set it and when is the audit log's job, not a column here.
+  status TEXT NOT NULL DEFAULT 'unreviewed',
+  rationale TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
+  CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Superseded by ai_scan_targets / ai_scan_catalogs above. Left in place so the
+-- rename lands without a backfill; dropped by a follow-up migration once the
+-- code reading them is deployed.
 CREATE TABLE IF NOT EXISTS device_agent_ai_scan_targets (
   organization_id TEXT NOT NULL,
   id TEXT NOT NULL,
@@ -1319,10 +1359,6 @@ CREATE TABLE IF NOT EXISTS device_agent_ai_scan_targets (
   CONSTRAINT device_agent_ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- device_agent_ai_scan_catalogs counts an organization's edits to its scan
--- target list. Added to the defaults' own version, the counter is the
--- list_version agents receive and echo on scan receipts, so it moves whenever
--- either side of the served list changes.
 CREATE TABLE IF NOT EXISTS device_agent_ai_scan_catalogs (
   organization_id TEXT NOT NULL,
   list_version integer NOT NULL DEFAULT 0,
@@ -8753,6 +8789,8 @@ WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS D
  OR OLD.jwks_uri IS DISTINCT FROM NEW.jwks_uri
  OR OLD.userinfo_endpoint IS DISTINCT FROM NEW.userinfo_endpoint
  OR OLD.introspection_endpoint IS DISTINCT FROM NEW.introspection_endpoint
+ OR OLD.scope_override IS DISTINCT FROM NEW.scope_override
+ OR OLD.resource_indicator_supported IS DISTINCT FROM NEW.resource_indicator_supported
  OR OLD.tunneled_mcp_server_id IS DISTINCT FROM NEW.tunneled_mcp_server_id)
 EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 CREATE TRIGGER remote_session_ema_issuer_delete_guard BEFORE DELETE ON remote_session_issuers

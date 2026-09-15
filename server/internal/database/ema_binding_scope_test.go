@@ -142,6 +142,35 @@ func TestEMABindingScope(t *testing.T) {
 			require.ErrorContains(t, err, "active identity-chaining binding must be explicitly unlinked")
 		})
 	}
+	for field, value := range map[string]string{"scope_override": "ARRAY['fixture:read']", "resource_indicator_supported": "FALSE"} {
+		t.Run(field+"_requires_unlink", func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			mutation := "UPDATE remote_session_issuers SET " + field + " = " + value + " WHERE id = fixture_scope_id(6)"
+			noop := "UPDATE remote_session_issuers SET " + field + " = " + field + " WHERE id = fixture_scope_id(6)"
+			_, err = tx.Exec(ctx, noop)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "SAVEPOINT reconfigure")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, mutation)
+			requireEMAScopeError(t, err)
+			require.ErrorContains(t, err, "active identity-chaining binding must be explicitly unlinked")
+			_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT reconfigure; UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, mutation)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'ready', generation = generation + 1")
+			require.NoError(t, err)
+			// No-op refreshes remain valid when the pinned value is non-NULL.
+			_, err = tx.Exec(ctx, noop)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_issuers SET "+field+" = NULL WHERE id = fixture_scope_id(6)")
+			requireEMAScopeError(t, err)
+		})
+	}
 	for _, generation := range []int{0, 1, 3} {
 		t.Run(fmt.Sprintf("unlink_rejects_generation_%d", generation), func(t *testing.T) {
 			tx, err := pool.Begin(ctx)

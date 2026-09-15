@@ -1538,7 +1538,13 @@ func newStartCommand() *cli.Command {
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
 
 			networkIngressQueue := c.String(networkIngressQueueFlag)
-			networkIngressClient := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: networkIngressQueue}
+			// Temporal is optional for the MCP-only serving tier. The client
+			// reports lifecycle delivery as unconfigured when it has no Temporal
+			// client, so leave it unset rather than dereferencing a nil environment.
+			networkIngressClient := &background.NetworkIngressClient{Client: nil, Queue: networkIngressQueue}
+			if temporalEnv != nil {
+				networkIngressClient.Client = temporalEnv.Client()
+			}
 			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).

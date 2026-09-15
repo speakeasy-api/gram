@@ -1,7 +1,11 @@
 -- atlas:txmode none
 
+-- Modify "remote_session_clients" table
+ALTER TABLE "remote_session_clients" ADD COLUMN "grant_types" text[] NULL;
 -- Create index "remote_session_clients_id_issuer_key" to table: "remote_session_clients"
 CREATE UNIQUE INDEX CONCURRENTLY "remote_session_clients_id_issuer_key" ON "remote_session_clients" ("id", "remote_session_issuer_id");
+-- Modify "remote_session_issuers" table
+ALTER TABLE "remote_session_issuers" ADD COLUMN "authorization_grant_profiles_supported" text[] NOT NULL DEFAULT ARRAY[]::text[];
 -- Create "remote_session_ema_bindings" table
 CREATE TABLE "remote_session_ema_bindings" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -73,7 +77,7 @@ CREATE TRIGGER "remote_session_ema_client_update_guard" BEFORE UPDATE ON "remote
 -- Create trigger "remote_session_ema_issuer_delete_guard"
 CREATE TRIGGER "remote_session_ema_issuer_delete_guard" BEFORE DELETE ON "remote_session_issuers" FOR EACH ROW EXECUTE FUNCTION "guard_remote_session_ema_lifecycle"();
 -- Create trigger "remote_session_ema_issuer_update_guard"
-CREATE TRIGGER "remote_session_ema_issuer_update_guard" BEFORE UPDATE ON "remote_session_issuers" FOR EACH ROW WHEN ((old.project_id IS DISTINCT FROM new.project_id) OR (old.organization_id IS DISTINCT FROM new.organization_id) OR (old.issuer IS DISTINCT FROM new.issuer) OR (old.deleted_at IS DISTINCT FROM new.deleted_at) OR (old.authorization_endpoint IS DISTINCT FROM new.authorization_endpoint) OR (old.token_endpoint IS DISTINCT FROM new.token_endpoint) OR (old.revocation_endpoint IS DISTINCT FROM new.revocation_endpoint) OR (old.registration_endpoint IS DISTINCT FROM new.registration_endpoint) OR (old.jwks_uri IS DISTINCT FROM new.jwks_uri) OR (old.userinfo_endpoint IS DISTINCT FROM new.userinfo_endpoint) OR (old.introspection_endpoint IS DISTINCT FROM new.introspection_endpoint) OR (old.tunneled_mcp_server_id IS DISTINCT FROM new.tunneled_mcp_server_id)) EXECUTE FUNCTION "guard_remote_session_ema_lifecycle"();
+CREATE TRIGGER "remote_session_ema_issuer_update_guard" BEFORE UPDATE ON "remote_session_issuers" FOR EACH ROW WHEN ((old.project_id IS DISTINCT FROM new.project_id) OR (old.organization_id IS DISTINCT FROM new.organization_id) OR (old.issuer IS DISTINCT FROM new.issuer) OR (old.deleted_at IS DISTINCT FROM new.deleted_at) OR (old.authorization_endpoint IS DISTINCT FROM new.authorization_endpoint) OR (old.token_endpoint IS DISTINCT FROM new.token_endpoint) OR (old.revocation_endpoint IS DISTINCT FROM new.revocation_endpoint) OR (old.registration_endpoint IS DISTINCT FROM new.registration_endpoint) OR (old.jwks_uri IS DISTINCT FROM new.jwks_uri) OR (old.userinfo_endpoint IS DISTINCT FROM new.userinfo_endpoint) OR (old.introspection_endpoint IS DISTINCT FROM new.introspection_endpoint) OR (old.scope_override IS DISTINCT FROM new.scope_override) OR (old.resource_indicator_supported IS DISTINCT FROM new.resource_indicator_supported) OR (old.tunneled_mcp_server_id IS DISTINCT FROM new.tunneled_mcp_server_id)) EXECUTE FUNCTION "guard_remote_session_ema_lifecycle"();
 -- Create trigger "remote_session_ema_user_issuer_delete_guard"
 CREATE TRIGGER "remote_session_ema_user_issuer_delete_guard" BEFORE DELETE ON "user_session_issuers" FOR EACH ROW EXECUTE FUNCTION "guard_remote_session_ema_lifecycle"();
 -- Create trigger "remote_session_ema_user_issuer_update_guard"
