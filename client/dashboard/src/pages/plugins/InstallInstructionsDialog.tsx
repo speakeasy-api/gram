@@ -58,7 +58,8 @@ type Provider =
   | "gemini"
   | "glean"
   | "bedrock"
-  | "opencode";
+  | "opencode"
+  | "pi";
 
 const providers: {
   id: Provider;
@@ -81,6 +82,7 @@ const providers: {
   { id: "cursor", label: "Cursor", source: "cursor", available: true },
   { id: "codex", label: "Codex", source: "codex", available: true },
   { id: "opencode", label: "opencode", source: "opencode", available: true },
+  { id: "pi", label: "Pi", source: "pi", available: true },
   { id: "copilot", label: "Copilot", source: "copilot", available: false },
   { id: "gemini", label: "Gemini", source: "gemini", available: false },
   { id: "glean", label: "Glean", source: "glean", available: false },
@@ -653,6 +655,54 @@ function CodexInstallContent({
 }
 
 /**
+ * Downloads the server-generated observability ZIP for one platform. The ZIP
+ * carries a freshly-minted hooks-scoped key, so minting is the server's job
+ * and the browser only has to save the file.
+ */
+function useObservabilityPluginDownload(platform: "opencode" | "pi"): {
+  isDownloading: boolean;
+  download: () => Promise<void>;
+} {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const download = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? `observability-${platform}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
+}
+
+/**
  * opencode install. opencode has no plugin-marketplace or deep-link concept
  * (unlike Claude Code / Cursor / Codex), so the primary path is the
  * server-generated observability ZIP (plugins.downloadObservabilityPlugin) —
@@ -665,8 +715,8 @@ function CodexInstallContent({
  * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { isDownloading, download } =
+    useObservabilityPluginDownload("opencode");
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
@@ -686,39 +736,6 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
     }
   }
 }`;
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -740,7 +757,7 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           variant="secondary"
           size="sm"
           disabled={isDownloading}
-          onClick={() => void handleDownloadPlugin()}
+          onClick={() => void download()}
           className="inline-flex items-center gap-2"
         >
           <Download className="size-4" />
@@ -792,6 +809,113 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           Replace the placeholders with the name, URL, and auth token from that
           server's own install page — that token is separate from the Gram hooks
           credential.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Pi install. Pi has no plugin marketplace, no hook configuration, and no MCP
+ * client of its own — everything is a TypeScript extension loaded into the Pi
+ * process — so the primary path is the server-generated observability ZIP,
+ * which carries the extension plus a freshly-minted hooks-scoped key. The MCP
+ * snippet is the config an MCP extension for Pi reads; Speakeasy reads the
+ * same file to report which servers a Pi workspace can reach.
+ */
+function PiInstallContent(): JSX.Element {
+  const { isDownloading, download } = useObservabilityPluginDownload("pi");
+
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+
+  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
+
+  const mcpConfig = `{
+  "mcpServers": {
+    "<server-name>": {
+      "transport": "streamable-http",
+      "url": "<mcp-server-url>"
+    }
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained Pi
+          extension with a hooks-scoped API key already embedded (no CLI, no key
+          to export). Extract it into your repo's{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">~/.pi/agent/</code> for
+          every repo) and Pi loads it on next start.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void download()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d .pi
+          </code>
+        </p>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Project-local extensions load only after you trust the project, so
+          answer Pi's trust prompt on first start.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
+          binary:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same extension into{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/extensions/</code>:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
+        </CodeBlock>
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Pi ships no MCP client. Install an MCP extension for Pi, then declare
+          servers in{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/mcp.json</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            ~/.pi/agent/mcp.json
+          </code>
+          ). Speakeasy reads the same file, so every server a Pi workspace can
+          reach shows up in your MCP inventory and its tool calls are attributed
+          to it. Replace the placeholders with the name and URL from that
+          server's own install page.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}
@@ -1063,6 +1187,7 @@ export function InstallInstructionsDialog({
                 />
               )}
               {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "pi" && <PiInstallContent />}
             </div>
           </div>
         </div>

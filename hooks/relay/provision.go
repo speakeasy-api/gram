@@ -41,12 +41,23 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode). For claude-code and cursor, dir is a plugin
-// directory; for codex, which has no plugin layout for hooks, dir is the
-// Codex home the config installs into; for opencode, dir receives an
+// cursor, codex, opencode) or "pi". For claude-code and cursor, dir is a
+// plugin directory; for codex, which has no plugin layout for hooks, dir is
+// the Codex home the config installs into; for opencode, dir receives an
 // .opencode/plugin shim usable either as a project directory or referenced
-// from an OpenCode config's plugin list.
+// from an OpenCode config's plugin list; for pi, dir receives a .pi/extensions
+// module usable as a project directory (or copied into ~/.pi/agent).
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
+	if err := writeConfigFile(dir, cfg); err != nil {
+		return err
+	}
+	// Pi is rendered here rather than by agenthooks/install: it has no hook
+	// config dialect to render, only a TypeScript extension module, and the
+	// frame protocol that module speaks is this package's own.
+	if provider == "pi" {
+		return writePiExtensionPackage(dir, cfg)
+	}
+
 	var target install.Target
 	switch provider {
 	case "claude-code", "claude":
@@ -60,13 +71,28 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
 	}
-	if err := writeConfigFile(dir, cfg); err != nil {
-		return err
-	}
 	if err := install.Install(ctx, manifest(target.Provider, cfg, dir), target); err != nil {
 		return err
 	}
 	return alignPublishedHookEvents(target.Provider, dir)
+}
+
+// writePiExtensionPackage installs the Pi extension into dir's project-local
+// Pi configuration directory, pointed at the binary and the speakeasy.json
+// already written beside it.
+func writePiExtensionPackage(dir string, cfg PluginConfig) error {
+	content, err := RenderPiExtensionForBinary(cfg.BinaryPath, filepath.Join(dir, configFileName))
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, piConfigDirName, filepath.FromSlash(PiExtensionFile))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create pi extension directory: %w", err)
+	}
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return fmt.Errorf("write pi extension: %w", err)
+	}
+	return nil
 }
 
 // manifest declares the event subscriptions every provider config is rendered

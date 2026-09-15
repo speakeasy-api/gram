@@ -27715,6 +27715,7 @@ paths:
                         - cursor
                         - codex
                         - opencode
+                        - pi
                     type: string
                 - allowEmptyValue: true
                   description: Session header

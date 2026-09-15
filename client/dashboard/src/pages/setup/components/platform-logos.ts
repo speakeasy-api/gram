@@ -4,6 +4,7 @@ export const PLATFORM_LOGOS: Record<string, string> = {
   codex: "/icons/platforms/openai.svg",
   cursor: "/icons/platforms/cursor.svg",
   opencode: "/icons/platforms/opencode.svg",
+  pi: "/icons/platforms/pi.svg",
 };
 
 // Monochrome black logos that are invisible on a dark background — flip them in
@@ -12,4 +13,5 @@ export const INVERT_LOGO_IN_DARK = new Set<string>([
   "codex",
   "cursor",
   "opencode",
+  "pi",
 ]);

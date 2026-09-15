@@ -14,12 +14,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/BurntSushi/toml"
+	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/stretchr/testify/require"
 )
@@ -1470,6 +1472,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
 		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
+		prefixes[4] + relay.PiExtensionFile:          []byte("v14 pi"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1477,8 +1480,9 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 5)
+	require.Len(t, dst, 6)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
+	require.Equal(t, []byte("v14 pi"), dst[prefixes[4]+relay.PiExtensionFile])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
 	// The regenerated shared manifests must reference the carried directories
@@ -1682,6 +1686,57 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
 	_, ok = files["hooks/bootstrap.sh"]
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
+}
+
+// Pi has no hook configuration at all — the extension module under
+// extensions/ is the whole registration — so a regression there is silent.
+// Pin that the package ships the extension wired to the relay's serve mode,
+// the deployment identity it reads, and both bootstrappers, since the
+// extension picks the Windows one itself.
+func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "pi")
+	require.NoError(t, err)
+
+	extension, ok := files[relay.PiExtensionFile]
+	require.True(t, ok, "pi package must ship "+relay.PiExtensionFile)
+	require.Contains(t, string(extension), `"pi","serve"`)
+	require.Contains(t, string(extension), "speakeasy.json")
+	require.Contains(t, string(extension), "bootstrap.sh")
+	require.Contains(t, string(extension), "bootstrap.ps1")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "pi package must ship speakeasy.json alongside the extension")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "pi package must ship the hooks bootstrapper the extension spawns")
+	_, ok = files["hooks/bootstrap.ps1"]
+	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
+}
+
+// The published hooks subtree carries one directory per platform, and the
+// rollout carries it forward by prefix, so a platform missing from either the
+// generator or hooksSubtreePrefixes silently stops publishing.
+func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+
+	for _, prefix := range hooksSubtreePrefixes(cfg.OrgName) {
+		require.True(t, slices.ContainsFunc(slices.Collect(maps.Keys(files)), func(name string) bool {
+			return strings.HasPrefix(name, prefix)
+		}), "hooks subtree prefix %q has no generated files", prefix)
+	}
+	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash

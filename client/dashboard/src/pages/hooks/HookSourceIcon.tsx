@@ -104,6 +104,24 @@ function OpencodeIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
+// Pi (pi.dev) — the agent is named for the letter, so the mark is a geometric
+// pi glyph drawn as paths so it needs no font. Uses currentColor like the
+// sibling icons.
+function PiIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 300 300"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M42 72H258V114H42V72Z" fill="currentColor" />
+      <path d="M78 114H120V258H78V114Z" fill="currentColor" />
+      <path d="M180 114H222V258H180V114Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 // Devin (Cognition) logo. Geometry from the LobeHub icon set; uses currentColor
 // so it picks up text color like the sibling icons.
 function DevinIcon({ className }: { className?: string }): JSX.Element {
@@ -347,6 +365,11 @@ export function HookSourceIcon({
   }
   if (normalizedSource?.includes("opencode")) {
     return <OpencodeIcon className={className} />;
+  }
+  // Matched exactly, not by substring: "pi" is a substring of other agent
+  // names ("copilot"), and the hook source for Pi is always the bare slug.
+  if (normalizedSource === "pi") {
+    return <PiIcon className={className} />;
   }
   if (normalizedSource?.includes("devin")) {
     return <DevinIcon className={className} />;

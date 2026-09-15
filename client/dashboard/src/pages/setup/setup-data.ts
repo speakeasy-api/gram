@@ -232,6 +232,31 @@ speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug
     ],
   },
   {
+    id: "pi",
+    name: "Pi",
+    description: "Minimal, extension-driven terminal coding agent",
+    icon: "pi",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "Pi has no plugin marketplace and no hook configuration — observability is a Pi extension — so the speakeasy-hooks CLI renders it straight into your repo. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the extension into your repo",
+        description:
+          "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=pi --dir=. --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+    ],
+  },
+  {
     id: "copilot",
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",

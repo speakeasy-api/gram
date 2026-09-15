@@ -6,6 +6,7 @@
 // Invocation contract (baked into generated provider configs):
 //
 //	speakeasy-hooks agenthooks run --provider=claude-code   # hook event on stdin
+//	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
 // The server URL, project slug, and org id come from the GRAM_HOOKS_* env vars
@@ -40,6 +41,12 @@ func main() {
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
+		case "pi":
+			// Pi drives hooks from a long-lived TypeScript extension rather
+			// than a process per event, so its events arrive as NDJSON frames
+			// on stdin for the lifetime of one Pi session.
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
+			os.Exit(relay.RunPiCommand(context.Background(), relay.LoadConfig(flagCfg), rest))
 		case "drain":
 			// Replays the offline payload spool (see relay/drain.go). Takes
 			// no arguments — spool entries carry their own deployment
@@ -75,7 +82,7 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, pi")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Gram server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")
