@@ -25,7 +25,11 @@ import (
 //
 // 4: ChatGPT Classic gained its process name, so an agent reports it as
 // running and not merely installed.
-const DefaultsVersion int32 = 4
+//
+// 5: the current ChatGPT app became its own target under the bundle id it
+// moved to, and the ChatGPT gateway documents moved onto it, leaving Classic
+// a scan target the gateway cannot single out.
+const DefaultsVersion int32 = 5
 
 // Source says where a target in an organization's list comes from.
 type Source string
