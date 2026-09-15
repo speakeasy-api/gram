@@ -642,6 +642,10 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

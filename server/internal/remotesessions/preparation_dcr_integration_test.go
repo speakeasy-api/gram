@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -192,98 +194,51 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 	}
 }
 
-func TestPreparationDCRIntegration_LifecycleTriggersRequireUnlink(t *testing.T) {
+func TestPreparationDCRIntegration_LifecycleRequiresExplicitUnlink(t *testing.T) {
 	t.Parallel()
-	ctx, ti, in := preparationFixture(t)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	err := repo.New(ti.conn).SetPreparationFixtureTrust(ctx, repo.SetPreparationFixtureTrustParams{IssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID), ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-	require.NoError(t, err)
-	// Unknown grants still install an explicit reference that lifecycle guards must honor.
-	result, err := ti.service.PrepareIdentityChaining(ctx, in)
-	require.NoError(t, err)
-	require.Equal(t, "unknown_grants", result.State)
-	statements := []struct {
-		name string
-		run  func(*repo.Queries) (int64, error)
-	}{
-		{"issuer tier move", func(q *repo.Queries) (int64, error) {
-			return q.MovePreparationFixtureIssuerTier(ctx, repo.MovePreparationFixtureIssuerTierParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-		}},
-		{"issuer identity", func(q *repo.Queries) (int64, error) {
-			return q.ChangePreparationFixtureIssuerIdentity(ctx, repo.ChangePreparationFixtureIssuerIdentityParams{ID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-		}},
-		{"human issuer trust disconnect", func(q *repo.Queries) (int64, error) {
-			return q.DisconnectPreparationFixtureTrust(ctx, repo.DisconnectPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-		}},
-		{"human issuer deletion", func(q *repo.Queries) (int64, error) {
-			return q.SoftDeletePreparationFixtureUserIssuer(ctx, repo.SoftDeletePreparationFixtureUserIssuerParams{ID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-		}},
-		{"client disconnect", func(q *repo.Queries) (int64, error) {
-			return q.SoftDeletePreparationFixtureClient(ctx, repo.SoftDeletePreparationFixtureClientParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-		}},
-	}
-	for _, tc := range statements {
-		_, err := tc.run(repo.New(ti.conn))
-		var pgerr *pgconn.PgError
-		require.ErrorAs(t, err, &pgerr, tc.name)
-		require.Equal(t, "23503", pgerr.Code, tc.name)
-	}
-	in.ExpectedGeneration = result.Generation
-	unlinked, err := ti.service.UnlinkIdentityChaining(ctx, in)
-	require.NoError(t, err)
-	require.Equal(t, "unlinked", unlinked.State)
-	require.Greater(t, unlinked.Generation, result.Generation)
-	for _, tc := range statements {
-		tx := testenv.BeginTx(t, ctx, ti.conn)
-		tag, err := tc.run(repo.New(tx))
-		require.NoError(t, err, tc.name)
-		require.EqualValues(t, 1, tag, tc.name)
-		require.NoError(t, tx.Rollback(ctx))
-	}
-}
-
-func TestPreparationDCRIntegration_UnlinkedTombstoneAllowsHardDelete(t *testing.T) {
-	t.Parallel()
-	for _, kind := range []string{"remote_session_issuers", "user_session_issuers", "remote_session_clients"} {
+	for _, kind := range []string{"client update", "client delete", "issuer update"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti, in := preparationFixture(t)
-			auth, _ := contextvalues.GetAuthContext(ctx)
 			result, err := ti.service.PrepareIdentityChaining(ctx, in)
 			require.NoError(t, err)
 			require.Equal(t, "unknown_grants", result.State)
+			mutate := func() error {
+				switch kind {
+				case "client update":
+					_, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: in.ClientID.String(), Audience: conv.PtrEmpty("https://changed.example.com/")})
+					return err
+				case "client delete":
+					return ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()})
+				default:
+					_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{ID: in.RemoteSessionIssuerID.String(), Issuer: conv.PtrEmpty("https://changed.example.com")})
+					return err
+				}
+			}
+			requireOopsCode(t, mutate(), oops.CodeConflict)
 			in.ExpectedGeneration = result.Generation
-			_, err = ti.service.UnlinkIdentityChaining(ctx, in)
+			unlinked, err := ti.service.UnlinkIdentityChaining(ctx, in)
 			require.NoError(t, err)
-			// Delete the now-unlinked selected client first when deleting its issuer;
-			// unrelated historical client/issuer FK rules remain unchanged by EMA.
-			if kind == "remote_session_issuers" {
-				err = repo.New(ti.conn).DeletePreparationFixtureClient(ctx, repo.DeletePreparationFixtureClientParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-				require.NoError(t, err)
-			}
-			id := in.ClientID
-			if kind == "remote_session_issuers" {
-				id = in.RemoteSessionIssuerID
-			}
-			if kind == "user_session_issuers" {
-				id = in.UserSessionIssuerID
-			}
-			switch kind {
-			case "remote_session_issuers":
-				err = repo.New(ti.conn).DeletePreparationFixtureIssuer(ctx, repo.DeletePreparationFixtureIssuerParams{ID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-			case "user_session_issuers":
-				err = repo.New(ti.conn).DeletePreparationFixtureUserIssuer(ctx, repo.DeletePreparationFixtureUserIssuerParams{ID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-			case "remote_session_clients":
-				err = repo.New(ti.conn).DeletePreparationFixtureClient(ctx, repo.DeletePreparationFixtureClientParams{ID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-			}
-			require.NoError(t, err)
-			count, err := repo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, repo.CountPreparationFixtureBindingByIDParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
-			require.NoError(t, err)
-			if kind != "remote_session_clients" {
-				require.Zero(t, count)
-			}
+			require.Equal(t, result.Generation+1, unlinked.Generation)
+			require.NoError(t, mutate())
 		})
 	}
+}
+
+func TestPreparationDCRIntegration_UnlinkedTombstoneCleanupOnIssuerDelete(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	result, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	in.ExpectedGeneration = result.Generation
+	_, err = ti.service.UnlinkIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()}))
+	require.NoError(t, ti.service.DeleteRemoteSessionIssuer(ctx, &issuersgen.DeleteRemoteSessionIssuerPayload{ID: in.RemoteSessionIssuerID.String()}))
+	count, err := repo.New(ti.conn).CountPreparationFixtureBindingByID(ctx, repo.CountPreparationFixtureBindingByIDParams{ID: result.BindingID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 func TestPreparationDCRIntegration_StaleRebindIdentityAndConfirmationRetry(t *testing.T) {
 	t.Parallel()

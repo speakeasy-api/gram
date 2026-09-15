@@ -319,6 +319,10 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
 
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

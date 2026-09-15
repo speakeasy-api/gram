@@ -67,3 +67,20 @@ func requireNoEMABindings(count int64, err error) error {
 	}
 	return nil
 }
+
+// Discovery may replace evidence on an active binding, including capability
+// removal. Endpoint changes instead reconfigure the selected authorization
+// server and require unlinking. Call after the refresh snapshot's row lock;
+// never hold that lock during discovery HTTP.
+func guardEMAEndpointRefresh(ctx context.Context, q *repo.Queries, existing repo.RemoteSessionIssuer, next repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams) error {
+	if existing.AuthorizationEndpoint.String == next.AuthorizationEndpoint &&
+		existing.TokenEndpoint.String == next.TokenEndpoint &&
+		existing.RevocationEndpoint.String == next.RevocationEndpoint &&
+		existing.RegistrationEndpoint.String == next.RegistrationEndpoint &&
+		existing.JwksUri.String == next.JwksUri &&
+		existing.UserinfoEndpoint.String == next.UserinfoEndpoint &&
+		existing.IntrospectionEndpoint.String == next.IntrospectionEndpoint {
+		return nil
+	}
+	return guardEMABindingsForIssuer(ctx, q, existing.OrganizationID.String, existing.ProjectID.UUID, existing.ID)
+}

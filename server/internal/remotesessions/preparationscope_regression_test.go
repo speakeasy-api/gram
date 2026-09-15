@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -165,4 +166,37 @@ func TestPreparationScope_LocksRevalidateProjectAfterWait(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Even an entirely inherited configuration must serialize with its consuming
+// project's lifecycle; none of its parent queries otherwise needs that row.
+func TestPreparationScope_FirstBindingWaitsForProjectDeletion(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	in.RemoteSessionIssuerID = seedOrgLevelRemoteIssuer(t, ctx, ti.conn, auth.ActiveOrganizationID, "project-race-issuer")
+	in.UserSessionIssuerID = createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, auth.ActiveOrganizationID, "project-race-user", in.RemoteSessionIssuerID)
+	in.ClientID = seedOrgLevelRemoteClient(t, ctx, ti.conn, auth.ActiveOrganizationID, in.RemoteSessionIssuerID, "project-race-client")
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	q := projectsrepo.New(tx)
+	_, err := q.LockProjectForEMADeletion(ctx, projectsrepo.LockProjectForEMADeletionParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { _, err := ti.service.PrepareIdentityChaining(ctx, in); done <- err }()
+	require.Eventually(t, func() bool {
+		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, "%LockEMAProject :one%")
+		return err == nil && blocked
+	}, 5*time.Second, 10*time.Millisecond)
+	_, err = q.DeleteProject(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	select {
+	case err := <-done:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(5 * time.Second):
+		t.Fatal("preparation did not revalidate deleted project")
+	}
+	count, err := repo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }

@@ -252,6 +252,10 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	q := repo.New(tx)
+	// Lock the project before parents, including wholly inherited configurations.
+	if _, err = q.LockEMAProject(ctx, repo.LockEMAProjectParams{ProjectID: project, OrganizationID: org}); err != nil {
+		return nil, preparationLookupError(err, "project not found")
+	}
 	if err = lockUserSessionIssuersForClientBinding(ctx, s.logger, tx, q, project, org, []uuid.UUID{in.UserSessionIssuerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}

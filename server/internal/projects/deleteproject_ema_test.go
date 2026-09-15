@@ -38,4 +38,7 @@ func TestProjectsService_DeleteProjectActiveEMABindingConflict(t *testing.T) {
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
 	_, err = projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "successful deletion must hide the project")
+	count, err := q.CountPreparationFixtureBindingByID(ctx, remoterepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Zero(t, count, "project deletion explicitly removes unlinked claims")
 }

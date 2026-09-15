@@ -525,10 +525,18 @@ WHERE id = @id
 RETURNING *;
 
 -- name: DeleteRemoteSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
-RETURNING *;
+WHERE remote_session_issuers.id = @id AND remote_session_issuers.project_id = @project_id AND remote_session_issuers.deleted IS FALSE
+RETURNING *
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.remote_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: CountRemoteSessionClientsByIssuerID :one
 -- Every non-deleted client on an issuer, across every tenancy tier. Delete
@@ -2595,10 +2603,18 @@ RETURNING *;
 
 -- name: DeleteOrganizationRemoteSessionIssuer :one
 -- Soft-delete any issuer in the org (organizational or project-specific).
+WITH deleted_parent AS (
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
-RETURNING *;
+WHERE remote_session_issuers.id = @id AND remote_session_issuers.organization_id = @organization_id AND remote_session_issuers.deleted IS FALSE
+RETURNING *
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.remote_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: SetOrganizationRemoteSessionIssuerProject :one
 -- Re-scope an issuer by setting (project-specific) or clearing (organizational)
@@ -3337,10 +3353,18 @@ WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS
 RETURNING *;
 
 -- name: DeleteGlobalRemoteSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
-RETURNING *;
+WHERE remote_session_issuers.id = @id AND remote_session_issuers.project_id IS NULL AND remote_session_issuers.organization_id IS NULL AND remote_session_issuers.deleted IS FALSE
+RETURNING *
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.remote_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: ListGlobalRemoteSessionClientsByIssuerID :many
 -- Global clients registered with a global issuer. Global clients carry no
@@ -3439,12 +3463,20 @@ WHERE id = @id AND deleted IS FALSE;
 -- migration only: it tombstones the emptied source after its clients have been
 -- re-pointed. The org-scoped DeleteOrganizationRemoteSessionIssuer stays the
 -- only delete a tenant-facing handler may call.
+WITH deleted_parent AS (
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
-  AND deleted IS FALSE
-RETURNING *;
+WHERE remote_session_issuers.id = @id
+  AND (remote_session_issuers.project_id IS NOT NULL OR remote_session_issuers.organization_id IS NOT NULL)
+  AND remote_session_issuers.deleted IS FALSE
+RETURNING *
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.remote_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: ListTenantRemoteSessionIssuersByIssuerURL :many
 -- Tenant issuers that describe the same upstream authorization server as a
@@ -3691,7 +3723,10 @@ WHERE id = @id
 
 -- name: EnsureEMABinding :exec
 INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
-VALUES (@project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource)
+SELECT @project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource
+WHERE EXISTS (SELECT 1 FROM projects p WHERE p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE)
+AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = @user_session_issuer_id AND u.deleted IS FALSE AND (u.project_id = @project_id OR (u.project_id IS NULL AND u.organization_id = @organization_id)))
+AND EXISTS (SELECT 1 FROM remote_session_issuers i WHERE i.id = @remote_session_issuer_id AND i.deleted IS FALSE AND (i.project_id = @project_id OR (i.project_id IS NULL AND (i.organization_id = @organization_id OR i.organization_id IS NULL))))
 ON CONFLICT (project_id, user_session_issuer_id, remote_session_issuer_id, resource) DO NOTHING;
 
 -- name: GetEMABinding :one
@@ -3705,11 +3740,19 @@ WHERE project_id = @project_id AND organization_id = @organization_id
 AND user_session_issuer_id = @user_session_issuer_id AND remote_session_issuer_id = @remote_session_issuer_id AND resource = @resource FOR UPDATE;
 
 -- name: SetEMABinding :one
-UPDATE remote_session_ema_bindings SET remote_session_client_id = sqlc.narg('remote_session_client_id'),
+UPDATE remote_session_ema_bindings b SET remote_session_client_id = CASE WHEN @state::text = 'unlinked' THEN NULL ELSE sqlc.narg('remote_session_client_id')::uuid END,
  generation = @generation, state = @state, grant_source = @grant_source, requested_scopes = @requested_scopes,
  claim_id = sqlc.narg('claim_id'), claimed_at = sqlc.narg('claimed_at'), updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id AND generation = @expected_generation
-RETURNING *;
+WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id AND b.generation = @expected_generation
+AND @generation::bigint >= b.generation
+AND ((b.state = 'unlinked') = (@state::text = 'unlinked') OR @generation::bigint = b.generation + 1)
+AND (@state::text = 'unlinked' OR (
+ EXISTS (SELECT 1 FROM projects p WHERE p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE)
+ AND EXISTS (SELECT 1 FROM user_session_issuers u WHERE u.id = b.user_session_issuer_id AND u.deleted IS FALSE AND (u.project_id = b.project_id OR (u.project_id IS NULL AND u.organization_id = b.organization_id)))
+ AND EXISTS (SELECT 1 FROM remote_session_issuers i WHERE i.id = b.remote_session_issuer_id AND i.deleted IS FALSE AND (i.project_id = b.project_id OR (i.project_id IS NULL AND (i.organization_id = b.organization_id OR i.organization_id IS NULL))))
+ AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR EXISTS (SELECT 1 FROM remote_session_clients c WHERE c.id = sqlc.narg('remote_session_client_id') AND c.remote_session_issuer_id = b.remote_session_issuer_id AND c.deleted IS FALSE AND (c.project_id = b.project_id OR (c.project_id IS NULL AND c.organization_id = b.organization_id))))
+))
+RETURNING b.*;
 
 -- Global clients are platform-owned: tenant preparation must not mutate their
 -- credentials or grant evidence. Keep this lock scoped like SetEMAClientGrants.
@@ -3939,3 +3982,13 @@ AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text) OR EX
 AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
     SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
 ));
+
+-- name: LockEMAProject :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR SHARE;
+
+-- name: CountPreparationFixtureLifecycleTriggers :one
+SELECT count(*) FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = current_schema()
+AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_session_ema_lifecycle');

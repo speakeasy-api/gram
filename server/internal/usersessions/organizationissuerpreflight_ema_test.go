@@ -38,4 +38,7 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 	require.Zero(t, preflight.EmaBindingCount)
 	require.True(t, preflight.CanDelete)
 	require.NoError(t, ti.service.DeleteIssuer(ctx, &orggen.DeleteIssuerPayload{ID: user.String()}))
+	count, err := q.CountPreparationFixtureBindingByID(ctx, remoterepo.CountPreparationFixtureBindingByIDParams{ID: binding.ID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	require.Zero(t, count, "user issuer deletion explicitly removes unlinked claims")
 }

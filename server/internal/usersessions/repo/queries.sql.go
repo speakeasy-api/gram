@@ -624,6 +624,7 @@ func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg Cre
 }
 
 const deleteOrganizationUserSessionIssuer = `-- name: DeleteOrganizationUserSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = $1
@@ -650,6 +651,13 @@ WHERE issuer.id = $1
       AND project.organization_id = issuer.organization_id
   )
 RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted FROM deleted_parent
 `
 
 type DeleteOrganizationUserSessionIssuerParams struct {
@@ -657,9 +665,27 @@ type DeleteOrganizationUserSessionIssuerParams struct {
 	OrganizationID string
 }
 
-func (q *Queries) DeleteOrganizationUserSessionIssuer(ctx context.Context, arg DeleteOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
+type DeleteOrganizationUserSessionIssuerRow struct {
+	ID                            uuid.UUID
+	ProjectID                     uuid.NullUUID
+	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
+	Slug                          string
+	AuthnChallengeMode            string
+	SessionDuration               pgtype.Interval
+	Classification                string
+	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+}
+
+func (q *Queries) DeleteOrganizationUserSessionIssuer(ctx context.Context, arg DeleteOrganizationUserSessionIssuerParams) (DeleteOrganizationUserSessionIssuerRow, error) {
 	row := q.db.QueryRow(ctx, deleteOrganizationUserSessionIssuer, arg.ID, arg.OrganizationID)
-	var i UserSessionIssuer
+	var i DeleteOrganizationUserSessionIssuerRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
@@ -716,6 +742,7 @@ func (q *Queries) DeleteOrganizationUserSessionIssuerCimdClient(ctx context.Cont
 }
 
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = $1
@@ -745,6 +772,13 @@ WHERE issuer.id = $1
       AND meta_mcp_server.deleted IS FALSE
   )
 RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, created_at, updated_at, deleted_at, deleted FROM deleted_parent
 `
 
 type DeleteUserSessionIssuerParams struct {
@@ -752,14 +786,32 @@ type DeleteUserSessionIssuerParams struct {
 	ProjectID uuid.UUID
 }
 
+type DeleteUserSessionIssuerRow struct {
+	ID                            uuid.UUID
+	ProjectID                     uuid.NullUUID
+	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
+	Slug                          string
+	AuthnChallengeMode            string
+	SessionDuration               pgtype.Interval
+	Classification                string
+	ClientIDMetadataAdmissionMode pgtype.Text
+	TrustedRemoteSessionIssuerID  uuid.NullUUID
+	TrustedRemoteSessionClientID  uuid.NullUUID
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+}
+
 // Recheck active owners in the write so an owner added after the handler's
 // preflight check prevents the issuer from being soft-deleted.
 //
 // This endpoint only mutates project-owned issuers. Organization-owned rows
 // have a separate org-admin API and cannot be deleted with project:write.
-func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (UserSessionIssuer, error) {
+func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (DeleteUserSessionIssuerRow, error) {
 	row := q.db.QueryRow(ctx, deleteUserSessionIssuer, arg.ID, arg.ProjectID)
-	var i UserSessionIssuer
+	var i DeleteUserSessionIssuerRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,

@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -52,9 +51,7 @@ func TestPreparationFixtureRegistrationScopesJoinedClient(t *testing.T) {
 	other := createProject(t, ctx, ti.conn, "fixture-other")
 	foreign := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, other, in.RemoteSessionIssuerID, "foreign-client")
 	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{ID: prepared.BindingID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: prepared.Generation, Generation: prepared.Generation + 1, State: "unknown_grants", GrantSource: "unknown", RemoteSessionClientID: conv.ToNullUUID(foreign), RequestedScopes: in.Scopes})
-	var pgErr *pgconn.PgError
-	require.ErrorAs(t, err, &pgErr)
-	require.Equal(t, "23503", pgErr.Code, "database scope guard rejects the foreign reference")
+	require.ErrorIs(t, err, pgx.ErrNoRows, "explicit conditional write rejects the foreign reference")
 	registration, err := q.GetPreparationFixtureRegistration(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, in.ClientID, registration.RemoteSessionClientID.UUID, "rejected writes preserve the authorized registration")

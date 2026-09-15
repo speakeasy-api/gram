@@ -123,6 +123,10 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	q := repo.New(tx)
+	// Lock the project before parents, including wholly inherited configurations.
+	if _, err = q.LockEMAProject(saveCtx, repo.LockEMAProjectParams{ProjectID: claim.ProjectID, OrganizationID: claim.OrganizationID}); err != nil {
+		return nil, preparationLookupError(err, "project not found")
+	}
 	if err = lockUserSessionIssuersForClientBinding(saveCtx, s.logger, tx, q, claim.ProjectID, claim.OrganizationID, []uuid.UUID{claim.UserSessionIssuerID}); err != nil {
 		return preparationResult(claim, issuer, emptyClient, "indeterminate"), err
 	}

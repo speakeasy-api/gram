@@ -570,16 +570,30 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	pr := s.repo.WithTx(dbtx)
+	// Exclude first binding creation before checking references. Preparation
+	// holds a project SHARE lock until its binding transaction commits.
+	if _, err := pr.LockProjectForEMADeletion(ctx, repo.LockProjectForEMADeletionParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock project for deletion")
+	}
+	count, err := pr.CountActiveProjectEMABindings(ctx, repo.CountActiveProjectEMABindingsParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check project identity-chaining bindings")
+	}
+	if count > 0 {
+		return oops.E(oops.CodeConflict, nil, "explicitly unlink identity-chaining bindings before deleting the project")
+	}
+	if err := pr.DeleteProjectEMATombstones(ctx, repo.DeleteProjectEMATombstonesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove project identity-chaining tombstones")
+	}
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil // Return successfully even if the project was already deleted
 	case err != nil:
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-			return oops.E(oops.CodeConflict, err, "project has active references; unlink identity-chaining bindings before deletion")
-		}
 		return oops.E(oops.CodeUnexpected, err, "error deleting project").LogError(ctx, s.logger, attr.SlogProjectID(payload.ID))
 	}
 

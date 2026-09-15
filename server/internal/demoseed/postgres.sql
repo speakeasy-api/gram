@@ -428,6 +428,11 @@ BEGIN
      WHERE organization_id = demo_org);
   DELETE FROM mcp_servers WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
+  -- A reseed explicitly resets preparation claims before hard-deleting their
+  -- parents. Do not depend on lifecycle triggers or SET NULL owner references.
+  DELETE FROM remote_session_ema_bindings
+  WHERE organization_id = demo_org
+    AND project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
   DELETE FROM user_session_issuers WHERE project_id = proj_a;
   -- The metadata table is project-scoped rather than organization-scoped, so

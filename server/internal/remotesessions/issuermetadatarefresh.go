@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -443,6 +444,9 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 		success = remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial
 	}
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
+		if err := guardEMAEndpointRefresh(ctx, q, existing, params); err != nil {
+			return repo.RemoteSessionIssuer{}, err
+		}
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
 	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
@@ -589,6 +593,9 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 
 	updated, err := write(txRepo)
 	if err != nil {
+		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 		}

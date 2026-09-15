@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -27,6 +28,14 @@ func guardScopedUserIssuerEMABindings(ctx context.Context, tx pgx.Tx, organizati
 	}
 	if err := verifyUserIssuerEMAScope(ctx, q, organizationID, projectID, id); err != nil {
 		return err
+	}
+	// Revalidate conditional tenant ownership under a row lock as well as the
+	// owner advisory lock. Hold both until the configuration mutation commits.
+	if _, err := remotesessionsrepo.New(tx).LockEMAUserIssuer(ctx, remotesessionsrepo.LockEMAUserIssuerParams{ID: id, ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID)}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuer scope")
 	}
 	count, err := remotesessionsrepo.New(tx).CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: projectID})
 	if err != nil {
