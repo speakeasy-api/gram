@@ -39,9 +39,11 @@ func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectB
 }
 
 // sessionsSource collapses agent_events to one row per session. Dimensions
-// resolve to the latest observed value; the measures are identity-aware
-// counts, so a caller composing sum(turn_count) gets the de-duplicated figure
-// without needing to know why.
+// resolve to the latest observed value that stated one: a session usually ends
+// on a hook or MCP event that carries no model, and that must not blank the
+// model an API request stated. The measures are identity-aware counts, so a
+// caller composing sum(turn_count) gets the de-duplicated figure without
+// needing to know why.
 func sessionsSource(scope Scope) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
@@ -49,10 +51,10 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		"session_id",
 		"min(occurred_at_unix_nano) AS started_at",
 		"max(occurred_at_unix_nano) AS ended_at",
-		"argMax(user_email, observed_at_unix_nano) AS user_email",
-		"argMax(model, observed_at_unix_nano) AS model",
-		"argMax(surface, observed_at_unix_nano) AS surface",
-		"argMax(provider, observed_at_unix_nano) AS provider",
+		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
+		"argMaxIf(model, observed_at_unix_nano, model != '') AS model",
+		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
+		"argMaxIf(provider, observed_at_unix_nano, provider != '') AS provider",
 		"uniqExactIf(turn_id, turn_id != '') AS turn_count",
 		"uniqExactIf(event_id, event_type LIKE 'tool_call%') AS tool_call_count",
 	).
@@ -70,12 +72,12 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"organization_id",
 		"project_id",
 		"event_id AS tool_call_id",
-		"argMax(tool_name, observed_at_unix_nano) AS tool_name",
-		"argMax(session_id, observed_at_unix_nano) AS session_id",
-		"argMax(user_email, observed_at_unix_nano) AS user_email",
-		"argMax(surface, observed_at_unix_nano) AS surface",
-		"argMax(outcome, observed_at_unix_nano) AS status",
-		"argMax(duration_nano, observed_at_unix_nano) AS duration_nano",
+		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
+		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
+		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
+		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
+		"argMaxIf(outcome, observed_at_unix_nano, outcome != '') AS status",
+		"argMaxIf(duration_nano, observed_at_unix_nano, duration_nano != 0) AS duration_nano",
 		"min(occurred_at_unix_nano) AS started_at",
 		"max(occurred_at_unix_nano) AS ended_at",
 	).

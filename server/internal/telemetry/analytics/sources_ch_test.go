@@ -76,6 +76,9 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	postCall.ToolName = "Bash"
 	postCall.Outcome = "error"
 	postCall.DurationNano = 5_000_000
+	trailingHook := agentEventFixture(orgID, "r8", "s1", "", "r8", "", base+4)
+	trailingHook.RawEventName = "hook_execution_complete"
+	trailingHook.Model = ""
 
 	rows := []chrepo.AgentEventRow{
 		agentEventFixture(orgID, "r1", "s1", "t1", "r1", "api_request", base),
@@ -85,6 +88,8 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		preCall,
 		postCall,
 		agentEventFixture(orgID, "r4", "s1", "t2", "r4", "api_request", base+3),
+		// How a real session ends: a hook or MCP event with no model on it.
+		trailingHook,
 		// A second session with a prompt and no turn id.
 		agentEventFixture(orgID, "r5", "s2", "", "r5", "prompt", base+10),
 		// Outside the window.
@@ -123,8 +128,9 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Equal(t, uint64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
 		require.Equal(t, uint64(1), got[0].toolCalls, "two observations of tc1 are one call")
 		require.Equal(t, base, got[0].startedAt)
-		require.Equal(t, base+3, got[0].endedAt, "the out-of-window row does not stretch the session")
+		require.Equal(t, base+4, got[0].endedAt, "the out-of-window row does not stretch the session")
 		require.Equal(t, "dev@example.com", got[0].user)
+		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
 		require.Equal(t, "s2", got[1].id)
 		require.Zero(t, got[1].turns, "an empty turn id is not a turn")
 		require.Zero(t, got[1].toolCalls)
