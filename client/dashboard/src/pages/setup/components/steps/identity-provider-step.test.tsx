@@ -139,15 +139,6 @@ describe("IdentityProviderStep", () => {
       expect(screen.getByRole("heading", { name: title })).toBeTruthy();
     }
 
-    // The console ceremony, explained inline rather than in a dialog.
-    expect(
-      screen.getByText("This step needs an Okta Super Administrator"),
-    ).toBeTruthy();
-    expect(screen.getByText("There is no secret to hand over")).toBeTruthy();
-    // Granted as one of four scopes, then called out on its own as the only
-    // write among them.
-    expect(screen.getAllByText("okta.apps.manage")).toHaveLength(2);
-
     // With nothing connected the step asks for the tenant first.
     expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
 

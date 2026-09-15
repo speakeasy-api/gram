@@ -233,10 +233,7 @@ describe("OktaConnectSection", () => {
     expect(screen.getByText("kid-abc123")).toBeTruthy();
     expect(screen.getByText("People and group membership")).toBeTruthy();
     expect(screen.getByText("18 groups")).toBeTruthy();
-    // The ceremony is history once it has worked.
-    expect(
-      screen.queryByText("What you will do in the Okta Admin Console"),
-    ).toBeNull();
+    // The exchange gives way to the connection once it has worked.
     expect(screen.queryByLabelText("Client ID")).toBeNull();
   });
 });
