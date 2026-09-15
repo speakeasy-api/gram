@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
+	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -60,4 +61,17 @@ func TestPreparationLifecycle_DetachAbsentJoinIgnoresEMABinding(t *testing.T) {
 	_, err = ti.service.DetachUserSessionIssuer(ctx, payload)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, in.UserSessionIssuerID), "blocked removal rolls back the join")
+}
+
+func TestPreparationLifecycle_OrganizationDetachAbsentJoinIgnoresEMABinding(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
+	result, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "ready", result.State)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	serverID := seedMCPServerInOrg(t, ctx, ti.conn, auth.ActiveOrganizationID, "ema-absent-detach")
+	err = ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{ClientID: in.ClientID.String(), McpServerID: serverID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

@@ -1150,7 +1150,7 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		TokenEndpoint:                       doc.TokenEndpoint,
 		RegistrationEndpoint:                doc.RegistrationEndpoint,
 		ScopesSupported:                     append([]string(nil), doc.ScopesSupported...),
-		GrantTypesSupported:                 append([]string(nil), doc.GrantTypesSupported...),
+		GrantTypesSupported:                 slices.Clone(doc.GrantTypesSupported),
 		AuthorizationGrantProfilesSupported: orEmptySlice(slices.Clone(doc.AuthorizationGrantProfilesSupported)),
 		ResponseTypesSupported:              append([]string(nil), doc.ResponseTypesSupported...),
 		TokenEndpointAuthMethodsSupported:   append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),

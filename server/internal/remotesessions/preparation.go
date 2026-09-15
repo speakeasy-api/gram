@@ -140,7 +140,7 @@ func samePreparationGrants(a, b []string) bool {
 }
 func normalizePreparationInput(in PreparationInput) (PreparationInput, error) {
 	u, err := url.Parse(in.Resource)
-	if err != nil || !urls.IsAbsoluteHTTPSOrLoopback(in.Resource) || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
+	if err != nil || !urls.IsAbsoluteHTTPSOrLoopback(in.Resource) || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery {
 		return in, oops.E(oops.CodeBadRequest, err, "invalid canonical resource")
 	}
 	// RFC 8707 identifiers are exact: a trailing slash is not discarded.
@@ -213,7 +213,30 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.db.Begin(ctx)
+	// A connection-scoped lock serializes this binding across the claim commit,
+	// HTTP submission and outcome commit without an open transaction during HTTP.
+	// Process/connection loss releases the lock; the durable claim still prevents
+	// replay of an uncertain registration.
+	conn, err := s.db.Acquire(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock preparation binding")
+	}
+	defer conn.Release()
+	lockKey := strings.Join([]string{"ema-preparation", org, project.String(), in.UserSessionIssuerID.String(), in.RemoteSessionIssuerID.String(), in.Resource}, "\n")
+	lockRepo := repo.New(conn)
+	if err := lockRepo.LockPreparationSubmission(ctx, lockKey); err != nil {
+		// A canceled lock request can have acquired the lock at the server.
+		_ = conn.Conn().Close(context.Background())
+		return nil, oops.E(oops.CodeUnexpected, err, "lock preparation binding")
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := lockRepo.UnlockPreparationSubmission(unlockCtx, lockKey); err != nil {
+			_ = conn.Conn().Close(context.Background())
+		}
+	}()
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
@@ -368,7 +391,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 		}
-		return s.finishPreparationDCR(ctx, in, b, issuer, method)
+		return s.finishPreparationDCR(ctx, conn, in, b, issuer, method)
 	}
 	// Explicit selection is never inferred from interactive attachments or grants.
 	if in.Mechanism == "dcr" {
@@ -471,7 +494,7 @@ func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, c
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
 		return false
 	}
-	if method == "" || !slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) || ((method == "client_secret_basic" || method == "client_secret_post") && !client.ClientSecretEncrypted.Valid) || (method == "private_key_jwt" && !client.JsonWebKeySetID.Valid) {
+	if method == "" || !(slices.Contains(issuer.TokenEndpointAuthMethodsSupported, method) || (method == "none" && len(issuer.TokenEndpointAuthMethodsSupported) == 0)) || ((method == "client_secret_basic" || method == "client_secret_post") && !client.ClientSecretEncrypted.Valid) || (method == "private_key_jwt" && !client.JsonWebKeySetID.Valid) {
 		return false
 	}
 	if method == "private_key_jwt" && client.JsonWebKeySetID.Valid {

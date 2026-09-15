@@ -54,7 +54,7 @@ func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 		_, err := normalizePreparationInput(invalid)
 		require.Error(t, err, "scope %q", scope)
 	}
-	for _, resource := range []string{"http://resource.example.com/mcp", "https://name:password@resource.example.com/mcp", "https://resource.example.com/mcp#fragment", "https://resource.example.com/mcp?query=1", "relative"} {
+	for _, resource := range []string{"http://resource.example.com/mcp", "https://name:password@resource.example.com/mcp", "https://resource.example.com/mcp#fragment", "https://resource.example.com/mcp?query=1", "relative", "https://resource.example.com/mcp?"} {
 		in.Resource = resource
 		_, err := normalizePreparationInput(in)
 		require.Error(t, err)
@@ -201,5 +201,25 @@ func TestPreparationLookupError(t *testing.T) {
 			require.Equal(t, tc.code, classified.Code)
 			require.ErrorIs(t, got, tc.err)
 		})
+	}
+}
+
+func TestPreparationDCRRejectsPlaintextBeforeSubmission(t *testing.T) {
+	t.Parallel()
+	// A nil policy would return indeterminate if transport validation were skipped.
+	_, state := (&Service{}).submitPreparationDCR(t.Context(), PreparationInput{}, "http://registration.example/register", "client_secret_basic")
+	require.Equal(t, "manual_setup_required", state)
+}
+
+func TestPreparationPublicClientOmittedAuthMethods(t *testing.T) {
+	t.Parallel()
+	client := repo.RemoteSessionClient{TokenEndpointAuthMethod: pgtype.Text{String: "none", Valid: true}}
+	for _, tc := range []struct {
+		methods []string
+		want    bool
+	}{
+		{nil, true}, {[]string{}, true}, {[]string{"none"}, true}, {[]string{"client_secret_basic"}, false},
+	} {
+		require.Equal(t, tc.want, preparationClientConfigurationValid(t.Context(), nil, client, repo.RemoteSessionIssuer{TokenEndpointAuthMethodsSupported: tc.methods}, ""))
 	}
 }
