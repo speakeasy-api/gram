@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"testing"
 
@@ -81,9 +82,12 @@ func TestPreparationLifecycle_OrganizationDetachAbsentJoinIgnoresEMABinding(t *t
 func TestPreparationLifecycle_DeletePreflightsReportLiveEMABindings(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
-	// Use an explicitly linked fixture accepted by the consolidated base guard.
+	// The trusted upstream IdP is distinct from the downstream resource AS.
+	// Preflights must count the EMA binding on the downstream issuer only.
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	require.NoError(t, repo.New(ti.conn).SetPreparationFixtureTrust(ctx, repo.SetPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, IssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID), ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
+	upstream := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, conv.ToPGText(auth.ActiveOrganizationID), "preflight-upstream-idp", "https://upstream.example.com")
+	require.NotEqual(t, upstream, in.RemoteSessionIssuerID)
+	require.NoError(t, repo.New(ti.conn).SetPreparationFixtureTrust(ctx, repo.SetPreparationFixtureTrustParams{ID: in.UserSessionIssuerID, IssuerID: conv.ToNullUUID(upstream), ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
 	preparationRecordGrants(t, ctx, ti, in.ClientID, []string{preparationJWTGrant})
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
@@ -99,6 +103,10 @@ func TestPreparationLifecycle_DeletePreflightsReportLiveEMABindings(t *testing.T
 	require.NoError(t, err)
 	require.EqualValues(t, 1, issuer.EmaBindingCount)
 	require.Empty(t, issuer.McpServerNames)
+	require.Empty(t, issuer.TrustedUserSessionIssuers, "downstream issuer is not the trusted IdP")
+	upstreamPreflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orgissuersgen.GetIssuerDeletePreflightPayload{ID: upstream.String()})
+	require.NoError(t, err)
+	require.Zero(t, upstreamPreflight.EmaBindingCount, "upstream trust must not be counted as a downstream EMA binding")
 	in.ExpectedGeneration = prepared.Generation
 	_, err = ti.service.UnlinkIdentityChaining(ctx, in)
 	require.NoError(t, err)
