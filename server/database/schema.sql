@@ -4627,6 +4627,63 @@ WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS agent_role_assignments_org_agent_all_idx
 ON agent_role_assignments (organization_id, agent_id);
 
+-- Agents assigned to a workload principal. A workload holds no grants of its
+-- own: it inherits the permission policies of the agents assigned to it. The
+-- relationship is many-to-many, since one agent can run on several workloads
+-- and one workload can host several agents.
+CREATE TABLE IF NOT EXISTS workload_agent_assignments (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+
+  -- Denormalized so the composite foreign keys below can pin both references
+  -- to one organization.
+  organization_id TEXT NOT NULL,
+
+  -- The workload principal is the pair (workload_issuer_id, subject), the same
+  -- identity as a workload: session subject. Keyed on that identity rather than
+  -- on an admission row: the principal is organization-scoped while admissions
+  -- are tiered by project, so withdrawing one tier's admission must not change
+  -- what the workload may do under another.
+  workload_issuer_id uuid NOT NULL,
+  subject TEXT NOT NULL CHECK (subject <> ''),
+
+  agent_id uuid NOT NULL,
+
+  -- The human who made the assignment: the workload authorizer, recorded as
+  -- approval attribution for the authority the assignment confers. Never
+  -- updated, and kept when that user leaves the organization.
+  created_by_user_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_agent_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_agent_assignments_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Composite rather than plain references, so an assignment naming another
+  -- organization's issuer or agent is a schema error rather than a row a
+  -- handler has to reject.
+  CONSTRAINT workload_agent_assignments_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
+);
+
+-- One live assignment per workload principal and agent, so re-assigning
+-- restores rather than duplicates. Also serves listing a workload's agents,
+-- which filters on the leading three columns.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_agent_key
+ON workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+WHERE deleted IS FALSE;
+
+-- Supports listing the workloads an agent is assigned to, and the agent
+-- foreign-key cascade, which sees soft-deleted rows the partial index above
+-- excludes.
+CREATE INDEX IF NOT EXISTS workload_agent_assignments_agent_idx
+ON workload_agent_assignments (organization_id, agent_id);
+
+-- Supports the workload issuer foreign-key cascade for the same reason.
+CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
+ON workload_agent_assignments (organization_id, workload_issuer_id);
+
 
 CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
   mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
