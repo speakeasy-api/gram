@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 // These tests cover the trigger workflow helpers that the platform trigger
@@ -17,29 +17,29 @@ import (
 func TestScheduleTriggerCronWorkflowWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, ScheduleTriggerCronWorkflow(t.Context(), nil, ScheduleTriggerCronWorkflowOptions{}), tenv.ErrNotConfigured)
+	require.ErrorIs(t, ScheduleTriggerCronWorkflow(t.Context(), nil, ScheduleTriggerCronWorkflowOptions{}), temporal.ErrNotConfigured)
 }
 
 func TestDeleteTriggerCronWorkflowScheduleWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, DeleteTriggerCronWorkflowSchedule(t.Context(), nil, uuid.New()), tenv.ErrNotConfigured)
+	require.ErrorIs(t, DeleteTriggerCronWorkflowSchedule(t.Context(), nil, uuid.New()), temporal.ErrNotConfigured)
 }
 
 func TestExecuteTriggerDispatchWorkflowWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, ExecuteTriggerDispatchWorkflow(t.Context(), nil, TriggerDispatchWorkflowInput{}), tenv.ErrNotConfigured)
+	require.ErrorIs(t, ExecuteTriggerDispatchWorkflow(t.Context(), nil, TriggerDispatchWorkflowInput{}), temporal.ErrNotConfigured)
 }
 
 func TestExecuteTriggerWakeWorkflowWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, ExecuteTriggerWakeWorkflow(t.Context(), nil, uuid.New(), time.Now()), tenv.ErrNotConfigured)
+	require.ErrorIs(t, ExecuteTriggerWakeWorkflow(t.Context(), nil, uuid.New(), time.Now()), temporal.ErrNotConfigured)
 }
 
 func TestCancelTriggerWakeWorkflowWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, CancelTriggerWakeWorkflow(t.Context(), nil, uuid.New()), tenv.ErrNotConfigured)
+	require.ErrorIs(t, CancelTriggerWakeWorkflow(t.Context(), nil, uuid.New()), temporal.ErrNotConfigured)
 }

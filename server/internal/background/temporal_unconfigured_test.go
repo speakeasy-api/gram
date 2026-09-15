@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -19,19 +19,19 @@ func TestTemporalChatAnalysisSignalerSignalWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
 	signaler := &TemporalChatAnalysisSignaler{TemporalEnv: nil, Logger: nil}
-	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), tenv.ErrNotConfigured)
+	require.ErrorIs(t, signaler.Signal(t.Context(), uuid.New()), temporal.ErrNotConfigured)
 }
 
 func TestTemporalChatTitleGeneratorWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
 	generator := &TemporalChatTitleGenerator{TemporalEnv: nil}
-	require.ErrorIs(t, generator.ScheduleChatTitleGeneration(t.Context(), "chat", "org", "project"), tenv.ErrNotConfigured)
+	require.ErrorIs(t, generator.ScheduleChatTitleGeneration(t.Context(), "chat", "org", "project"), temporal.ErrNotConfigured)
 }
 
 func TestOpenRouterKeyRefresherScheduleWithoutTemporal(t *testing.T) {
 	t.Parallel()
 
 	refresher := &OpenRouterKeyRefresher{TemporalEnv: nil}
-	require.ErrorIs(t, refresher.ScheduleOpenRouterKeyRefresh(t.Context(), "org", openrouter.KeyType(""), nil), tenv.ErrNotConfigured)
+	require.ErrorIs(t, refresher.ScheduleOpenRouterKeyRefresh(t.Context(), "org", openrouter.KeyType(""), nil), temporal.ErrNotConfigured)
 }
