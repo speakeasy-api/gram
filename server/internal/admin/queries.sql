@@ -161,15 +161,21 @@ filtered AS (
         t.ends_at AS trial_ends_at,
         om.created_at,
         om.updated_at,
-        (
-            SELECT count(*)
-            FROM organization_user_relationships our
-            WHERE our.organization_id = om.id
-              AND our.deleted IS FALSE
-        )::bigint AS member_count
+        members.member_count
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
     LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    -- Only bounds/member sorting need pre-page counts. Keep the guard inside
+    -- the aggregate so generic plans skip membership access too. NULL marks
+    -- deferred display counts; real zero-member counts remain zero.
+    CROSS JOIN LATERAL (
+        SELECT CASE WHEN (sqlc.narg('min_members')::bigint IS NOT NULL OR sqlc.narg('max_members')::bigint IS NOT NULL OR sqlc.arg('sort_by')::text = 'member_count')
+                    THEN count(*) END::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE (sqlc.narg('min_members')::bigint IS NOT NULL OR sqlc.narg('max_members')::bigint IS NOT NULL OR sqlc.arg('sort_by')::text = 'member_count')
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         -- The id arms compare exactly because a substring match on an opaque high-cardinality id produces incidental hits an operator cannot explain.
@@ -186,6 +192,12 @@ filtered AS (
         -- slice and encodes to a NULL array, and cardinality(NULL) is NULL, which
         -- would drop every row instead of keeping every row.
         AND (coalesce(cardinality(sqlc.arg('account_types')::text[]), 0) = 0 OR om.gram_account_type = ANY(sqlc.arg('account_types')::text[]))
+        AND (sqlc.narg('min_members')::bigint IS NULL OR members.member_count >= sqlc.narg('min_members')::bigint)
+        AND (sqlc.narg('max_members')::bigint IS NULL OR members.member_count <= sqlc.narg('max_members')::bigint)
+        AND (sqlc.narg('created_at_gte')::timestamptz IS NULL OR om.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+        AND (sqlc.narg('created_at_lt')::timestamptz IS NULL OR om.created_at < sqlc.narg('created_at_lt')::timestamptz)
+        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
+        AND (sqlc.narg('disabled_only')::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
         -- No empty arm: the handler resolves an absent filter to {active}.
         -- The id arms repeat here, and only here, so a pasted id reaches a disabled organization: investigating one is a leading reason to paste an id at all.
         -- Deliberately not repeated on the account type arm or the cursor, which keep applying to an id match.
@@ -207,7 +219,8 @@ filtered AS (
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
         )
-)
+),
+paged AS MATERIALIZED (
 SELECT * FROM filtered
 -- trial_state is computed in the CTE's select list, so it cannot be named in the
 -- CTE's own WHERE. Filtering out here keeps the ladder to one copy per query.
@@ -235,7 +248,37 @@ ORDER BY
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
 LIMIT sqlc.arg('page_limit')::int
-OFFSET sqlc.arg('page_offset')::bigint;
+OFFSET sqlc.arg('page_offset')::bigint
+)
+-- MATERIALIZED keeps display-only membership access after LIMIT and OFFSET.
+SELECT
+    id, name, slug, account_type, workos_id, stripe_customer_id,
+    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    trial_ends_at, created_at, updated_at,
+    coalesce(member_count, (
+        SELECT count(*)
+        FROM organization_user_relationships our
+        WHERE our.organization_id = paged.id
+          AND our.deleted IS FALSE
+    ))::bigint AS member_count
+FROM paged
+ORDER BY
+    CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'asc' THEN name END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'name' AND sqlc.arg('sort_dir')::text = 'desc' THEN name END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'asc' THEN slug END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN created_at END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'disabled_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN disabled_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'disabled_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN disabled_at END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'trial_ends_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN trial_ends_at END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'trial_ends_at' AND sqlc.arg('sort_dir')::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
+    -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
+    id ASC;
 
 -- name: AdminCountOrganizations :one
 -- The count cannot ride on the page query. That query carries the cursor
@@ -269,6 +312,16 @@ filtered AS (
         END::text AS trial_state
     FROM organization_metadata om
     LEFT JOIN trials t ON t.organization_id = om.id
+    -- Match the list's active-membership definition without multiplying rows.
+    -- Guard access inside the aggregate: generic plans must not scan members
+    -- when both bounds are absent.
+    CROSS JOIN LATERAL (
+        SELECT count(*)::bigint AS member_count
+        FROM organization_user_relationships our
+        WHERE (sqlc.narg('min_members')::bigint IS NOT NULL OR sqlc.narg('max_members')::bigint IS NOT NULL)
+          AND our.organization_id = om.id
+          AND our.deleted IS FALSE
+    ) members
     CROSS JOIN search
     WHERE
         (
@@ -279,6 +332,12 @@ filtered AS (
             OR lower(om.workos_id) = lower(search.term)
         )
         AND (coalesce(cardinality(sqlc.arg('account_types')::text[]), 0) = 0 OR om.gram_account_type = ANY(sqlc.arg('account_types')::text[]))
+        AND (sqlc.narg('min_members')::bigint IS NULL OR members.member_count >= sqlc.narg('min_members')::bigint)
+        AND (sqlc.narg('max_members')::bigint IS NULL OR members.member_count <= sqlc.narg('max_members')::bigint)
+        AND (sqlc.narg('created_at_gte')::timestamptz IS NULL OR om.created_at >= sqlc.narg('created_at_gte')::timestamptz)
+        AND (sqlc.narg('created_at_lt')::timestamptz IS NULL OR om.created_at < sqlc.narg('created_at_lt')::timestamptz)
+        -- Unlike disabled_states, this restriction is never bypassed by an ID match.
+        AND (sqlc.narg('disabled_only')::boolean IS NOT TRUE OR om.disabled_at IS NOT NULL)
         AND (
             (CASE WHEN om.disabled_at IS NULL THEN 'active' ELSE 'disabled' END) = ANY(sqlc.arg('disabled_states')::text[])
             OR lower(om.id) = lower(search.term)
