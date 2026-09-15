@@ -375,7 +375,7 @@ export function IdentityProviderSetupStepPanel({
             openSafeExternalUrl(step.deepLink!);
           }}
         >
-          {portal ? "Open the app in Okta" : "Open the right screen in Okta"}
+          {portal ? "Open the app in Okta" : "Connect in Okta"}
           <ExternalLink className="h-3.5 w-3.5" />
         </Button>
       ) : null}
