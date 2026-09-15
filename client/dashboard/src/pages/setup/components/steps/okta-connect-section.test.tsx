@@ -181,6 +181,53 @@ describe("OktaConnectSection", () => {
     });
   });
 
+  it("shows the value already submitted, and saving it again is an update", () => {
+    withStep(
+      connectStep({
+        expectedValues: [
+          {
+            key: "client_id",
+            label: "Client ID",
+            secret: false,
+            currentValue: "0oaexampleclientid",
+          },
+        ],
+      }),
+    );
+    renderSection(connection());
+
+    const field = screen.getByLabelText("Client ID") as HTMLInputElement;
+    expect(field.value).toBe("0oaexampleclientid");
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    // Correcting it sends what is on screen now, not what came back.
+    fireEvent.change(field, { target: { value: "0oacorrectedvalue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(submit.mutate.mock.calls[0]![0]).toEqual({
+      request: {
+        submitSetupStepRequestBody: {
+          stepKey: "connect",
+          values: [{ key: "client_id", value: "0oacorrectedvalue" }],
+        },
+      },
+    });
+  });
+
+  it("never prefills a secret, because the server does not hand one back", () => {
+    withStep(
+      connectStep({
+        expectedValues: [
+          { key: "client_secret", label: "Client secret", secret: true },
+        ],
+      }),
+    );
+    renderSection(connection());
+
+    const field = screen.getByLabelText("Client secret") as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+  });
+
   it("offers the check once the value is in", () => {
     withStep(connectStep({ state: "awaiting_verification" }));
     renderSection(connection({ status: "awaiting_verification" }));
@@ -189,6 +236,16 @@ describe("OktaConnectSection", () => {
     expect(verify.mutate.mock.calls[0]![0]).toEqual({
       request: { verifySetupStepRequestBody: { stepKey: "connect" } },
     });
+  });
+
+  it("still offers the check after one has failed", () => {
+    // The server takes another check from a failed step, so hiding the button
+    // here would strand the administrator on a fixable error.
+    withStep(connectStep({ state: "failed" }));
+    renderSection(connection({ status: "failed" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Verify connection" }));
+    expect(verify.mutate).toHaveBeenCalledOnce();
   });
 
   it("says so plainly while the check cannot run at all", () => {
@@ -212,6 +269,7 @@ describe("OktaConnectSection", () => {
     renderSection(
       connection({
         status: "active",
+        clientId: "0oaexampleclientid",
         capabilities: ["directory_read"],
         lastVerifiedAt: new Date("2026-09-14T12:30:00Z"),
         verifyEvidence: {
@@ -231,6 +289,7 @@ describe("OktaConnectSection", () => {
     expect(screen.getByText(TENANT)).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
     expect(screen.getByText("kid-abc123")).toBeTruthy();
+    expect(screen.getByText("0oaexampleclientid")).toBeTruthy();
     expect(screen.getByText("People and group membership")).toBeTruthy();
     expect(screen.getByText("18 groups")).toBeTruthy();
     // The exchange gives way to the connection once it has worked.

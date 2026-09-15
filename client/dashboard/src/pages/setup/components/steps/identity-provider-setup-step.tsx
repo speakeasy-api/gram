@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import type { IdentityProviderExpectedValue } from "@gram/client/models/components/identityproviderexpectedvalue.js";
 import type { IdentityProviderFieldOutcome } from "@gram/client/models/components/identityproviderfieldoutcome.js";
 import type { IdentityProviderSetupStep } from "@gram/client/models/components/identityprovidersetupstep.js";
 import type { IdentityProviderVerifyResult } from "@gram/client/models/components/identityproviderverifyresult.js";
@@ -40,6 +41,12 @@ const VERIFY_COPY: Record<string, { title: string; body: string }> = {
     body: "Grant the missing scope on the application's Okta API Scopes tab in your console, then check again. Everything already granted keeps working.",
   },
 };
+
+/** Correcting a stored value is an update; supplying a first one is a save. */
+function saveLabel(isSubmitting: boolean, hasSavedValue: boolean): string {
+  if (isSubmitting) return "Saving...";
+  return hasSavedValue ? "Update" : "Save";
+}
 
 function outcomeFor(
   outcomes: IdentityProviderFieldOutcome[],
@@ -156,8 +163,22 @@ export function IdentityProviderSetupStepPanel({
   verifyUnavailable,
 }: IdentityProviderSetupStepPanelProps): JSX.Element {
   const [values, setValues] = useState<Record<string, string>>({});
+  // What is on screen: what has been typed here, else what was submitted
+  // before. A secret never arrives back from the server, so its field is
+  // always empty and saving it again means retyping it.
+  const valueFor = (expected: IdentityProviderExpectedValue) =>
+    values[expected.key] ?? expected.currentValue ?? "";
   const complete = step.expectedValues.every((expected) =>
-    (values[expected.key] ?? "").trim(),
+    valueFor(expected).trim(),
+  );
+  // A check that came back short leaves the step failed, and the server takes
+  // another one from there, so the button has to survive its own bad news.
+  const canVerify =
+    step.state === "awaiting_verification" || step.state === "failed";
+  // Something is already stored, so this is a correction rather than a first
+  // answer. Secrets are excluded: theirs is always a fresh value.
+  const hasSavedValue = step.expectedValues.some(
+    (expected) => !expected.secret && expected.currentValue,
   );
 
   return (
@@ -214,7 +235,7 @@ export function IdentityProviderSetupStepPanel({
                   id={`setup-${expected.key}`}
                   type={expected.secret ? "password" : "text"}
                   reveal={expected.secret}
-                  value={values[expected.key] ?? ""}
+                  value={valueFor(expected)}
                   onChange={(value) =>
                     setValues((previous) => ({
                       ...previous,
@@ -243,14 +264,14 @@ export function IdentityProviderSetupStepPanel({
                 onSubmit(
                   step.expectedValues.map((expected) => ({
                     key: expected.key,
-                    value: (values[expected.key] ?? "").trim(),
+                    value: valueFor(expected).trim(),
                   })),
                 )
               }
             >
-              {isSubmitting ? "Saving..." : "Save"}
+              {saveLabel(isSubmitting, hasSavedValue)}
             </Button>
-            {step.state === "awaiting_verification" ? (
+            {canVerify ? (
               <Button
                 variant="secondary"
                 size="sm"

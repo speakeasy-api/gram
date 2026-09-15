@@ -41,6 +41,15 @@ export function OktaConnectionSummary({
         ) : null}
       </div>
 
+      {connection.clientId ? (
+        <Text variant="small" muted>
+          Client ID{" "}
+          <span className="text-foreground font-mono text-xs">
+            {connection.clientId}
+          </span>
+        </Text>
+      ) : null}
+
       <IdentityProviderCapabilities reads={reads} />
 
       <div className="space-y-1">
