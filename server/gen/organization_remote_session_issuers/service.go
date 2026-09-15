@@ -167,6 +167,9 @@ type CreateIssuerPayload struct {
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
@@ -341,6 +344,9 @@ type OrganizationIssuerDeletePreflight struct {
 	// Organization-owned user_session_issuers that trust this issuer and block
 	// deletion.
 	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // OrganizationIssuerMigratePreflight is the result type of the
@@ -366,8 +372,13 @@ type OrganizationIssuerMigratePreflight struct {
 	// User-session issuers that trust the source and block migration until
 	// explicitly unlinked or re-linked.
 	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int64
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 }
 
@@ -440,11 +451,14 @@ type UpdateIssuerPayload struct {
 	OpPolicyURI *string
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	OpTosURI            *string
+	ScopesSupported     []string
+	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no

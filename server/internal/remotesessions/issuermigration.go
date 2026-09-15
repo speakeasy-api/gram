@@ -370,6 +370,7 @@ func sortedUnique(values []string) []string {
 // by migrateIssuer's own guards, so the dialog an admin confirms and the
 // mutation that runs cannot disagree about what blocks a migration.
 type migratePreflight struct {
+	emaBindingCount               int64
 	clientCount                   int64
 	mcpServerNames                []string
 	endpointMismatches            []issuerFieldMismatch
@@ -380,7 +381,7 @@ type migratePreflight struct {
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+	return p.emaBindingCount == 0 && len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
 }
 
 type trustedUserSessionIssuerReference struct {
@@ -392,6 +393,11 @@ type trustedUserSessionIssuerReference struct {
 // source onto target. The caller has already loaded both issuers scoped to the
 // organization and validated the scope ladder.
 func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target repo.RemoteSessionIssuer) (migratePreflight, error) {
+	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: source.ID, OrganizationID: source.OrganizationID.String, ProjectID: source.ProjectID.UUID})
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count identity-chaining bindings: %w", err)
+	}
+
 	clientCount, err := r.CountRemoteSessionClientsByIssuerID(ctx, source.ID)
 	if err != nil {
 		return migratePreflight{}, fmt.Errorf("count source issuer clients: %w", err)
@@ -447,6 +453,7 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 	}
 
 	return migratePreflight{
+		emaBindingCount:               emaCount,
 		clientCount:                   clientCount,
 		mcpServerNames:                names,
 		endpointMismatches:            endpointMismatches(source, target),
@@ -479,19 +486,24 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // is the whole of the operation apart from soft-deleting the source, which each
 // surface does with its own scoped delete query.
 //
-// The three guards are the reason this is shared rather than duplicated. Endpoint
+// The four guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
 // authorization server it was established with, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
 // remote_session_issuer) invariant, which no database constraint expresses.
 // Trusted user-session-issuer references must be explicitly unlinked or
-// re-linked rather than silently following a migration. A surface that drifted
+// re-linked rather than silently following a migration. EMA bindings likewise
+// require explicit unlinking before migration. A surface that drifted
 // on any guard would not merely behave differently, it would be less safe.
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
 // cannot change before the transaction commits.
 func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+	if err := guardEMABindingsForIssuer(ctx, r, source.OrganizationID.String, source.ProjectID.UUID, source.ID); err != nil {
+		return 0, err
+	}
+
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)

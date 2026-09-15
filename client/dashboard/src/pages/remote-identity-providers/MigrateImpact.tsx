@@ -147,6 +147,7 @@ export function MigrateImpact({
   isLoading,
   hasFailed,
   clientCount,
+  emaBindingCount,
   mcpServerNames,
   endpointMismatches,
   conflictingMcpServerNames,
@@ -155,6 +156,7 @@ export function MigrateImpact({
   isLoading: boolean;
   hasFailed: boolean;
   clientCount: number | undefined;
+  emaBindingCount: number | undefined;
   mcpServerNames: string[] | undefined;
   endpointMismatches: IssuerFieldMismatch[] | undefined;
   conflictingMcpServerNames: string[] | undefined;
@@ -201,6 +203,15 @@ export function MigrateImpact({
           ? ` Affected MCP servers: ${mcpServerNames.join(", ")}.`
           : ""}
       </Text>
+
+      {emaBindingCount !== undefined && emaBindingCount > 0 && (
+        <Alert variant="error" dismissible={false}>
+          {emaBindingCount} active identity-chaining{" "}
+          {emaBindingCount === 1 ? "binding blocks" : "bindings block"}{" "}
+          consolidation. Explicitly unlink these bindings before consolidating,
+          then prepare new bindings for the target provider.
+        </Alert>
+      )}
 
       {endpointMismatches && endpointMismatches.length > 0 && (
         <Alert variant="error" dismissible={false} alignTop>

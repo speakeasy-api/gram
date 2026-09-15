@@ -48,6 +48,7 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		issuerIDs = append(issuerIDs, id.String())
 	}
 	return &types.RemoteSessionClient{
+		GrantTypes:              row.GrantTypes,
 		ID:                      row.ID.String(),
 		ProjectID:               projectID,
 		OrganizationID:          organizationID,
@@ -99,6 +100,7 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 	}
 
 	return &types.RemoteSessionClient{
+		GrantTypes:              row.GrantTypes,
 		ID:                      row.ID.String(),
 		ProjectID:               projectID,
 		OrganizationID:          organizationID,

@@ -67,6 +67,8 @@ var OrganizationClientDeletePreflight = Type("OrganizationClientDeletePreflight"
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers this client is attached to.")
 
 	Required("session_count", "mcp_server_names")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
 })
 
 // CreateOrganizationRemoteSessionClientForm registers a standalone

@@ -247,6 +247,9 @@ type OrganizationClientDeletePreflight struct {
 	SessionCount int
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // An MCP server attached to a remote_session_client, with the fields the

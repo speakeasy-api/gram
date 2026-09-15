@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -48,19 +49,20 @@ const discoveryHTTPTimeout = 10 * time.Second
 // and the served (or merged) document verbatim, from which every typed field
 // is derived.
 type rfc8414Document struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	JwksURI                           string   `json:"jwks_uri"`
-	ServiceDocumentation              string   `json:"service_documentation"`
-	OpPolicyURI                       string   `json:"op_policy_uri"`
-	OpTosURI                          string   `json:"op_tos_uri"`
-	ScopesSupported                   []string `json:"scopes_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	Issuer                              string   `json:"issuer"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	TokenEndpoint                       string   `json:"token_endpoint"`
+	RevocationEndpoint                  string   `json:"revocation_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	JwksURI                             string   `json:"jwks_uri"`
+	ServiceDocumentation                string   `json:"service_documentation"`
+	OpPolicyURI                         string   `json:"op_policy_uri"`
+	OpTosURI                            string   `json:"op_tos_uri"`
+	ScopesSupported                     []string `json:"scopes_supported"`
+	GrantTypesSupported                 []string `json:"grant_types_supported"`
+	AuthorizationGrantProfilesSupported []string `json:"authorization_grant_profiles_supported"`
+	ResponseTypesSupported              []string `json:"response_types_supported"`
+	TokenEndpointAuthMethodsSupported   []string `json:"token_endpoint_auth_methods_supported"`
 
 	// CodeChallengeMethodsSupported stays nil when the document omits the
 	// field, and only here: persistence collapses it to an empty array
@@ -124,6 +126,8 @@ type discoveryResult struct {
 	// so a refresh keeps the stored document's members for it instead of
 	// withdrawing them; "" when every candidate answered definitively.
 	unreadable string
+	// unreadableErr retains the upstream status and cause for refresh failures.
+	unreadableErr *discoveryError
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -237,7 +241,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 
 	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.jwksResolver, existing)
 	if err != nil {
-		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+		return nil, s.recordIssuerDiscoveryFailure(ctx, logger, existing, err)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -372,29 +376,30 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 	txRepo := repo.New(dbtx)
 
 	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
-		Slug:                              payload.Slug,
-		Issuer:                            payload.Issuer,
-		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
-		LogoAssetID:                       logoAssetID,
-		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGTextEmpty(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGTextEmpty(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
-		Oidc:                              conv.PtrValOr(payload.Oidc, false),
-		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                                payload.Slug,
+		Issuer:                              payload.Issuer,
+		Name:                                conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                         logoAssetID,
+		ClientSetupDocumentationUrl:         conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGTextEmpty(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
+		Oidc:                                conv.PtrValOr(payload.Oidc, false),
+		Passthrough:                         conv.PtrValOr(payload.Passthrough, false),
 		// Discovered fields forwarded from the draft. Omitted fields store NULL
 		// ("not captured"), like code_challenge_methods_supported above.
 		UserinfoEndpoint:                           conv.PtrToPGTextEmpty(payload.UserinfoEndpoint),
@@ -571,28 +576,33 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
 
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
-		Slug:                              conv.PtrToPGText(payload.Slug),
-		Issuer:                            conv.PtrToPGText(payload.Issuer),
-		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
-		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
-		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
-		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
-		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
-		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
-		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
-		OpPolicyUri:                       conv.PtrToPGText(payload.OpPolicyURI),
-		OpTosUri:                          conv.PtrToPGText(payload.OpTosURI),
-		ScopesSupported:                   payload.ScopesSupported,
-		GrantTypesSupported:               payload.GrantTypesSupported,
-		ResponseTypesSupported:            payload.ResponseTypesSupported,
-		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
-		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
-		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
-		UserinfoEndpoint:                  conv.PtrToPGText(payload.UserinfoEndpoint),
-		IntrospectionEndpoint:             conv.PtrToPGText(payload.IntrospectionEndpoint),
+		Slug:                                conv.PtrToPGText(payload.Slug),
+		Issuer:                              conv.PtrToPGText(payload.Issuer),
+		Name:                                conv.PtrToPGText(payload.Name),
+		LogoAssetID:                         conv.PtrToPGText(payload.LogoAssetID),
+		ClientSetupDocumentationUrl:         conv.PtrToPGText(payload.ClientSetupDocumentationURL),
+		AuthorizationEndpoint:               conv.PtrToPGText(payload.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                  conv.PtrToPGText(payload.RevocationEndpoint),
+		RegistrationEndpoint:                conv.PtrToPGText(payload.RegistrationEndpoint),
+		JwksUri:                             conv.PtrToPGText(payload.JwksURI),
+		ServiceDocumentation:                conv.PtrToPGText(payload.ServiceDocumentation),
+		OpPolicyUri:                         conv.PtrToPGText(payload.OpPolicyURI),
+		OpTosUri:                            conv.PtrToPGText(payload.OpTosURI),
+		ScopesSupported:                     payload.ScopesSupported,
+		GrantTypesSupported:                 payload.GrantTypesSupported,
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
+		ResponseTypesSupported:              payload.ResponseTypesSupported,
+		TokenEndpointAuthMethodsSupported:   payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:       payload.CodeChallengeMethodsSupported,
+		ClientIDMetadataDocumentSupported:   conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
+		UserinfoEndpoint:                    conv.PtrToPGText(payload.UserinfoEndpoint),
+		IntrospectionEndpoint:               conv.PtrToPGText(payload.IntrospectionEndpoint),
 		IntrospectionEndpointAuthMethodsSupported:  payload.IntrospectionEndpointAuthMethodsSupported,
 		IDTokenSigningAlgValuesSupported:           payload.IDTokenSigningAlgValuesSupported,
 		ClaimsSupported:                            payload.ClaimsSupported,
@@ -905,6 +915,10 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
 	}
 
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+		return err
+	}
+
 	deleted, err := txRepo.DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{
 		ID:        issuerID,
 		ProjectID: uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
@@ -995,14 +1009,15 @@ func (e *discoveryError) UserMessage() string {
 // payload: callers must not reflect upstream endpoints or registration
 // material to untrusted clients.
 type DiscoveredIssuerMetadata struct {
-	Issuer                            string
-	AuthorizationEndpoint             string
-	TokenEndpoint                     string
-	RegistrationEndpoint              string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	Issuer                              string
+	AuthorizationEndpoint               string
+	TokenEndpoint                       string
+	RegistrationEndpoint                string
+	ScopesSupported                     []string
+	GrantTypesSupported                 []string
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 
 	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
 	// that omits the field yields an empty slice — the persisted
@@ -1065,14 +1080,15 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 	doc := discovered.doc
 	return DiscoveredIssuerMetadata{
-		Issuer:                            doc.Issuer,
-		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
-		TokenEndpoint:                     doc.TokenEndpoint,
-		RegistrationEndpoint:              doc.RegistrationEndpoint,
-		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
-		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
-		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
-		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+		Issuer:                              doc.Issuer,
+		AuthorizationEndpoint:               doc.AuthorizationEndpoint,
+		TokenEndpoint:                       doc.TokenEndpoint,
+		RegistrationEndpoint:                doc.RegistrationEndpoint,
+		ScopesSupported:                     append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:                 slices.Clone(doc.GrantTypesSupported),
+		AuthorizationGrantProfilesSupported: orEmptySlice(slices.Clone(doc.AuthorizationGrantProfilesSupported)),
+		ResponseTypesSupported:              append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported:   append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
 
 		// An empty advertised list must survive as empty here, because nil and
 		// empty persist differently for this field (NULL "never captured" vs
@@ -1144,6 +1160,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	// in what the primary left out. There are only two families, so the loop
 	// ends as soon as the second has contributed.
 	var firstErr *discoveryError
+	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
 	// unreadable records, per family, the first candidate that could not be
@@ -1183,6 +1200,17 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 			continue
 		}
 
+		// Discovery location is not issuer identity. Even an origin fallback
+		// must name the exact requested issuer (including its trailing slash).
+		if doc.Issuer == "" {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL)}
+			continue
+		}
+		if doc.Issuer != issuerURL {
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
+			continue
+		}
+
 		// A 200 that parses but advertises no usable OAuth endpoints is almost
 		// always a catch-all answering our speculative candidate, not real
 		// metadata. Remember the first such document but keep probing — a later
@@ -1211,9 +1239,10 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 	if primary != nil {
 		result := discoveryResult{
-			doc:        *primary,
-			warnings:   collectDiscoveryWarnings(issuerURL, *primary),
-			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+			doc:           *primary,
+			warnings:      collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:    conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+			unreadableErr: unreadableErr,
 		}
 		if result.unreadable != "" {
 			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable))
@@ -1221,11 +1250,17 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		return result, nil
 	}
 
+	// Reject unusable identity evidence only after every candidate was tried.
+	// An unread candidate still takes transient precedence so it can be retried.
+	if untrustedErr != nil && unreadableErr == nil {
+		return discoveryResult{}, untrustedErr
+	}
+
 	// An endpoint-less document is only worth returning when it is all the
 	// issuer has. With a candidate unread, the real document may be behind
 	// the outage, so the run is transient rather than a verdict on the issuer.
 	if fallback != nil && unreadableErr == nil {
-		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil}, nil
 	}
 	if unreadableErr != nil {
 		return discoveryResult{}, unreadableErr
@@ -1365,7 +1400,15 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 		}
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	mediaType, _, mediaErr := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if mediaErr != nil || mediaType != "application/json" {
+		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery content type must be application/json"), definitive: true}
+	}
+	const maxDiscoveryBodyBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryBodyBytes+1))
+	if len(body) > maxDiscoveryBodyBytes {
+		return rfc8414Document{}, &discoveryError{WellKnownURL: wellKnown, Status: resp.StatusCode, cause: errors.New("discovery document exceeds body limit"), definitive: true}
+	}
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
 			WellKnownURL: wellKnown,
@@ -1395,6 +1438,31 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // loopback exception for endpoints is measured against. A stored document is
 // re-projected the same way, without a fetch.
 func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, error) {
+	// JSON null is accepted by Go's []string decoder, even as an element.
+	// Metadata arrays must actually be arrays containing only strings.
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil || members == nil {
+		return rfc8414Document{}, errors.New("discovery document must be a JSON object")
+	}
+	for _, name := range []string{"scopes_supported", "grant_types_supported", "authorization_grant_profiles_supported", "response_types_supported", "token_endpoint_auth_methods_supported", "code_challenge_methods_supported", "introspection_endpoint_auth_methods_supported", "id_token_signing_alg_values_supported", "claims_supported"} {
+		raw, present := members[name]
+		if !present {
+			continue
+		}
+		var values []json.RawMessage
+		if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+			return rfc8414Document{}, fmt.Errorf("%s must be an array of strings", name)
+		}
+		for _, value := range values {
+			var entry any
+			if err := json.Unmarshal(value, &entry); err != nil {
+				return rfc8414Document{}, fmt.Errorf("decode %s entry: %w", name, err)
+			}
+			if _, ok := entry.(string); !ok {
+				return rfc8414Document{}, fmt.Errorf("%s must contain only strings", name)
+			}
+		}
+	}
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return rfc8414Document{}, fmt.Errorf("decode discovery document: %w", err)

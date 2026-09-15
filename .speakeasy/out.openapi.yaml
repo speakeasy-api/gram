@@ -44399,6 +44399,315 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: RemoteSessionClients
+  /rpc/remoteSessionClients.prepareEMA:
+    post:
+      description: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+      operationId: prepareEMA
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrepareEMARequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityChainingPreparation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: prepareEMA remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: prepareEMA
+  /rpc/remoteSessionClients.readEMA:
+    post:
+      description: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+      operationId: readEMA
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadEMARequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityChainingPreparation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: readEMA remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: readEMA
+  /rpc/remoteSessionClients.unlinkEMA:
+    post:
+      description: Explicit, tenant-scoped identity-chaining configuration. Does not exchange tokens or establish user access.
+      operationId: unlinkEMA
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlinkEMARequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityChainingPreparation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: unlinkEMA remoteSessionClients
+      tags:
+        - remoteSessionClients
+      x-speakeasy-name-override: unlinkEMA
   /rpc/remoteSessionClients.update:
     post:
       description: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
@@ -71221,6 +71530,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
@@ -71806,6 +72120,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
@@ -76606,6 +76925,76 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    IdentityChainingPreparation:
+      type: object
+      properties:
+        binding_id:
+          type: string
+        client_id:
+          type: string
+          description: Exact selected remote_session_client row ID, when available.
+        external_client_id:
+          type: string
+          description: Public OAuth client identifier, never a secret.
+        generation:
+          type: integer
+          format: int64
+        grant_source:
+          type: string
+          description: Provenance of recorded grants, not provider trust.
+        grant_types:
+          type: array
+          items:
+            type: string
+          description: Null means unknown; an empty array means no recorded grants.
+          nullable: true
+        issuer:
+          type: string
+        remediation:
+          type: string
+          description: Safe next action without provider bodies or credentials.
+        resource:
+          type: string
+        retryable:
+          type: boolean
+        scopes:
+          type: array
+          items:
+            type: string
+        stage:
+          type: string
+          enum:
+            - selection
+            - eligibility
+            - registration
+            - discovery
+            - publication
+        state:
+          type: string
+          description: Preparation state; readiness never proves user access.
+          enum:
+            - unsupported_profile
+            - incomplete_metadata
+            - unknown_grants
+            - manual_setup_required
+            - configuration_required
+            - in_progress
+            - indeterminate
+            - provider_rejection
+            - transient_failure
+            - published_acceptance_unverified
+            - ready
+            - unlinked
+      required:
+        - state
+        - stage
+        - remediation
+        - retryable
+        - generation
+        - resource
+        - scopes
+        - grant_source
+        - grant_types
     IdentityDirectory:
       type: object
       properties:
@@ -77040,7 +77429,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -77050,6 +77439,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -77075,6 +77468,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -81241,6 +81635,10 @@ components:
     OrganizationClientDeletePreflight:
       type: object
       properties:
+        ema_binding_count:
+          type: integer
+          description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
+          format: int64
         mcp_server_names:
           type: array
           items:
@@ -81254,6 +81652,7 @@ components:
       required:
         - session_count
         - mcp_server_names
+        - ema_binding_count
     OrganizationEntry:
       type: object
       properties:
@@ -81336,6 +81735,10 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients registered with this issuer.
           format: int64
+        ema_binding_count:
+          type: integer
+          description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
+          format: int64
         mcp_server_names:
           type: array
           items:
@@ -81351,12 +81754,13 @@ components:
         - client_count
         - mcp_server_names
         - trusted_user_session_issuers
+        - ema_binding_count
     OrganizationIssuerMigratePreflight:
       type: object
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -81366,6 +81770,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -81388,6 +81796,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -81503,10 +81912,14 @@ components:
       properties:
         can_delete:
           type: boolean
-          description: True when no live MCP server or toolset references the issuer.
+          description: True when no live MCP server, toolset, or active identity-chaining binding references the issuer.
         client_count:
           type: integer
           description: Number of non-deleted user_session_clients registered with the issuer.
+          format: int64
+        ema_binding_count:
+          type: integer
+          description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
           format: int64
         live_session_count:
           type: integer
@@ -81529,6 +81942,7 @@ components:
         - mcp_servers
         - toolsets
         - can_delete
+        - ema_binding_count
     OrganizationUserSessionIssuerReference:
       type: object
       properties:
@@ -82327,6 +82741,72 @@ components:
         - kind
         - id
         - status
+    PrepareEMARequestBody:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: Explicit selected client row ID; never inferred.
+          format: uuid
+        confirm_grants:
+          type: array
+          items:
+            type: string
+          description: Administrator-declared grants, not provider verification.
+        expected_generation:
+          type: integer
+          description: Optimistic binding generation.
+          format: int64
+          minimum: 0
+        mechanism:
+          type: string
+          default: manual
+          enum:
+            - manual
+            - cimd
+            - dcr
+        remote_session_issuer_id:
+          type: string
+          format: uuid
+        resource:
+          type: string
+          description: Canonical intended resource URI.
+          format: uri
+          minLength: 1
+          maxLength: 2048
+        resource_metadata:
+          type: object
+          properties:
+            authorization_servers:
+              type: array
+              items:
+                type: string
+            resource:
+              type: string
+          required:
+            - resource
+            - authorization_servers
+        scopes:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Requested scope tokens.
+        token_endpoint_auth_method:
+          type: string
+          description: Explicit DCR authentication method.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - expected_generation
+        - user_session_issuer_id
+        - remote_session_issuer_id
+        - resource
     PreviewSpendRuleRequestBody:
       type: object
       properties:
@@ -83340,6 +83820,25 @@ components:
       required:
         - group_value
         - points
+    ReadEMARequestBody:
+      type: object
+      properties:
+        remote_session_issuer_id:
+          type: string
+          format: uuid
+        resource:
+          type: string
+          description: Canonical intended resource URI.
+          format: uri
+          minLength: 1
+          maxLength: 2048
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - remote_session_issuer_id
+        - resource
     RecordDashboardCtaEventRequestBody:
       type: object
       properties:
@@ -83633,6 +84132,12 @@ components:
         created_at:
           type: string
           format: date-time
+        grant_types:
+          type: array
+          items:
+            type: string
+          description: Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
+          nullable: true
         id:
           type: string
           description: The remote_session_client id.
@@ -83687,12 +84192,18 @@ components:
         - client_id_issued_at
         - created_at
         - updated_at
+        - grant_types
     RemoteSessionIssuer:
       type: object
       properties:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
@@ -83842,6 +84353,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
@@ -91557,6 +92073,31 @@ components:
         - provider
         - seen_at
         - reason
+    UnlinkEMARequestBody:
+      type: object
+      properties:
+        expected_generation:
+          type: integer
+          description: Optimistic binding generation.
+          format: int64
+          minimum: 0
+        remote_session_issuer_id:
+          type: string
+          format: uuid
+        resource:
+          type: string
+          description: Canonical intended resource URI.
+          format: uri
+          minLength: 1
+          maxLength: 2048
+        user_session_issuer_id:
+          type: string
+          format: uuid
+      required:
+        - expected_generation
+        - user_session_issuer_id
+        - remote_session_issuer_id
+        - resource
     UnmarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -92472,6 +93013,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.

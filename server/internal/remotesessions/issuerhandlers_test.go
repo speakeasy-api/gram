@@ -1369,7 +1369,7 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"issuer":                 server.URL,
+			"issuer":                 server.URL + "/tenant",
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
 			"jwks_uri":               server.URL + "/jwks",
@@ -1411,7 +1411,7 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/.well-known/oauth-authorization-server" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issuer":                 server.URL,
+				"issuer":                 server.URL + "/tenant",
 				"authorization_endpoint": server.URL + "/authorize",
 				"token_endpoint":         server.URL + "/token",
 				"jwks_uri":               server.URL + "/jwks",
@@ -1420,7 +1420,7 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 			return
 		}
 		// Catch-all: 200 with no authorization_endpoint / token_endpoint.
-		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + "/tenant"})
 	}))
 	t.Cleanup(server.Close)
 
@@ -1455,7 +1455,7 @@ func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *t
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		probedPaths = append(probedPaths, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + "/tenant"})
 	}))
 	t.Cleanup(server.Close)
 
@@ -2129,12 +2129,12 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-
-	require.Nil(t, draft.JwksURI)
-	require.Nil(t, draft.UserinfoEndpoint)
-	require.Nil(t, draft.ClaimsSupported)
-	require.False(t, draft.BackchannelLogoutSupported)
-	require.Contains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+	require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+	require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+	require.Nil(t, draft.JwksURI, "the sibling issuer cannot supply a key URL")
+	require.Nil(t, draft.UserinfoEndpoint, "the sibling issuer cannot supply userinfo")
+	require.Empty(t, draft.ClaimsSupported, "the sibling issuer cannot supply claims")
+	require.False(t, draft.BackchannelLogoutSupported, "the sibling issuer cannot supply logout capabilities")
 }
 
 // A document naming no issuer cannot be tied to the primary, so it
@@ -2148,17 +2148,13 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeDocumentWithoutIssuer(t *t
 		mutateOIDC:  func(doc map[string]any) { delete(doc, "issuer") },
 	})
 
-	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
-
-	require.Nil(t, draft.JwksURI)
-	require.Nil(t, draft.UserinfoEndpoint)
-	require.Nil(t, draft.ClaimsSupported)
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 // Enrichment endpoints are dialled with a bearer token, so a plaintext one
@@ -2230,27 +2226,56 @@ func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndp
 	require.NotNil(t, draft.JwksURI, "the rest of the OpenID document still merges")
 }
 
-// The merge gate compares issuers the way the rest of the package does,
-// ignoring a trailing slash, so an OpenID document that spells the issuer
-// with one still contributes.
-func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlash(t *testing.T) {
+// A trailing slash changes the issuer identifier and must not be merged.
+func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuerMismatch(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	var server *httptest.Server
-	server = metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+	server = metadataServer(t, metadataServerOptions{mutateOAuth: func(doc map[string]any) { doc["issuer"] = server.URL + "/" }, mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
 	}})
 
-	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, draft.JwksURI, "a trailing slash on the OpenID issuer does not block the merge")
-	require.Equal(t, server.URL+"/jwks", *draft.JwksURI)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+// Isolate the OIDC mismatch: an exact OAuth document remains usable, while
+// absent OAuth metadata leaves no acceptable candidate. Neither admits OIDC fields.
+func TestFetchRemoteSessionIssuerMetadata_IsolatesOIDCTrailingSlashMismatch(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusOK, http.StatusNotFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var oauthStatus atomic.Int32
+			oauthStatus.Store(int32(status))
+			var server *httptest.Server
+			server = metadataServer(t, metadataServerOptions{
+				oauthStatus: &oauthStatus,
+				mutateOIDC:  func(doc map[string]any) { doc["issuer"] = server.URL + "/" },
+			})
+			draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
+			if status == http.StatusNotFound {
+				requireOopsCode(t, err, oops.CodeInvalid)
+				require.Nil(t, draft, "the mismatched OIDC candidate cannot stand alone")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+			require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+			require.Equal(t, []string{"read", "write"}, draft.ScopesSupported)
+			require.Nil(t, draft.JwksURI)
+			require.Nil(t, draft.UserinfoEndpoint)
+			require.Empty(t, draft.ClaimsSupported)
+			require.False(t, draft.BackchannelLogoutSupported, "OIDC mismatch cannot contribute capabilities to an exact OAuth candidate")
+		})
+	}
 }
 
 // A flag the RFC 8414 document states explicitly, even as false, is never
@@ -2288,9 +2313,13 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 
 	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
 	require.NoError(t, err)
-
-	var members map[string]any
-	require.NoError(t, json.Unmarshal(discovered.Metadata, &members))
-	require.NotContains(t, members, "claims_supported")
-	require.Equal(t, "kept", members["oauth_only_extension"])
+	require.Equal(t, server.URL, discovered.Issuer)
+	require.Empty(t, discovered.UserinfoEndpoint)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &document))
+	require.Equal(t, server.URL, document["issuer"])
+	require.Equal(t, "kept", document["oauth_only_extension"])
+	require.NotContains(t, document, "jwks_uri")
+	require.NotContains(t, document, "userinfo_endpoint")
+	require.NotContains(t, document, "claims_supported")
 }

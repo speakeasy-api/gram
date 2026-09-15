@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -331,7 +332,7 @@ func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *te
 
 // When a same-origin candidate fails transiently after the primary document
 // was read, the fields only it advertises are not treated as withdrawn: the
-// stored values stand and the caller is warned. A definitive miss on the next
+// entire snapshot stands and the failure is recorded. A definitive miss on the next
 // refresh clears them.
 func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFields(t *testing.T) {
 	t.Parallel()
@@ -339,29 +340,39 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFiel
 	ctx, ti := newTestService(t)
 	var oidcStatus atomic.Int32
 	oidcStatus.Store(http.StatusOK)
-	upstream := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus})
+	upstream := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus, mutateOIDC: func(doc map[string]any) {
+		doc["authorization_grant_profiles_supported"] = []string{"urn:ietf:params:oauth:grant-profile:id-jag"}
+		doc["grant_types_supported"] = []string{"urn:ietf:params:oauth:grant-type:jwt-bearer"}
+	}})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable", upstream.URL))
 	require.NoError(t, err)
 
 	complete := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, complete.Issuer.AuthorizationGrantProfilesSupported)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 	require.Equal(t, []string{"sub", "email", "email_verified"}, complete.Issuer.ClaimsSupported)
 
 	oidcStatus.Store(http.StatusServiceUnavailable)
-	kept := refreshIssuer(t, ctx, ti, created.ID)
-	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI, "a transient miss does not withdraw the field")
-	require.Equal(t, upstream.URL+"/userinfo", *kept.Issuer.UserinfoEndpoint)
-	require.Equal(t, []string{"sub", "email", "email_verified"}, kept.Issuer.ClaimsSupported)
-	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "was unreadable")
-	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
+	before := loadIssuerRow(t, ctx, ti, created)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	kept := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
+	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
+	require.Equal(t, before.JwksUri, kept.JwksUri)
+	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataLastErrorAt.Valid)
+	require.True(t, kept.MetadataLastErrorUrl.Valid)
 
 	oidcStatus.Store(http.StatusNotFound)
 	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
 	require.Nil(t, withdrawn.Issuer.JwksURI, "a definitive miss withdraws the field")
 	require.Nil(t, withdrawn.Issuer.UserinfoEndpoint)
 	require.Empty(t, withdrawn.Issuer.ClaimsSupported)
+	require.Empty(t, withdrawn.Issuer.AuthorizationGrantProfilesSupported)
+	require.False(t, loadIssuerRow(t, ctx, ti, created).MetadataLastErrorAt.Valid)
 	require.False(t, slices.ContainsFunc(withdrawn.DiscoveryWarnings, func(w string) bool {
 		return strings.Contains(w, "was unreadable")
 	}), "a 404 is definitive and raises no unreadable warning: %v", withdrawn.DiscoveryWarnings)
@@ -386,12 +397,17 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapture
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
 	oauthStatus.Store(http.StatusServiceUnavailable)
-	kept := refreshIssuer(t, ctx, ti, created.ID)
-	require.Equal(t, upstream.URL+"/register", *kept.Issuer.RegistrationEndpoint, "a member only the unreadable document carries is not withdrawn")
-	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI)
-	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "was unreadable")
-	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
+	before := loadIssuerRow(t, ctx, ti, created)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	kept := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
+	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
+	require.Equal(t, before.JwksUri, kept.JwksUri)
+	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataLastErrorAt.Valid)
+	require.True(t, kept.MetadataLastErrorUrl.Valid)
 
 	oauthStatus.Store(http.StatusNotFound)
 	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
@@ -447,12 +463,18 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPr
 	})
 	require.NoError(t, err)
 
-	kept := refreshIssuer(t, ctx, ti, created.ID)
-	require.Nil(t, kept.Issuer.JwksURI, "the previous issuer's key set must not be attributed to the new one")
-	require.Equal(t, current.URL+"/authorize", *kept.Issuer.AuthorizationEndpoint)
-	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
-		return strings.Contains(w, "was unreadable")
-	}), "the unreadable candidate is still reported: %v", kept.DiscoveryWarnings)
+	before := loadIssuerRow(t, ctx, ti, created)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	kept := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
+	require.Equal(t, before.AuthorizationGrantProfilesSupported, kept.AuthorizationGrantProfilesSupported)
+	require.Equal(t, before.JwksUri, kept.JwksUri)
+	require.Equal(t, before.AuthorizationEndpoint, kept.AuthorizationEndpoint)
+	require.True(t, kept.MetadataLastErrorAt.Valid)
+	require.True(t, kept.MetadataLastErrorUrl.Valid)
+
 }
 
 // A document Postgres cannot hold as jsonb is not retained verbatim; the
@@ -481,8 +503,8 @@ func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *t
 
 // The stored document only fills gaps after the fetched one has passed the
 // distrust gate on its own. A primary that advertises no issuer is rejected
-// even when a transient miss on the other candidate would otherwise have let
-// the stored issuer stand in for it.
+// without borrowing the stored issuer. An unread candidate keeps the failure
+// transient until discovery can determine whether an exact match is available.
 func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStoredIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -492,6 +514,11 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 	var dropIssuer atomic.Bool
 	upstream := metadataServer(t, metadataServerOptions{
 		oidcStatus: &oidcStatus,
+		mutateOIDC: func(doc map[string]any) {
+			if dropIssuer.Load() {
+				delete(doc, "issuer")
+			}
+		},
 		mutateOAuth: func(doc map[string]any) {
 			if dropIssuer.Load() {
 				delete(doc, "issuer")
@@ -505,6 +532,7 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 	complete := refreshIssuer(t, ctx, ti, created.ID)
 	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
 
+	before := loadIssuerRow(t, ctx, ti, created)
 	dropIssuer.Store(true)
 	oidcStatus.Store(http.StatusServiceUnavailable)
 	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
@@ -513,9 +541,19 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStor
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	kept := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
+	require.True(t, kept.MetadataLastErrorUrl.Valid)
+	// Once the outage ends, neither candidate identifies the requested issuer.
+	oidcStatus.Store(http.StatusOK)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "advertises no issuer")
+	kept = loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, before.Metadata, kept.Metadata)
+	require.Equal(t, before.MetadataFetchedAt, kept.MetadataFetchedAt)
 }
 
 // loadIssuerRow reads the stored row for an issuer the test service created
@@ -696,14 +734,14 @@ func TestRefreshRemoteSessionIssuerMetadata_TransientPathOutageDoesNotAdoptOrigi
 	require.Equal(t, "https://stale.example.com/authorize", loadIssuerRow(t, ctx, ti, created).AuthorizationEndpoint.String, "the origin document was not adopted")
 
 	pathStatus.Store(http.StatusNotFound)
-	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
 		ID:               created.ID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err, "a definitive miss on the path locations still reaches the origin fallback")
-	require.Equal(t, upstream.URL+"/authorize", *result.Issuer.AuthorizationEndpoint)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Equal(t, "https://stale.example.com/authorize", loadIssuerRow(t, ctx, ti, created).AuthorizationEndpoint.String, "an origin fallback must still advertise the exact issuer")
 }
 
 // An endpoint-less document is returned only when it is all the issuer has.
@@ -748,9 +786,7 @@ func TestRefreshRemoteSessionIssuerMetadata_EndpointlessDocumentWithUnreadableCa
 	require.Contains(t, err.Error(), "advertises no authorization_endpoint")
 }
 
-// Origin metadata cannot bind keys for a path-scoped issuer. The ordinary
-// metadata fallback remains available when no jwks_uri is advertised, but a
-// key URL requires the document's issuer to match byte for byte.
+// Origin metadata cannot bind either keys or capabilities for a path-scoped issuer.
 func TestRefreshRemoteSessionIssuerMetadata_RejectsOriginKeysWhenIssuerHasPath(t *testing.T) {
 	t.Parallel()
 
@@ -767,7 +803,7 @@ func TestRefreshRemoteSessionIssuerMetadata_RejectsOriginKeysWhenIssuerHasPath(t
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
-	require.Contains(t, err.Error(), "refusing to trust its jwks_uri")
+	require.Contains(t, err.Error(), "another authorization server")
 
 	stored, err := repo.New(ti.conn).GetRemoteSessionIssuerByIDProjectOwned(t.Context(), repo.GetRemoteSessionIssuerByIDProjectOwnedParams{
 		ID:        uuid.MustParse(created.ID),
@@ -778,8 +814,7 @@ func TestRefreshRemoteSessionIssuerMetadata_RejectsOriginKeysWhenIssuerHasPath(t
 	require.Equal(t, "https://stale.example.com/jwks", stored.JwksUri.String)
 }
 
-// The origin relaxation is no wider than the fallback that motivates it: a
-// sibling path on the same host is a different tenant on a multi-tenant IdP,
+// A sibling path on the same host is a different tenant on a multi-tenant IdP,
 // and adopting its endpoints would send users to the wrong place.
 func TestRefreshRemoteSessionIssuerMetadata_AbortsOnSiblingPathIssuer(t *testing.T) {
 	t.Parallel()
@@ -1351,22 +1386,23 @@ func TestRefreshIssuerMetadata_RejectsGlobalIssuer(t *testing.T) {
 // supplied row, which each test then perturbs on exactly one axis.
 func discoveredMetadataParams(issuer repo.RemoteSessionIssuer) repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams {
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
-		AuthorizationEndpoint:             "https://refreshed.example.com/authorize",
-		TokenEndpoint:                     "https://refreshed.example.com/token",
-		RegistrationEndpoint:              "",
-		JwksUri:                           "",
-		ServiceDocumentation:              "",
-		OpPolicyUri:                       "",
-		OpTosUri:                          "",
-		ScopesSupported:                   []string{},
-		GrantTypesSupported:               []string{},
-		ResponseTypesSupported:            []string{},
-		TokenEndpointAuthMethodsSupported: []string{},
-		ClientIDMetadataDocumentSupported: false,
-		ID:                                issuer.ID,
-		Issuer:                            issuer.Issuer,
-		ProjectID:                         issuer.ProjectID,
-		OrganizationID:                    issuer.OrganizationID,
+		AuthorizationEndpoint:               "https://refreshed.example.com/authorize",
+		TokenEndpoint:                       "https://refreshed.example.com/token",
+		RegistrationEndpoint:                "",
+		JwksUri:                             "",
+		ServiceDocumentation:                "",
+		OpPolicyUri:                         "",
+		OpTosUri:                            "",
+		ScopesSupported:                     []string{},
+		GrantTypesSupported:                 []string{},
+		AuthorizationGrantProfilesSupported: []string{},
+		ResponseTypesSupported:              []string{},
+		TokenEndpointAuthMethodsSupported:   []string{},
+		ClientIDMetadataDocumentSupported:   false,
+		ID:                                  issuer.ID,
+		Issuer:                              issuer.Issuer,
+		ProjectID:                           issuer.ProjectID,
+		OrganizationID:                      issuer.OrganizationID,
 	}
 }
 
@@ -1617,4 +1653,94 @@ func TestRefreshRemoteSessionIssuerMetadata_RevocationEndpointStaysNullWhenUnadv
 	})
 	require.NoError(t, err, "a missing revocation endpoint must not abort the refresh")
 	require.Nil(t, result.Issuer.RevocationEndpoint)
+}
+
+// Every ownership tier records failed discovery independently of the last
+// successful evidence, and a later complete refresh clears the failure.
+func TestAIM63RefreshEvidenceAcrossOwnershipTiers(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"project", "organization", "platform"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var malformed atomic.Bool
+			var removed atomic.Bool
+			upstream := fakeIssuerServer(t, func(doc map[string]any) {
+				if malformed.Load() {
+					doc["authorization_grant_profiles_supported"] = []any{nil}
+					return
+				}
+				if !removed.Load() {
+					doc["authorization_grant_profiles_supported"] = []string{"urn:ietf:params:oauth:grant-profile:id-jag"}
+				}
+			})
+			var created *types.RemoteSessionIssuer
+			var err error
+			var refresh func() error
+			switch tier {
+			case "project":
+				created, err = ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("profile-project", upstream.URL))
+				refresh = func() error {
+					_, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
+				}
+			case "organization":
+				payload := newCreateIssuerPayload("profile-organization", nil)
+				payload.Issuer = upstream.URL
+				created, err = ti.service.CreateIssuer(ctx, payload)
+				refresh = func() error {
+					_, err := ti.service.RefreshIssuerMetadata(ctx, &orgissuersgen.RefreshIssuerMetadataPayload{ID: created.ID})
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
+				}
+			case "platform":
+				ctx = withAdmin(t, ctx)
+				payload := createGlobalIssuer(t, "profile-platform")
+				payload.Issuer = upstream.URL
+				created, err = ti.service.CreateGlobalIssuer(ctx, payload)
+				refresh = func() error {
+					_, err := ti.service.RefreshGlobalIssuerMetadata(ctx, &adminrsgen.RefreshGlobalIssuerMetadataPayload{ID: created.ID})
+					if err != nil {
+						return fmt.Errorf("refresh issuer: %w", err)
+					}
+					return nil
+				}
+			}
+			require.NoError(t, err)
+			require.NoError(t, refresh())
+			var projectID uuid.NullUUID
+			if created.ProjectID != "" {
+				projectID = uuid.NullUUID{UUID: uuid.MustParse(created.ProjectID), Valid: true}
+			}
+			read := func() repo.RemoteSessionIssuer {
+				row, err := repo.New(ti.conn).GetRemoteSessionIssuerForMetadataRefresh(ctx, repo.GetRemoteSessionIssuerForMetadataRefreshParams{
+					ID: uuid.MustParse(created.ID), Issuer: upstream.URL, ProjectID: projectID,
+					OrganizationID: pgtype.Text{String: created.OrganizationID, Valid: created.OrganizationID != ""},
+				})
+				require.NoError(t, err)
+				return row
+			}
+			before := read()
+			require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, before.AuthorizationGrantProfilesSupported)
+			malformed.Store(true)
+			require.Error(t, refresh())
+			after := read()
+			require.Equal(t, before.Metadata, after.Metadata)
+			require.Equal(t, before.MetadataFetchedAt, after.MetadataFetchedAt)
+			require.Equal(t, before.AuthorizationGrantProfilesSupported, after.AuthorizationGrantProfilesSupported)
+			require.True(t, after.MetadataLastErrorAt.Valid)
+			require.True(t, after.MetadataLastError.Valid)
+			malformed.Store(false)
+			removed.Store(true)
+			require.NoError(t, refresh())
+			cleared := read()
+			require.Empty(t, cleared.AuthorizationGrantProfilesSupported)
+			require.False(t, cleared.MetadataLastErrorAt.Valid)
+		})
+	}
 }

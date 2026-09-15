@@ -197,10 +197,28 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return r.locks.Delete(releaseCtx, leaseKey)
 	})
 
-	q := repo.New(r.db)
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return zero, fmt.Errorf("reserve client rotation connection: %w", err)
+	}
+	defer conn.Release()
+	q := repo.New(conn)
 	row, err := q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
+	}
+	issuerID := row.RemoteSessionClient.RemoteSessionIssuerID
+	releaseRegistration, err := lockRegistrationIssuer(ctx, conn, issuerID)
+	if err != nil {
+		return zero, fmt.Errorf("lock issuer registration for rotation: %w", err)
+	}
+	defer releaseRegistration()
+	row, err = q.GetRemoteSessionClientForRotation(ctx, params.ClientID)
+	if err != nil {
+		return zero, fmt.Errorf("revalidate client rotation: %w", err)
+	}
+	if row.RemoteSessionClient.RemoteSessionIssuerID != issuerID {
+		return zero, ErrClientNotRotatable
 	}
 	current := row.RemoteSessionClient
 
@@ -230,6 +248,21 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 			logger.InfoContext(ctx, "client registration no longer needs rotation; adopting the current row")
 			return current, nil
 		}
+	}
+
+	// EMA grants describe this exact registration. Ordinary interactive rotation
+	// must not silently replace it with an authorization-code-only registration.
+	ownerOrganizationID := current.OrganizationID.String
+	if current.ProjectID.Valid {
+		ownerOrganizationID = conv.Default(ownerOrganizationID, params.OrganizationID)
+	}
+	rotationOrganizationID, err := lifecycleOrganization(ctx, q, ownerOrganizationID, current.ProjectID.UUID)
+	if err != nil {
+		return zero, err
+	}
+	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: rotationOrganizationID, ProjectID: current.ProjectID.UUID})
+	if err := requireNoEMABindings(emaCount, err); err != nil {
+		return zero, err
 	}
 
 	if current.ClientIDMetadataUri.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {
@@ -285,12 +318,17 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		secretExpiresAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 	}
 
-	dbtx, err := r.db.Begin(ctx)
+	dbtx, err := conn.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin client rotation transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
+	// Re-check lifecycle scope after HTTP. The registration session lock has
+	// prevented EMA preparation from installing a binding during submission.
+	if err := guardEMABindingsForClient(ctx, txRepo, rotationOrganizationID, current.ProjectID.UUID, current.ID); err != nil {
+		return zero, err
+	}
 
 	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
 	if err != nil {

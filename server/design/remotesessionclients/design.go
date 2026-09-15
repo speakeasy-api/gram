@@ -55,6 +55,7 @@ var _ = Service("remoteSessionClients", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	identityChainingMethods()
 
 	Method("createRemoteSessionClient", func() {
 		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
@@ -827,6 +828,9 @@ var DetachUserSessionIssuerForm = Type("DetachUserSessionIssuerForm", func() {
 })
 
 var RemoteSessionClient = Type("RemoteSessionClient", func() {
+	Attribute("grant_types", ArrayOf(String), "Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.", func() {
+		Meta("struct:tag:json", "grant_types")
+	})
 	Meta("struct:pkg:path", "types")
 
 	Description("A remote_session_client record. client_secret_encrypted is never returned.")
