@@ -1309,6 +1309,11 @@ type EvaluatePromptGuardrailResponseBody struct {
 	Flagged *bool `form:"flagged,omitempty" json:"flagged,omitempty" xml:"flagged,omitempty"`
 	// Number of in-scope messages the judge evaluated.
 	JudgedCount *int `form:"judged_count,omitempty" json:"judged_count,omitempty" xml:"judged_count,omitempty"`
+	// Total number of messages matching the guardrail scope before the replay
+	// limit.
+	InScopeMessageCount *int `form:"in_scope_message_count,omitempty" json:"in_scope_message_count,omitempty" xml:"in_scope_message_count,omitempty"`
+	// True when the replay judged only the first 200 in-scope messages.
+	MessageLimitHit *bool `form:"message_limit_hit,omitempty" json:"message_limit_hit,omitempty" xml:"message_limit_hit,omitempty"`
 	// Total OpenRouter cost across in-scope judge calls, in USD.
 	TotalCostUsd *float64 `form:"total_cost_usd,omitempty" json:"total_cost_usd,omitempty" xml:"total_cost_usd,omitempty"`
 	// Aggregate judge latency overhead across in-scope messages, computed as the
@@ -19363,11 +19368,13 @@ func NewTestDetectionRuleGatewayError(body *TestDetectionRuleGatewayErrorRespons
 // service "evaluatePromptGuardrail" endpoint result from a HTTP "OK" response.
 func NewEvaluatePromptGuardrailPromptGuardrailEvalResultOK(body *EvaluatePromptGuardrailResponseBody) *risk.PromptGuardrailEvalResult {
 	v := &risk.PromptGuardrailEvalResult{
-		ChatID:         *body.ChatID,
-		Flagged:        *body.Flagged,
-		JudgedCount:    *body.JudgedCount,
-		TotalCostUsd:   *body.TotalCostUsd,
-		TotalLatencyMs: *body.TotalLatencyMs,
+		ChatID:              *body.ChatID,
+		Flagged:             *body.Flagged,
+		JudgedCount:         *body.JudgedCount,
+		InScopeMessageCount: *body.InScopeMessageCount,
+		MessageLimitHit:     *body.MessageLimitHit,
+		TotalCostUsd:        *body.TotalCostUsd,
+		TotalLatencyMs:      *body.TotalLatencyMs,
 	}
 	v.Verdicts = make([]*risk.PromptGuardrailMessageVerdict, len(body.Verdicts))
 	for i, val := range body.Verdicts {
@@ -21425,6 +21432,12 @@ func ValidateEvaluatePromptGuardrailResponseBody(body *EvaluatePromptGuardrailRe
 	}
 	if body.JudgedCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("judged_count", "body"))
+	}
+	if body.InScopeMessageCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_scope_message_count", "body"))
+	}
+	if body.MessageLimitHit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message_limit_hit", "body"))
 	}
 	if body.TotalCostUsd == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost_usd", "body"))
