@@ -1,0 +1,23 @@
+server/internal/o11y/metrics_test.go
+  s_7e03f0f75b771f::t_2d9a40cdb5c644 10-11,26-32
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_7e03f0f75b771f::t_c3c340b5a4f45e 439-441
+server/internal/scanners/promptinjection/openrouter/judge_v2_test.go
+  s_7e03f0f75b771f::t_67ef99eb77017a 196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bce3fd6ba967334dbe105b41af869b8b57d33a0c",
+  "prompts": {},
+  "sessions": {
+    "s_7e03f0f75b771f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09f45-da54-7902-9dfd-7309263448a8",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
