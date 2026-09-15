@@ -41,7 +41,7 @@ type WorkOSOrganizationCreator interface {
 // WorkOSVerifiedDomainCreator is the platform-admin provisioning capability.
 type WorkOSVerifiedDomainCreator interface {
 	// CreateOrganizationWithVerifiedDomain returns an ID only after verifying the response domain state.
-	CreateOrganizationWithVerifiedDomain(ctx context.Context, hostname string) (string, error)
+	CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error)
 
 	// UpdateOrganizationExternalIDWithoutRetry sets the derived ID without retrying.
 	UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error
@@ -92,9 +92,9 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 }
 
 // CreateInWorkOSWithVerifiedDomain creates an administrator-verified organization.
-// Callers must validate hostname and establish ownership before calling this.
-func CreateInWorkOSWithVerifiedDomain(ctx context.Context, client WorkOSVerifiedDomainCreator, hostname string) (CreatedOrganization, error) {
-	workosOrgID, err := client.CreateOrganizationWithVerifiedDomain(ctx, hostname)
+// Callers must validate name and hostname and establish ownership before calling this.
+func CreateInWorkOSWithVerifiedDomain(ctx context.Context, client WorkOSVerifiedDomainCreator, name, hostname string) (CreatedOrganization, error) {
+	workosOrgID, err := client.CreateOrganizationWithVerifiedDomain(ctx, name, hostname)
 	if err != nil {
 		return CreatedOrganization{}, fmt.Errorf("create WorkOS organization with verified domain: %w", err)
 	}
@@ -126,7 +126,7 @@ var ErrUnavailable = errors.New("WorkOS is not configured on this server")
 type Unavailable struct{}
 
 // CreateOrganizationWithVerifiedDomain always fails with ErrUnavailable.
-func (Unavailable) CreateOrganizationWithVerifiedDomain(context.Context, string) (string, error) {
+func (Unavailable) CreateOrganizationWithVerifiedDomain(context.Context, string, string) (string, error) {
 	return "", ErrUnavailable
 }
 

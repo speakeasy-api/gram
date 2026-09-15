@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
-
 	"github.com/workos/workos-go/v6/pkg/organizations"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
@@ -98,9 +96,9 @@ var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization c
 
 // CreateOrganizationWithVerifiedDomain asserts prior administrator verification
 // of hostname. It does not retry because creation has no idempotency key.
-func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, hostname string) (string, error) {
+func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
 	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
-		Name:           orgprovision.NameFromHostname(hostname),
+		Name:           name,
 		Domains:        nil,
 		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
 		ExternalID:     "",

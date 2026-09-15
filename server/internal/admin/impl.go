@@ -1244,9 +1244,12 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, err
 	}
 
-	name := orgprovision.NameFromHostname(hostname)
+	name, err := orgprovision.ValidateName(orgprovision.NameFromHostname(hostname))
+	if err != nil {
+		return nil, err
+	}
 
-	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, hostname)
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
 		// CodeInvalid and not CodeInvariantViolation, which reads like the

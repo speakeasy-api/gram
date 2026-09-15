@@ -40,11 +40,11 @@ func TestCreateInWorkOS_UnavailableIsRecognisable(t *testing.T) {
 func TestVerifiedDomainUnavailable(t *testing.T) {
 	t.Parallel()
 	var client orgprovision.WorkOSVerifiedDomainCreator = orgprovision.Unavailable{}
-	id, err := client.CreateOrganizationWithVerifiedDomain(t.Context(), "example.com")
+	id, err := client.CreateOrganizationWithVerifiedDomain(t.Context(), "example", "example.com")
 	require.ErrorIs(t, err, orgprovision.ErrUnavailable)
 	require.Empty(t, id)
 	require.ErrorIs(t, client.UpdateOrganizationExternalIDWithoutRetry(t.Context(), "org_example", "example"), orgprovision.ErrUnavailable)
-	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example.com")
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "example.com")
 	require.ErrorIs(t, err, orgprovision.ErrUnavailable)
 	require.Empty(t, created)
 }

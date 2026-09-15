@@ -45,7 +45,7 @@ func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 func TestCreateInWorkOSWithVerifiedDomain_AgainstMockWorkOS(t *testing.T) {
 	t.Parallel()
 	client := newEmulatorClient(t)
-	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
 	require.NoError(t, err)
 	require.NotEmpty(t, created.WorkOSOrganizationID)
 	require.Equal(t, orgid.FromWorkOSID(created.WorkOSOrganizationID), created.GramOrganizationID)

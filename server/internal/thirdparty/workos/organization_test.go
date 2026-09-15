@@ -46,7 +46,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, verifiedOrganizationResponse)
 	})
-	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
 	require.NoError(t, err)
 	require.Equal(t, "org_example", created.WorkOSOrganizationID)
 	require.Equal(t, orgid.FromWorkOSID("org_example"), created.GramOrganizationID)
@@ -105,7 +105,7 @@ func TestVerifiedOrganizationRejectsUnexpectedResponses(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, response)
 		})
-		created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
+		created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
 		require.Error(t, err, response)
 		require.NotErrorIs(t, err, workos.ErrOrganizationCreationRejected)
 		require.Empty(t, created, response)
@@ -136,7 +136,7 @@ func TestVerifiedOrganizationErrorsDoNotRetry(t *testing.T) {
 				}
 				_, _ = io.WriteString(w, verifiedOrganizationResponse)
 			})
-			created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "www.example.com")
+			created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(t.Context(), client, "example", "www.example.com")
 			require.Error(t, err)
 			require.Empty(t, created)
 			var providerError workos_errors.HTTPError
@@ -190,7 +190,7 @@ func TestExistingOrganizationOperationsStillRetry(t *testing.T) {
 func TestVerifiedOrganizationDisplayNamePreservesDomain(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ hostname, name string }{
-		{"example.com", "example"},
+		{"example.com", "Chosen Display Name"},
 		{"app.example.co.uk", "example"},
 		{"a.b.example.com", "example"},
 		{"app.tenant.github.io", "tenant"},
@@ -212,7 +212,7 @@ func TestVerifiedOrganizationDisplayNamePreservesDomain(t *testing.T) {
 					"domains": []map[string]string{{"domain": tc.hostname, "state": "verified"}},
 				})
 			})
-			_, err := client.CreateOrganizationWithVerifiedDomain(t.Context(), tc.hostname)
+			_, err := client.CreateOrganizationWithVerifiedDomain(t.Context(), tc.name, tc.hostname)
 			require.NoError(t, err)
 			var payload map[string]json.RawMessage
 			require.NoError(t, json.Unmarshal(<-requests, &payload))

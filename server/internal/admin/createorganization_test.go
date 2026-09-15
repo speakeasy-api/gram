@@ -64,26 +64,30 @@ type fakeWorkOSCreator struct {
 	// order, so a test can assert that a rejected request never reached WorkOS.
 	createdNames []string
 
+	createdDisplayNames []string
+
 	// externalIDs records the last external_id written per WorkOS organization.
 	externalIDs map[string]string
 }
 
 func newFakeWorkOS(organizationID string) *fakeWorkOSCreator {
 	return &fakeWorkOSCreator{
-		mu:             sync.Mutex{},
-		organizationID: organizationID,
-		createErr:      nil,
-		updateErr:      nil,
-		createdNames:   nil,
-		externalIDs:    map[string]string{},
+		mu:                  sync.Mutex{},
+		organizationID:      organizationID,
+		createErr:           nil,
+		updateErr:           nil,
+		createdNames:        nil,
+		createdDisplayNames: nil,
+		externalIDs:         map[string]string{},
 	}
 }
 
-func (f *fakeWorkOSCreator) CreateOrganizationWithVerifiedDomain(_ context.Context, hostname string) (string, error) {
+func (f *fakeWorkOSCreator) CreateOrganizationWithVerifiedDomain(_ context.Context, name, hostname string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.createdNames = append(f.createdNames, hostname)
+	f.createdDisplayNames = append(f.createdDisplayNames, name)
 	if f.createErr != nil {
 		return "", f.createErr
 	}
@@ -606,6 +610,21 @@ func TestCreateOrganization_RejectsInvalidURLsBeforeWorkOS(t *testing.T) {
 	requireNoOrganizationRow(t, ctx, conn, "org_invalid_url")
 }
 
+func TestCreateOrganization_RejectsInvalidDerivedNameBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_invalid_derived_name"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	for _, input := range []string{"a.com", "https://www.a.com/about", "1.com"} {
+		_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: input, OwnershipConfirmed: true, AdminSessionToken: nil})
+		requireOopsCode(t, err, oops.CodeInvalid)
+		require.Empty(t, fake.names(), "invalid derived name must cause no remote creation")
+		require.Empty(t, fake.externalID(workosOrgID), "invalid derived name must cause no external ID write")
+	}
+	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
+}
+
 func TestCreateOrganization_NormalizesTheExactHostname(t *testing.T) {
 	t.Parallel()
 
@@ -618,6 +637,7 @@ func TestCreateOrganization_NormalizesTheExactHostname(t *testing.T) {
 
 	require.Equal(t, "example", res.Name)
 	require.Equal(t, []string{"www.example.com"}, fake.names())
+	require.Equal(t, []string{"example"}, fake.createdDisplayNames)
 	require.Equal(t, "example", res.Slug)
 }
 
