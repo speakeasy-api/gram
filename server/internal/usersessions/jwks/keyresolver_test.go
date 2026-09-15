@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -593,6 +594,80 @@ func TestVerificationKey_CacheWriteFailureDoesNotFailResolution(t *testing.T) {
 	key, err := kr.VerificationKey(t.Context(), remoteSourceFor(t, server), "a")
 	require.NoError(t, err)
 	require.Equal(t, "a", key.KeyID)
+}
+
+func TestStoreRetriesAfterConcurrentConsultFailure(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "rotated")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), prior))
+
+	marked := prior
+	marked.LastErrorAt = time.Now()
+	marked.LastError = transientErrorReasonPrefix
+	marked.Revision = "revision-2"
+	written, err := cache.PutIfUnchanged(t.Context(), source.CacheKey(), prior, marked)
+	require.NoError(t, err)
+	require.True(t, written)
+
+	rotated := keySetJSON(t, testKey(t, "rotated"))
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: rotated,
+		ETag:     `"rotated"`,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.JSONEq(t, string(rotated), string(stored.Document))
+	require.Empty(t, stored.LastError)
+	require.Zero(t, stored.LastErrorAt)
+}
+
+func TestStoreDoesNotRetryRevisionOnlyConflict(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "late")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+	prior := CacheState{
+		Document:    keySetJSON(t, testKey(t, "old")),
+		ETag:        `"old"`,
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+		LastErrorAt: time.Time{},
+		LastError:   "",
+		Revision:    "revision-1",
+	}
+	current := prior
+	current.Revision = "revision-2"
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), current))
+
+	kr.store(t.Context(), source, prior, &Result{
+		Outcome:  CacheOutcomeRefreshed,
+		KeySet:   jose.JSONWebKeySet{},
+		Document: keySetJSON(t, testKey(t, "late")),
+		ETag:     `"late"`,
+		TTL:      time.Hour,
+	})
+
+	stored, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, "revision-2", stored.Revision)
+	require.JSONEq(t, string(prior.Document), string(stored.Document))
 }
 
 func TestVerificationKey_LimiterErrorFailsClosed(t *testing.T) {

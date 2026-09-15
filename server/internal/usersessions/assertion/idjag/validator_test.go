@@ -225,6 +225,7 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 	}{
 		{name: "missing email", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Email = "" }, reason: ReasonEmailMissing},
 		{name: "missing expiry", mutate: func(claims *jwt.Claims, _ *additionalClaims) { claims.Expiry = nil }, reason: ReasonExpiryMissing},
+		{name: "missing issued at", mutate: func(claims *jwt.Claims, _ *additionalClaims) { claims.IssuedAt = nil }, reason: ReasonIssuedAtMissing},
 		{name: "missing jti", mutate: func(claims *jwt.Claims, _ *additionalClaims) { claims.ID = "" }, reason: ReasonIDMissing},
 		{name: "expired", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
 			claims.Expiry = jwt.NewNumericDate(time.Now().Add(-10 * time.Minute))

@@ -20,6 +20,7 @@ const (
 	ReasonSubjectMissing         Reason = "assertion_subject_missing"
 	ReasonEmailMissing           Reason = "assertion_email_missing"
 	ReasonExpiryMissing          Reason = "assertion_expiry_missing"
+	ReasonIssuedAtMissing        Reason = "assertion_issued_at_missing"
 	ReasonExpired                Reason = "assertion_expired"
 	ReasonNotYetValid            Reason = "assertion_not_yet_valid"
 	ReasonLifetimeTooLong        Reason = "assertion_lifetime_too_long"

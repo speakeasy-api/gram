@@ -114,6 +114,9 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if claims.Expiry == nil {
 		return nil, reject(ReasonExpiryMissing, errors.New("exp is required"))
 	}
+	if claims.IssuedAt == nil {
+		return nil, reject(ReasonIssuedAtMissing, errors.New("iat is required"))
+	}
 	now := time.Now()
 	if err := claims.ValidateWithLeeway(jwt.Expected{Issuer: "", Subject: "", AnyAudience: nil, ID: "", Time: now}, assertioncore.MaxSkew); err != nil {
 		switch {
@@ -129,7 +132,7 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if expiresAt.After(now.Add(MaxLifetime + assertioncore.MaxSkew)) {
 		return nil, reject(ReasonLifetimeTooLong, errors.New("exp exceeds the ID-JAG lifetime bound"))
 	}
-	if claims.IssuedAt != nil && expiresAt.Sub(claims.IssuedAt.Time()) > MaxLifetime+assertioncore.MaxSkew {
+	if expiresAt.Sub(claims.IssuedAt.Time()) > MaxLifetime+assertioncore.MaxSkew {
 		return nil, reject(ReasonLifetimeTooLong, errors.New("exp exceeds the permitted lifetime from iat"))
 	}
 	if claims.ID == "" {
