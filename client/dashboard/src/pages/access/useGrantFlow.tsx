@@ -9,7 +9,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import { GrantDrawer } from "./GrantDrawer";
-import { toRoleSlug } from "./types";
 
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
@@ -133,7 +132,7 @@ export function useGrantFlow(): {
           }
         }}
         editingRole={null}
-        onRoleCreated={(roleName) => {
+        onRoleCreated={(role) => {
           if (!createChallenge) return;
           const ids = createChallenge.challengeIds;
           resolveChallenge.mutate(
@@ -145,7 +144,7 @@ export function useGrantFlow(): {
                   scope: createChallenge.scope,
                   resolutionType:
                     ResolveChallengeFormResolutionType.RoleAssigned,
-                  roleSlug: toRoleSlug(roleName),
+                  roleSlug: role.slug,
                   resourceKind: createChallenge.resourceKind,
                   resourceId: createChallenge.resourceId,
                 },

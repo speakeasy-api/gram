@@ -2285,7 +2285,7 @@ paths:
         type: mutation
   /rpc/access.resolveChallenge:
     post:
-      description: Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+      description: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
       operationId: resolveChallenge
       parameters:
         - allowEmptyValue: true
@@ -83883,7 +83883,7 @@ components:
           description: Resource kind from the challenge.
         role_slug:
           type: string
-          description: Role slug to assign (required when resolution_type=role_assigned).
+          description: Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
         scope:
           type: string
           description: Scope that was denied.

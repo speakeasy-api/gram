@@ -125,6 +125,16 @@ SELECT challenge_id FROM authz_challenge_resolutions
 WHERE organization_id = @organization_id
   AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days';
 
+-- name: LockChallengeResolutions :exec
+-- Serializes resolution for every challenge in a batch. Sorting the distinct IDs
+-- gives overlapping batches one lock order, so two admins cannot grant different
+-- roles for the same unresolved challenge or deadlock on reversed input.
+SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || challenge_id, 0))
+FROM (
+  SELECT DISTINCT unnest(@challenge_ids::text[]) AS challenge_id
+  ORDER BY challenge_id
+) AS challenge_locks;
+
 -- name: InsertChallengeResolutions :many
 -- Creates resolution records for one or more denied challenges.
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).

@@ -726,7 +726,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("resolveChallenge", func() {
-		Description("Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.")
+		Description("Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -1395,7 +1395,7 @@ var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 		Description("How the challenge is being resolved.")
 		Enum("role_assigned", "dismissed")
 	})
-	Attribute("role_slug", String, "Role slug to assign (required when resolution_type=role_assigned).")
+	Attribute("role_slug", String, "Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).")
 })
 
 var ChallengeResolutionModel = Type("ChallengeResolution", func() {

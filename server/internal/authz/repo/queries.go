@@ -320,6 +320,7 @@ type ChallengeSummary struct {
 	Scope               string
 	ResourceKind        string
 	ResourceID          string
+	Selector            string
 	RoleSlugs           []string
 	EvaluatedGrantCount uint32
 	MatchedGrantCount   uint64
@@ -340,6 +341,7 @@ var challengeSummaryColumns = []string{
 	"scope",
 	"resource_kind",
 	"resource_id",
+	"selector",
 	"role_slugs",
 	"evaluated_grant_count",
 	"length(matched_grants.scope) AS matched_grant_count",
@@ -362,6 +364,7 @@ func scanChallengeSummary(rows interface{ Scan(dest ...any) error }) (ChallengeS
 		&r.Scope,
 		&r.ResourceKind,
 		&r.ResourceID,
+		&r.Selector,
 		&r.RoleSlugs,
 		&r.EvaluatedGrantCount,
 		&r.MatchedGrantCount,

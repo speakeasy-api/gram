@@ -13,7 +13,6 @@ import { ResolveChallengeFormResolutionType } from "@gram/client/models/componen
 import { invalidateAllChallenges } from "@gram/client/react-query/challenges.js";
 import { useResolveChallengeMutation } from "@gram/client/react-query/resolveChallenge.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, ChevronRight, Plus, Users } from "lucide-react";
@@ -21,7 +20,6 @@ import { useState } from "react";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { invalidateAllChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { principalDisplayName } from "./challengeHelpers";
-import { toRoleSlug } from "./types";
 import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";
@@ -48,8 +46,15 @@ export function GrantDrawer({
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   const allRoles = rolesData?.roles ?? [];
+  // Challenge resolution adds one role without replacing the member's current
+  // roles. System-role assignment stays on the full member-management flow;
+  // this focused shortcut only offers custom roles the server can add safely.
   const roles = challenge
-    ? allRoles.filter((r) => r.grants.some((g) => g.scope === challenge.scope))
+    ? allRoles.filter(
+        (role) =>
+          !role.isSystem &&
+          role.grants.some((grant) => grant.scope === challenge.scope),
+      )
     : [];
 
   const hasMatchingRoles = roles.length > 0;
@@ -92,9 +97,7 @@ export function GrantDrawer({
             principalUrn: challenge.principalUrn,
             scope: challenge.scope,
             resolutionType: ResolveChallengeFormResolutionType.RoleAssigned,
-            roleSlug: selectedRole.isSystem
-              ? selectedRole.name.toLowerCase()
-              : toRoleSlug(selectedRole.name),
+            roleSlug: selectedRole.slug,
             resourceKind: challenge.resourceKind,
             resourceId: challenge.resourceId,
           },
@@ -258,11 +261,6 @@ export function GrantDrawer({
                         <Text variant="body" className="font-medium">
                           {role.name}
                         </Text>
-                        {role.isSystem && (
-                          <Badge variant="neutral">
-                            <Badge.Text>System</Badge.Text>
-                          </Badge>
-                        )}
                       </div>
                       <Text
                         variant="body"
@@ -311,16 +309,9 @@ export function GrantDrawer({
                         >
                           Role
                         </Text>
-                        <div className="flex items-center gap-2">
-                          <Text variant="body" className="text-sm font-medium">
-                            {selectedRole.name}
-                          </Text>
-                          {selectedRole.isSystem && (
-                            <Badge variant="neutral">
-                              <Badge.Text>System</Badge.Text>
-                            </Badge>
-                          )}
-                        </div>
+                        <Text variant="body" className="text-sm font-medium">
+                          {selectedRole.name}
+                        </Text>
                       </div>
                       <div className="flex items-center justify-between">
                         <Text

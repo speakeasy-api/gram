@@ -63,3 +63,27 @@ func TestService_RequestAccess_NoAdminsToNotify(t *testing.T) {
 	require.Equal(t, 0, result.SentToCount)
 	require.Empty(t, ti.emailSender.Sent())
 }
+
+func TestService_RequestAccess_AllNotificationsFail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_admin", "ada@example.com", "Ada Admin", "user_admin", "membership_admin")
+	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockSystemRole("role_admin", "Admin", "admin"))
+	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "local_admin", mockMember("", "membership_admin", "user_admin", "admin"))
+	ti.emailSender.FailSends()
+
+	result, err := ti.service.RequestAccess(ctx, &gen.RequestAccessPayload{
+		Scope:        "mcp:connect",
+		ResourceID:   nil,
+		ResourceName: nil,
+		Message:      nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.SentToCount)
+	require.Empty(t, ti.emailSender.Sent())
+}

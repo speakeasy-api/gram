@@ -2128,6 +2128,27 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ':' || challenge_id, 0))
+FROM (
+  SELECT DISTINCT unnest($2::text[]) AS challenge_id
+  ORDER BY challenge_id
+) AS challenge_locks
+`
+
+type LockChallengeResolutionsParams struct {
+	OrganizationID string
+	ChallengeIds   []string
+}
+
+// Serializes resolution for every challenge in a batch. Sorting the distinct IDs
+// gives overlapping batches one lock order, so two admins cannot grant different
+// roles for the same unresolved challenge or deadlock on reversed input.
+func (q *Queries) LockChallengeResolutions(ctx context.Context, arg LockChallengeResolutionsParams) error {
+	_, err := q.db.Exec(ctx, lockChallengeResolutions, arg.OrganizationID, arg.ChallengeIds)
+	return err
+}
+
 const lockMemberRoleSync = `-- name: LockMemberRoleSync :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.member-role-sync', $1::text, $2::text)::text, 0

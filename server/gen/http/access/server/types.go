@@ -122,7 +122,8 @@ type ResolveChallengeRequestBody struct {
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
 	// How the challenge is being resolved.
 	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
-	// Role slug to assign (required when resolution_type=role_assigned).
+	// Custom role slug to add to the denied user before resolving (required when
+	// resolution_type=role_assigned).
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 }
 

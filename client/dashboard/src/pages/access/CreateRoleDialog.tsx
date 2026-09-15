@@ -125,7 +125,7 @@ interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
-  onRoleCreated?: (roleName: string) => void;
+  onRoleCreated?: (role: Role) => void;
   presentation?: RoleEditorPresentation;
 }
 
@@ -272,12 +272,12 @@ export function CreateRoleDialog({
 
   // ─── Mutations ────────────────────────────────────────────────
   const createRole = useCreateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
-      onRoleCreated?.(name);
+      onRoleCreated?.(role);
       handleClose();
     },
   });

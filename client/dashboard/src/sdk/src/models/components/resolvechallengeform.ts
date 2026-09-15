@@ -42,7 +42,7 @@ export type ResolveChallengeForm = {
    */
   resourceKind?: string | undefined;
   /**
-   * Role slug to assign (required when resolution_type=role_assigned).
+   * Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).
    */
   roleSlug?: string | undefined;
   /**
