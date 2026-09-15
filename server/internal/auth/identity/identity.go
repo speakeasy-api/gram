@@ -502,7 +502,7 @@ func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, o
 		return IDPLoginResult{}, err
 	}
 	if err := r.userInfoCache.Store(ctx, *userInfo); err != nil {
-		return IDPLoginResult{}, fmt.Errorf("store user info: %w", err)
+		r.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
 	}
 
 	return IDPLoginResult{
