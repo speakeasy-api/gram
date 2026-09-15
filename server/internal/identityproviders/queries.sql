@@ -114,9 +114,61 @@ SELECT *
 FROM identity_provider_signing_keys
 WHERE organization_id = @organization_id
   AND identity_provider_connection_id = @identity_provider_connection_id
+  AND state = 'active'
   AND deleted IS FALSE
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetConfiguredIdentityProviderSigningKey :one
+SELECT *
+FROM identity_provider_signing_keys
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND id = @signing_key_id
+  AND state = 'active'
+  AND deleted IS FALSE;
+
+-- name: UpdateIdentityProviderVerification :execrows
+UPDATE identity_provider_connections
+SET
+  status = @status,
+  status_detail = @status_detail,
+  capabilities = @capabilities,
+  last_verified_at = @last_verified_at,
+  verify_evidence = @verify_evidence,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @identity_provider_connection_id
+  AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM okta_identity_provider_connections AS o
+    WHERE o.identity_provider_connection_id = identity_provider_connections.id
+      AND o.client_id = @client_id
+      AND o.signing_key_id = @signing_key_id
+  );
+
+-- name: UpdateOktaIdentityProviderGrantedScopes :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  granted_scopes = @granted_scopes,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = @organization_id
+  AND c.id = @identity_provider_connection_id
+  AND c.deleted IS FALSE;
+
+-- name: MarkIdentityProviderSigningKeyUsed :exec
+UPDATE identity_provider_signing_keys
+SET
+  last_used_at = @last_used_at,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND id = @id
+  AND state = 'active'
+  AND deleted IS FALSE;
 
 -- name: GetIdentityProviderJSONWebKeySet :one
 SELECT jsonb_build_object(

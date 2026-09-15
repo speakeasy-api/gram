@@ -64,7 +64,8 @@ type Service struct {
 	authz      *authz.Engine
 	audit      *audit.Logger
 	encryption *encryption.Client
-	serverURL  *url.URL
+	okta       OktaClient
+	publicURL  *url.URL
 }
 
 var (
@@ -80,7 +81,8 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	encryptionClient *encryption.Client,
-	serverURL *url.URL,
+	oktaClient OktaClient,
+	publicURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("identity_providers"))
 	return &Service{
@@ -91,7 +93,8 @@ func NewService(
 		authz:      authzEngine,
 		audit:      auditLogger,
 		encryption: encryptionClient,
-		serverURL:  serverURL,
+		okta:       oktaClient,
+		publicURL:  publicURL,
 	}
 }
 
@@ -194,7 +197,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading created identity provider connection").LogError(ctx, logger)
 	}
-	view, err := mv.BuildIdentityProviderConnectionView(row, IdentityProviderJSONWebKeySetURL(s.serverURL, row.ID))
+	view, err := mv.BuildIdentityProviderConnectionView(row, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider connection response").LogError(ctx, logger)
 	}
@@ -218,7 +221,7 @@ func (s *Service) Get(ctx context.Context, _ *gen.GetPayload) (*gen.GetIdentityP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading identity provider connection").LogError(ctx, logger)
 	}
-	view, err := mv.BuildIdentityProviderConnectionView(row, IdentityProviderJSONWebKeySetURL(s.serverURL, row.ID))
+	view, err := mv.BuildIdentityProviderConnectionView(row, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider connection response").LogError(ctx, logger)
 	}
@@ -238,9 +241,13 @@ func (s *Service) DescribeSetup(ctx context.Context, _ *gen.DescribeSetupPayload
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading identity provider setup").LogError(ctx, logger)
 	}
+	lastOutcome, err := mv.BuildIdentityProviderVerifyResultView(row)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider setup").LogError(ctx, logger)
+	}
 	return &gen.IdentityProviderSetup{
 		ConnectionID: row.ID.String(),
-		Steps:        []*gen.IdentityProviderSetupStep{buildConnectSetupStep(row.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.serverURL, row.ID), row.Status)},
+		Steps:        []*gen.IdentityProviderSetupStep{buildConnectSetupStep(row.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.publicURL, row.ID), row.Status, conv.FromPGText[string](row.ClientID), lastOutcome)},
 	}, nil
 }
 
@@ -291,6 +298,10 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading updated identity provider connection").LogError(ctx, logger)
 	}
+	lastOutcome, err := mv.BuildIdentityProviderVerifyResultView(after)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error building identity provider setup").LogError(ctx, logger)
+	}
 
 	if err := s.audit.LogIdentityProviderConnectionUpdated(ctx, dbtx, audit.LogIdentityProviderConnectionUpdatedEvent{
 		OrganizationID:                           authCtx.ActiveOrganizationID,
@@ -299,8 +310,8 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 		ActorSlug:                                nil,
 		IdentityProviderConnectionURN:            urn.NewIdentityProviderConnectionID(after.ID),
 		TenantIdentifier:                         after.TenantIdentifier,
-		IdentityProviderConnectionSnapshotBefore: identityProviderConnectionSnapshot(before),
-		IdentityProviderConnectionSnapshotAfter:  identityProviderConnectionSnapshot(after),
+		IdentityProviderConnectionSnapshotBefore: identityProviderConnectionSnapshot(before, ""),
+		IdentityProviderConnectionSnapshotAfter:  identityProviderConnectionSnapshot(after, ""),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording identity provider connection update").LogError(ctx, logger)
 	}
@@ -309,7 +320,7 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 	}
 
 	return &gen.SubmitSetupStepResult{
-		Step: buildConnectSetupStep(after.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.serverURL, after.ID), after.Status),
+		Step: buildConnectSetupStep(after.TenantIdentifier, IdentityProviderJSONWebKeySetURL(s.publicURL, after.ID), after.Status, conv.FromPGText[string](after.ClientID), lastOutcome),
 		FieldOutcomes: []*gen.IdentityProviderFieldOutcome{{
 			Key:     setupValueClientID,
 			Outcome: "accepted",
@@ -317,15 +328,6 @@ func (s *Service) SubmitSetupStep(ctx context.Context, payload *gen.SubmitSetupS
 		}},
 		NextStepKey: nil,
 	}, nil
-}
-
-func (s *Service) VerifySetupStep(ctx context.Context, _ *gen.VerifySetupStepPayload) (*gen.IdentityProviderVerifyResult, error) {
-	if _, _, err := s.requireAccess(ctx, authz.ScopeOrgAdmin); err != nil {
-		return nil, err
-	}
-
-	// Slice B replaces this placeholder with the Okta capability probe.
-	return nil, oops.E(oops.CodeUnavailable, nil, "verification arrives in slice B")
 }
 
 func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error {
@@ -383,7 +385,7 @@ func (s *Service) Delete(ctx context.Context, payload *gen.DeletePayload) error 
 // HandleJSONWebKeySet serves every live public signing key for a connection.
 func (s *Service) HandleJSONWebKeySet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	if customdomains.FromContext(ctx) != nil {
+	if customdomains.FromContext(ctx) != nil && !strings.EqualFold(r.Host, s.publicURL.Host) {
 		return oops.E(oops.CodeNotFound, nil, "identity provider JSON Web Key Set not found")
 	}
 	connectionID, err := uuid.Parse(chi.URLParam(r, "connection_id"))
@@ -400,8 +402,8 @@ func (s *Service) HandleJSONWebKeySet(w http.ResponseWriter, r *http.Request) er
 	return httpcache.WriteCacheableJSON(ctx, w, r, s.logger, "application/jwk-set+json", identityProviderJSONWebKeySetMaxAgeSec, body)
 }
 
-func IdentityProviderJSONWebKeySetURL(serverURL *url.URL, connectionID uuid.UUID) string {
-	return strings.TrimRight(serverURL.String(), "/") + "/.well-known/identity-provider/" + connectionID.String() + "/jwks.json"
+func IdentityProviderJSONWebKeySetURL(publicURL *url.URL, connectionID uuid.UUID) string {
+	return strings.TrimRight(publicURL.String(), "/") + "/.well-known/identity-provider/" + connectionID.String() + "/jwks.json"
 }
 
 func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
@@ -471,7 +473,24 @@ func normalizeTenantURL(raw string) (string, error) {
 	if net.ParseIP(host) != nil || !validDNSName(host) {
 		return "", errors.New("tenant URL must contain a valid DNS hostname")
 	}
-	return host, nil
+	return normalizeOktaDomain(host), nil
+}
+
+func normalizeOktaDomain(host string) string {
+	for _, family := range []string{"okta.com", "oktapreview.com", "okta-emea.com"} {
+		suffix := "." + family
+		if subdomain, ok := strings.CutSuffix(host, suffix); ok {
+			normalized := strings.TrimSuffix(subdomain, "-admin")
+			for normalized != subdomain && strings.HasSuffix(normalized, "-admin") {
+				subdomain = normalized
+				normalized = strings.TrimSuffix(subdomain, "-admin")
+			}
+			if normalized != "" && normalized != subdomain {
+				return normalized + suffix
+			}
+		}
+	}
+	return host
 }
 
 func validDNSName(host string) bool {
@@ -491,12 +510,13 @@ func validDNSName(host string) bool {
 	return true
 }
 
-func buildConnectSetupStep(tenantIdentifier, jwksURL, status string) *gen.IdentityProviderSetupStep {
+func buildConnectSetupStep(tenantIdentifier, jwksURL, status string, clientID *string, lastOutcome *gen.IdentityProviderVerifyResult) *gen.IdentityProviderSetupStep {
 	return &gen.IdentityProviderSetupStep{
 		Key:   setupStepConnect,
 		Title: "Connect Okta",
 		Where: "their_console",
 		Instructions: []string{
+			"Granting API scopes to a service app needs an Okta Super Administrator; if that is not you, hand these steps to the person who is.",
 			"Create an API Services app integration in the Okta Admin Console.",
 			"Use the JWKS URL for Public key / Private key client authentication.",
 			"Grant the API scopes and administrator roles shown below, then enter the app's Client ID in Speakeasy.",
@@ -507,10 +527,17 @@ func buildConnectSetupStep(tenantIdentifier, jwksURL, status string) *gen.Identi
 			{Label: "API scopes", Value: oktaAPIScopes, Copyable: true},
 			{Label: "Administrator roles", Value: oktaAdministratorRoles, Copyable: false},
 		},
-		ExpectedValues: []*gen.IdentityProviderExpectedValue{{Key: setupValueClientID, Label: "Client ID", Secret: false}},
+		ExpectedValues: []*gen.IdentityProviderExpectedValue{buildExpectedSetupValue(setupValueClientID, "Client ID", false, clientID)},
 		State:          setupStepState(status),
-		LastOutcome:    nil,
+		LastOutcome:    lastOutcome,
 	}
+}
+
+func buildExpectedSetupValue(key, label string, secret bool, currentValue *string) *gen.IdentityProviderExpectedValue {
+	if secret {
+		currentValue = nil
+	}
+	return &gen.IdentityProviderExpectedValue{Key: key, Label: label, Secret: secret, CurrentValue: currentValue}
 }
 
 func setupStepState(status string) string {
@@ -538,11 +565,12 @@ func oktaAdminAppsURL(tenantIdentifier string) *string {
 	return nil
 }
 
-func identityProviderConnectionSnapshot(row repo.GetIdentityProviderConnectionByOrganizationRow) *audit.IdentityProviderConnectionSnapshot {
+func identityProviderConnectionSnapshot(row repo.GetIdentityProviderConnectionByOrganizationRow, outcome string) *audit.IdentityProviderConnectionSnapshot {
 	return &audit.IdentityProviderConnectionSnapshot{
 		Kind:             row.Kind,
 		TenantIdentifier: row.TenantIdentifier,
 		Status:           row.Status,
+		Outcome:          outcome,
 		Capabilities:     row.Capabilities,
 		GrantedScopes:    row.GrantedScopes,
 	}

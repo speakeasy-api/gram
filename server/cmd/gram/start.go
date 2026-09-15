@@ -159,6 +159,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -380,6 +381,11 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			Usage:    "The public URL of the server",
 			EnvVars:  []string{"GRAM_SERVER_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "identity-provider-public-url",
+			Usage:   "Public origin used only for identity provider JWKS URLs; in non-local environments it must match the platform origin or a registered domain",
+			EnvVars: []string{"GRAM_IDENTITY_PROVIDER_PUBLIC_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "environment",
@@ -957,6 +963,22 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			}
 			if err := validateServerURL(serverURL, c.String("environment")); err != nil {
 				return fmt.Errorf("invalid server url: %w", err)
+			}
+			identityProviderPublicURL := *serverURL
+			identityProviderPublicURL.Path = ""
+			identityProviderPublicURL.RawPath = ""
+			if raw := strings.TrimSpace(c.String("identity-provider-public-url")); raw != "" {
+				parsedIdentityProviderPublicURL, err := url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("failed to parse identity provider public url: %w", err)
+				}
+				if err := validateServerURL(parsedIdentityProviderPublicURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid identity provider public url: %w", err)
+				}
+				if parsedIdentityProviderPublicURL.Path != "" && parsedIdentityProviderPublicURL.Path != "/" {
+					return errors.New("identity provider public url must be an absolute origin")
+				}
+				identityProviderPublicURL = *parsedIdentityProviderPublicURL
 			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
@@ -1625,7 +1647,7 @@ func newServerCommand(name, commandUsage string, privateOnly bool) *cli.Command 
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, serverURL))
+			identityproviders.Attach(mux, identityproviders.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, okta.NewClient(guardianPolicy), &identityProviderPublicURL))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,

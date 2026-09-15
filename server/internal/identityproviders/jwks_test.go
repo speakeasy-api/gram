@@ -96,6 +96,15 @@ func TestHandleJSONWebKeySetReturnsNotFoundOnCustomDomain(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
+func TestHandleJSONWebKeySetAllowsConfiguredRegisteredDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceWithURLs(t, "", "https://identity-public.example.test")
+	connection := createConnection(t, ctx, ti, "https://example.okta.com")
+	recorder := serveJSONWebKeySet(t, ctx, ti, connection.ID, "", true, "identity-public.example.test")
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestHandleJSONWebKeySetReturnsNotFoundAfterConnectionDeletion(t *testing.T) {
 	t.Parallel()
 
@@ -113,15 +122,18 @@ func TestIdentityProviderJSONWebKeySetURLTrimsTrailingSlash(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
 	require.Equal(
 		t,
-		"https://api.example.test/base/.well-known/identity-provider/"+id.String()+"/jwks.json",
-		identityproviders.IdentityProviderJSONWebKeySetURL(mustURL(t, "https://api.example.test/base/"), id),
+		"https://api.example.test/.well-known/identity-provider/"+id.String()+"/jwks.json",
+		identityproviders.IdentityProviderJSONWebKeySetURL(mustURL(t, "https://api.example.test/"), id),
 	)
 }
 
-func serveJSONWebKeySet(t *testing.T, ctx context.Context, ti *testInstance, connectionID, etag string, customDomain bool) *httptest.ResponseRecorder {
+func serveJSONWebKeySet(t *testing.T, ctx context.Context, ti *testInstance, connectionID, etag string, customDomain bool, hosts ...string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	request := httptest.NewRequest(http.MethodGet, "/.well-known/identity-provider/"+connectionID+"/jwks.json", nil).WithContext(ctx)
+	if len(hosts) > 0 {
+		request.Host = hosts[0]
+	}
 	routeContext := chi.NewRouteContext()
 	routeContext.URLParams.Add("connection_id", connectionID)
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeContext))

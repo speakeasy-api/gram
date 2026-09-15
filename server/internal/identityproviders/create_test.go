@@ -35,7 +35,7 @@ func TestCreateCreatesOktaConnectionAndRS256SigningKey(t *testing.T) {
 	require.Empty(t, connection.Capabilities)
 	require.Empty(t, connection.GrantedScopes)
 	require.NotEmpty(t, connection.SigningKeyKid)
-	require.Equal(t, "https://api.example.test/base/.well-known/identity-provider/"+connection.ID+"/jwks.json", connection.JwksURL)
+	require.Equal(t, "https://api.example.test/.well-known/identity-provider/"+connection.ID+"/jwks.json", connection.JwksURL)
 	require.NotEmpty(t, connection.CreatedAt)
 	require.NotEmpty(t, connection.UpdatedAt)
 
@@ -159,4 +159,23 @@ func TestCreateRejectsSecondConnectionForOrganization(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestCreateNormalizesOktaAdminConsoleDomains(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		tenantURL string
+		expected  string
+	}{
+		{tenantURL: "https://example-admin.okta.com", expected: "example.okta.com"},
+		{tenantURL: "https://example-admin.oktapreview.com", expected: "example.oktapreview.com"},
+		{tenantURL: "https://example-admin.okta-emea.com", expected: "example.okta-emea.com"},
+		{tenantURL: "https://example-admin.example.com", expected: "example-admin.example.com"},
+	}
+	for _, testCase := range cases {
+		ctx, ti := newTestService(t)
+		connection := createConnection(t, ctx, ti, testCase.tenantURL)
+		require.Equal(t, testCase.expected, connection.TenantIdentifier)
+	}
 }

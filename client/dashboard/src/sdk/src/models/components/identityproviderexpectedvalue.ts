@@ -3,11 +3,16 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type IdentityProviderExpectedValue = {
+  /**
+   * Previously submitted value. Always omitted for secret values.
+   */
+  currentValue?: string | undefined;
   key: string;
   label: string;
   secret: boolean;
@@ -17,11 +22,19 @@ export type IdentityProviderExpectedValue = {
 export const IdentityProviderExpectedValue$inboundSchema: z.ZodMiniType<
   IdentityProviderExpectedValue,
   unknown
-> = z.object({
-  key: z.string(),
-  label: z.string(),
-  secret: z.boolean(),
-});
+> = z.pipe(
+  z.object({
+    current_value: z.optional(z.string()),
+    key: z.string(),
+    label: z.string(),
+    secret: z.boolean(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "current_value": "currentValue",
+    });
+  }),
+);
 
 export function identityProviderExpectedValueFromJSON(
   jsonString: string,

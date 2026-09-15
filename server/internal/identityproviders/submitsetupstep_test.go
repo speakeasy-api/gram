@@ -34,6 +34,7 @@ func TestSubmitSetupStepSavesTrimmedClientIDAndAwaitsVerification(t *testing.T) 
 	require.NotNil(t, result.Step)
 	require.Equal(t, "connect", result.Step.Key)
 	require.Equal(t, "awaiting_verification", result.Step.State)
+	require.Equal(t, "client-123", *result.Step.ExpectedValues[0].CurrentValue)
 	require.Equal(t, []*gen.IdentityProviderFieldOutcome{{
 		Key:     "client_id",
 		Outcome: "accepted",
@@ -47,6 +48,12 @@ func TestSubmitSetupStepSavesTrimmedClientIDAndAwaitsVerification(t *testing.T) 
 	require.True(t, stored.ClientID.Valid)
 	require.Equal(t, "client-123", stored.ClientID.String)
 	require.Equal(t, "awaiting_verification", stored.Status)
+	reloaded, err := ti.service.Get(ctx, &gen.GetPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "client-123", *reloaded.Connection.ClientID)
+	setup, err := ti.service.DescribeSetup(ctx, &gen.DescribeSetupPayload{SessionToken: nil, ApikeyToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "client-123", *setup.Steps[0].ExpectedValues[0].CurrentValue)
 
 	afterAudits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionIdentityProviderConnectionUpdated)
 	require.NoError(t, err)

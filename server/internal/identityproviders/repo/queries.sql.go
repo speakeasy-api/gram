@@ -159,6 +159,45 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 	return i, err
 }
 
+const getConfiguredIdentityProviderSigningKey = `-- name: GetConfiguredIdentityProviderSigningKey :one
+SELECT id, organization_id, identity_provider_connection_id, kid, algorithm, public_jwk, private_key_encrypted, state, activated_at, retired_at, last_used_at, created_at, updated_at, deleted_at, deleted
+FROM identity_provider_signing_keys
+WHERE organization_id = $1
+  AND identity_provider_connection_id = $2
+  AND id = $3
+  AND state = 'active'
+  AND deleted IS FALSE
+`
+
+type GetConfiguredIdentityProviderSigningKeyParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	SigningKeyID                 uuid.UUID
+}
+
+func (q *Queries) GetConfiguredIdentityProviderSigningKey(ctx context.Context, arg GetConfiguredIdentityProviderSigningKeyParams) (IdentityProviderSigningKey, error) {
+	row := q.db.QueryRow(ctx, getConfiguredIdentityProviderSigningKey, arg.OrganizationID, arg.IdentityProviderConnectionID, arg.SigningKeyID)
+	var i IdentityProviderSigningKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.IdentityProviderConnectionID,
+		&i.Kid,
+		&i.Algorithm,
+		&i.PublicJwk,
+		&i.PrivateKeyEncrypted,
+		&i.State,
+		&i.ActivatedAt,
+		&i.RetiredAt,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getIdentityProviderConnectionByOrganization = `-- name: GetIdentityProviderConnectionByOrganization :one
 SELECT
   c.id, c.organization_id, c.kind, c.tenant_identifier, c.display_name, c.status, c.status_detail, c.capabilities, c.last_verified_at, c.verify_evidence, c.created_at, c.updated_at, c.deleted_at, c.deleted,
@@ -255,6 +294,7 @@ SELECT id, organization_id, identity_provider_connection_id, kid, algorithm, pub
 FROM identity_provider_signing_keys
 WHERE organization_id = $1
   AND identity_provider_connection_id = $2
+  AND state = 'active'
   AND deleted IS FALSE
 ORDER BY created_at DESC
 LIMIT 1
@@ -309,6 +349,35 @@ func (q *Queries) MarkIdentityProviderAwaitingVerification(ctx context.Context, 
 	return err
 }
 
+const markIdentityProviderSigningKeyUsed = `-- name: MarkIdentityProviderSigningKeyUsed :exec
+UPDATE identity_provider_signing_keys
+SET
+  last_used_at = $1,
+  updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND identity_provider_connection_id = $3
+  AND id = $4
+  AND state = 'active'
+  AND deleted IS FALSE
+`
+
+type MarkIdentityProviderSigningKeyUsedParams struct {
+	LastUsedAt                   pgtype.Timestamptz
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	ID                           uuid.UUID
+}
+
+func (q *Queries) MarkIdentityProviderSigningKeyUsed(ctx context.Context, arg MarkIdentityProviderSigningKeyUsedParams) error {
+	_, err := q.db.Exec(ctx, markIdentityProviderSigningKeyUsed,
+		arg.LastUsedAt,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.ID,
+	)
+	return err
+}
+
 const softDeleteIdentityProviderConnection = `-- name: SoftDeleteIdentityProviderConnection :exec
 UPDATE identity_provider_connections
 SET
@@ -349,6 +418,57 @@ func (q *Queries) SoftDeleteIdentityProviderSigningKeys(ctx context.Context, arg
 	return err
 }
 
+const updateIdentityProviderVerification = `-- name: UpdateIdentityProviderVerification :execrows
+UPDATE identity_provider_connections
+SET
+  status = $1,
+  status_detail = $2,
+  capabilities = $3,
+  last_verified_at = $4,
+  verify_evidence = $5,
+  updated_at = clock_timestamp()
+WHERE organization_id = $6
+  AND id = $7
+  AND deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM okta_identity_provider_connections AS o
+    WHERE o.identity_provider_connection_id = identity_provider_connections.id
+      AND o.client_id = $8
+      AND o.signing_key_id = $9
+  )
+`
+
+type UpdateIdentityProviderVerificationParams struct {
+	Status                       string
+	StatusDetail                 pgtype.Text
+	Capabilities                 []string
+	LastVerifiedAt               pgtype.Timestamptz
+	VerifyEvidence               []byte
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	ClientID                     pgtype.Text
+	SigningKeyID                 uuid.NullUUID
+}
+
+func (q *Queries) UpdateIdentityProviderVerification(ctx context.Context, arg UpdateIdentityProviderVerificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateIdentityProviderVerification,
+		arg.Status,
+		arg.StatusDetail,
+		arg.Capabilities,
+		arg.LastVerifiedAt,
+		arg.VerifyEvidence,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.ClientID,
+		arg.SigningKeyID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateOktaIdentityProviderClientID = `-- name: UpdateOktaIdentityProviderClientID :exec
 UPDATE okta_identity_provider_connections AS o
 SET
@@ -369,5 +489,28 @@ type UpdateOktaIdentityProviderClientIDParams struct {
 
 func (q *Queries) UpdateOktaIdentityProviderClientID(ctx context.Context, arg UpdateOktaIdentityProviderClientIDParams) error {
 	_, err := q.db.Exec(ctx, updateOktaIdentityProviderClientID, arg.ClientID, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	return err
+}
+
+const updateOktaIdentityProviderGrantedScopes = `-- name: UpdateOktaIdentityProviderGrantedScopes :exec
+UPDATE okta_identity_provider_connections AS o
+SET
+  granted_scopes = $1,
+  updated_at = clock_timestamp()
+FROM identity_provider_connections AS c
+WHERE o.identity_provider_connection_id = c.id
+  AND c.organization_id = $2
+  AND c.id = $3
+  AND c.deleted IS FALSE
+`
+
+type UpdateOktaIdentityProviderGrantedScopesParams struct {
+	GrantedScopes                []string
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+}
+
+func (q *Queries) UpdateOktaIdentityProviderGrantedScopes(ctx context.Context, arg UpdateOktaIdentityProviderGrantedScopesParams) error {
+	_, err := q.db.Exec(ctx, updateOktaIdentityProviderGrantedScopes, arg.GrantedScopes, arg.OrganizationID, arg.IdentityProviderConnectionID)
 	return err
 }

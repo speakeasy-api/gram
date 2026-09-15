@@ -1475,6 +1475,7 @@ func unmarshalIdentityProviderConnectionResponseBodyToIdentityprovidersIdentityP
 		Kind:             *v.Kind,
 		TenantIdentifier: *v.TenantIdentifier,
 		DisplayName:      v.DisplayName,
+		ClientID:         v.ClientID,
 		Status:           *v.Status,
 		StatusDetail:     v.StatusDetail,
 		JwksURL:          *v.JwksURL,
@@ -1554,9 +1555,10 @@ func unmarshalIdentityProviderPrintedValueResponseBodyToIdentityprovidersIdentit
 // a value of type *IdentityProviderExpectedValueResponseBody.
 func unmarshalIdentityProviderExpectedValueResponseBodyToIdentityprovidersIdentityProviderExpectedValue(v *IdentityProviderExpectedValueResponseBody) *identityproviders.IdentityProviderExpectedValue {
 	res := &identityproviders.IdentityProviderExpectedValue{
-		Key:    *v.Key,
-		Label:  *v.Label,
-		Secret: *v.Secret,
+		Key:          *v.Key,
+		Label:        *v.Label,
+		Secret:       *v.Secret,
+		CurrentValue: v.CurrentValue,
 	}
 
 	return res

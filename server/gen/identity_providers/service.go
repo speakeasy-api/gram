@@ -109,10 +109,12 @@ type IdentityProviderConnection struct {
 	Kind             string
 	TenantIdentifier string
 	DisplayName      *string
-	Status           string
-	StatusDetail     *string
-	Capabilities     []string
-	GrantedScopes    []string
+	// Identifier of the configured identity provider application.
+	ClientID      *string
+	Status        string
+	StatusDetail  *string
+	Capabilities  []string
+	GrantedScopes []string
 	// Absolute URL of the Speakeasy-hosted public JSON Web Key Set.
 	JwksURL string
 	// RFC 7638 thumbprint of the active signing key.
@@ -127,6 +129,8 @@ type IdentityProviderExpectedValue struct {
 	Key    string
 	Label  string
 	Secret bool
+	// Previously submitted value. Always omitted for secret values.
+	CurrentValue *string
 }
 
 type IdentityProviderFieldOutcome struct {

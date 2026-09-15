@@ -23,6 +23,7 @@ type IdentityProviderConnectionSnapshot struct {
 	Kind             string   `json:"kind"`
 	TenantIdentifier string   `json:"tenant_identifier"`
 	Status           string   `json:"status"`
+	Outcome          string   `json:"outcome,omitempty"`
 	Capabilities     []string `json:"capabilities"`
 	GrantedScopes    []string `json:"granted_scopes"`
 }

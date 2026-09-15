@@ -81558,6 +81558,9 @@ components:
                     type: array
                     items:
                         type: string
+                client_id:
+                    type: string
+                    description: Identifier of the configured identity provider application.
                 created_at:
                     type: string
                     format: date-time
@@ -81615,6 +81618,9 @@ components:
         IdentityProviderExpectedValue:
             type: object
             properties:
+                current_value:
+                    type: string
+                    description: Previously submitted value. Always omitted for secret values.
                 key:
                     type: string
                 label:

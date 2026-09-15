@@ -35,6 +35,10 @@ export type IdentityProviderConnectionStatus = ClosedEnum<
  */
 export type IdentityProviderConnection = {
   capabilities: Array<string>;
+  /**
+   * Identifier of the configured identity provider application.
+   */
+  clientId?: string | undefined;
   createdAt: Date;
   displayName?: string | undefined;
   grantedScopes: Array<string>;
@@ -73,6 +77,7 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     capabilities: z.array(z.string()),
+    client_id: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -97,6 +102,7 @@ export const IdentityProviderConnection$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "client_id": "clientId",
       "created_at": "createdAt",
       "display_name": "displayName",
       "granted_scopes": "grantedScopes",

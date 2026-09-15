@@ -40,14 +40,16 @@ type VerifySetupStepRequestBody struct {
 // CreateResponseBody is the type of the "identityProviders" service "create"
 // endpoint HTTP response body.
 type CreateResponseBody struct {
-	ID               string   `form:"id" json:"id" xml:"id"`
-	Kind             string   `form:"kind" json:"kind" xml:"kind"`
-	TenantIdentifier string   `form:"tenant_identifier" json:"tenant_identifier" xml:"tenant_identifier"`
-	DisplayName      *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	Status           string   `form:"status" json:"status" xml:"status"`
-	StatusDetail     *string  `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
-	Capabilities     []string `form:"capabilities" json:"capabilities" xml:"capabilities"`
-	GrantedScopes    []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	ID               string  `form:"id" json:"id" xml:"id"`
+	Kind             string  `form:"kind" json:"kind" xml:"kind"`
+	TenantIdentifier string  `form:"tenant_identifier" json:"tenant_identifier" xml:"tenant_identifier"`
+	DisplayName      *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Identifier of the configured identity provider application.
+	ClientID      *string  `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	Status        string   `form:"status" json:"status" xml:"status"`
+	StatusDetail  *string  `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
+	Capabilities  []string `form:"capabilities" json:"capabilities" xml:"capabilities"`
+	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
 	// Absolute URL of the Speakeasy-hosted public JSON Web Key Set.
 	JwksURL string `form:"jwks_url" json:"jwks_url" xml:"jwks_url"`
 	// RFC 7638 thumbprint of the active signing key.
@@ -1222,14 +1224,16 @@ type IdentityProviderCapabilityReadResponseBody struct {
 // IdentityProviderConnectionResponseBody is used to define fields on response
 // body types.
 type IdentityProviderConnectionResponseBody struct {
-	ID               string   `form:"id" json:"id" xml:"id"`
-	Kind             string   `form:"kind" json:"kind" xml:"kind"`
-	TenantIdentifier string   `form:"tenant_identifier" json:"tenant_identifier" xml:"tenant_identifier"`
-	DisplayName      *string  `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	Status           string   `form:"status" json:"status" xml:"status"`
-	StatusDetail     *string  `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
-	Capabilities     []string `form:"capabilities" json:"capabilities" xml:"capabilities"`
-	GrantedScopes    []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
+	ID               string  `form:"id" json:"id" xml:"id"`
+	Kind             string  `form:"kind" json:"kind" xml:"kind"`
+	TenantIdentifier string  `form:"tenant_identifier" json:"tenant_identifier" xml:"tenant_identifier"`
+	DisplayName      *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Identifier of the configured identity provider application.
+	ClientID      *string  `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	Status        string   `form:"status" json:"status" xml:"status"`
+	StatusDetail  *string  `form:"status_detail,omitempty" json:"status_detail,omitempty" xml:"status_detail,omitempty"`
+	Capabilities  []string `form:"capabilities" json:"capabilities" xml:"capabilities"`
+	GrantedScopes []string `form:"granted_scopes" json:"granted_scopes" xml:"granted_scopes"`
 	// Absolute URL of the Speakeasy-hosted public JSON Web Key Set.
 	JwksURL string `form:"jwks_url" json:"jwks_url" xml:"jwks_url"`
 	// RFC 7638 thumbprint of the active signing key.
@@ -1268,6 +1272,8 @@ type IdentityProviderExpectedValueResponseBody struct {
 	Key    string `form:"key" json:"key" xml:"key"`
 	Label  string `form:"label" json:"label" xml:"label"`
 	Secret bool   `form:"secret" json:"secret" xml:"secret"`
+	// Previously submitted value. Always omitted for secret values.
+	CurrentValue *string `form:"current_value,omitempty" json:"current_value,omitempty" xml:"current_value,omitempty"`
 }
 
 // IdentityProviderVerifyResultResponseBody is used to define fields on
@@ -1303,6 +1309,7 @@ func NewCreateResponseBody(res *identityproviders.IdentityProviderConnection) *C
 		Kind:             res.Kind,
 		TenantIdentifier: res.TenantIdentifier,
 		DisplayName:      res.DisplayName,
+		ClientID:         res.ClientID,
 		Status:           res.Status,
 		StatusDetail:     res.StatusDetail,
 		JwksURL:          res.JwksURL,

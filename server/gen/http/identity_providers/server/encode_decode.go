@@ -1369,6 +1369,7 @@ func marshalIdentityprovidersIdentityProviderConnectionToIdentityProviderConnect
 		Kind:             v.Kind,
 		TenantIdentifier: v.TenantIdentifier,
 		DisplayName:      v.DisplayName,
+		ClientID:         v.ClientID,
 		Status:           v.Status,
 		StatusDetail:     v.StatusDetail,
 		JwksURL:          v.JwksURL,
@@ -1468,9 +1469,10 @@ func marshalIdentityprovidersIdentityProviderPrintedValueToIdentityProviderPrint
 // value of type *identityproviders.IdentityProviderExpectedValue.
 func marshalIdentityprovidersIdentityProviderExpectedValueToIdentityProviderExpectedValueResponseBody(v *identityproviders.IdentityProviderExpectedValue) *IdentityProviderExpectedValueResponseBody {
 	res := &IdentityProviderExpectedValueResponseBody{
-		Key:    v.Key,
-		Label:  v.Label,
-		Secret: v.Secret,
+		Key:          v.Key,
+		Label:        v.Label,
+		Secret:       v.Secret,
+		CurrentValue: v.CurrentValue,
 	}
 
 	return res

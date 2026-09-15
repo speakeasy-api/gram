@@ -19,9 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviders"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -52,6 +54,16 @@ type testInstance struct {
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithOktaEndpoint(t, "")
+}
+
+func newTestServiceWithOktaEndpoint(t *testing.T, endpoint string) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithURLs(t, endpoint, "https://api.example.test/")
+}
+
+func newTestServiceWithURLs(t *testing.T, oktaEndpoint, publicURL string) (context.Context, *testInstance) {
+	t.Helper()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -74,9 +86,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	serverURL, err := url.Parse("https://api.example.test/base/")
+	serverURL, err := url.Parse(publicURL)
 	require.NoError(t, err)
 	encryptionClient := testenv.NewEncryptionClient(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	retryConfig := guardian.DefaultRetryConfig()
+	retryConfig.MaxAttempts = 0
 	service := identityproviders.NewService(
 		logger,
 		tracerProvider,
@@ -85,6 +101,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(),
 		encryptionClient,
+		okta.NewClient(guardianPolicy, okta.ClientOpts{Endpoint: oktaEndpoint, RetryConfig: retryConfig}),
 		serverURL,
 	)
 
