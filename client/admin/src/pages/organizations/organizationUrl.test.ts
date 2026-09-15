@@ -59,6 +59,12 @@ describe("organization URL preview", () => {
     "https://b\u00fccher.de",
     "https://\u212a.com",
     "https://example\u3002com",
+    "ab--cd.com",
+    "xn---a-xka.com", // Decodes to -üa (leading hyphen).
+    "xn--ab---3ra.com", // Decodes to ab--ü (reserved hyphens).
+    "xn--a--xka.com", // Decodes to aü- (trailing hyphen).
+    "xn--ab-m1t.com", // Decodes to a + ZWJ + b (invalid joiner context).
+    "xn--a-xbb.com", // Decodes to a + combining acute (not NFC).
     "xn--a.com",
     "xn--.com",
     "xn--invalidpunycode-.com",
@@ -70,6 +76,24 @@ describe("organization URL preview", () => {
     expect(result.hostname).toBe("");
     expect(result.error).not.toBe("");
   });
+
+  it.each(Array.from({ length: 33 }, (_, i) => (i === 32 ? 127 : i)))(
+    "rejects control character U+%i anywhere in the submitted URL",
+    (code) => {
+      const control = String.fromCharCode(code);
+      for (const input of [
+        `${control}example.com`,
+        `example.com${control}`,
+        `https://exa${control}mple.com`,
+        `https://example.com/a${control}b`,
+        `https://example.com/?q=a${control}b`,
+        `https://example.com/#a${control}b`,
+      ]) {
+        expect(organizationUrlPreview(input).hostname).toBe("");
+        expect(organizationUrlPreview(input).error).not.toBe("");
+      }
+    },
+  );
 
   it("leaves public-suffix policy to the server", () => {
     expect(organizationUrlPreview("github.io").hostname).toBe("github.io");

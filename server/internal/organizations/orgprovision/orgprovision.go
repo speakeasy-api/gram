@@ -18,6 +18,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 )
@@ -234,4 +236,17 @@ func normalizeSpaces(name string) string {
 	}
 
 	return b.String()
+}
+
+// NameFromHostname derives a display name from a normalized company hostname.
+// Keep punycode as ASCII, and honor private suffixes (tenant.github.io -> tenant).
+// If no registrable domain exists, retain the input rather than invent a name.
+// This is not validation and must never be used to select a verified domain.
+func NameFromHostname(hostname string) string {
+	registrable, err := publicsuffix.EffectiveTLDPlusOne(hostname)
+	if err != nil {
+		return hostname
+	}
+	name, _, _ := strings.Cut(registrable, ".")
+	return name
 }

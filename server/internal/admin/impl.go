@@ -1239,12 +1239,14 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	if !payload.OwnershipConfirmed {
 		return nil, oops.E(oops.CodeInvalid, nil, "confirm that the organization owns this domain before creating it")
 	}
-	name, err := organizationHostname(payload.URL)
+	hostname, err := organizationHostname(payload.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name)
+	name := orgprovision.NameFromHostname(hostname)
+
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, hostname)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
 		// CodeInvalid and not CodeInvariantViolation, which reads like the

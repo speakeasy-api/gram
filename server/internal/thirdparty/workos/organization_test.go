@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-const verifiedOrganizationResponse = `{"id":"org_example","name":"www.example.com","domains":[{"domain":"www.example.com","state":"verified"}]}`
+const verifiedOrganizationResponse = `{"id":"org_example","name":"example","domains":[{"domain":"www.example.com","state":"verified"}]}`
 
 func organizationHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Client {
 	t.Helper()
@@ -57,7 +57,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 	require.Empty(t, create.key)
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(create.body, &payload))
-	require.JSONEq(t, `"www.example.com"`, string(payload["name"]))
+	require.JSONEq(t, `"example"`, string(payload["name"]))
 	require.JSONEq(t, `[{"domain":"www.example.com","state":"verified"}]`, string(payload["domain_data"]))
 	require.JSONEq(t, `null`, string(payload["domains"]))
 	require.NotContains(t, payload, "external_id")
@@ -76,6 +76,7 @@ func TestVerifiedOrganizationRequests(t *testing.T) {
 	require.Empty(t, plain.key)
 	payload = nil
 	require.NoError(t, json.Unmarshal(plain.body, &payload))
+	require.JSONEq(t, `"Example"`, string(payload["name"]))
 	require.JSONEq(t, `null`, string(payload["domains"]))
 	require.JSONEq(t, `null`, string(payload["domain_data"]))
 	plainUpdate := <-requests
@@ -184,4 +185,43 @@ func TestExistingOrganizationOperationsStillRetry(t *testing.T) {
 	require.EqualValues(t, 2, creates.Load())
 	require.EqualValues(t, 2, updates.Load())
 	require.EqualValues(t, 2, reads.Load())
+}
+
+func TestVerifiedOrganizationDisplayNamePreservesDomain(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ hostname, name string }{
+		{"example.com", "example"},
+		{"app.example.co.uk", "example"},
+		{"a.b.example.com", "example"},
+		{"app.tenant.github.io", "tenant"},
+		{"www.xn--bcher-kva.de", "xn--bcher-kva"},
+		{"www.xn--e1afmkfd.xn--p1ai", "xn--e1afmkfd"},
+		{"www.city.kawasaki.jp", "city"},
+		{"app.example.unknown-suffix", "example"},
+		{"my-company.com", "my-company"},
+	} {
+		t.Run(tc.hostname, func(t *testing.T) {
+			t.Parallel()
+			requests := make(chan []byte, 1)
+			client := organizationHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				requests <- body
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"id":      "org_example",
+					"domains": []map[string]string{{"domain": tc.hostname, "state": "verified"}},
+				})
+			})
+			_, err := client.CreateOrganizationWithVerifiedDomain(t.Context(), tc.hostname)
+			require.NoError(t, err)
+			var payload map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(<-requests, &payload))
+			var name string
+			require.NoError(t, json.Unmarshal(payload["name"], &name))
+			require.Equal(t, tc.name, name)
+			var domains []map[string]string
+			require.NoError(t, json.Unmarshal(payload["domain_data"], &domains))
+			require.Equal(t, []map[string]string{{"domain": tc.hostname, "state": "verified"}}, domains)
+		})
+	}
 }

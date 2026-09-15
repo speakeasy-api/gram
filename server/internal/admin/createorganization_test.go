@@ -198,8 +198,8 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.Equal(t, res.ID, fake.externalID(workosOrgID),
 		"external_id must be back-filled with the Gram id, or the sync path resolves this organization by a different route")
 
-	require.Equal(t, "example.com", res.Name)
-	require.Equal(t, "example-com", res.Slug)
+	require.Equal(t, "example", res.Name)
+	require.Equal(t, "example", res.Slug)
 	require.Equal(t, 0, res.MemberCount, "an admin-created organization starts empty")
 	require.Nil(t, res.DisabledAt)
 
@@ -312,7 +312,7 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 
 	// The operator typed this name second and it wins, which is the
 	// name = EXCLUDED.name arm of the upsert.
-	require.Equal(t, "race.example.com", res.Name, "the operator's domain must overwrite the name the sync wrote")
+	require.Equal(t, "example", res.Name, "the derived display name must overwrite the name the sync wrote")
 	require.NotEqual(t, seeded.Name, res.Name)
 
 	// The slug is in the organization's URL. Re-deriving one here would find the
@@ -347,7 +347,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 	defer func() { _ = blocker.Rollback(ctx) }()
 
 	blockerQueries := orgrepo.New(blocker)
-	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "lock-example-com"))
+	require.NoError(t, blockerQueries.LockOrganizationSlug(ctx, "example"))
 
 	type outcome struct {
 		res *gen.AdminOrganization
@@ -616,9 +616,9 @@ func TestCreateOrganization_NormalizesTheExactHostname(t *testing.T) {
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "  https://WWW.Example.COM./about?x=1#team  ", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
-	require.Equal(t, "www.example.com", res.Name)
+	require.Equal(t, "example", res.Name)
 	require.Equal(t, []string{"www.example.com"}, fake.names())
-	require.Equal(t, "www-example-com", res.Slug)
+	require.Equal(t, "example", res.Slug)
 }
 
 func TestCreateOrganization_RequiresOwnershipConfirmation(t *testing.T) {
@@ -648,7 +648,7 @@ func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
 
 	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Gram id")
 	require.NotEqual(t, first.Slug, second.Slug, "the second organization must get its own slug")
-	require.Equal(t, "duplicate-example-com", first.Slug)
+	require.Equal(t, "example", first.Slug)
 
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZSAMENAME1"))
 	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZSAMENAME2"))

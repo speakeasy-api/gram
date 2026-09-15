@@ -5,11 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -22,15 +19,7 @@ import (
 func TestCreateInWorkOS_AgainstMockWorkOS(t *testing.T) {
 	t.Parallel()
 
-	idp := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: true})
-
-	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
-	require.NoError(t, err)
-
-	client := workos.NewClient(guardianPolicy, "dev-idp-mock", workos.ClientOpts{
-		Endpoint: idp.WorkOSURL,
-		ClientID: "dev-idp-mock",
-	})
+	client := newEmulatorClient(t)
 
 	created, err := orgprovision.CreateInWorkOS(t.Context(), client, "Acme Local Co")
 	require.NoError(t, err)
@@ -62,7 +51,7 @@ func TestCreateInWorkOSWithVerifiedDomain_AgainstMockWorkOS(t *testing.T) {
 	require.Equal(t, orgid.FromWorkOSID(created.WorkOSOrganizationID), created.GramOrganizationID)
 	org, err := client.GetOrganization(t.Context(), created.WorkOSOrganizationID)
 	require.NoError(t, err)
-	require.Equal(t, "www.example.com", org.Name)
+	require.Equal(t, "example", org.Name)
 	require.Equal(t, created.GramOrganizationID, org.ExternalID)
 	policy, err := client.GetOrganizationDomainPolicy(t.Context(), created.WorkOSOrganizationID)
 	require.NoError(t, err)
