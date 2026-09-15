@@ -235,3 +235,90 @@ func TestHTTPClientNoRoutes(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoTunnelRoute)
 	require.Nil(t, resp)
 }
+
+func TestHTTPClientUnreachableGatewayFailsOverToALiveOne(t *testing.T) {
+	t.Parallel()
+
+	// Route selection for anonymous requests is random, so the assertion is
+	// the one that holds in both orders: the forward succeeds. When the dead
+	// address is drawn first it can only succeed by failing over, and
+	// TestHTTPClientAllGatewaysUnreachable pins the unpublish that goes with it.
+	var requests atomic.Int64
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer live.Close()
+
+	// A pod that died without unpublishing: the address is still in the store
+	// but nothing accepts a connection there.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", deadURL, time.Minute))
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", live.URL, time.Minute))
+
+	req := tokenRequest(t, "https://as.customer.internal/oauth/token")
+	resp, err := newTestHTTPClient(t, routes).Do(req, "tunnel-1")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, int64(1), requests.Load(), "the live gateway must see the request exactly once")
+
+	candidates, err := routes.Candidates(t.Context(), "tunnel-1")
+	require.NoError(t, err)
+	require.Contains(t, candidates, live.URL, "a live route must never be unpublished")
+}
+
+func TestHTTPClientAllGatewaysUnreachable(t *testing.T) {
+	t.Parallel()
+
+	// One candidate, so the dial failure is reached deterministically: it must
+	// drop the route rather than leave a dead pod's address to stall the next
+	// token exchange too.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", deadURL, time.Minute))
+
+	req := tokenRequest(t, "https://as.customer.internal/oauth/token")
+	resp, err := newTestHTTPClient(t, routes).Do(req, "tunnel-1") //nolint:bodyclose // error path returns a nil response
+	require.ErrorIs(t, err, ErrNoTunnelRoute)
+	require.Nil(t, resp)
+
+	candidates, err := routes.Candidates(t.Context(), "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
+
+func TestHTTPClientBlockedGatewayAddressIsNotUnpublished(t *testing.T) {
+	t.Parallel()
+
+	// The gateway CIDR allowlist is empty, so the loopback address the route
+	// store carries is refused by the egress policy rather than by the pod.
+	// That says nothing about the route and must leave it published.
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gateway.Close()
+
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", gateway.URL, time.Minute))
+
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	client := NewHTTPClient(routes, "forward-token", policy, nil)
+
+	req := tokenRequest(t, "https://as.customer.internal/oauth/token")
+	resp, err := client.Do(req, "tunnel-1") //nolint:bodyclose // error path returns a nil response
+	require.Error(t, err)
+	require.Nil(t, resp)
+	require.NotErrorIs(t, err, ErrNoTunnelRoute, "an egress rejection is not an exhausted route pool")
+
+	candidates, err := routes.Candidates(t.Context(), "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{gateway.URL}, candidates)
+}

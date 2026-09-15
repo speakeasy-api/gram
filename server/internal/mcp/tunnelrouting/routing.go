@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -27,6 +28,15 @@ const (
 
 	clientAffinityAuthPrefix = "auth"
 )
+
+// GatewayDialTimeout bounds only the TCP connect to a gateway. Route store
+// entries are advertise addresses of pods that can disappear without
+// unpublishing, so a stale route must be detected in about the time a live
+// gateway needs to accept a connection, not in the transport's default
+// minute-scale window. Every caller that dials a gateway — the MCP proxy and
+// the back-channel HTTP client — shares this value so the two paths give up
+// on a dead pod at the same point.
+const GatewayDialTimeout = 3 * time.Second
 
 // ClientAffinityKeyFromRequest derives the stable affinity key used for both
 // gateway-owner selection and local agent-session selection.

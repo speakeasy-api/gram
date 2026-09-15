@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,7 +51,7 @@ type HTTPClient struct {
 // RFC1918 cluster ranges the default policy blocks. Empty means no
 // relaxation: forwards to private gateway addresses then fail closed.
 func NewHTTPClient(routes route.Store, forwardToken string, policy *guardian.Policy, gatewayCIDRs []string) *HTTPClient {
-	options := []guardian.ClientOption{}
+	options := []guardian.ClientOption{guardian.WithDialTimeout(GatewayDialTimeout)}
 	if len(gatewayCIDRs) > 0 {
 		options = append(options, guardian.WithAllowedCIDRBlocks(gatewayCIDRs...))
 	}
@@ -77,6 +78,12 @@ func NewHTTPClient(routes route.Store, forwardToken string, policy *guardian.Pol
 // another candidate is tried. A substream-failed response is returned as-is,
 // never replayed — the request may already have reached the backend, and the
 // calls this client carries are non-idempotent POSTs.
+//
+// A gateway that cannot be connected to at all is treated the same way as one
+// reporting no-live-session: its route is unpublished and another candidate is
+// tried. Connect attempts are bounded by GatewayDialTimeout, so a route left
+// behind by a pod that died without unpublishing costs seconds rather than the
+// transport's default connect window.
 func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, error) {
 	if c == nil || c.routes == nil {
 		return nil, fmt.Errorf("tunnel forwarding is not configured")
@@ -106,13 +113,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 	exclude := map[string]struct{}{}
 	var unpublishErr error
+	var dialErr error
 	for range maxForwardAttempts {
 		addr, ok := SelectRoute("", candidates, exclude)
 		if !ok {
-			if unpublishErr != nil {
-				return nil, errors.Join(ErrNoTunnelRoute, unpublishErr)
-			}
-			return nil, ErrNoTunnelRoute
+			return nil, errors.Join(ErrNoTunnelRoute, dialErr, unpublishErr)
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
@@ -125,7 +130,20 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 		resp, err := c.client.Do(forward)
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
+			// A connect failure means this gateway never saw the request, so
+			// another candidate can carry it even though the payload is a
+			// non-idempotent POST. The address points at a pod that is gone,
+			// so drop it from the store on the way past. Any later failure —
+			// the request is on the wire by then — is returned as-is.
+			if !isDialFailure(err) {
+				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
+			}
+			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
+				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish unreachable tunnel route: %w", uerr))
+			}
+			exclude[addr] = struct{}{}
+			dialErr = errors.Join(dialErr, fmt.Errorf("forward request via tunnel: %w", err))
+			continue
 		}
 
 		if resp.StatusCode != http.StatusBadGateway {
@@ -148,8 +166,27 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 	return nil, errors.Join(
 		fmt.Errorf("no tunnel gateway accepted the request after %d attempts: %w", maxForwardAttempts, ErrNoTunnelRoute),
+		dialErr,
 		unpublishErr,
 	)
+}
+
+// isDialFailure reports whether err means the connection to the gateway was
+// never established. Only then is the request provably unsent and therefore
+// safe to replay on another gateway: anything later, including a read failure
+// after the headers went out, may have already reached the backend.
+//
+// An egress policy rejection also surfaces as a dial error — it is raised from
+// the dialer's control hook — and is deliberately excluded. It says nothing
+// about the pod behind the address, every other candidate in the same cluster
+// range would be refused identically, and unpublishing on it would empty the
+// route store whenever the gateway CIDR allowlist is misconfigured.
+func isDialFailure(err error) bool {
+	if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
+		return false
+	}
+	opErr, ok := errors.AsType[*net.OpError](err)
+	return ok && opErr.Op == "dial"
 }
 
 // buildForward clones req onto the gateway address, keeping only the path and
