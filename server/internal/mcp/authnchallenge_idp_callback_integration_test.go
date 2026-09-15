@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,6 +32,7 @@ import (
 // identity resolver, PostgreSQL, and Redis. Only external WorkOS HTTP endpoints
 // are mocked, so stale-cache assertions cover the full login bootstrap.
 func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []struct {
 		name           string
 		localMember    bool
@@ -46,6 +48,7 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 		{name: "listing_failure_stale_positive", localMember: true, primeCache: true, listingFailure: true, wantMember: true, wantError: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
 			// The service retains this pointer; initialize it once its database and cache exist.
 			resolver := new(identity.Resolver)
 			ctx, ti := newTestMCPServiceWithIdentityResolver(t, resolver)
@@ -57,13 +60,21 @@ func TestHandleIDPCallback_RealResolverMembershipReconciliation(t *testing.T) {
 			oid := "org_" + uuid.NewString()
 			mid := "om_" + uuid.NewString()
 			email := uid + "@example.com"
-			_, err := ti.conn.Exec(ctx, "INSERT INTO users (id,email,display_name,workos_id) VALUES ($1,$2,'Test User',$3)", uid, email, wid)
+			users := userrepo.New(ti.conn)
+			_, err := users.UpsertUser(ctx, userrepo.UpsertUserParams{ID: uid, Email: email, DisplayName: "Test User"})
 			require.NoError(t, err)
-			_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET workos_id=$1 WHERE id=$2", oid, ac.ActiveOrganizationID)
+			require.NoError(t, users.SetUserWorkosID(ctx, userrepo.SetUserWorkosIDParams{ID: uid, WorkosID: conv.ToPGText(wid)}))
+			orgs := orgrepo.New(ti.conn)
+			require.NoError(t, orgs.ClearWorkosOrgID(ctx, ac.ActiveOrganizationID))
+			_, err = orgs.SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{OrganizationID: ac.ActiveOrganizationID, WorkosID: conv.ToPGText(oid)})
 			require.NoError(t, err)
 			if scenario.localMember {
-				_, err = ti.conn.Exec(ctx, "INSERT INTO organization_user_relationships (organization_id,user_id,workos_user_id,workos_membership_id) VALUES ($1,$2,$3,$4)", ac.ActiveOrganizationID, uid, wid, mid)
-				require.NoError(t, err)
+				require.NoError(t, orgs.UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+					OrganizationID:     ac.ActiveOrganizationID,
+					UserID:             conv.ToPGText(uid),
+					WorkosUserID:       conv.ToPGText(wid),
+					WorkosMembershipID: conv.ToPGText(mid),
+				}))
 			}
 			var exchangeCalls, listingCalls atomic.Int32
 			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

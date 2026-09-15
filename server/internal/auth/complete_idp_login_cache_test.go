@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,10 @@ func (c *failingUserInfoSetCache) Set(ctx context.Context, key string, value any
 		c.failedSets++
 		return errors.New("user-info SET unavailable")
 	}
-	return c.Cache.Set(ctx, key, value, ttl)
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set backing cache: %w", err)
+	}
+	return nil
 }
 
 func TestCompleteIDPLogin_MembershipGateIgnoresStaleCacheRepopulation(t *testing.T) {
