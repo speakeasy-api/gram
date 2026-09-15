@@ -105,9 +105,9 @@ func TestNewTokenEndpointError_KeepsTheStatusText(t *testing.T) {
 func TestTokenEndpointMissing(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, tokenEndpointMissing(404, false))
-	require.True(t, tokenEndpointMissing(410, false))
-	require.False(t, tokenEndpointMissing(404, true), "an OAuth error body is the endpoint answering, not drift")
-	require.False(t, tokenEndpointMissing(400, false))
-	require.False(t, tokenEndpointMissing(200, true), "a 2xx body error never triggers")
+	require.True(t, upstreamEndpointMissing(404, false))
+	require.True(t, upstreamEndpointMissing(410, false))
+	require.False(t, upstreamEndpointMissing(404, true), "an OAuth error body is the endpoint answering, not drift")
+	require.False(t, upstreamEndpointMissing(400, false))
+	require.False(t, upstreamEndpointMissing(200, true), "a 2xx body error never triggers")
 }

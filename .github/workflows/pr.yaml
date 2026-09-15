@@ -1583,8 +1583,11 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        # Do not retry: a nondeterministic race must fail CI even if a rerun passes.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -race -tags=inv.debug ./...
+        # Each package can launch Postgres, Redis, and ClickHouse concurrently.
+        # Bound package concurrency so eight race-enabled binaries plus their
+        # containers do not compete for this runner's eight CPUs during startup.
+        # Keep within-package parallelism and race detection; do not retry failures.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -p=2 -race -tags=inv.debug ./...
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays

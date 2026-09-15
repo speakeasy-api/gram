@@ -383,7 +383,7 @@ func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
 	}{
 		{name: "null match", match: nil, wantErr: "matches must not contain null entries"},
 		{name: "blank target id", match: &gen.AIScanMatch{TargetID: " ", Category: "harness", Signal: "installed", Version: nil}, wantErr: "match target_id must not be blank"},
-		{name: "unsupported category", match: &gen.AIScanMatch{TargetID: "new-tool", Category: "future_category", Signal: "installed", Version: nil}, wantErr: "match category must be harness or local_model"},
+		{name: "unsupported category", match: &gen.AIScanMatch{TargetID: "new-tool", Category: "future_category", Signal: "installed", Version: nil}, wantErr: "match category must be one of harness, assistant, local_model"},
 		{name: "unsupported signal", match: &gen.AIScanMatch{TargetID: "cursor", Category: "harness", Signal: "future_signal", Version: nil}, wantErr: "match signal must be installed or running"},
 	}
 

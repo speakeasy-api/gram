@@ -52,16 +52,30 @@ func (allowingPlatformMCPBudget) AllowN(context.Context, string, int) (ratelimit
 	return ratelimit.Result{Allowed: true}, nil
 }
 
+// The Shadow AI reads attach separately from the Shadow MCP inventory, so an
+// unrelated failure in one cannot report the other unavailable. Both halves
+// are held to a live org:admin recheck rather than the session that installed
+// the package, which is what this stub stands in for.
+type stubLiveOrgAdminAuthorizer struct{}
+
+func (stubLiveOrgAdminAuthorizer) RequireLiveOrgAdmin(context.Context, platformmcp.Principal) error {
+	return nil
+}
+
 func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.T) {
 	t.Parallel()
 
 	limiter := allowingPlatformMCPBudget{}
 	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil)
-	attached := attachShadowInventory(reader, platformMCPConfig{
+	config := platformMCPConfig{
 		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
 		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},
-	}, platformmcp.OperationBudget{Connection: limiter, Organization: limiter})
+	}
+	budget := platformmcp.OperationBudget{Connection: limiter, Organization: limiter}
+	attached := attachShadowInventory(reader, config, budget)
 	require.True(t, attached)
+	// Attached independently, as the local-fixture surface does in production.
+	attachShadowAI(reader, config, stubLiveOrgAdminAuthorizer{}, budget)
 }
 
 func TestLocalPlatformMCPMarketplaceTokenResolvesDedicatedRepository(t *testing.T) {

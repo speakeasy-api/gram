@@ -11,12 +11,17 @@ import {
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import {
+  UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
+} from "@gram/client/models/components/updateremotesessionclientform.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
+  isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
 
@@ -248,11 +253,13 @@ export function EndpointsFields({
 export function TokenEndpointAuthMethodField({
   value,
   onChange,
+  allowPrivateKeyJwt = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
+  allowPrivateKeyJwt?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -288,22 +295,78 @@ export function TokenEndpointAuthMethodField({
           >
             none
           </SelectItem>
+          {(allowPrivateKeyJwt ||
+            value ===
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
+            <SelectItem
+              value={
+                CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+              }
+            >
+              private_key_jwt
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
     </Stack>
   );
 }
 
+export function ClientAssertionAudienceField({
+  value,
+  onChange,
+}: {
+  value: AuthAudienceFormat;
+  onChange: (value: AuthAudienceFormat) => void;
+}): JSX.Element {
+  return (
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">
+        Client assertion audience
+      </Label>
+      <Select
+        value={value}
+        onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.Issuer
+            }
+          >
+            Issuer URL (default)
+          </SelectItem>
+          <SelectItem
+            value={
+              UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat.TokenEndpoint
+            }
+          >
+            Token endpoint URL
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Text small muted>
+        Use the issuer URL unless your identity provider requires the token
+        endpoint URL, as required by providers such as Okta.
+      </Text>
+    </Stack>
+  );
+}
+
 // ClientCredentialsFields is used by both Add (editable client_id) and
 // Modify (client_id read-only — the API has no rotate path; create a fresh
-// remote_session_client if you need a new one). clientSecret stays an input
-// in both — empty means "leave existing in place" in Modify. Callers that
+// remote_session_client if you need a new one). The secret input is hidden
+// for private_key_jwt; empty means "leave existing in place" in Modify. Callers that
 // render their own section header (e.g. above a client-type selector) pass
 // showHeading={false} to suppress the built-in "OAuth Client Credentials" block.
 export function ClientCredentialsFields({
   clientId,
   clientSecret,
   tokenEndpointAuthMethod,
+  allowPrivateKeyJwt = false,
   clientIdEditable = true,
   clientSecretLabel = "Client Secret (optional)",
   clientSecretPlaceholder = "••••••••",
@@ -317,6 +380,7 @@ export function ClientCredentialsFields({
   tokenEndpointAuthMethod:
     | CreateRemoteSessionClientFormTokenEndpointAuthMethod
     | "";
+  allowPrivateKeyJwt?: boolean;
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
@@ -359,21 +423,29 @@ export function ClientCredentialsFields({
         )}
       </Stack>
 
-      <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">
-          {clientSecretLabel}
-        </Label>
-        <Input
-          type="password"
-          value={clientSecret}
-          onChange={onClientSecretChange}
-          placeholder={clientSecretPlaceholder}
-        />
-      </Stack>
+      {isPrivateKeyJwtAuthMethod(tokenEndpointAuthMethod) ? (
+        <Text muted small>
+          Any existing client secret is retained but not used with
+          private_key_jwt.
+        </Text>
+      ) : (
+        <Stack gap={2}>
+          <Label className="text-muted-foreground text-xs">
+            {clientSecretLabel}
+          </Label>
+          <Input
+            type="password"
+            value={clientSecret}
+            onChange={onClientSecretChange}
+            placeholder={clientSecretPlaceholder}
+          />
+        </Stack>
+      )}
 
       <TokenEndpointAuthMethodField
         value={tokenEndpointAuthMethod}
         onChange={onTokenEndpointAuthMethodChange}
+        allowPrivateKeyJwt={allowPrivateKeyJwt}
       />
     </Stack>
   );

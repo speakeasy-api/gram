@@ -93,6 +93,25 @@ type AiIntegrationSync struct {
 	ID                    uuid.UUID
 }
 
+type AiScanTarget struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
+	Status          string
+	Rationale       pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ApiKey struct {
 	ID                     uuid.UUID
 	OrganizationID         string
@@ -166,6 +185,7 @@ type AssistantMcpOauthClient struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
 	ClientSecretExpiresAt pgtype.Timestamptz
+	ClientIDMetadataUri   pgtype.Text
 	RegistrationOwner     uuid.NullUUID
 	RegistrationStartedAt pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz
@@ -655,28 +675,6 @@ type DeploymentsPackage struct {
 	DeploymentID uuid.UUID
 	PackageID    uuid.UUID
 	VersionID    uuid.UUID
-}
-
-type DeviceAgentAiScanCatalog struct {
-	OrganizationID string
-	ListVersion    int32
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
-type DeviceAgentAiScanTarget struct {
-	OrganizationID  string
-	ID              string
-	DisplayName     string
-	Category        string
-	BundleIds       []string
-	Binaries        []string
-	ConfigDirs      []string
-	ProcessNames    []string
-	VersionPlistKey pgtype.Text
-	Enabled         bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
 }
 
 type DeviceAgentConfiguration struct {
@@ -1435,6 +1433,7 @@ type MetaMcpServer struct {
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
+	Instructions        pgtype.Text
 	Visibility          string
 	NetworkAccessMode   pgtype.Text
 	CreatedAt           pgtype.Timestamptz
@@ -1646,6 +1645,14 @@ type OrganizationMetadatum struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
+}
+
+type OrganizationOnboarding struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Preset         pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
@@ -2107,6 +2114,23 @@ type PrincipalGrant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PrincipalRemoteSessionBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	PrincipalID           uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	RemoteSessionID       uuid.UUID
+	IssuerAttachmentScope string
+	ClientAttachmentScope string
+	GrantGeneration       int64
+	AttachedBySubjectID   string
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type Project struct {
 	ID                     uuid.UUID
 	Name                   string
@@ -2241,6 +2265,7 @@ type RemoteMcpServerHeader struct {
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -2272,6 +2297,7 @@ type RemoteSessionClient struct {
 	ID                              uuid.UUID
 	ProjectID                       uuid.NullUUID
 	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
 	RemoteSessionIssuerID           uuid.UUID
 	ClientID                        string
 	ClientSecretEncrypted           pgtype.Text
@@ -2315,6 +2341,8 @@ type RemoteSessionIssuer struct {
 	JwksUri                                    pgtype.Text
 	Jwks                                       []byte
 	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
 	JwksCacheExpiresAt                         pgtype.Timestamptz
 	JwksEtag                                   pgtype.Text
 	ServiceDocumentation                       pgtype.Text
@@ -3235,6 +3263,7 @@ type UserSessionIssuer struct {
 	ID                            uuid.UUID
 	ProjectID                     uuid.NullUUID
 	OrganizationID                pgtype.Text
+	AttachmentScope               pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval
@@ -3257,6 +3286,18 @@ type UserSessionIssuerCimdClient struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+}
+
+type WorkloadAgentAssignment struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type WorkloadIdentityAdmission struct {

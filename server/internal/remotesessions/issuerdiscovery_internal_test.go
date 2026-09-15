@@ -97,3 +97,11 @@ func TestIssuerIdentifier(t *testing.T) {
 	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`{"jwks_uri":"https://idp.example.com/jwks"}`), "https://idp.example.com//"))
 	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`null`), "https://idp.example.com"))
 }
+
+func TestClientAssertionIssuer(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "https://idp.example.com/", clientAssertionIssuer([]byte(`{"issuer":"https://idp.example.com/"}`), "https://idp.example.com"), "a canonically matching document preserves its exact issuer identifier")
+	require.Equal(t, "https://idp.example.com/configured/", clientAssertionIssuer([]byte(`{"issuer":"https://idp.example.com/stale/"}`), "https://idp.example.com/configured/"), "metadata retained across an issuer edit cannot override the current issuer")
+	require.Equal(t, "https://idp.example.com/configured/", clientAssertionIssuer(nil, " https://idp.example.com/configured/ "), "the configured fallback preserves a significant trailing slash")
+}
