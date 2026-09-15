@@ -22,8 +22,21 @@ type Connection struct {
 	ConnectionType string
 	Name           string
 	State          string // "active", "inactive", "draft", "validating"
-	CreatedAt      string
-	UpdatedAt      string
+
+	// CallbackEndpoint is WorkOS's top-level callback_endpoint value.
+	CallbackEndpoint string
+
+	// OIDCDiscoveryEndpoint is the identity provider's OIDC discovery URL.
+	OIDCDiscoveryEndpoint string
+
+	// OIDCRedirectURI is WorkOS's oidc_options.redirect_uri value and is the
+	// authoritative callback URL for OIDC provider configuration. Both
+	// oidc_options.redirect_uri and callback_endpoint were confirmed in a live
+	// GET /connections/{id} WorkOS response on 2026-09-15.
+	OIDCRedirectURI string
+
+	CreatedAt string
+	UpdatedAt string
 }
 
 // CreateOIDCConnectionInput contains the transient values needed to configure a WorkOS OIDC connection.
@@ -45,13 +58,20 @@ type CreateOIDCConnectionInput struct {
 }
 
 type connectionResponse struct {
-	ID             string `json:"id"`
-	OrganizationID string `json:"organization_id"`
-	ConnectionType string `json:"connection_type"`
-	Name           string `json:"name"`
-	State          string `json:"state"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	ID               string                        `json:"id"`
+	OrganizationID   string                        `json:"organization_id"`
+	ConnectionType   string                        `json:"connection_type"`
+	Name             string                        `json:"name"`
+	State            string                        `json:"state"`
+	CallbackEndpoint string                        `json:"callback_endpoint"`
+	OIDCOptions      connectionOIDCOptionsResponse `json:"oidc_options"`
+	CreatedAt        string                        `json:"created_at"`
+	UpdatedAt        string                        `json:"updated_at"`
+}
+
+type connectionOIDCOptionsResponse struct {
+	DiscoveryEndpoint string `json:"discovery_endpoint"`
+	RedirectURI       string `json:"redirect_uri"`
 }
 
 type createOIDCConnectionRequest struct {
@@ -74,6 +94,14 @@ type createOIDCAttributeMaps struct {
 	StandardAttributes map[string]string `json:"standard_attributes"`
 }
 
+type updateOIDCConnectionRequest struct {
+	OIDCOptions updateOIDCOptions `json:"oidc_options"`
+}
+
+type updateOIDCOptions struct {
+	DiscoveryEndpoint string `json:"discovery_endpoint"`
+}
+
 // CreateOIDCConnection creates a GenericOIDC connection using the field names
 // confirmed against WorkOS POST /connections validation on 2026-09-15.
 func (wc *Client) CreateOIDCConnection(ctx context.Context, input CreateOIDCConnectionInput) (Connection, error) {
@@ -91,15 +119,15 @@ func (wc *Client) CreateOIDCConnection(ctx context.Context, input CreateOIDCConn
 		AttributeMaps: createOIDCAttributeMaps{
 			StandardAttributes: map[string]string{
 				"email":      "email",
-				"first_name": "first_name",
-				"last_name":  "last_name",
+				"first_name": "given_name",
+				"last_name":  "family_name",
 				"groups":     "groups",
 			},
 		},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return Connection{}, fmt.Errorf("encode WorkOS OIDC connection: %w", err)
+		return emptyConnection(), fmt.Errorf("encode WorkOS OIDC connection: %w", err)
 	}
 	var response connectionResponse
 	if err := wc.doWithoutRetry(ctx, http.MethodPost, "/connections", body, &response); err != nil {
@@ -107,9 +135,44 @@ func (wc *Client) CreateOIDCConnection(ctx context.Context, input CreateOIDCConn
 		if input.ClientSecret != "" && errors.As(err, &apiErr) {
 			apiErr.Body = redactCredential(apiErr.Body, input.ClientSecret)
 		}
-		return Connection{}, err
+		return emptyConnection(), err
 	}
 	return connectionFromResponse(response), nil
+}
+
+// UpdateOIDCConnectionDiscoveryEndpoint updates only the OIDC discovery URL
+// for an existing WorkOS connection.
+func (wc *Client) UpdateOIDCConnectionDiscoveryEndpoint(ctx context.Context, connectionID, discoveryEndpoint string) (Connection, error) {
+	if err := validateOIDCConnectionDiscoveryEndpointUpdate(connectionID, discoveryEndpoint); err != nil {
+		return emptyConnection(), err
+	}
+
+	body, err := json.Marshal(updateOIDCConnectionRequest{
+		OIDCOptions: updateOIDCOptions{
+			DiscoveryEndpoint: discoveryEndpoint,
+		},
+	})
+	if err != nil {
+		return emptyConnection(), fmt.Errorf("encode WorkOS OIDC connection update: %w", err)
+	}
+
+	var response connectionResponse
+	path := "/connections/" + url.PathEscape(connectionID)
+	if err := wc.doWithoutRetry(ctx, http.MethodPatch, path, body, &response); err != nil {
+		return emptyConnection(), err
+	}
+
+	return connectionFromResponse(response), nil
+}
+
+func validateOIDCConnectionDiscoveryEndpointUpdate(connectionID, discoveryEndpoint string) error {
+	if strings.TrimSpace(connectionID) == "" {
+		return errors.New("update WorkOS OIDC connection: connection ID is required")
+	}
+	if strings.TrimSpace(discoveryEndpoint) == "" {
+		return errors.New("update WorkOS OIDC connection: discovery endpoint is required")
+	}
+	return nil
 }
 
 func redactCredential(value, credential string) string {
@@ -127,12 +190,12 @@ func redactCredential(value, credential string) string {
 // GetConnection retrieves a WorkOS connection by its stable connection ID.
 func (wc *Client) GetConnection(ctx context.Context, connectionID string) (Connection, error) {
 	if strings.TrimSpace(connectionID) == "" {
-		return Connection{}, errors.New("get WorkOS connection: connection ID is required")
+		return emptyConnection(), errors.New("get WorkOS connection: connection ID is required")
 	}
 	var response connectionResponse
 	path := "/connections/" + url.PathEscape(connectionID)
 	if err := wc.do(ctx, http.MethodGet, path, nil, &response); err != nil {
-		return Connection{}, err
+		return emptyConnection(), err
 	}
 	return connectionFromResponse(response), nil
 }
@@ -151,7 +214,33 @@ func IsConnectionsWriteUnavailable(err error) bool {
 }
 
 func connectionFromResponse(response connectionResponse) Connection {
-	return Connection(response)
+	return Connection{
+		ID:                    response.ID,
+		OrganizationID:        response.OrganizationID,
+		ConnectionType:        response.ConnectionType,
+		Name:                  response.Name,
+		State:                 response.State,
+		CallbackEndpoint:      response.CallbackEndpoint,
+		OIDCDiscoveryEndpoint: response.OIDCOptions.DiscoveryEndpoint,
+		OIDCRedirectURI:       response.OIDCOptions.RedirectURI,
+		CreatedAt:             response.CreatedAt,
+		UpdatedAt:             response.UpdatedAt,
+	}
+}
+
+func emptyConnection() Connection {
+	return Connection{
+		ID:                    "",
+		OrganizationID:        "",
+		ConnectionType:        "",
+		Name:                  "",
+		State:                 "",
+		CallbackEndpoint:      "",
+		OIDCDiscoveryEndpoint: "",
+		OIDCRedirectURI:       "",
+		CreatedAt:             "",
+		UpdatedAt:             "",
+	}
 }
 
 // ListConnections fetches SSO connections for an organization from WorkOS.
@@ -175,13 +264,16 @@ func (wc *Client) ListConnections(ctx context.Context, organizationID string) ([
 		}
 		for _, c := range resp.Data {
 			out = append(out, Connection{
-				ID:             c.ID,
-				OrganizationID: c.OrganizationID,
-				ConnectionType: string(c.ConnectionType),
-				Name:           c.Name,
-				State:          string(c.State),
-				CreatedAt:      c.CreatedAt,
-				UpdatedAt:      c.UpdatedAt,
+				ID:                    c.ID,
+				OrganizationID:        c.OrganizationID,
+				ConnectionType:        string(c.ConnectionType),
+				Name:                  c.Name,
+				State:                 string(c.State),
+				CallbackEndpoint:      "",
+				OIDCDiscoveryEndpoint: "",
+				OIDCRedirectURI:       "",
+				CreatedAt:             c.CreatedAt,
+				UpdatedAt:             c.UpdatedAt,
 			})
 		}
 		if resp.ListMetadata.After == "" {

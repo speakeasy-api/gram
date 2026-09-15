@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -232,11 +233,12 @@ type oauthClientSettingsRequest struct {
 // Okta's OAuth2Claim wire model deliberately uses group_filter_type while its
 // other fields are camelCase:
 // https://github.com/okta/terraform-provider-okta/blob/33f6568264a666fb5a023a26b6b86a12d003279b/sdk/v2_oAuth2Claim.go
-type createGroupsClaimRequest struct {
+type signInClaim struct {
+	ID                   string                       `json:"id,omitempty"`
 	AlwaysIncludeInToken bool                         `json:"alwaysIncludeInToken"`
 	ClaimType            string                       `json:"claimType"`
 	Conditions           authorizationClaimConditions `json:"conditions"`
-	GroupFilterType      string                       `json:"group_filter_type"`
+	GroupFilterType      string                       `json:"group_filter_type,omitempty"`
 	Name                 string                       `json:"name"`
 	Status               string                       `json:"status"`
 	Value                string                       `json:"value"`
@@ -649,12 +651,246 @@ func (c *Client) ListAuthorizationServers(ctx context.Context, tenantDomain, acc
 	return response, nil
 }
 
+// EnsureAuthorizationServerPolicyClient assigns an application instance to the active default policy.
+func (c *Client) EnsureAuthorizationServerPolicyClient(ctx context.Context, tenantDomain, accessToken, authorizationServerID, applicationID string) error {
+	if strings.TrimSpace(tenantDomain) == "" || strings.TrimSpace(accessToken) == "" || strings.TrimSpace(authorizationServerID) == "" || strings.TrimSpace(applicationID) == "" {
+		return errors.New("ensure Okta authorization server policy client: tenant domain, access token, authorization server ID, and application ID are required")
+	}
+
+	collectionPath := "/api/v1/authorizationServers/" + url.PathEscape(authorizationServerID) + "/policies"
+	requestURL, err := c.urlFor(tenantDomain, collectionPath)
+	if err != nil {
+		return fmt.Errorf("ensure Okta authorization server policy client: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("create Okta authorization server policies request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var policies []map[string]json.RawMessage
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &policies); err != nil {
+		return err
+	}
+
+	var defaultPolicies []map[string]json.RawMessage
+	for _, policy := range policies {
+		var identity struct {
+			Name       string `json:"name"`
+			Status     string `json:"status"`
+			Conditions struct {
+				Clients struct {
+					Include []string `json:"include"`
+				} `json:"clients"`
+			} `json:"conditions"`
+		}
+		encoded, err := json.Marshal(policy)
+		if err != nil {
+			return fmt.Errorf("encode Okta authorization server policy: %w", err)
+		}
+		if err := json.Unmarshal(encoded, &identity); err != nil {
+			return fmt.Errorf("decode Okta authorization server policy: %w", err)
+		}
+		if identity.Status != "ACTIVE" {
+			continue
+		}
+		for _, included := range identity.Conditions.Clients.Include {
+			if included == "ALL_CLIENTS" || included == applicationID {
+				return nil
+			}
+		}
+		if identity.Name == "Default Policy" {
+			defaultPolicies = append(defaultPolicies, policy)
+		}
+	}
+	if len(defaultPolicies) != 1 {
+		return fmt.Errorf("ensure Okta authorization server policy client: expected exactly one active Default Policy, found %d", len(defaultPolicies))
+	}
+
+	policy := defaultPolicies[0]
+	var policyID string
+	if err := json.Unmarshal(policy["id"], &policyID); err != nil || policyID == "" {
+		return errors.New("ensure Okta authorization server policy client: active Default Policy has no ID")
+	}
+	var conditions map[string]json.RawMessage
+	if err := json.Unmarshal(policy["conditions"], &conditions); err != nil {
+		return fmt.Errorf("decode Okta authorization server policy conditions: %w", err)
+	}
+	var clients map[string]json.RawMessage
+	if rawClients, ok := conditions["clients"]; ok {
+		if err := json.Unmarshal(rawClients, &clients); err != nil {
+			return fmt.Errorf("decode Okta authorization server policy clients: %w", err)
+		}
+	} else {
+		clients = make(map[string]json.RawMessage)
+	}
+	var included []string
+	if rawInclude, ok := clients["include"]; ok {
+		if err := json.Unmarshal(rawInclude, &included); err != nil {
+			return fmt.Errorf("decode Okta authorization server policy clients: %w", err)
+		}
+	}
+	included = append(included, applicationID)
+	clients["include"], err = json.Marshal(included)
+	if err != nil {
+		return fmt.Errorf("encode Okta authorization server policy clients: %w", err)
+	}
+	conditions["clients"], err = json.Marshal(clients)
+	if err != nil {
+		return fmt.Errorf("encode Okta authorization server policy conditions: %w", err)
+	}
+
+	payload := make(map[string]json.RawMessage)
+	for _, field := range []string{"type", "status", "name", "description", "priority"} {
+		if value, ok := policy[field]; ok {
+			payload[field] = value
+		}
+	}
+	payload["conditions"], err = json.Marshal(conditions)
+	if err != nil {
+		return fmt.Errorf("encode Okta authorization server policy conditions: %w", err)
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode Okta authorization server policy: %w", err)
+	}
+	requestURL, err = c.urlFor(tenantDomain, collectionPath+"/"+url.PathEscape(policyID))
+	if err != nil {
+		return fmt.Errorf("ensure Okta authorization server policy client: %w", err)
+	}
+	httpRequest, err = http.NewRequestWithContext(ctx, http.MethodPut, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create Okta authorization server policy update request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	var response json.RawMessage
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
+		return err
+	}
+	return nil
+}
+
+// EnsureSignInClaims creates or repairs the identity claims required by Gram sign-in.
+func (c *Client) EnsureSignInClaims(ctx context.Context, tenantDomain, accessToken, authorizationServerID string) ([]string, error) {
+	claimNames := []string{"groups", "given_name", "family_name", "email"}
+	if strings.TrimSpace(tenantDomain) == "" || strings.TrimSpace(accessToken) == "" || strings.TrimSpace(authorizationServerID) == "" {
+		return nil, errors.New("ensure Okta sign-in claims: tenant domain, access token, and authorization server ID are required")
+	}
+	desiredClaims := []signInClaim{
+		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "REGEX", Name: "groups", Status: "ACTIVE", Value: ".*", ValueType: "GROUPS"},
+		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "given_name", Status: "ACTIVE", Value: "user.firstName", ValueType: "EXPRESSION"},
+		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "family_name", Status: "ACTIVE", Value: "user.lastName", ValueType: "EXPRESSION"},
+		{ID: "", AlwaysIncludeInToken: true, ClaimType: "IDENTITY", Conditions: authorizationClaimConditions{Scopes: []string{}}, GroupFilterType: "", Name: "email", Status: "ACTIVE", Value: "user.email", ValueType: "EXPRESSION"},
+	}
+
+	claimsPath := "/api/v1/authorizationServers/" + url.PathEscape(authorizationServerID) + "/claims"
+	listClaims := func() ([]signInClaim, error) {
+		requestURL, err := c.urlFor(tenantDomain, claimsPath)
+		if err != nil {
+			return nil, fmt.Errorf("ensure Okta sign-in claims: %w", err)
+		}
+		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create Okta sign-in claims request: %w", err)
+		}
+		httpRequest.Header.Set("Accept", "application/json")
+		httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+		var claims []signInClaim
+		if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &claims); err != nil {
+			return nil, err
+		}
+		return claims, nil
+	}
+	claimMatches := func(actual, desired signInClaim) bool {
+		return actual.AlwaysIncludeInToken == desired.AlwaysIncludeInToken &&
+			actual.ClaimType == desired.ClaimType &&
+			actual.Conditions.Scopes != nil && len(actual.Conditions.Scopes) == 0 &&
+			actual.GroupFilterType == desired.GroupFilterType && actual.Name == desired.Name &&
+			actual.Status == desired.Status && actual.Value == desired.Value && actual.ValueType == desired.ValueType
+	}
+	mutateClaim := func(method, path string, claim signInClaim) error {
+		body, err := json.Marshal(claim)
+		if err != nil {
+			return fmt.Errorf("encode Okta sign-in claim: %w", err)
+		}
+		requestURL, err := c.urlFor(tenantDomain, path)
+		if err != nil {
+			return fmt.Errorf("ensure Okta sign-in claim: %w", err)
+		}
+		httpRequest, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("create Okta sign-in claim mutation request: %w", err)
+		}
+		httpRequest.Header.Set("Accept", "application/json")
+		httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+		httpRequest.Header.Set("Content-Type", "application/json")
+		var response json.RawMessage
+		if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	existingClaims, err := listClaims()
+	if err != nil {
+		return nil, err
+	}
+	for _, desired := range desiredClaims {
+		var sameName []signInClaim
+		for _, existing := range existingClaims {
+			if existing.Name != desired.Name {
+				continue
+			}
+			sameName = append(sameName, existing)
+		}
+		if len(sameName) == 0 {
+			if err := mutateClaim(http.MethodPost, claimsPath, desired); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		for _, existing := range sameName {
+			if claimMatches(existing, desired) {
+				continue
+			}
+			if existing.ID == "" {
+				return nil, fmt.Errorf("ensure Okta sign-in claim %q: existing claim has no ID", desired.Name)
+			}
+			if err := mutateClaim(http.MethodPut, claimsPath+"/"+url.PathEscape(existing.ID), desired); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	verifiedClaims, err := listClaims()
+	if err != nil {
+		return nil, err
+	}
+	for _, desired := range desiredClaims {
+		found := false
+		for _, actual := range verifiedClaims {
+			if claimMatches(actual, desired) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("ensure Okta sign-in claims: claim %q did not match after update", desired.Name)
+		}
+	}
+	return claimNames, nil
+}
+
 // CreateGroupsClaim adds the groups identity claim to a custom authorization server.
 func (c *Client) CreateGroupsClaim(ctx context.Context, tenantDomain, accessToken, authorizationServerID string) error {
 	if authorizationServerID == "" {
 		return errors.New("create Okta groups claim: authorization server ID is required")
 	}
-	payload := createGroupsClaimRequest{
+	payload := signInClaim{
+		ID:                   "",
 		AlwaysIncludeInToken: true,
 		ClaimType:            "IDENTITY",
 		Conditions:           authorizationClaimConditions{Scopes: []string{}},
@@ -794,6 +1030,111 @@ func (c *Client) GetApplication(ctx context.Context, tenantDomain, accessToken, 
 		return Application{}, err
 	}
 	return applicationFromResponse(response), nil
+}
+
+// EnsureOIDCApplicationRedirectURI appends a redirect URI without replacing existing application configuration.
+func (c *Client) EnsureOIDCApplicationRedirectURI(ctx context.Context, tenantDomain, accessToken, applicationID, redirectURI string) error {
+	if strings.TrimSpace(tenantDomain) == "" || strings.TrimSpace(accessToken) == "" || strings.TrimSpace(applicationID) == "" || strings.TrimSpace(redirectURI) == "" {
+		return errors.New("ensure Okta OIDC application redirect URI: tenant domain, access token, application ID, and redirect URI are required")
+	}
+	path := "/api/v1/apps/" + url.PathEscape(applicationID)
+	requestURL, err := c.urlFor(tenantDomain, path)
+	if err != nil {
+		return fmt.Errorf("ensure Okta OIDC application redirect URI: %w", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return fmt.Errorf("create Okta application redirect URI request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+
+	var application map[string]json.RawMessage
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &application); err != nil {
+		return err
+	}
+	var settings map[string]json.RawMessage
+	if rawSettings, ok := application["settings"]; ok {
+		if err := json.Unmarshal(rawSettings, &settings); err != nil {
+			return fmt.Errorf("decode Okta OIDC application settings: %w", err)
+		}
+	} else {
+		settings = make(map[string]json.RawMessage)
+	}
+	var oauthClient map[string]json.RawMessage
+	if rawOAuthClient, ok := settings["oauthClient"]; ok {
+		if err := json.Unmarshal(rawOAuthClient, &oauthClient); err != nil {
+			return fmt.Errorf("decode Okta OIDC application OAuth settings: %w", err)
+		}
+	} else {
+		oauthClient = make(map[string]json.RawMessage)
+	}
+	var redirectURIs []string
+	if rawRedirectURIs, ok := oauthClient["redirect_uris"]; ok {
+		if err := json.Unmarshal(rawRedirectURIs, &redirectURIs); err != nil {
+			return fmt.Errorf("decode Okta OIDC application redirect URIs: %w", err)
+		}
+	}
+	if slices.Contains(redirectURIs, redirectURI) {
+		return nil
+	}
+	redirectURIs = append(redirectURIs, redirectURI)
+	oauthClient["redirect_uris"], err = json.Marshal(redirectURIs)
+	if err != nil {
+		return fmt.Errorf("encode Okta OIDC application redirect URIs: %w", err)
+	}
+	settings["oauthClient"], err = json.Marshal(oauthClient)
+	if err != nil {
+		return fmt.Errorf("encode Okta OIDC application OAuth settings: %w", err)
+	}
+
+	payload := make(map[string]json.RawMessage)
+	for _, field := range []string{"accessibility", "features", "label", "name", "profile", "signOnMode", "universalLogout", "visibility"} {
+		if value, ok := application[field]; ok {
+			payload[field] = value
+		}
+	}
+	payload["settings"], err = json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("encode Okta OIDC application settings: %w", err)
+	}
+	if rawCredentials, ok := application["credentials"]; ok {
+		var credentials map[string]json.RawMessage
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			return fmt.Errorf("decode Okta OIDC application credentials: %w", err)
+		}
+		if rawOAuthCredentials, ok := credentials["oauthClient"]; ok {
+			var oauthCredentials map[string]json.RawMessage
+			if err := json.Unmarshal(rawOAuthCredentials, &oauthCredentials); err != nil {
+				return fmt.Errorf("decode Okta OIDC application OAuth credentials: %w", err)
+			}
+			delete(oauthCredentials, "client_secret")
+			credentials["oauthClient"], err = json.Marshal(oauthCredentials)
+			if err != nil {
+				return fmt.Errorf("encode Okta OIDC application OAuth credentials: %w", err)
+			}
+		}
+		payload["credentials"], err = json.Marshal(credentials)
+		if err != nil {
+			return fmt.Errorf("encode Okta OIDC application credentials: %w", err)
+		}
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode Okta OIDC application: %w", err)
+	}
+	httpRequest, err = http.NewRequestWithContext(ctx, http.MethodPut, requestURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create Okta application redirect URI update request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	var response json.RawMessage
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ResolveApplicationByClientID finds an OIDC application by its public OAuth client ID.

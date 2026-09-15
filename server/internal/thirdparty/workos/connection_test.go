@@ -31,7 +31,7 @@ func TestClientCreateOIDCConnectionSendsExactPayload(t *testing.T) {
 		requests <- r.Clone(t.Context())
 		bodies <- body
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"active","created_at":"2026-09-15T00:00:00Z","updated_at":"2026-09-15T00:00:00Z"}`))
+		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"active","callback_endpoint":"https://api.workos.com/sso/callback/conn_example","oidc_options":{"discovery_endpoint":"https://example.okta.com/.well-known/openid-configuration","redirect_uri":"https://api.workos.com/sso/callback/conn_example"},"created_at":"2026-09-15T00:00:00Z","updated_at":"2026-09-15T00:00:00Z"}`))
 	})
 
 	connection, err := newClientWithHandler(t, handler).CreateOIDCConnection(t.Context(), workos.CreateOIDCConnectionInput{
@@ -43,13 +43,16 @@ func TestClientCreateOIDCConnectionSendsExactPayload(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, workos.Connection{
-		ID:             "conn_example",
-		OrganizationID: "org_example",
-		ConnectionType: "GenericOIDC",
-		Name:           "Okta",
-		State:          "active",
-		CreatedAt:      "2026-09-15T00:00:00Z",
-		UpdatedAt:      "2026-09-15T00:00:00Z",
+		ID:                    "conn_example",
+		OrganizationID:        "org_example",
+		ConnectionType:        "GenericOIDC",
+		Name:                  "Okta",
+		State:                 "active",
+		CallbackEndpoint:      "https://api.workos.com/sso/callback/conn_example",
+		OIDCDiscoveryEndpoint: "https://example.okta.com/.well-known/openid-configuration",
+		OIDCRedirectURI:       "https://api.workos.com/sso/callback/conn_example",
+		CreatedAt:             "2026-09-15T00:00:00Z",
+		UpdatedAt:             "2026-09-15T00:00:00Z",
 	}, connection)
 
 	request := <-requests
@@ -68,7 +71,7 @@ func TestClientCreateOIDCConnectionSendsExactPayload(t *testing.T) {
 			"pkce":true
 		},
 		"attribute_maps":{
-			"standard_attributes":{"email":"email","first_name":"first_name","last_name":"last_name","groups":"groups"}
+			"standard_attributes":{"email":"email","first_name":"given_name","last_name":"family_name","groups":"groups"}
 		}
 	}`, string(<-bodies))
 }
@@ -129,17 +132,137 @@ func TestClientGetConnectionReadsByID(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Clone(t.Context())
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"draft"}`))
+		_, _ = w.Write([]byte(`{"id":"conn_example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"draft","callback_endpoint":"https://api.workos.com/sso/callback/legacy","oidc_options":{"discovery_endpoint":"https://example.okta.com/.well-known/openid-configuration","redirect_uri":"https://api.workos.com/sso/callback/authoritative"},"created_at":"2026-09-15T00:00:00Z","updated_at":"2026-09-15T01:00:00Z"}`))
 	})
 	connection, err := newClientWithHandler(t, handler).GetConnection(t.Context(), "conn_example")
 	require.NoError(t, err)
 	request := <-requests
 	require.Equal(t, http.MethodGet, request.Method)
 	require.Equal(t, "/connections/conn_example", request.URL.Path)
-	require.Equal(t, "conn_example", connection.ID)
-	require.Equal(t, "org_example", connection.OrganizationID)
-	require.Equal(t, "GenericOIDC", connection.ConnectionType)
-	require.Equal(t, "draft", connection.State)
+	require.Equal(t, workos.Connection{
+		ID:                    "conn_example",
+		OrganizationID:        "org_example",
+		ConnectionType:        "GenericOIDC",
+		Name:                  "Okta",
+		State:                 "draft",
+		CallbackEndpoint:      "https://api.workos.com/sso/callback/legacy",
+		OIDCDiscoveryEndpoint: "https://example.okta.com/.well-known/openid-configuration",
+		OIDCRedirectURI:       "https://api.workos.com/sso/callback/authoritative",
+		CreatedAt:             "2026-09-15T00:00:00Z",
+		UpdatedAt:             "2026-09-15T01:00:00Z",
+	}, connection)
+}
+
+func TestClientUpdateOIDCConnectionDiscoveryEndpointSendsExactRequest(t *testing.T) {
+	t.Parallel()
+
+	requests := make(chan *http.Request, 1)
+	bodies := make(chan []byte, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		requests <- r.Clone(t.Context())
+		bodies <- body
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"conn/example","organization_id":"org_example","connection_type":"GenericOIDC","name":"Okta","state":"active","callback_endpoint":"https://api.workos.com/sso/callback/legacy","oidc_options":{"discovery_endpoint":"https://new.example.com/.well-known/openid-configuration","redirect_uri":"https://api.workos.com/sso/callback/authoritative"},"created_at":"2026-09-15T00:00:00Z","updated_at":"2026-09-15T02:00:00Z"}`))
+	})
+
+	connection, err := newClientWithHandler(t, handler).UpdateOIDCConnectionDiscoveryEndpoint(
+		t.Context(),
+		"conn/example",
+		"https://new.example.com/.well-known/openid-configuration",
+	)
+	require.NoError(t, err)
+	require.Equal(t, workos.Connection{
+		ID:                    "conn/example",
+		OrganizationID:        "org_example",
+		ConnectionType:        "GenericOIDC",
+		Name:                  "Okta",
+		State:                 "active",
+		CallbackEndpoint:      "https://api.workos.com/sso/callback/legacy",
+		OIDCDiscoveryEndpoint: "https://new.example.com/.well-known/openid-configuration",
+		OIDCRedirectURI:       "https://api.workos.com/sso/callback/authoritative",
+		CreatedAt:             "2026-09-15T00:00:00Z",
+		UpdatedAt:             "2026-09-15T02:00:00Z",
+	}, connection)
+
+	request := <-requests
+	require.Equal(t, http.MethodPatch, request.Method)
+	require.Equal(t, "/connections/conn%2Fexample", request.URL.EscapedPath())
+	require.Equal(t, "Bearer test-api-key", request.Header.Get("Authorization"))
+	require.JSONEq(t, `{"oidc_options":{"discovery_endpoint":"https://new.example.com/.well-known/openid-configuration"}}`, string(<-bodies))
+}
+
+func TestClientUpdateOIDCConnectionDiscoveryEndpointRequiresConnectionID(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	})
+
+	_, err := newClientWithHandler(t, handler).UpdateOIDCConnectionDiscoveryEndpoint(t.Context(), "  ", "https://example.com/.well-known/openid-configuration")
+	require.EqualError(t, err, "update WorkOS OIDC connection: connection ID is required")
+	require.Equal(t, int64(0), calls.Load())
+}
+
+func TestClientUpdateOIDCConnectionDiscoveryEndpointRequiresDiscoveryEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	})
+
+	_, err := newClientWithHandler(t, handler).UpdateOIDCConnectionDiscoveryEndpoint(t.Context(), "conn_example", "\t")
+	require.EqualError(t, err, "update WorkOS OIDC connection: discovery endpoint is required")
+	require.Equal(t, int64(0), calls.Load())
+}
+
+func TestClientUpdateOIDCConnectionDiscoveryEndpointDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"try again"}`))
+	})
+
+	_, err := newClientWithHandler(t, handler).UpdateOIDCConnectionDiscoveryEndpoint(
+		t.Context(),
+		"conn_example",
+		"https://example.com/.well-known/openid-configuration",
+	)
+	require.Error(t, err)
+	require.Equal(t, int64(1), calls.Load())
+}
+
+func TestStubClientUpdateOIDCConnectionDiscoveryEndpoint(t *testing.T) {
+	t.Parallel()
+
+	client := workos.NewStubClient()
+	created, err := client.CreateOIDCConnection(t.Context(), workos.CreateOIDCConnectionInput{
+		OrganizationID:    "org_example",
+		Name:              "Okta",
+		DiscoveryEndpoint: "https://old.example.com/.well-known/openid-configuration",
+		ClientID:          "client_example",
+		ClientSecret:      "secret_example",
+	})
+	require.NoError(t, err)
+
+	updated, err := client.UpdateOIDCConnectionDiscoveryEndpoint(t.Context(), created.ID, "https://new.example.com/.well-known/openid-configuration")
+	require.NoError(t, err)
+	require.Equal(t, "https://new.example.com/.well-known/openid-configuration", updated.OIDCDiscoveryEndpoint)
+
+	stored, err := client.GetConnection(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, updated, stored)
 }
 
 func TestIsConnectionsWriteUnavailableMatchesOnlyCapabilityError(t *testing.T) {
@@ -325,16 +448,31 @@ func TestHasActiveConnection(t *testing.T) {
 		want bool
 	}{
 		{name: "empty slice", in: nil, want: false},
-		{name: "only inactive", in: []workos.Connection{{State: "inactive"}, {State: "draft"}}, want: false},
-		{name: "single active", in: []workos.Connection{{State: "active"}}, want: true},
-		{name: "active among inactive", in: []workos.Connection{{State: "draft"}, {State: "active"}, {State: "inactive"}}, want: true},
-		{name: "validating is not active", in: []workos.Connection{{State: "validating"}}, want: false},
+		{name: "only inactive", in: []workos.Connection{connectionWithState("inactive"), connectionWithState("draft")}, want: false},
+		{name: "single active", in: []workos.Connection{connectionWithState("active")}, want: true},
+		{name: "active among inactive", in: []workos.Connection{connectionWithState("draft"), connectionWithState("active"), connectionWithState("inactive")}, want: true},
+		{name: "validating is not active", in: []workos.Connection{connectionWithState("validating")}, want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, workos.HasActiveConnection(tc.in))
 		})
+	}
+}
+
+func connectionWithState(state string) workos.Connection {
+	return workos.Connection{
+		ID:                    "",
+		OrganizationID:        "",
+		ConnectionType:        "",
+		Name:                  "",
+		State:                 state,
+		CallbackEndpoint:      "",
+		OIDCDiscoveryEndpoint: "",
+		OIDCRedirectURI:       "",
+		CreatedAt:             "",
+		UpdatedAt:             "",
 	}
 }
 

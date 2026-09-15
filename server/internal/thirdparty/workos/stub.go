@@ -354,14 +354,18 @@ func (s *StubClient) CreateOIDCConnection(_ context.Context, input CreateOIDCCon
 	defer s.mut.Unlock()
 
 	now := s.nowFn().UTC().Format(time.RFC3339)
+	stubRedirectURI := "https://" + "auth.example.test/sso/oidc/stub/callback"
 	connection := Connection{
-		ID:             fmt.Sprintf("stub_connection_%d", s.next),
-		OrganizationID: input.OrganizationID,
-		ConnectionType: "GenericOIDC",
-		Name:           input.Name,
-		State:          "active",
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                    fmt.Sprintf("stub_connection_%d", s.next),
+		OrganizationID:        input.OrganizationID,
+		ConnectionType:        "GenericOIDC",
+		Name:                  input.Name,
+		State:                 "active",
+		CallbackEndpoint:      stubRedirectURI,
+		OIDCDiscoveryEndpoint: input.DiscoveryEndpoint,
+		OIDCRedirectURI:       stubRedirectURI,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 	s.next++
 	s.connections[connection.ID] = connection
@@ -374,8 +378,27 @@ func (s *StubClient) GetConnection(_ context.Context, connectionID string) (Conn
 
 	connection, ok := s.connections[connectionID]
 	if !ok {
-		return Connection{}, &APIError{Method: "GET", Path: "/stub/connections/" + connectionID, StatusCode: 404, Body: "connection not found"}
+		return emptyConnection(), &APIError{Method: "GET", Path: "/stub/connections/" + connectionID, StatusCode: 404, Body: "connection not found"}
 	}
+	return connection, nil
+}
+
+func (s *StubClient) UpdateOIDCConnectionDiscoveryEndpoint(_ context.Context, connectionID, discoveryEndpoint string) (Connection, error) {
+	if err := validateOIDCConnectionDiscoveryEndpointUpdate(connectionID, discoveryEndpoint); err != nil {
+		return emptyConnection(), err
+	}
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	connection, ok := s.connections[connectionID]
+	if !ok {
+		return emptyConnection(), &APIError{Method: "PATCH", Path: "/stub/connections/" + connectionID, StatusCode: 404, Body: "connection not found"}
+	}
+	connection.OIDCDiscoveryEndpoint = discoveryEndpoint
+	connection.UpdatedAt = s.nowFn().UTC().Format(time.RFC3339)
+	s.connections[connectionID] = connection
+
 	return connection, nil
 }
 

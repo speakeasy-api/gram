@@ -511,6 +511,181 @@ func TestCreateGroupsClaimDoesNotRetry(t *testing.T) {
 	require.Equal(t, int64(1), requests.Load())
 }
 
+func TestEnsureSignInClaimsCreatesRepairsVerifiesAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	type mutation struct {
+		method string
+		path   string
+		body   []byte
+	}
+	claims := []map[string]any{
+		{"id": "groups-claim", "alwaysIncludeInToken": true, "claimType": "IDENTITY", "conditions": map[string]any{"scopes": []string{}}, "group_filter_type": "REGEX", "name": "groups", "status": "ACTIVE", "value": ".*", "valueType": "GROUPS"},
+		{"id": "given-name-claim", "alwaysIncludeInToken": false, "claimType": "IDENTITY", "conditions": map[string]any{"scopes": []string{"profile"}}, "name": "given_name", "status": "INACTIVE", "value": "user.displayName", "valueType": "EXPRESSION"},
+		{"id": "email-claim", "alwaysIncludeInToken": true, "claimType": "IDENTITY", "conditions": map[string]any{"scopes": []string{}}, "name": "email", "status": "ACTIVE", "value": "user.email", "valueType": "EXPRESSION"},
+	}
+	var gets atomic.Int64
+	var mu sync.Mutex
+	var mutations []mutation
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-access-token" || r.Header.Get("Accept") != "application/json" {
+			http.Error(w, "invalid authorization", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/authorizationServers/auth-server-1/claims":
+			gets.Add(1)
+			mu.Lock()
+			defer mu.Unlock()
+			_ = json.NewEncoder(w).Encode(claims)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/authorizationServers/auth-server-1/claims/given-name-claim":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			mutations = append(mutations, mutation{method: r.Method, path: r.URL.Path, body: body})
+			claims[1] = map[string]any{"id": "given-name-claim", "alwaysIncludeInToken": true, "claimType": "IDENTITY", "conditions": map[string]any{"scopes": []string{}}, "name": "given_name", "status": "ACTIVE", "value": "user.firstName", "valueType": "EXPRESSION"}
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"id":"given-name-claim"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/authorizationServers/auth-server-1/claims":
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			mutations = append(mutations, mutation{method: r.Method, path: r.URL.Path, body: body})
+			claims = append(claims, map[string]any{"id": "family-name-claim", "alwaysIncludeInToken": true, "claimType": "IDENTITY", "conditions": map[string]any{"scopes": []string{}}, "name": "family_name", "status": "ACTIVE", "value": "user.lastName", "valueType": "EXPRESSION"})
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"family-name-claim"}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	names, err := client.EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"groups", "given_name", "family_name", "email"}, names)
+	secondNames, err := client.EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
+	require.NoError(t, err)
+	require.Equal(t, names, secondNames)
+	require.Equal(t, int64(4), gets.Load())
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, mutations, 2)
+	require.Equal(t, http.MethodPut, mutations[0].method)
+	require.Equal(t, "/api/v1/authorizationServers/auth-server-1/claims/given-name-claim", mutations[0].path)
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"}`, string(mutations[0].body))
+	require.Equal(t, http.MethodPost, mutations[1].method)
+	require.Equal(t, "/api/v1/authorizationServers/auth-server-1/claims", mutations[1].path)
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"}`, string(mutations[1].body))
+}
+
+func TestEnsureSignInClaimsCreatesExactPayloadsInDeterministicOrder(t *testing.T) {
+	t.Parallel()
+
+	var gets atomic.Int64
+	var posted [][]byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			if gets.Add(1) == 1 {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[
+				{"id":"groups","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"group_filter_type":"REGEX","name":"groups","status":"ACTIVE","value":".*","valueType":"GROUPS"},
+				{"id":"given_name","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"},
+				{"id":"family_name","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"},
+				{"id":"email","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"email","status":"ACTIVE","value":"user.email","valueType":"EXPRESSION"}
+			]`))
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		posted = append(posted, body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"created-claim"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	names, err := newTestClient(t, server.URL).EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"groups", "given_name", "family_name", "email"}, names)
+	require.Len(t, posted, 4)
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"group_filter_type":"REGEX","name":"groups","status":"ACTIVE","value":".*","valueType":"GROUPS"}`, string(posted[0]))
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"}`, string(posted[1]))
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"}`, string(posted[2]))
+	require.JSONEq(t, `{"alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"email","status":"ACTIVE","value":"user.email","valueType":"EXPRESSION"}`, string(posted[3]))
+}
+
+func TestEnsureSignInClaimsFailsWhenVerificationDoesNotMatch(t *testing.T) {
+	t.Parallel()
+
+	var gets atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			gets.Add(1)
+			_, _ = w.Write([]byte(`[
+				{"id":"groups-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"group_filter_type":"REGEX","name":"groups","status":"ACTIVE","value":".*","valueType":"GROUPS"},
+				{"id":"given-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"given_name","status":"ACTIVE","value":"user.firstName","valueType":"EXPRESSION"},
+				{"id":"family-claim","alwaysIncludeInToken":true,"claimType":"IDENTITY","conditions":{"scopes":[]},"name":"family_name","status":"ACTIVE","value":"user.lastName","valueType":"EXPRESSION"}
+			]`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"email-claim"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	names, err := newTestClient(t, server.URL).EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
+	require.ErrorContains(t, err, `claim "email" did not match after update`)
+	require.Nil(t, names)
+	require.Equal(t, int64(2), gets.Load())
+}
+
+func TestEnsureSignInClaimsMutationDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var posts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		posts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000009","errorSummary":"temporary failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := newTestClientWithRetries(t, server.URL, 3).EnsureSignInClaims(t.Context(), "example.okta.com", "test-access-token", "auth-server-1")
+	require.Error(t, err)
+	require.Equal(t, int64(1), posts.Load())
+}
+
+func TestEnsureOktaConfigurationValidatesArguments(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, "http://127.0.0.1:1")
+	require.Error(t, client.EnsureOIDCApplicationRedirectURI(t.Context(), " ", "token", "app", "https://example.com/callback"))
+	require.Error(t, client.EnsureAuthorizationServerPolicyClient(t.Context(), "tenant", "", "server", "app"))
+	names, err := client.EnsureSignInClaims(t.Context(), "tenant", "token", "")
+	require.Error(t, err)
+	require.Nil(t, names)
+}
+
 func TestCreateOIDCApplicationSendsExactPayloadAndDropsResponseSecret(t *testing.T) {
 	t.Parallel()
 
@@ -625,6 +800,195 @@ func TestGetApplicationReturnsOnlyNonSecretFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, okta.Application{ID: "app-123", Status: "INACTIVE", Label: "Speakeasy", ClientID: "client-123"}, app)
 	require.NotContains(t, fmt.Sprintf("%+v", app), "discard-me")
+}
+
+func TestEnsureOIDCApplicationRedirectURIPreservesWritableFieldsAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	var puts atomic.Int64
+	var putBody []byte
+	redirectURIs := []string{"https://existing.example.com/callback"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path != "/api/v1/apps/app-instance-1" || r.Header.Get("Authorization") != "Bearer test-access-token" || r.Header.Get("Accept") != "application/json" {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": "app-instance-1", "status": "ACTIVE", "created": "2026-01-01T00:00:00Z", "lastUpdated": "2026-01-02T00:00:00Z",
+				"name": "oidc_client", "label": "Speakeasy sign-in", "signOnMode": "OPENID_CONNECT",
+				"accessibility": map[string]any{"selfService": false}, "features": []string{}, "profile": map[string]any{"owner": "platform"},
+				"universalLogout": map[string]any{"protocol": "OIDC_FRONT_CHANNEL"}, "visibility": map[string]any{"autoSubmitToolbar": false},
+				"credentials": map[string]any{"oauthClient": map[string]any{"client_id": "oauth-client-1", "client_secret": "must-not-leave", "token_endpoint_auth_method": "client_secret_post", "autoKeyRotation": true}},
+				"settings": map[string]any{
+					"app":         map[string]any{"logoURI": "https://example.com/logo.png"},
+					"oauthClient": map[string]any{"application_type": "web", "grant_types": []string{"authorization_code", "refresh_token"}, "redirect_uris": redirectURIs, "response_types": []string{"code"}},
+				},
+				"_links": map[string]any{"self": map[string]any{"href": "https://example.okta.com/api/v1/apps/app-instance-1"}},
+			})
+		case http.MethodPut:
+			puts.Add(1)
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			putBody = body
+			redirectURIs = []string{"https://existing.example.com/callback", "https://new.example.com/callback"}
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	require.NoError(t, client.EnsureOIDCApplicationRedirectURI(t.Context(), "example.okta.com", "test-access-token", "app-instance-1", "https://new.example.com/callback"))
+	require.NoError(t, client.EnsureOIDCApplicationRedirectURI(t.Context(), "example.okta.com", "test-access-token", "app-instance-1", "https://new.example.com/callback"))
+	require.Equal(t, int64(3), requests.Load())
+	require.Equal(t, int64(1), puts.Load())
+	require.JSONEq(t, `{
+		"name":"oidc_client",
+		"label":"Speakeasy sign-in",
+		"signOnMode":"OPENID_CONNECT",
+		"accessibility":{"selfService":false},
+		"features":[],
+		"profile":{"owner":"platform"},
+		"universalLogout":{"protocol":"OIDC_FRONT_CHANNEL"},
+		"visibility":{"autoSubmitToolbar":false},
+		"credentials":{"oauthClient":{"client_id":"oauth-client-1","token_endpoint_auth_method":"client_secret_post","autoKeyRotation":true}},
+		"settings":{"app":{"logoURI":"https://example.com/logo.png"},"oauthClient":{"application_type":"web","grant_types":["authorization_code","refresh_token"],"redirect_uris":["https://existing.example.com/callback","https://new.example.com/callback"],"response_types":["code"]}}
+	}`, string(putBody))
+	require.NotContains(t, string(putBody), "must-not-leave")
+}
+
+func TestEnsureOIDCApplicationRedirectURIPutDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var puts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"name":"oidc_client","label":"Sign-in","signOnMode":"OPENID_CONNECT","credentials":{"oauthClient":{"client_secret":"discard-me"}},"settings":{"oauthClient":{"redirect_uris":[]}}}`))
+			return
+		}
+		puts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000009","errorSummary":"temporary failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestClientWithRetries(t, server.URL, 3).EnsureOIDCApplicationRedirectURI(t.Context(), "example.okta.com", "test-access-token", "app-instance-1", "https://new.example.com/callback")
+	require.Error(t, err)
+	require.Equal(t, int64(1), puts.Load())
+}
+
+func TestEnsureAuthorizationServerPolicyClientPreservesPolicyAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	var gets atomic.Int64
+	var puts atomic.Int64
+	var putBody []byte
+	include := []string{"oauth-client-id-is-not-the-app-id"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-access-token" || r.Header.Get("Accept") != "application/json" {
+			http.Error(w, "invalid authorization", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/authorizationServers/auth-server-1/policies":
+			gets.Add(1)
+			_ = json.NewEncoder(w).Encode([]any{
+				map[string]any{"id": "inactive", "type": "OAUTH_AUTHORIZATION_POLICY", "status": "INACTIVE", "name": "Default Policy", "description": "ignored", "priority": 1, "conditions": map[string]any{"clients": map[string]any{"include": []string{"app-instance-1"}}}},
+				map[string]any{"id": "default-policy", "type": "OAUTH_AUTHORIZATION_POLICY", "status": "ACTIVE", "name": "Default Policy", "description": "Default access", "priority": 2, "conditions": map[string]any{"clients": map[string]any{"include": include, "exclude": []string{"blocked-app"}}, "scopes": map[string]any{"include": []string{"openid"}}}},
+			})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/authorizationServers/auth-server-1/policies/default-policy":
+			puts.Add(1)
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "invalid body", http.StatusBadRequest)
+				return
+			}
+			putBody = body
+			include = []string{"oauth-client-id-is-not-the-app-id", "app-instance-1"}
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := newTestClient(t, server.URL)
+
+	require.NoError(t, client.EnsureAuthorizationServerPolicyClient(t.Context(), "example.okta.com", "test-access-token", "auth-server-1", "app-instance-1"))
+	require.NoError(t, client.EnsureAuthorizationServerPolicyClient(t.Context(), "example.okta.com", "test-access-token", "auth-server-1", "app-instance-1"))
+	require.Equal(t, int64(2), gets.Load())
+	require.Equal(t, int64(1), puts.Load())
+	require.JSONEq(t, `{
+		"type":"OAUTH_AUTHORIZATION_POLICY",
+		"status":"ACTIVE",
+		"name":"Default Policy",
+		"description":"Default access",
+		"priority":2,
+		"conditions":{"clients":{"include":["oauth-client-id-is-not-the-app-id","app-instance-1"],"exclude":["blocked-app"]},"scopes":{"include":["openid"]}}
+	}`, string(putBody))
+}
+
+func TestEnsureAuthorizationServerPolicyClientAcceptsAllClients(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"other-policy","type":"OAUTH_AUTHORIZATION_POLICY","status":"ACTIVE","name":"Other Policy","description":"","priority":1,"conditions":{"clients":{"include":["ALL_CLIENTS"]}}}]`))
+	}))
+	t.Cleanup(server.Close)
+
+	require.NoError(t, newTestClient(t, server.URL).EnsureAuthorizationServerPolicyClient(t.Context(), "example.okta.com", "test-access-token", "auth-server-1", "app-instance-1"))
+	require.Equal(t, int64(1), requests.Load())
+}
+
+func TestEnsureAuthorizationServerPolicyClientRejectsAmbiguousDefault(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"id":"default-1","type":"OAUTH_AUTHORIZATION_POLICY","status":"ACTIVE","name":"Default Policy","description":"","priority":1,"conditions":{"clients":{"include":[]}}},
+			{"id":"default-2","type":"OAUTH_AUTHORIZATION_POLICY","status":"ACTIVE","name":"Default Policy","description":"","priority":2,"conditions":{"clients":{"include":[]}}}
+		]`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestClient(t, server.URL).EnsureAuthorizationServerPolicyClient(t.Context(), "example.okta.com", "test-access-token", "auth-server-1", "app-instance-1")
+	require.ErrorContains(t, err, "expected exactly one active Default Policy, found 2")
+	require.NotContains(t, err.Error(), "test-access-token")
+}
+
+func TestEnsureAuthorizationServerPolicyClientPutDoesNotRetry(t *testing.T) {
+	t.Parallel()
+
+	var puts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[{"id":"default-policy","type":"OAUTH_AUTHORIZATION_POLICY","status":"ACTIVE","name":"Default Policy","description":"","priority":1,"conditions":{"clients":{"include":[]}}}]`))
+			return
+		}
+		puts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"errorCode":"E0000009","errorSummary":"temporary failure"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	err := newTestClientWithRetries(t, server.URL, 3).EnsureAuthorizationServerPolicyClient(t.Context(), "example.okta.com", "test-access-token", "auth-server-1", "app-instance-1")
+	require.Error(t, err)
+	require.Equal(t, int64(1), puts.Load())
 }
 
 func TestResolveApplicationByClientIDUsesSafeFilterAndExactFallbackMatch(t *testing.T) {
