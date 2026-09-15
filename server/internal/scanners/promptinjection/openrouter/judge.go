@@ -420,11 +420,13 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), c.model, c.reasoning, outcome, duration)
 	if err != nil {
 		c.metrics.RecordFailOpen(ctx, req.OrgID, c.model, c.reasoning, reason)
-		c.logger.WarnContext(ctx, "PI judge call failed; failing open",
-			attr.SlogError(err),
-			attr.SlogOutcome(string(outcome)),
-			attr.SlogOrganizationID(req.OrgID),
-		)
+		if outcome != o11y.OutcomeCanceled {
+			c.logger.WarnContext(ctx, "PI judge call failed; failing open",
+				attr.SlogError(err),
+				attr.SlogOutcome(string(outcome)),
+				attr.SlogOrganizationID(req.OrgID),
+			)
+		}
 	}
 	return verdict, err
 }

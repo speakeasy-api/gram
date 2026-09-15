@@ -125,6 +125,31 @@ func TestJudgeCanceledContextSkipsLimiterAndCompletion(t *testing.T) {
 	require.NotContains(t, logs.String(), `"level":"WARN"`)
 }
 
+func TestJudgeExpiredContextRecordsTimeout(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
+	client := &countingCompletionClient{}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, client, testJudgeLimiter(t))
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	_, err := j.Evaluate(ctx, promptpolicy.Input{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   judgemessage.New(message.User, "", "hello"),
+		Config:    promptpolicy.Config{Temperature: nil, FailOpen: true},
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Zero(t, client.calls.Load())
+	require.Equal(t, int64(1), evaluationCountByOutcome(t, reader, o11y.OutcomeTimeout))
+	require.Zero(t, evaluationCountByOutcome(t, reader, o11y.OutcomeCanceled))
+}
+
 func TestJudgeCompletionCancellationIsNotWarned(t *testing.T) {
 	t.Parallel()
 

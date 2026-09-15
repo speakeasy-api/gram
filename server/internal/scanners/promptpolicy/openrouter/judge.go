@@ -124,7 +124,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		return nil, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, j.canceled(ctx, nil, in.OrgID, err)
+		return nil, j.contextDone(ctx, nil, in.OrgID, err)
 	}
 
 	ctx, span := j.tracer.Start(ctx, "risk.judge.evaluate", trace.WithAttributes(
@@ -141,11 +141,11 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	res, limitErr := j.limiter.Allow(ctx, bucket)
 	switch {
 	case ctx.Err() != nil:
-		span.SetStatus(codes.Error, "llm judge call canceled")
-		return nil, j.canceled(ctx, span, in.OrgID, ctx.Err())
+		span.SetStatus(codes.Error, "llm judge context done")
+		return nil, j.contextDone(ctx, span, in.OrgID, ctx.Err())
 	case errors.Is(limitErr, context.Canceled):
-		span.SetStatus(codes.Error, "llm judge call canceled")
-		return nil, j.canceled(ctx, span, in.OrgID, limitErr)
+		span.SetStatus(codes.Error, "llm judge context done")
+		return nil, j.contextDone(ctx, span, in.OrgID, limitErr)
 	case limitErr != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(limitErr),
@@ -165,9 +165,6 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	start := time.Now()
 	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
-	if ctx.Err() != nil {
-		outcome = o11y.OutcomeCanceled
-	}
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
 		span.RecordError(err)
@@ -205,13 +202,15 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	}, nil
 }
 
-// canceled records a caller-abandoned evaluation without the warn log a real
-// failure gets. span is nil when the caller gave up before the span started;
-// callers set span status inline so spancheck can see it.
-func (j *Judge) canceled(ctx context.Context, span trace.Span, orgID string, err error) error {
-	j.metrics.RecordEvaluation(ctx, orgID, o11y.OutcomeCanceled, 0)
+// contextDone records an evaluation abandoned because the caller's context
+// ended (canceled or past its deadline) without the warn log a real failure
+// gets. span is nil when it ended before the span started; callers set span
+// status inline so spancheck can see it.
+func (j *Judge) contextDone(ctx context.Context, span trace.Span, orgID string, err error) error {
+	outcome := o11y.OutcomeFromErrorWithTimeout(err)
+	j.metrics.RecordEvaluation(ctx, orgID, outcome, 0)
 	if span != nil {
-		span.SetAttributes(attr.Outcome(o11y.OutcomeCanceled))
+		span.SetAttributes(attr.Outcome(outcome))
 	}
 	return fmt.Errorf("llm judge call: %w", err)
 }
