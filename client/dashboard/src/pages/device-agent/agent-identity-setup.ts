@@ -228,6 +228,8 @@ sh "$INSTALLER" --install-dir "$BIN_DIR"
 
 # 2) Agent identity. The key is this machine's only credential.
 $SUDO mkdir -p '${dir}'
+# Create it private first so the key is never briefly world-readable.
+$SUDO install -m 0600 /dev/null '${path}'
 $SUDO tee '${path}' >/dev/null <<'JSON'
 ${config}
 JSON

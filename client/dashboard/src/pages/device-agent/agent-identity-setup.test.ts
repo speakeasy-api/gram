@@ -157,6 +157,14 @@ describe("agent identity snippet", () => {
       const snippet = buildAgentIdentitySnippet({ ...base, mode });
       expect(snippet).toContain("$SUDO mkdir -p '/etc/speakeasy'");
       expect(snippet).toContain("$SUDO tee '/etc/speakeasy/managed.json'");
+      // The file exists at 0600 before the key is written into it.
+      const create = snippet.indexOf(
+        "$SUDO install -m 0600 /dev/null '/etc/speakeasy/managed.json'",
+      );
+      expect(create).toBeGreaterThan(-1);
+      expect(create).toBeLessThan(
+        snippet.indexOf("$SUDO tee '/etc/speakeasy/managed.json'"),
+      );
     }
   });
 
