@@ -23,9 +23,10 @@ interface StepSectionProps {
   badgeVariant?: "success" | "neutral";
   /**
    * A step the card can name but not yet open, because an earlier one has to
-   * land first. It shows its heading row wherever the card is — a locked step
-   * is context for the step you are on, not a page of its own — greyed, with
-   * no body and nothing to click.
+   * land first. It registers so the rail counts the whole journey, and shows
+   * greyed with no body if anything ever opens it — but it does not appear
+   * alongside the step you are on. The rail is where the sequence lives;
+   * repeating it in the body says the same thing twice.
    */
   locked?: boolean;
   children?: ReactNode;
@@ -64,7 +65,7 @@ export function StepSection({
       aria-labelledby={headingId}
       aria-disabled={locked || undefined}
       className={cn("space-y-3", locked && "opacity-60")}
-      hidden={!active && !locked}
+      hidden={!active}
     >
       <div className="flex items-start gap-3">
         <div

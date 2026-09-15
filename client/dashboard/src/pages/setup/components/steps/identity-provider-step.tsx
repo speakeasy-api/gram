@@ -27,6 +27,9 @@ import type { IdpProvider } from "../../types";
 
 const INITIAL_VISIBLE = 6;
 
+/** The provider Speakeasy walks itself; see providers.ts. */
+const GUIDED_PROVIDER_ID = "okta-oidc";
+
 const DEFAULT_DESCRIPTION =
   "Pick the identity provider your organization already runs, then connect sign-in, mirror its directory, and carry the access those two give you into your MCP servers.";
 
@@ -252,7 +255,12 @@ function SelectIdpSection({
   if (isSearching) visibleProviders = filteredProviders;
   else if (showAll) visibleProviders = IDP_PROVIDERS;
 
-  // Picked and, where there is one to make, connected.
+  // A connection outlives the click that made it, so after a reload the grid
+  // still has to show which provider this organization is on.
+  const shown = selectedProvider ?? (connection ? GUIDED_PROVIDER_ID : null);
+  // Switching provider under a live connection would leave the connection
+  // stranded, so the grid is a record of the choice until it is removed.
+  const locked = !!connection;
   const complete = guided
     ? connection?.status === "active"
     : !!selectedProvider;
@@ -262,16 +270,10 @@ function SelectIdpSection({
       index={index}
       slug="select-idp"
       title="Select IDP"
-      description="The identity provider your team already signs in with."
+      description="The identity provider your team already signs in with, and what it takes to connect it."
       complete={complete}
     >
-      {guided ? (
-        <OktaConnectSection
-          onChangeProvider={() => onSelectProvider(null)}
-          connection={connection}
-          isLoadingConnection={isLoadingConnection}
-        />
-      ) : (
+      <div className="space-y-6">
         <div>
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
@@ -281,6 +283,7 @@ function SelectIdpSection({
               onChange={setQuery}
               placeholder="Search providers"
               className="pl-9"
+              disabled={locked}
             />
           </div>
           {isSearching && filteredProviders.length === 0 && (
@@ -294,11 +297,14 @@ function SelectIdpSection({
                 key={p.id}
                 type="button"
                 onClick={() => onSelectProvider(p.id)}
+                disabled={locked}
                 className={cn(
                   "flex items-center gap-3 border p-4 text-left transition-all",
-                  selectedProvider === p.id
+                  shown === p.id
                     ? "border-foreground bg-secondary"
                     : "border-border bg-card hover:border-foreground/30",
+                  locked && shown !== p.id && "opacity-50",
+                  locked && "cursor-default",
                 )}
               >
                 <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
@@ -331,6 +337,7 @@ function SelectIdpSection({
           </div>
           {!isSearching &&
             !showAll &&
+            !locked &&
             IDP_PROVIDERS.length > INITIAL_VISIBLE && (
               <button
                 type="button"
@@ -342,7 +349,14 @@ function SelectIdpSection({
               </button>
             )}
         </div>
-      )}
+
+        {guided ? (
+          <OktaConnectSection
+            connection={connection}
+            isLoadingConnection={isLoadingConnection}
+          />
+        ) : null}
+      </div>
     </StepSection>
   );
 }

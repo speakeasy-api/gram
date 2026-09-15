@@ -176,20 +176,20 @@ describe("IdentityProviderStep", () => {
     expect(screen.getByText(/Setup finishes without this/)).toBeTruthy();
   });
 
-  it("lets the administrator back out to the grid before anything is submitted", () => {
+  it("keeps the provider grid on screen once a provider is picked", () => {
     render(<IdentityProviderStep onComplete={() => {}} />);
     fireEvent.click(guidedOkta());
-    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Choose a different provider" }),
-    );
-
-    expect(screen.queryByLabelText("Okta organization URL")).toBeNull();
-    // Back to the grid, with the portal path available again.
+    // The selector stays at the top of the step: picking again is how you
+    // change your mind, so the step needs no escape hatch of its own.
     expect(guidedOkta()).toBeTruthy();
+    expect(portalOkta()).toBeTruthy();
+    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled"),
-    ).toBe(true);
+      screen.queryByRole("button", { name: "Choose a different provider" }),
+    ).toBeNull();
+
+    fireEvent.click(portalOkta());
+    expect(screen.queryByLabelText("Okta organization URL")).toBeNull();
   });
 });

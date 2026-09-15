@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import type { IdentityProviderFieldOutcome } from "@gram/client/models/components/identityproviderfieldoutcome.js";
 import { useCreateIdentityProviderMutation } from "@gram/client/react-query/createIdentityProvider.js";
@@ -125,8 +124,6 @@ function RemoveConnection({
 }
 
 interface OktaConnectSectionProps {
-  /** Returns the card to the provider grid. Only while nothing is connected. */
-  onChangeProvider: () => void;
   connection: IdentityProviderConnection | undefined;
   isLoadingConnection: boolean;
 }
@@ -135,7 +132,6 @@ interface OktaConnectSectionProps {
 // the exchange the server describes — what Speakeasy prints, where to put it,
 // and what comes back — and the connection itself once it has proved out.
 export function OktaConnectSection({
-  onChangeProvider,
   connection,
   isLoadingConnection,
 }: OktaConnectSectionProps): JSX.Element {
@@ -185,17 +181,7 @@ export function OktaConnectSection({
             );
           }}
         />
-      ) : (
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={onChangeProvider}
-          className="text-muted-foreground hover:text-foreground -ml-2 gap-1.5"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Choose a different provider
-        </Button>
-      )}
+      ) : null}
 
       {!connection ? (
         <TenantUrlForm

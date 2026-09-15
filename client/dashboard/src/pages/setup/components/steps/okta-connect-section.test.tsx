@@ -114,11 +114,7 @@ beforeEach(() => {
 
 function renderSection(conn?: IdentityProviderConnection) {
   return render(
-    <OktaConnectSection
-      onChangeProvider={() => {}}
-      connection={conn}
-      isLoadingConnection={false}
-    />,
+    <OktaConnectSection connection={conn} isLoadingConnection={false} />,
   );
 }
 
@@ -127,9 +123,6 @@ describe("OktaConnectSection", () => {
     renderSection(undefined);
 
     expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Choose a different provider" }),
-    ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Remove connection" }),
     ).toBeNull();
@@ -158,13 +151,11 @@ describe("OktaConnectSection", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByLabelText("Client ID")).toBeTruthy();
-    // The escape hatch becomes removal once a connection exists.
+    // The escape hatch is removal once a connection exists; switching provider
+    // is the grid's job, and it refuses while a connection is live.
     expect(
       screen.getByRole("button", { name: "Remove connection" }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Choose a different provider" }),
-    ).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "0oaexampleclientid" },

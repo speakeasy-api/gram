@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import type { IdentityProviderClaim } from "@gram/client/models/components/identityproviderclaim.js";
 import type { IdentityProviderExpectedValue } from "@gram/client/models/components/identityproviderexpectedvalue.js";
@@ -50,6 +50,31 @@ const VERIFY_COPY: Record<string, { title: string; body: string }> = {
 function saveLabel(isSubmitting: boolean, hasSavedValue: boolean): string {
   if (isSubmitting) return "Saving...";
   return hasSavedValue ? "Update" : "Save";
+}
+
+function SubStep({
+  position,
+  title,
+  children,
+}: {
+  position: number;
+  title?: string;
+  children?: ReactNode;
+}): JSX.Element {
+  return (
+    <li className="flex gap-3">
+      <div
+        aria-hidden="true"
+        className="border-border text-muted-foreground flex h-6 w-6 flex-shrink-0 items-center justify-center border text-xs font-semibold"
+      >
+        {position}
+      </div>
+      <div className="min-w-0 flex-1 space-y-3">
+        {title ? <Text className="leading-6">{title}</Text> : null}
+        {children}
+      </div>
+    </li>
+  );
 }
 
 function outcomeFor(
@@ -349,131 +374,148 @@ export function IdentityProviderSetupStepPanel({
     ? "Checking..."
     : (verifyLabel ?? "Verify connection");
 
-  return (
-    <div className="border-border bg-card space-y-5 border p-5">
-      <div className="space-y-1">
-        <h4 className="text-foreground text-sm leading-5 font-semibold">
-          {step.title}
-        </h4>
-        {step.instructions.map((instruction) => (
-          <Text key={instruction} variant="small" muted>
-            {instruction}
-          </Text>
+  // Each part of the step is numbered, because the work is a sequence and
+  // reads as one. The outer journey is the rail's job, not this panel's.
+  const parts: ReactNode[] = [];
+  for (const instruction of step.instructions) {
+    parts.push(
+      <SubStep
+        key={`instruction-${instruction}`}
+        position={parts.length + 1}
+        title={instruction}
+      />,
+    );
+  }
+  if (step.printedValues.length > 0 || step.deepLink) {
+    parts.push(
+      <SubStep
+        key="printed"
+        position={parts.length + 1}
+        title={
+          step.printedValues.length > 0
+            ? "Copy these into Okta."
+            : "Open Okta to make the change."
+        }
+      >
+        {step.printedValues.map((printed) => (
+          <PrintedValue
+            key={printed.label}
+            label={printed.label}
+            value={printed.value}
+            copyable={printed.copyable}
+          />
         ))}
-      </div>
+        {step.deepLink ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              openSafeExternalUrl(step.deepLink!);
+            }}
+          >
+            {portal ? "Open the app in Okta" : "Connect in Okta"}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+      </SubStep>,
+    );
+  }
+  if (portal) {
+    parts.push(
+      <SubStep key="portal" position={parts.length + 1} title={portal.note}>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={portal.isPending}
+          onClick={portal.onConnect}
+        >
+          {portal.isPending ? "Opening..." : "Connect"}
+        </Button>
+      </SubStep>,
+    );
+  }
+  if (canSubmit || canVerify) {
+    parts.push(
+      <SubStep
+        key="bring-back"
+        position={parts.length + 1}
+        title={
+          askedValues.length > 0
+            ? "Bring the value back here."
+            : "Then run the check."
+        }
+      >
+        {askedValues.map((expected) => {
+          const outcome = outcomeFor(fieldOutcomes, expected.key);
+          const rejected = outcome?.outcome === "rejected";
+          return (
+            <Field key={expected.key}>
+              <FieldLabel htmlFor={`setup-${expected.key}`}>
+                {expected.label}
+              </FieldLabel>
+              <Input
+                id={`setup-${expected.key}`}
+                type={expected.secret ? "password" : "text"}
+                reveal={expected.secret}
+                value={valueFor(expected)}
+                onChange={(value) =>
+                  setValues((previous) => ({
+                    ...previous,
+                    [expected.key]: value,
+                  }))
+                }
+                error={rejected}
+                disabled={isSubmitting}
+              />
+              {rejected ? <FieldError>{outcome.detail}</FieldError> : null}
+              {outcome?.outcome === "accepted" ? (
+                <FieldDescription>{outcome.detail}</FieldDescription>
+              ) : null}
+            </Field>
+          );
+        })}
+        {submitError ? <FieldError>{submitError}</FieldError> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {canSubmit ? (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!complete || isSubmitting}
+              onClick={() =>
+                onSubmit(
+                  askedValues.map((expected) => ({
+                    key: expected.key,
+                    value: valueFor(expected).trim(),
+                  })),
+                )
+              }
+            >
+              {submitLabel ?? saveLabel(isSubmitting, hasSavedValue)}
+            </Button>
+          ) : null}
+          {canVerify ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isVerifying}
+              onClick={onVerify}
+            >
+              {checkLabel}
+            </Button>
+          ) : null}
+        </div>
+      </SubStep>,
+    );
+  }
 
+  return (
+    <div className="space-y-5">
       {step.claims && step.claims.length > 0 ? (
         <ClaimTable claims={step.claims} />
       ) : null}
 
-      {step.deepLink ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            openSafeExternalUrl(step.deepLink!);
-          }}
-        >
-          {portal ? "Open the app in Okta" : "Connect in Okta"}
-          <ExternalLink className="h-3.5 w-3.5" />
-        </Button>
-      ) : null}
-
-      {step.printedValues.length > 0 ? (
-        <div className="space-y-3">
-          {step.printedValues.map((printed) => (
-            <PrintedValue
-              key={printed.label}
-              label={printed.label}
-              value={printed.value}
-              copyable={printed.copyable}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {portal ? (
-        <div className="space-y-3">
-          <Text variant="small" muted>
-            {portal.note}
-          </Text>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={portal.isPending}
-            onClick={portal.onConnect}
-          >
-            {portal.isPending ? "Opening..." : "Connect"}
-          </Button>
-        </div>
-      ) : null}
-
-      {canSubmit || canVerify ? (
-        <div className="space-y-4">
-          {askedValues.map((expected) => {
-            const outcome = outcomeFor(fieldOutcomes, expected.key);
-            const rejected = outcome?.outcome === "rejected";
-            return (
-              <Field key={expected.key}>
-                <FieldLabel htmlFor={`setup-${expected.key}`}>
-                  {expected.label}
-                </FieldLabel>
-                <Input
-                  id={`setup-${expected.key}`}
-                  type={expected.secret ? "password" : "text"}
-                  reveal={expected.secret}
-                  value={valueFor(expected)}
-                  onChange={(value) =>
-                    setValues((previous) => ({
-                      ...previous,
-                      [expected.key]: value,
-                    }))
-                  }
-                  error={rejected}
-                  disabled={isSubmitting}
-                />
-                {rejected ? <FieldError>{outcome.detail}</FieldError> : null}
-                {outcome?.outcome === "accepted" ? (
-                  <FieldDescription>{outcome.detail}</FieldDescription>
-                ) : null}
-              </Field>
-            );
-          })}
-
-          {submitError ? <FieldError>{submitError}</FieldError> : null}
-
-          <div className="flex flex-wrap items-center gap-3">
-            {canSubmit ? (
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={!complete || isSubmitting}
-                onClick={() =>
-                  onSubmit(
-                    askedValues.map((expected) => ({
-                      key: expected.key,
-                      value: valueFor(expected).trim(),
-                    })),
-                  )
-                }
-              >
-                {submitLabel ?? saveLabel(isSubmitting, hasSavedValue)}
-              </Button>
-            ) : null}
-            {canVerify ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={isVerifying}
-                onClick={onVerify}
-              >
-                {checkLabel}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      <ol className="space-y-5">{parts}</ol>
 
       {verifyUnavailable ? (
         <Alert variant="info" alignTop>
