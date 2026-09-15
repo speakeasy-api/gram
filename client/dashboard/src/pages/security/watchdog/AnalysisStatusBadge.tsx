@@ -32,9 +32,7 @@ export function AnalysisStatusBadge(): JSX.Element | null {
   });
 
   if (statusQuery.isPending) {
-    return (
-      <Skeleton className="w-28" />
-    );
+    return <Skeleton className="w-28" />;
   }
   if (!statusQuery.isSuccess) return null;
 
