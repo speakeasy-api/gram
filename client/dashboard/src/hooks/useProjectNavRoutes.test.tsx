@@ -82,6 +82,7 @@ beforeEach(() => {
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -136,6 +137,7 @@ describe("useProjectNavRoutes", () => {
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
@@ -143,6 +145,7 @@ describe("useProjectNavRoutes", () => {
 
       expect(navRoutes).not.toContain(routes.assistants);
       expect(navRoutes).not.toContain(routes.watchdog);
+      expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
       // Without Watchdog, the legacy risk pages stay in the nav.
       expect(navRoutes).toContain(routes.riskOverview);
@@ -150,11 +153,26 @@ describe("useProjectNavRoutes", () => {
     },
   );
 
+  it("keeps Explore out of the nav until its flag is released to the organization", () => {
+    const { result: hidden } = renderHook(() => useProjectNavRoutes());
+    expect(hidden.current.map((entry) => entry.route)).not.toContain(
+      routes.explore,
+    );
+
+    testState.featureFlags = {
+      ...testState.featureFlags,
+      [FEATURE_FLAGS.explore]: { status: "enabled" },
+    };
+    const { result: shown } = renderHook(() => useProjectNavRoutes());
+    expect(shown.current.map((entry) => entry.route)).toContain(routes.explore);
+  });
+
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
+      [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
@@ -162,6 +180,7 @@ describe("useProjectNavRoutes", () => {
 
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
+    expect(navRoutes).toContain(routes.explore);
     expect(navRoutes).not.toContain(routes.deployments);
     // Watchdog supersedes the legacy overview in the nav; Risk Events shows
     // in both modes.

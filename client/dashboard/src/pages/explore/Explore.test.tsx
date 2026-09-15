@@ -6,21 +6,31 @@ import Explore from "./Explore";
 
 const testState = vi.hoisted(() => ({
   isPending: false,
+  /** How PostHog answers for the Explore rollout flag. */
+  flagStatus: "enabled" as "enabled" | "disabled" | "loading",
   isError: false,
   datasets: [] as unknown[],
   refetch: vi.fn().mockResolvedValue(undefined),
+  /** How many times the page asked for the catalog. */
+  describeCalls: 0,
 }));
 
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: testState.flagStatus }),
+}));
 vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
-  useAnalyticsDescribe: () => ({
-    isPending: testState.isPending,
-    isError: testState.isError,
-    data:
-      testState.isPending || testState.isError
-        ? undefined
-        : { datasets: testState.datasets },
-    refetch: testState.refetch,
-  }),
+  useAnalyticsDescribe: () => {
+    testState.describeCalls += 1;
+    return {
+      isPending: testState.isPending,
+      isError: testState.isError,
+      data:
+        testState.isPending || testState.isError
+          ? undefined
+          : { datasets: testState.datasets },
+      refetch: testState.refetch,
+    };
+  },
 }));
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -76,6 +86,7 @@ const toolCalls: AnalyticsDataset = {
 describe("Explore", () => {
   beforeEach(() => {
     testState.isPending = false;
+    testState.flagStatus = "enabled";
     testState.isError = false;
     testState.datasets = [sessions, toolCalls];
     testState.refetch.mockClear();
@@ -164,5 +175,23 @@ describe("Explore", () => {
 
     expect(screen.getByText("No datasets yet")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
+  });
+
+  it("stays closed to an organization the rollout has not reached", () => {
+    testState.flagStatus = "disabled";
+    testState.describeCalls = 0;
+    render(<Explore />);
+
+    expect(screen.getByText("Explore is not available yet")).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
+    expect(testState.describeCalls, "it never asks for the catalog").toBe(0);
+  });
+
+  it("waits rather than saying no while the flag is still loading", () => {
+    testState.flagStatus = "loading";
+    render(<Explore />);
+
+    expect(screen.getByLabelText("Loading the catalog")).toBeTruthy();
+    expect(screen.queryByText("Explore is not available yet")).toBeNull();
   });
 });

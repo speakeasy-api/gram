@@ -39,6 +39,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
+  const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
   // Assistants is opt-in: unavailable flags remain hidden.
@@ -48,6 +49,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
   // Watchdog is opt-in like Assistants: unavailable flags remain hidden.
   const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
+  // Explore is opt-in while it is dogfooded: the flag is released to the
+  // organizations trying it, and everyone else never sees the page.
+  const isExploreEnabled = exploreFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -79,7 +83,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.environments, scope: readWrite },
       { route: routes.identities, scope: observe },
       { route: routes.costs, scope: observe },
-      { route: routes.explore, scope: observe },
+      ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
       ...(isOrgMemoryEnabled
@@ -103,6 +107,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     projectId,
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
+    isExploreEnabled,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
   ]);

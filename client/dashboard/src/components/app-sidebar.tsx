@@ -87,6 +87,7 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
+  const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
@@ -207,7 +208,9 @@ export function AppSidebar({
               // these pages measure.
               { item: routes.identities, ...accessFor(routes.identities) },
               { item: routes.costs, ...accessFor(routes.costs) },
-              { item: routes.explore, ...accessFor(routes.explore) },
+              ...(isExploreEnabled
+                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                : []),
               { item: routes.insights, ...accessFor(routes.insights) },
               {
                 item: routes.agentSessions,
