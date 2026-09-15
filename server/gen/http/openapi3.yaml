@@ -72427,6 +72427,18 @@ components:
             required:
                 - resource_kind
                 - resource_id
+        AgentPollingPrincipal:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Human-readable name of the agent identity.
+                urn:
+                    type: string
+                    description: Principal URN of the agent identity, for example `agent:<uuid>`.
+            required:
+                - urn
+                - display_name
         AgentSession:
             type: object
             properties:
@@ -79856,6 +79868,8 @@ components:
                     items:
                         $ref: '#/components/schemas/AgentPlugin'
                     description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+                principal:
+                    $ref: '#/components/schemas/AgentPollingPrincipal'
             required:
                 - etag
                 - marketplaces
@@ -83317,6 +83331,8 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - org:device_agent_sync
+                        - org:hooks_ingest
                 selectors:
                     type: array
                     items:
@@ -83358,6 +83374,8 @@ components:
                             - agent:write
                             - agent:authorize
                             - agent:transfer
+                            - org:device_agent_sync
+                            - org:hooks_ingest
                     description: The inherited scopes the primary scope grants.
             required:
                 - scope
@@ -88807,6 +88825,8 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - org:device_agent_sync
+                        - org:hooks_ingest
             description: Form for requesting access to a scope.
             required:
                 - scope
@@ -90535,6 +90555,8 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - org:device_agent_sync
+                        - org:hooks_ingest
                 selectors:
                     type: array
                     items:
@@ -90786,6 +90808,8 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - org:device_agent_sync
+                        - org:hooks_ingest
                 visibility:
                     type: string
                     description: Whether this scope is a first-class permission or an internal storage/evaluation scope.

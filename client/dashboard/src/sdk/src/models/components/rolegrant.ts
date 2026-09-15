@@ -49,6 +49,8 @@ export const Scope = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * The scope slug this grant applies to.

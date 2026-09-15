@@ -229,7 +229,7 @@ function AgentAPIKeysContent({
             agentId: agent.id,
             name: validatedName,
             expiresAt,
-            delegatedGrantsVersion: 1,
+            delegatedGrantsVersion: 2,
             requestedGrants,
             scopes: [],
           },

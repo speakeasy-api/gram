@@ -71,6 +71,21 @@ func TestAgentManagementScopesAreIndependent(t *testing.T) {
 	}
 }
 
+// Org admins can delegate device-agent grants without a backfill, but the
+// grants themselves confer nothing beyond their own check.
+func TestDeviceAgentScopesAreSatisfiedByOrgAdminOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest} {
+		check := Check{Scope: scope, ResourceID: "org_123"}
+		require.True(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "org_123")}, check), scope)
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgRead, "org_123")}, check), scope)
+		require.Equal(t, []Scope{scope}, ScopeImplicationClosure(scope))
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "org_123")}, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
+	}
+	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgDeviceAgentSync, "org_123")}, Check{Scope: ScopeOrgHooksIngest, ResourceID: "org_123"}))
+}
+
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	t.Parallel()
 
@@ -459,7 +474,7 @@ func TestCalculateSubScopes(t *testing.T) {
 		scope string
 		want  []string
 	}{
-		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgDeviceAgentSync), string(ScopeOrgHooksIngest), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
 		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
 		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},

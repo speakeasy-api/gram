@@ -12,8 +12,9 @@ type RuntimeScopeRegistryVersion int
 
 const (
 	RuntimeScopeRegistryVersion1 RuntimeScopeRegistryVersion = 1
+	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion1
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion2
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -45,9 +46,15 @@ func activeRuntimeScope() runtimeScopeDefinition {
 }
 
 func safeRuntimeScope() runtimeScopeDefinition {
+	return safeRuntimeScopeSince(RuntimeScopeRegistryVersion1)
+}
+
+// safeRuntimeScopeSince registers a scope that became agent-runtime-safe in a
+// later registry version, so policies stored at older versions stay unchanged.
+func safeRuntimeScopeSince(version RuntimeScopeRegistryVersion) runtimeScopeDefinition {
 	return runtimeScopeDefinition{
 		lifecycle: RuntimeScopeLifecycleActive,
-		safeSince: RuntimeScopeRegistryVersion1,
+		safeSince: version,
 	}
 }
 
@@ -93,6 +100,8 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeAgentWrite:              activeRuntimeScope(),
 	authz.ScopeAgentAuthorize:          activeRuntimeScope(),
 	authz.ScopeAgentTransfer:           activeRuntimeScope(),
+	authz.ScopeOrgDeviceAgentSync:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
+	authz.ScopeOrgHooksIngest:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
 	scopeMCPApprovalReadTombstone:      retiredRuntimeScope(),
 	scopeMCPApprovalDecideTombstone:    retiredRuntimeScope(),
 }
