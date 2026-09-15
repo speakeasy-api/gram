@@ -91,7 +91,7 @@ type oauthPageData struct {
 type BrowserIdentity interface {
 	BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error)
 	ExchangeCodeForTokens(ctx context.Context, code string) (*identity.IDPUserInfo, error)
-	UpsertUserFromIDP(ctx context.Context, idpUser *identity.IDPUserInfo) (string, error)
+	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
 }
 
 type OrganizationOption struct {
@@ -392,13 +392,13 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "login could not be completed")
 			return
 		}
-		userID, err := s.identity.UpsertUserFromIDP(r.Context(), idpUser)
+		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "login could not be completed")
 			return
 		}
 		challenge.ID = uuid.NewString()
-		challenge.Subject = urn.NewUserSubject(userID).String()
+		challenge.Subject = urn.NewUserSubject(login.UserID).String()
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return

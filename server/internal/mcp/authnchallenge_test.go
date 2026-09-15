@@ -22,7 +22,6 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -53,11 +52,17 @@ type mockIdentityResolver struct {
 	upsertResult string
 	upsertErr    error
 
-	hasAccessResult *sessions.Organization
-	hasAccessEmail  string
-	hasAccessOK     bool
+	hasAccessOK  bool
+	hasAccessErr error
 
 	buildAuthURLParams identity.AuthorizationURLParams
+
+	// calls records resolver method names in invocation order.
+	calls []string
+	// loginOptions records the options passed to each CompleteIDPLogin call.
+	loginOptions []identity.IDPLoginOptions
+	// memberChecks records the user id of each IsOrganizationMember call.
+	memberChecks []string
 }
 
 func (m *mockIdentityResolver) BuildAuthorizationURL(_ context.Context, params identity.AuthorizationURLParams) (*url.URL, error) {
@@ -69,12 +74,19 @@ func (m *mockIdentityResolver) ExchangeCodeForTokens(_ context.Context, _ string
 	return m.exchangeResult, m.exchangeErr
 }
 
-func (m *mockIdentityResolver) UpsertUserFromIDP(_ context.Context, _ *identity.IDPUserInfo) (string, error) {
-	return m.upsertResult, m.upsertErr
+func (m *mockIdentityResolver) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+	m.calls = append(m.calls, "CompleteIDPLogin")
+	m.loginOptions = append(m.loginOptions, opts)
+	if m.upsertErr != nil {
+		return identity.IDPLoginResult{}, m.upsertErr
+	}
+	return identity.IDPLoginResult{UserID: m.upsertResult, Reactivated: false, UserInfo: nil}, nil
 }
 
-func (m *mockIdentityResolver) HasAccessToOrganization(_ context.Context, _, _ string) (*sessions.Organization, string, bool) {
-	return m.hasAccessResult, m.hasAccessEmail, m.hasAccessOK
+func (m *mockIdentityResolver) IsOrganizationMember(_ context.Context, _, userID string) (bool, error) {
+	m.calls = append(m.calls, "IsOrganizationMember")
+	m.memberChecks = append(m.memberChecks, userID)
+	return m.hasAccessOK, m.hasAccessErr
 }
 
 // seedPrivateToolsetWithIssuer creates a private toolset backed by a
@@ -756,15 +768,13 @@ func TestPrivateOAuthAuthorizeCallbackConsentTokenFlow(t *testing.T) {
 			Email: "private-e2e@example.com",
 			Name:  "Private E2E User",
 		},
-		upsertResult:   "private-e2e-user",
-		hasAccessEmail: "private-e2e@example.com",
-		hasAccessOK:    true,
+		upsertResult: "private-e2e-user",
+		hasAccessOK:  true,
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	mock.hasAccessResult = &sessions.Organization{ID: authCtx.ActiveOrganizationID, Name: "Private E2E Org"}
 
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, toolset.McpSlug.String, "private", uuid.NullUUID{}, issuer.ID)
@@ -892,12 +902,7 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 			Name:  "Test User",
 		},
 		upsertResult: gramUserID,
-		hasAccessResult: &sessions.Organization{
-			ID:   "org-id-placeholder",
-			Name: "Test Org",
-		},
-		hasAccessEmail: "test@example.com",
-		hasAccessOK:    true,
+		hasAccessOK:  true,
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
@@ -1010,12 +1015,7 @@ func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
 			Name:  "Test User",
 		},
 		upsertResult: gramUserID,
-		hasAccessResult: &sessions.Organization{
-			ID:   "org-id-placeholder",
-			Name: "Test Org",
-		},
-		hasAccessEmail: "test@example.com",
-		hasAccessOK:    true,
+		hasAccessOK:  true,
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
@@ -1082,12 +1082,7 @@ func TestHandleIDPCallback_UsesBaseURLFromCachedState(t *testing.T) {
 			Name:  "Test User",
 		},
 		upsertResult: gramUserID,
-		hasAccessResult: &sessions.Organization{
-			ID:   "org-id-placeholder",
-			Name: "Test Org",
-		},
-		hasAccessEmail: "test@example.com",
-		hasAccessOK:    true,
+		hasAccessOK:  true,
 	}
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
