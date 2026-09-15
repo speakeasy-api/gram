@@ -6,6 +6,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
@@ -36,6 +37,7 @@ import {
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
+  shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPPolicy,
 } from "./shadowMCPInventoryStatus";
@@ -66,13 +68,24 @@ const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
 
-  // The label alone. The description that used to sit under it restated the
-  // badge for most rows, and the server detail page carries the full reading
-  // for the rows where it did not.
+  // The badge is the verdict; the description is the mechanism behind it,
+  // which a one-word badge cannot carry. "Restricted" covers five different
+  // postures — selected users only, mixed, blocked for some, and two ways a
+  // denial still leaves standing access — and "Observed" can hide a decision
+  // lying dormant for want of a blocking policy, which is the state that
+  // should worry an admin most. Triaging those apart is the column's job, so
+  // the detail stays on the row rather than only on the server page. It sits
+  // in a tooltip to keep the column scannable, on a focusable span so it is
+  // reachable by keyboard and announced through aria-describedby rather than
+  // being hover-only.
   return (
-    <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
-      <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
-    </Badge>
+    <SimpleTooltip tooltip={shadowMCPInventoryStatusDescription(server)}>
+      <span tabIndex={0} className="inline-flex cursor-help">
+        <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+          <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+        </Badge>
+      </span>
+    </SimpleTooltip>
   );
 }
 
