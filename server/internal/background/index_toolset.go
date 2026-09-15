@@ -37,7 +37,7 @@ func ExecuteIndexToolset(
 	params IndexToolsetParams,
 ) (client.WorkflowRun, error) {
 	if env == nil {
-		return nil, ErrTemporalUnavailable
+		return nil, tenv.ErrNotConfigured
 	}
 
 	return env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
