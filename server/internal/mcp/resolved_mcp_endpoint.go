@@ -34,7 +34,7 @@ import (
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	clientauth "github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // ResolvedMcpEndpoint carries everything the issuer-gated OAuth handlers
@@ -160,7 +160,7 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 // value. Only the addressed endpoint's URL is accepted, so an assertion
 // minted for the revocation endpoint does not authenticate a token request or
 // the reverse.
-func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) clientauth.Audiences {
+func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) privatekeyjwt.Audiences {
 	endpoint := ""
 	switch at {
 	case clientAssertionAtToken:
@@ -168,7 +168,7 @@ func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndp
 	case clientAssertionAtRevoke:
 		endpoint = u.Revoke
 	}
-	return clientauth.Audiences{
+	return privatekeyjwt.Audiences{
 		Issuer:   u.Issuer,
 		Endpoint: endpoint,
 	}
