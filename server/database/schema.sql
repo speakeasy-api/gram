@@ -8769,11 +8769,15 @@ FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 
 -- grant_types records registration evidence: authorized preparation may confirm
 -- or publish it for an active binding without changing client identity/configuration.
+-- Issuance/rejection observations and resource display members are also mutable;
+-- resource_identifier and legacy_callback_url instead pin resource/callback semantics.
 CREATE TRIGGER remote_session_ema_client_update_guard
 BEFORE UPDATE ON remote_session_clients FOR EACH ROW
 WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
  OR OLD.remote_session_issuer_id IS DISTINCT FROM NEW.remote_session_issuer_id OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at
  OR OLD.audience IS DISTINCT FROM NEW.audience
+ OR OLD.resource_identifier IS DISTINCT FROM NEW.resource_identifier
+ OR OLD.legacy_callback_url IS DISTINCT FROM NEW.legacy_callback_url
  OR OLD.client_id IS DISTINCT FROM NEW.client_id OR OLD.client_secret_encrypted IS DISTINCT FROM NEW.client_secret_encrypted
  OR OLD.client_secret_expires_at IS DISTINCT FROM NEW.client_secret_expires_at
  OR OLD.token_endpoint_auth_method IS DISTINCT FROM NEW.token_endpoint_auth_method OR OLD.json_web_key_set_id IS DISTINCT FROM NEW.json_web_key_set_id

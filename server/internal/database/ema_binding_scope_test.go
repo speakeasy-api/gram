@@ -210,6 +210,37 @@ func TestEMABindingScope(t *testing.T) {
 			require.Equal(t, "23514", pgErr.Code)
 		})
 	}
+	for field, values := range map[string][2]string{
+		"resource_identifier": {"'https://resource.example.invalid'", "NULL"},
+		"legacy_callback_url": {"TRUE", "FALSE"},
+	} {
+		t.Run(field+"_requires_unlink", func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			noop := "UPDATE remote_session_clients SET " + field + " = " + field + " WHERE id = fixture_scope_id(1)"
+			mutation := "UPDATE remote_session_clients SET " + field + " = " + values[0] + " WHERE id = fixture_scope_id(1)"
+			_, err = tx.Exec(ctx, noop)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "SAVEPOINT reconfigure")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, mutation)
+			requireEMAScopeError(t, err)
+			require.ErrorContains(t, err, "active identity-chaining binding must be explicitly unlinked")
+			_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT reconfigure; UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, mutation)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'ready', generation = generation + 1")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, noop)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_clients SET "+field+" = "+values[1]+" WHERE id = fixture_scope_id(1)")
+			requireEMAScopeError(t, err)
+		})
+	}
 	t.Run("secret_expiry_requires_unlink", func(t *testing.T) {
 		tx, err := pool.Begin(ctx)
 		require.NoError(t, err)
@@ -310,7 +341,11 @@ UPDATE remote_session_clients SET client_secret_expires_at = '2000-01-01' WHERE 
 		_, err = tx.Exec(ctx, emaScopeInsert)
 		require.NoError(t, err)
 		// Evidence publication is not a credential/configuration mutation.
-		_, err = tx.Exec(ctx, `UPDATE remote_session_clients SET grant_types = ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'] WHERE id = fixture_scope_id(1)`)
+		_, err = tx.Exec(ctx, `UPDATE remote_session_clients SET grant_types = ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+ client_id_issued_at = clock_timestamp(), upstream_rejected_at = clock_timestamp(),
+ resource_name = 'Fixture resource', resource_documentation = 'https://resource.example.invalid/docs',
+ resource_policy_uri = 'https://resource.example.invalid/policy', resource_tos_uri = 'https://resource.example.invalid/terms',
+ updated_at = clock_timestamp() WHERE id = fixture_scope_id(1)`)
 		require.NoError(t, err)
 		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
 UPDATE projects SET organization_id = 'fixture-org-b' WHERE id = fixture_scope_id(1);
