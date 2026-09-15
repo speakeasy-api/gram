@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
@@ -80,17 +80,19 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 
 	return NewToolProxy(
 		testenv.NewLogger(t),
 		tracerProvider,
-		sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		meterProvider,
 		ToolCallSourceMCP,
 		testenv.NewEncryptionClient(t),
 		nil,
 		policy,
 		funcs,
 		nil,
+		mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t)),
 	)
 }
 
@@ -148,14 +150,14 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	err := proxy.Do(ctx, recorder, bytes.NewReader([]byte(body)), toolconfig.ToolCallEnv{
+	err := proxy.Do(ctx, recorder, []byte(body), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{})
+	}, plan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 
 	return recorder, err
 }

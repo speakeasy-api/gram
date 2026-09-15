@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -609,6 +610,19 @@ func (s *Service) executeProxiedMemberTool(
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
+
+	s.scanEvaluator.Scan(ctx, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceMetaMCP,
+		OrganizationID: gate.organizationID,
+		ProjectID:      gate.projectID.String(),
+		ServerID:       member.serverID.String(),
+		ToolsetID:      "",
+		ToolName:       toolName,
+		ResourceURI:    "",
+		PromptName:     "",
+		Phase:          mcpriskscan.PhaseBeforeExecution,
+		Payload:        arguments,
+	})
 
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
 	// observability parse (re-serializing it emits empty/null fields that

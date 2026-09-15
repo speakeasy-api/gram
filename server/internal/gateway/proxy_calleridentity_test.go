@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -59,6 +59,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 			onRequest: func(req functions.RunnerToolCallRequest) { captured = req.Meta },
 		},
 		nil,
+		mcpriskscan.NewNoop(tracerProvider, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 	)
 
 	bodyBytes, err := json.Marshal(ToolCallBody{
@@ -72,14 +73,14 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 	})
 	require.NoError(t, err)
 
-	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  client,
-	}, toolCallPlan, tm.HTTPLogAttributes{})
+	}, toolCallPlan, tm.HTTPLogAttributes{}, mcpriskscan.Target{Surface: mcpriskscan.SurfaceHostedMCP, ServerID: "", ToolsetID: ""})
 	require.NoError(t, err)
 
 	return captured

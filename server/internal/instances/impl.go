@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -123,6 +124,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
+			mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
 		),
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
@@ -367,11 +369,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	requestNumBytes := int64(len(requestBodyBytes))
 
-	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
-
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, toolconfig.ToolCallEnv{
+	target := mcpriskscan.Target{Surface: mcpriskscan.SurfaceInstances, ServerID: "", ToolsetID: ""}
+	if toolset != nil {
+		target.ToolsetID = toolset.ID
+	}
+	err = s.toolProxy.Do(ctx, interceptor, requestBodyBytes, toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
 		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
@@ -379,7 +383,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
 		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, attrRecorder)
+	}, plan, attrRecorder, target)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
