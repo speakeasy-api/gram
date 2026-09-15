@@ -108,7 +108,7 @@ type Service struct {
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
-	scanObserver              mcpriskscan.Observer
+	scanEvaluator             mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries
@@ -389,7 +389,7 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
-	scanObserver := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
+	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
@@ -413,7 +413,7 @@ func NewService(
 		networkIngressTelemetry:   networkingress.NewTelemetry(logger, meterProvider),
 		identityCoverage:          mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		hostedToolsCallCheckpoint: hostedToolsCallCheckpoint,
-		scanObserver:              scanObserver,
+		scanEvaluator:             scanEvaluator,
 		guardianPolicy:            guardianPolicy,
 		db:                        db,
 		authRepo:                  auth_repo.New(db),
@@ -442,7 +442,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
-			scanObserver,
+			scanEvaluator,
 		),
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
@@ -1636,7 +1636,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
-		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanObserver)
+		return handlePromptsGet(ctx, s.logger, s.db, payload, req, s.scanEvaluator)
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "resources/templates/list":

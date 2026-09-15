@@ -40,7 +40,7 @@ func (r *recordingRemoteRiskScan) Scan(_ context.Context, event mcpriskscan.Even
 func TestToolsCallRiskScanNoopDoesNotRejectUnclassifiedCall(t *testing.T) {
 	t.Parallel()
 	interceptor := &toolsCallRiskScanInterceptor{
-		observer: mcpriskscan.NewNoop(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)),
+		evaluator: mcpriskscan.NewNoop(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 		event: mcpriskscan.Event{
 			Surface: mcpriskscan.SurfaceRemoteMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 			ToolsetID: "", ToolName: "", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
@@ -48,7 +48,7 @@ func TestToolsCallRiskScanNoopDoesNotRejectUnclassifiedCall(t *testing.T) {
 		},
 	}
 	// The request phase decoded Params, but there is no known tool schema,
-	// target identity, or stamped principal for the observer to classify.
+	// target identity, or stamped principal for the evaluator to classify.
 	call := &proxy.ToolsCallRequest{
 		Params: &mcp.CallToolParamsRaw{
 			Name:      "unclassified-operation",
@@ -194,7 +194,7 @@ func assertRiskScanSelectionRejection(t *testing.T, request string, code int64) 
 	require.Empty(t, recorded.events)
 }
 
-func newRiskScanTestProxy(t *testing.T, upstreamURL string, observer mcpriskscan.Observer, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
+func newRiskScanTestProxy(t *testing.T, upstreamURL string, evaluator mcpriskscan.Evaluator, selection *toolfilter.SessionSelection, tunnel bool) *proxy.Proxy {
 	t.Helper()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -202,7 +202,7 @@ func newRiskScanTestProxy(t *testing.T, upstreamURL string, observer mcpriskscan
 	require.NoError(t, err)
 	manager := NewProxyManager(logger, tracerProvider, testenv.NewMeterProvider(t),
 		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	manager.scanObserver = observer
+	manager.scanEvaluator = evaluator
 	if tunnel {
 		return manager.BuildTarget(logger, proxy.ServerIdentity{
 			RemoteMCPServerID:   "",

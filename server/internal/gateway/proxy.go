@@ -128,7 +128,7 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
-	scanObserver  mcpriskscan.Observer
+	scanEvaluator mcpriskscan.Evaluator
 }
 
 func NewToolProxy(
@@ -141,7 +141,7 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
-	scanObserver mcpriskscan.Observer,
+	scanEvaluator mcpriskscan.Evaluator,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -156,7 +156,7 @@ func NewToolProxy(
 		policy:        policy,
 		functions:     funcCaller,
 		platformTools: platformTools,
-		scanObserver:  scanObserver,
+		scanEvaluator: scanEvaluator,
 	}
 }
 
@@ -204,7 +204,7 @@ func (tp *ToolProxy) Do(
 		toolName = plan.Descriptor.URN.Name
 	}
 
-	tp.scanObserver.Scan(ctx, mcpriskscan.Event{
+	tp.scanEvaluator.Scan(ctx, mcpriskscan.Event{
 		Surface:        target.Surface,
 		OrganizationID: plan.Descriptor.OrganizationID,
 		ProjectID:      plan.Descriptor.ProjectID,

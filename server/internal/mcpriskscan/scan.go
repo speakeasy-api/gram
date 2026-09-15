@@ -71,13 +71,14 @@ type Event struct {
 	Phase string
 
 	// Payload borrows already-materialized request arguments: json.RawMessage for
-	// tool calls or map[string]string for prompts. Observers must not mutate it.
+	// tool calls or map[string]string for prompts. Evaluators must not mutate it.
 	// Resource reads leave it nil because they have no meaningful request body.
 	Payload any
 }
 
-// Observer observes a seam without returning a decision or modifying its request.
-type Observer interface {
+// Evaluator is the MCP-scoped risk-policy evaluation seam for both record-only
+// findings (flag policies, governance by record) and call gating (block policies).
+type Evaluator interface {
 	Scan(ctx context.Context, event Event)
 }
 
@@ -87,8 +88,9 @@ type noop struct {
 	duration metric.Float64Histogram
 }
 
-// NewNoop records reachability and the scan cost baseline; it performs no risk evaluation.
-func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) Observer {
+// NewNoop returns an Evaluator that records reachability and the scan cost baseline,
+// without evaluating policies, recording findings, or gating calls.
+func NewNoop(tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, logger *slog.Logger) Evaluator {
 	const scope = "github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	meter := meterProvider.Meter(scope)
 	scans, err := meter.Int64Counter(

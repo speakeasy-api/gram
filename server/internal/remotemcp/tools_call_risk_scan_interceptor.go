@@ -11,8 +11,8 @@ import (
 // Params there. Never register it in ToolsCallPreForwardInterceptors, where
 // malformed calls can have nil Params.
 type toolsCallRiskScanInterceptor struct {
-	observer mcpriskscan.Observer
-	event    mcpriskscan.Event
+	evaluator mcpriskscan.Evaluator
+	event     mcpriskscan.Event
 }
 
 var _ proxy.ToolsCallRequestInterceptor = (*toolsCallRiskScanInterceptor)(nil)
@@ -25,7 +25,7 @@ func (i *toolsCallRiskScanInterceptor) InterceptToolsCallRequest(ctx context.Con
 	event := i.event
 	event.ToolName = call.Params.Name
 	event.Payload = call.Params.Arguments
-	i.observer.Scan(ctx, event)
-	// Observation cannot reject traffic; Observer.Scan deliberately has no error result.
+	i.evaluator.Scan(ctx, event)
+	// This adapter cannot reject traffic; Evaluator.Scan has no decision or error result.
 	return nil
 }

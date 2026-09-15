@@ -23,7 +23,7 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	observer := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	evaluator := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	var authCtx contextvalues.AuthContext
 	authCtx.UserID = "credential-owner"
 	ctx := contextvalues.SetAuthContext(t.Context(), &authCtx)
@@ -32,9 +32,9 @@ func TestNoop_DoesNotPromoteCredentialOwnerToPrincipal(t *testing.T) {
 		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
 		Payload: nil,
 	}
-	observer.Scan(ctx, event)
-	observer.Scan(mcpidentity.NewValidatorBoundary().StampAPIKey(ctx), event)
-	observer.Scan(mcpidentity.NewValidatorBoundary().StampAssistant(ctx), event)
+	evaluator.Scan(ctx, event)
+	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAPIKey(ctx), event)
+	evaluator.Scan(mcpidentity.NewValidatorBoundary().StampAssistant(ctx), event)
 
 	spans := recorder.Ended()
 	require.Len(t, spans, 3)
@@ -58,19 +58,19 @@ func TestNoop_DoesNotExportRequestPayload(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	observer := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	evaluator := mcpriskscan.NewNoop(provider, testenv.NewMeterProvider(t), testenv.NewLogger(t))
 	event := mcpriskscan.Event{
 		Surface: mcpriskscan.SurfaceHostedMCP, OrganizationID: "", ProjectID: "", ServerID: "",
 		ToolsetID: "", ToolName: "ping", ResourceURI: "", PromptName: "", Phase: mcpriskscan.PhaseBeforeExecution,
 		Payload: nil,
 	}
-	observer.Scan(t.Context(), event)
+	evaluator.Scan(t.Context(), event)
 	for _, payload := range []any{
 		json.RawMessage(`{"private_argument":"sensitive-tool-input"}`),
 		map[string]string{"private_argument": "sensitive-prompt-input"},
 	} {
 		event.Payload = payload
-		observer.Scan(t.Context(), event)
+		evaluator.Scan(t.Context(), event)
 	}
 
 	spans := recorder.Ended()
@@ -90,7 +90,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		require.NoError(t, meterProvider.Shutdown(context.Background()))
 		require.NoError(t, tracerProvider.Shutdown(context.Background()))
 	})
-	observer := mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t))
+	evaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, testenv.NewLogger(t))
 	wantCounts := make(map[attribute.Set]int64)
 	for _, seam := range []struct{ surface, phase string }{
 		{mcpriskscan.SurfaceHostedMCP, mcpriskscan.PhaseBeforeExecution},
@@ -105,7 +105,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		wantCounts[attrs] = 2
 		ctx := t.Context()
 		for _, suffix := range []string{"first", "second"} {
-			observer.Scan(ctx, mcpriskscan.Event{
+			evaluator.Scan(ctx, mcpriskscan.Event{
 				Surface: seam.surface, Phase: seam.phase,
 				OrganizationID: "org-" + suffix, ProjectID: "project-" + suffix,
 				ServerID: "server-" + suffix, ToolsetID: "toolset-" + suffix,
