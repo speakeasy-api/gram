@@ -492,6 +492,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		secretCiphertext = conv.ToPGText(encrypted)
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{
 		ClientSecretEncrypted:   secretCiphertext,
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -768,6 +772,10 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return nil, err
+	}
+
 	if _, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,
@@ -860,6 +868,10 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return err
+	}
 
 	deleted, err := txRepo.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{
 		ID:        clientID,

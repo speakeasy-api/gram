@@ -131,3 +131,12 @@ Anthropic inference hooks: Agent Sessions includes “Claude inference conversat
 Anthropic inference hooks on AI Integrations shows **Finish setup** with a pending URL and no signing secret. The seeded configuration never permits real inference deliveries.
 
 Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. Raw view reveals the wake envelope and Slack reply tool call.
+
+### Identity chaining preparation (management API)
+
+The project has one reserved-example remote issuer advertising both ID-JAG and
+JWT-bearer, plus a separate resource registration with explicitly recorded
+JWT-bearer grants and `documents:read` scope. It contains no secret, binding,
+remote session, or claim of usable human access. This lets API consumers display
+capability and administrator-declared registration evidence separately. No new
+dashboard surface is part of AIM-63; browser verification is not applicable.

@@ -20,6 +20,732 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildPrepareEMARequest instantiates a HTTP request object with method and
+// path set to call the "remoteSessionClients" service "prepareEMA" endpoint
+func (c *Client) BuildPrepareEMARequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PrepareEMARemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "prepareEMA", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePrepareEMARequest returns an encoder for requests sent to the
+// remoteSessionClients prepareEMA server.
+func EncodePrepareEMARequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.PrepareEMAPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "prepareEMA", "*remotesessionclients.PrepareEMAPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewPrepareEMARequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "prepareEMA", err)
+		}
+		return nil
+	}
+}
+
+// DecodePrepareEMAResponse returns a decoder for responses returned by the
+// remoteSessionClients prepareEMA endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodePrepareEMAResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePrepareEMAResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PrepareEMAResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			res := NewPrepareEMAIdentityChainingPreparationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PrepareEMAUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PrepareEMAForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PrepareEMABadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMABadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMABadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PrepareEMANotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMANotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMANotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PrepareEMAConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PrepareEMAUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PrepareEMAInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PrepareEMAInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+				}
+				err = ValidatePrepareEMAInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+				}
+				return nil, NewPrepareEMAInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PrepareEMAUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+				}
+				err = ValidatePrepareEMAUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+				}
+				return nil, NewPrepareEMAUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "prepareEMA", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PrepareEMAGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "prepareEMA", err)
+			}
+			err = ValidatePrepareEMAGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "prepareEMA", err)
+			}
+			return nil, NewPrepareEMAGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "prepareEMA", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReadEMARequest instantiates a HTTP request object with method and path
+// set to call the "remoteSessionClients" service "readEMA" endpoint
+func (c *Client) BuildReadEMARequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReadEMARemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "readEMA", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReadEMARequest returns an encoder for requests sent to the
+// remoteSessionClients readEMA server.
+func EncodeReadEMARequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.ReadEMAPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "readEMA", "*remotesessionclients.ReadEMAPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewReadEMARequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "readEMA", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReadEMAResponse returns a decoder for responses returned by the
+// remoteSessionClients readEMA endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeReadEMAResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReadEMAResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReadEMAResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			res := NewReadEMAIdentityChainingPreparationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReadEMAUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReadEMAForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReadEMABadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMABadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMABadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReadEMANotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMANotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMANotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReadEMAConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReadEMAUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReadEMAInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReadEMAInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+				}
+				err = ValidateReadEMAInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+				}
+				return nil, NewReadEMAInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReadEMAUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+				}
+				err = ValidateReadEMAUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+				}
+				return nil, NewReadEMAUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "readEMA", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReadEMAGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "readEMA", err)
+			}
+			err = ValidateReadEMAGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "readEMA", err)
+			}
+			return nil, NewReadEMAGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "readEMA", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUnlinkEMARequest instantiates a HTTP request object with method and
+// path set to call the "remoteSessionClients" service "unlinkEMA" endpoint
+func (c *Client) BuildUnlinkEMARequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UnlinkEMARemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "unlinkEMA", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUnlinkEMARequest returns an encoder for requests sent to the
+// remoteSessionClients unlinkEMA server.
+func EncodeUnlinkEMARequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.UnlinkEMAPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "unlinkEMA", "*remotesessionclients.UnlinkEMAPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUnlinkEMARequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "unlinkEMA", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUnlinkEMAResponse returns a decoder for responses returned by the
+// remoteSessionClients unlinkEMA endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUnlinkEMAResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUnlinkEMAResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UnlinkEMAResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			res := NewUnlinkEMAIdentityChainingPreparationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UnlinkEMAUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UnlinkEMAForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UnlinkEMABadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMABadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMABadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UnlinkEMANotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMANotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMANotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UnlinkEMAConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UnlinkEMAUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UnlinkEMAInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UnlinkEMAInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+				}
+				err = ValidateUnlinkEMAInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+				}
+				return nil, NewUnlinkEMAInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UnlinkEMAUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+				}
+				err = ValidateUnlinkEMAUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+				}
+				return nil, NewUnlinkEMAUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "unlinkEMA", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UnlinkEMAGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "unlinkEMA", err)
+			}
+			err = ValidateUnlinkEMAGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "unlinkEMA", err)
+			}
+			return nil, NewUnlinkEMAGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "unlinkEMA", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateRemoteSessionClientRequest instantiates a HTTP request object
 // with method and path set to call the "remoteSessionClients" service
 // "createRemoteSessionClient" endpoint
@@ -2497,6 +3223,12 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		Audience:                v.Audience,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,
+	}
+	if v.GrantTypes != nil {
+		res.GrantTypes = make([]string, len(v.GrantTypes))
+		for i, val := range v.GrantTypes {
+			res.GrantTypes[i] = val
+		}
 	}
 	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
 	for i, val := range v.UserSessionIssuerIds {

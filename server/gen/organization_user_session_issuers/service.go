@@ -194,6 +194,9 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	Toolsets []*OrganizationUserSessionIssuerReference
 	// True when no live MCP server or toolset references the issuer.
 	CanDelete bool
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // A live project resource that references an organization-owned

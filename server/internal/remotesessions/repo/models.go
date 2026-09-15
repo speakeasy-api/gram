@@ -70,6 +70,24 @@ type RemoteSessionClient struct {
 	Deleted                         bool
 }
 
+type RemoteSessionEmaBinding struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+	RemoteSessionClientID uuid.NullUUID
+	Generation            int64
+	State                 string
+	GrantSource           string
+	RequestedScopes       []string
+	ClaimID               uuid.NullUUID
+	ClaimedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type RemoteSessionIssuer struct {
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID

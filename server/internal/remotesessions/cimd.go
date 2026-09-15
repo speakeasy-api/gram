@@ -94,12 +94,26 @@ type clientMetadataDocument struct {
 // present only while a key set is attached; scope is the client's explicit
 // upstream scopes, omitted when empty.
 func BuildClientMetadataDocument(clientID, redirectURI string, tokenEndpointAuthMethod TokenEndpointAuthMethod, jwksURI string, scope []string) clientMetadataDocument {
+	return BuildClientMetadataDocumentWithGrants(clientID, redirectURI, tokenEndpointAuthMethod, jwksURI, scope, nil)
+}
+
+// BuildClientMetadataDocumentWithGrants publishes only this client's recorded
+// grants. NULL retains legacy interactive behavior; an explicit empty record
+// advertises no grants. Publication is not proof of provider acceptance.
+func BuildClientMetadataDocumentWithGrants(clientID, redirectURI string, tokenEndpointAuthMethod TokenEndpointAuthMethod, jwksURI string, scope, grants []string) clientMetadataDocument {
+	if grants == nil {
+		grants = []string{"authorization_code", "refresh_token"}
+	}
+	responses := []string{}
+	if slices.Contains(grants, "authorization_code") {
+		responses = append(responses, "code")
+	}
 	return clientMetadataDocument{
 		ClientID:                clientID,
 		ClientName:              cimdClientName,
 		RedirectURIs:            []string{redirectURI},
-		GrantTypes:              []string{"authorization_code", "refresh_token"},
-		ResponseTypes:           []string{"code"},
+		GrantTypes:              append([]string{}, grants...),
+		ResponseTypes:           responses,
 		JWKSURI:                 jwksURI,
 		TokenEndpointAuthMethod: string(tokenEndpointAuthMethod),
 		Scope:                   strings.Join(scope, " "),
@@ -161,12 +175,13 @@ func (m *ChallengeManager) HandleClientMetadataDocument(w http.ResponseWriter, r
 	if row.HasJsonWebKeySet {
 		jwksURI = ClientJSONWebKeySetURL(m.serverURL, row.ID)
 	}
-	doc := BuildClientMetadataDocument(
+	doc := BuildClientMetadataDocumentWithGrants(
 		row.ClientIDMetadataUri.String,
 		m.callbackURL(canonicalCallbackRouteBase),
 		TokenEndpointAuthMethod(row.TokenEndpointAuthMethod),
 		jwksURI,
 		row.Scope,
+		row.GrantTypes,
 	)
 
 	body, err := json.Marshal(doc)

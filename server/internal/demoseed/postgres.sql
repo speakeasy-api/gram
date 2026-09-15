@@ -181,6 +181,8 @@ DECLARE
   toolset_3    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e03';
   toolset_4    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e04';
   us_issuer    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a01';
+  chaining_issuer CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a11';
+  chaining_client CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c11';
   -- One registered agent per credential kind the Connections list can report,
   -- plus the pre-column row whose kind is resolved from the rest of it.
   usc_key      CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c01';
@@ -927,6 +929,30 @@ BEGIN
   VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', interval '30 days');
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
+
+  -- Advertised capability and an administrator-declared registration are
+  -- separate evidence. No binding or session is created: neither proves
+  -- that a provisioned human can use this resource. Reserved example URLs
+  -- and a public client keep this fixture free of operational credentials.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+     grant_types_supported, authorization_grant_profiles_supported,
+     token_endpoint_auth_methods_supported, metadata_fetched_at)
+  VALUES
+    (chaining_issuer, proj_a, demo_org, 'identity-chaining-example',
+     'https://authorization.example.com', 'https://authorization.example.com/token',
+     'Identity chaining example',
+     ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'], ARRAY['none'], now());
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     token_endpoint_auth_method, grant_types, scope, resource_identifier)
+  VALUES
+    (chaining_client, proj_a, demo_org, chaining_issuer,
+     'demo-resource-client', 'none',
+     ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'], ARRAY['documents:read'],
+     'https://resource.example.com/mcp');
 
   -- Resolved from a Client ID Metadata Document, and the strongest posture
   -- available: it signs an assertion with a key it publishes, so Gram holds no
@@ -2684,6 +2710,15 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 external OAuth metadata row, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE project_id = proj_a AND id = chaining_client
+    AND remote_session_issuer_id = chaining_issuer
+    AND grant_types = ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer']
+    AND client_secret_encrypted IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected one declared chaining registration, found %', stray;
   END IF;
 
   -- The registrations are the point of the Connections surfaces: one per

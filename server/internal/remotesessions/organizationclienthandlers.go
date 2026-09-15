@@ -170,9 +170,15 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
 	}
 
+	emaCount, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+
 	return &orgclientsgen.OrganizationClientDeletePreflight{
-		SessionCount:   int(sessionCount),
-		McpServerNames: names,
+		EmaBindingCount: emaCount,
+		SessionCount:    int(sessionCount),
+		McpServerNames:  names,
 	}, nil
 }
 
@@ -578,6 +584,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		ClientSecretEncrypted:   clientSecretEncrypted,
 		TokenEndpointAuthMethod: conv.PtrToPGText(payload.TokenEndpointAuthMethod),
@@ -719,6 +729,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return err
+	}
+
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -819,6 +833,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if !server.UserSessionIssuerID.Valid {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		return err
 	}
 
 	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{

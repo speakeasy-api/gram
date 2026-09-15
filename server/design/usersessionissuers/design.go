@@ -462,4 +462,6 @@ var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSession
 	Attribute("toolsets", ArrayOf(OrganizationUserSessionIssuerReference), "Live toolsets that block deletion.")
 	Attribute("can_delete", Boolean, "True when no live MCP server or toolset references the issuer.")
 	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
 })

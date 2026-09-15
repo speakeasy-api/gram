@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type OrganizationClientDeletePreflight = {
   /**
+   * Active identity-chaining bindings that must be explicitly unlinked before deletion.
+   */
+  emaBindingCount: number;
+  /**
    * Display names of MCP servers this client is attached to.
    */
   mcpServerNames: Array<string>;
@@ -28,11 +32,13 @@ export const OrganizationClientDeletePreflight$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    ema_binding_count: z.int(),
     mcp_server_names: z.array(z.string()),
     session_count: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "ema_binding_count": "emaBindingCount",
       "mcp_server_names": "mcpServerNames",
       "session_count": "sessionCount",
     });

@@ -28,6 +28,7 @@ INSERT INTO remote_session_issuers (
     op_tos_uri,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -67,6 +68,7 @@ VALUES (
     @op_tos_uri,
     @scopes_supported,
     @grant_types_supported,
+    COALESCE(@authorization_grant_profiles_supported::text[], ARRAY[]::text[]),
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
     -- Nullable on purpose: a caller with neither a discovery document nor an
@@ -115,6 +117,7 @@ INSERT INTO remote_session_issuers (
     registration_endpoint,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -135,6 +138,7 @@ VALUES (
     @registration_endpoint,
     @scopes_supported,
     @grant_types_supported,
+    COALESCE(@authorization_grant_profiles_supported::text[], ARRAY[]::text[]),
     @response_types_supported,
     @token_endpoint_auth_methods_supported,
     @code_challenge_methods_supported,
@@ -153,6 +157,7 @@ SET
     registration_endpoint = EXCLUDED.registration_endpoint,
     scopes_supported = EXCLUDED.scopes_supported,
     grant_types_supported = EXCLUDED.grant_types_supported,
+    authorization_grant_profiles_supported = EXCLUDED.authorization_grant_profiles_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
     code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
@@ -375,6 +380,7 @@ SET
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
@@ -474,6 +480,7 @@ SET
     op_tos_uri = CASE WHEN @op_tos_uri::text = '' THEN NULL ELSE @op_tos_uri::text END,
     scopes_supported = @scopes_supported::text[],
     grant_types_supported = @grant_types_supported::text[],
+    authorization_grant_profiles_supported = @authorization_grant_profiles_supported::text[],
     response_types_supported = @response_types_supported::text[],
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
     code_challenge_methods_supported = @code_challenge_methods_supported::text[],
@@ -845,6 +852,7 @@ WHERE link.remote_session_client_id = c.id
 SELECT
     c.id,
     c.client_id_metadata_uri,
+    c.grant_types,
     COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
     CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
     c.scope
@@ -1578,6 +1586,7 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_clients AS c
@@ -1683,6 +1692,7 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_client_user_session_issuers AS link
@@ -2462,6 +2472,7 @@ SET
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
@@ -3044,6 +3055,7 @@ SET
     END,
     scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
     grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
     response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
@@ -3318,9 +3330,10 @@ WHERE id = @id
 FOR UPDATE;
 
 -- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
--- Fills only the capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
+-- Restates advertised grant profiles and fills capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
 UPDATE remote_session_issuers
 SET
+    authorization_grant_profiles_supported = @authorization_grant_profiles_supported::text[],
     code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, @code_challenge_methods_supported::text[]),
     introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, @introspection_endpoint_auth_methods_supported::text[]),
     id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, @id_token_signing_alg_values_supported::text[]),
@@ -3408,3 +3421,54 @@ SET registration_endpoint = sqlc.narg('registration_endpoint'),
 FROM remote_session_clients AS c
 WHERE c.id = @client_id
   AND i.id = c.remote_session_issuer_id;
+
+-- name: EnsureEMABinding :exec
+INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
+VALUES (@project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource)
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_issuer_id, resource) DO NOTHING;
+
+-- name: GetEMABinding :one
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+AND user_session_issuer_id = @user_session_issuer_id AND remote_session_issuer_id = @remote_session_issuer_id AND resource = @resource;
+
+-- name: LockEMABinding :one
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+AND user_session_issuer_id = @user_session_issuer_id AND remote_session_issuer_id = @remote_session_issuer_id AND resource = @resource FOR UPDATE;
+
+-- name: SetEMABinding :one
+UPDATE remote_session_ema_bindings SET remote_session_client_id = sqlc.narg('remote_session_client_id'),
+ generation = @generation, state = @state, grant_source = @grant_source, requested_scopes = @requested_scopes,
+ claim_id = sqlc.narg('claim_id'), claimed_at = sqlc.narg('claimed_at'), updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id AND generation = @expected_generation
+RETURNING *;
+
+-- name: LockEMAClient :one
+SELECT * FROM remote_session_clients WHERE id = @id AND deleted IS FALSE
+AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;
+
+-- name: LockEMAIssuer :one
+SELECT * FROM remote_session_issuers WHERE id = @id AND deleted IS FALSE
+AND (project_id = @project_id OR (project_id IS NULL AND (organization_id = @organization_id OR organization_id IS NULL))) FOR UPDATE;
+
+-- name: SetEMAClientGrants :one
+UPDATE remote_session_clients SET grant_types = sqlc.narg('grant_types')::text[], updated_at = clock_timestamp()
+WHERE id = @id AND deleted IS FALSE
+AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) RETURNING *;
+
+-- name: CountActiveEMABindingsForClient :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state <> 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: CountActiveEMABindingsForIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state <> 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: CountActiveEMABindingsForUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = @issuer_id AND state <> 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: LockEMAUserIssuer :one
+SELECT id FROM user_session_issuers WHERE id = @id AND deleted IS FALSE
+AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;

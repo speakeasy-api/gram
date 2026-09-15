@@ -128,6 +128,9 @@ type ListClientsResponseBody struct {
 // GetClientResponseBody is the type of the "organizationRemoteSessionClients"
 // service "getClient" endpoint HTTP response body.
 type GetClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -179,6 +182,9 @@ type GetClientDeletePreflightResponseBody struct {
 	SessionCount int `form:"session_count" json:"session_count" xml:"session_count"`
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64 `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -192,6 +198,9 @@ type ListClientMcpServersResponseBody struct {
 // "organizationRemoteSessionClients" service "createClient" endpoint HTTP
 // response body.
 type CreateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -239,6 +248,9 @@ type CreateClientResponseBody struct {
 // "organizationRemoteSessionClients" service "createCimdClient" endpoint HTTP
 // response body.
 type CreateCimdClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -286,6 +298,9 @@ type CreateCimdClientResponseBody struct {
 // "organizationRemoteSessionClients" service "updateClient" endpoint HTTP
 // response body.
 type UpdateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -333,6 +348,9 @@ type UpdateClientResponseBody struct {
 // "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
 // HTTP response body.
 type AttachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -380,6 +398,9 @@ type AttachClientKeySetResponseBody struct {
 // "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
 // HTTP response body.
 type DetachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -427,6 +448,9 @@ type DetachClientKeySetResponseBody struct {
 // "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
 // response body.
 type RotateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2803,6 +2827,9 @@ type OrganizationRemoteSessionClientResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2903,6 +2930,12 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -2925,7 +2958,8 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 // "organizationRemoteSessionClients" service.
 func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionclients.OrganizationClientDeletePreflight) *GetClientDeletePreflightResponseBody {
 	body := &GetClientDeletePreflightResponseBody{
-		SessionCount: res.SessionCount,
+		SessionCount:    res.SessionCount,
+		EmaBindingCount: res.EmaBindingCount,
 	}
 	if res.McpServerNames != nil {
 		body.McpServerNames = make([]string, len(res.McpServerNames))
@@ -2978,6 +3012,12 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -3014,6 +3054,12 @@ func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimd
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3052,6 +3098,12 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -3088,6 +3140,12 @@ func NewAttachClientKeySetResponseBody(res *types.RemoteSessionClient) *AttachCl
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3126,6 +3184,12 @@ func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachCl
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -3162,6 +3226,12 @@ func NewRotateClientResponseBody(res *types.RemoteSessionClient) *RotateClientRe
 		Audience:                res.Audience,
 		CreatedAt:               res.CreatedAt,
 		UpdatedAt:               res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))

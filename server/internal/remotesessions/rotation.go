@@ -203,6 +203,12 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
 	current := row.RemoteSessionClient
+	// EMA grants describe this exact registration. Ordinary interactive rotation
+	// must not silently replace it with an authorization-code-only registration.
+	emaCount, err := q.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(current.ID), OrganizationID: current.OrganizationID.String, ProjectID: uuid.Nil})
+	if err := requireNoEMABindings(emaCount, err); err != nil {
+		return zero, err
+	}
 
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(current.ID.String()),
@@ -291,6 +297,11 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txRepo := repo.New(dbtx)
+	// Re-check under the same client row lock as preparation after the network
+	// call. A newly installed binding wins over this stale rotation completion.
+	if err := guardEMABindingsForClient(ctx, txRepo, current.OrganizationID.String, current.ID); err != nil {
+		return zero, err
+	}
 
 	issuerIDs, err := txRepo.ListUserSessionIssuerIDsForRemoteSessionClient(ctx, current.ID)
 	if err != nil {

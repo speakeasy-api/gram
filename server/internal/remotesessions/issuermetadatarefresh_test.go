@@ -200,16 +200,17 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 
 	id := createProjectIssuer(t, ctx, ti, "reproject", upstream.URL)
 	document, err := json.Marshal(map[string]any{
-		"issuer":                                upstream.URL,
-		"authorization_endpoint":                upstream.URL + "/authorize",
-		"token_endpoint":                        upstream.URL + "/token",
-		"jwks_uri":                              upstream.URL + "/jwks",
-		"userinfo_endpoint":                     upstream.URL + "/userinfo",
-		"scopes_supported":                      []string{"openid"},
-		"code_challenge_methods_supported":      []string{"S256"},
-		"claims_supported":                      []string{"sub", "email"},
-		"id_token_signing_alg_values_supported": []string{"RS256"},
-		"backchannel_logout_supported":          true,
+		"issuer":                                 upstream.URL,
+		"authorization_endpoint":                 upstream.URL + "/authorize",
+		"token_endpoint":                         upstream.URL + "/token",
+		"jwks_uri":                               upstream.URL + "/jwks",
+		"userinfo_endpoint":                      upstream.URL + "/userinfo",
+		"scopes_supported":                       []string{"openid"},
+		"authorization_grant_profiles_supported": []string{"urn:ietf:params:oauth:grant-profile:id-jag"},
+		"code_challenge_methods_supported":       []string{"S256"},
+		"claims_supported":                       []string{"sub", "email"},
+		"id_token_signing_alg_values_supported":  []string{"RS256"},
+		"backchannel_logout_supported":           true,
 	})
 	require.NoError(t, err)
 	// A partial read two hours ago: fetched and errored together, so no fetch is due and the re-projection runs alone.
@@ -230,6 +231,7 @@ func TestIssuerMetadataRefresh_Reproject_FillsCapabilityColumnsWithoutNetwork(t 
 	require.Zero(t, requests.Load(), "re-projection never contacts the upstream")
 
 	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, after.AuthorizationGrantProfilesSupported)
 	require.Equal(t, before.UserinfoEndpoint, after.UserinfoEndpoint, "endpoint columns are left to the fetch: NULL there is a value, not a gap")
 	require.Equal(t, []string{"S256"}, after.CodeChallengeMethodsSupported)
 	require.Equal(t, []string{"sub", "email"}, after.ClaimsSupported)
@@ -288,7 +290,7 @@ func TestIssuerMetadataRefresh_Reproject_UnvettableDocumentYieldsToNetworkRefres
 	after := loadIssuerByID(t, ctx, ti, id)
 	require.Equal(t, "https://stale.example.com/authorize", after.AuthorizationEndpoint.String, "another issuer's endpoints are not adopted")
 	require.Equal(t, fetchedAt, after.MetadataFetchedAt.Time, "a re-projection failure is not a fetch")
-	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints")
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's metadata")
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, after.MetadataLastErrorUrl.Valid, "a document that fails vetting is a definitive failure")
 	require.False(t, reprojectDue(t, ctx, ti, id, now), "a rejected document is not re-projected again")
@@ -376,17 +378,17 @@ func TestIssuerMetadataRefresh_Refresh_PartialReadKeepsTheRetryURL(t *testing.T)
 
 	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
 	require.NoError(t, err)
-	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial, outcome)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
-	require.Equal(t, upstream.URL+"/authorize", after.AuthorizationEndpoint.String, "the readable document is applied")
-	require.WithinDuration(t, now, after.MetadataFetchedAt.Time, time.Minute)
+	require.NotEqual(t, upstream.URL+"/authorize", after.AuthorizationEndpoint.String, "the partial document is not applied")
+	require.False(t, after.MetadataFetchedAt.Valid)
 	require.Contains(t, after.MetadataLastErrorUrl.String, upstream.URL+"/.well-known/oauth-authorization-server")
 	require.WithinDuration(t, now, after.MetadataLastErrorAt.Time, time.Minute)
 	require.False(t, fetchDue(t, ctx, ti, id, now))
-	require.False(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "a partial read is a success: the unread candidate does not join the hourly retry track")
+	require.True(t, fetchDue(t, ctx, ti, id, now.Add(61*time.Minute)), "an incomplete read joins the hourly retry track")
 	require.True(t, fetchDue(t, ctx, ti, id, now.Add(25*time.Hour)), "the next fetch waits for the daily cadence")
-	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial])
+	require.Equal(t, int64(1), outcomeCounts(t, reader)[remotesessionmetrics.IssuerMetadataRefreshOutcomeTransientFailure])
 }
 
 func TestIssuerMetadataRefresh_Refresh_TransientFailureRetriesWithinTheHour(t *testing.T) {
@@ -645,7 +647,7 @@ func TestIssuerMetadataRefresh_Refresh_UntrustedDocumentIsDefinitive(t *testing.
 	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
-	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints")
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's metadata")
 	require.False(t, after.MetadataLastErrorUrl.Valid)
 	require.Equal(t, "https://stale.example.com/authorize", after.AuthorizationEndpoint.String)
 }
@@ -1108,7 +1110,7 @@ func TestIssuerMetadataRefresh_Reproject_DecodeFailureKeepsThePendingUpstreamErr
 	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
-	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints", "the message may change")
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's metadata", "the message may change")
 	require.Equal(t, errorAt, after.MetadataLastErrorAt.Time, "the pending failure keeps its timestamp")
 	require.Equal(t, retryURL, after.MetadataLastErrorUrl.String, "the pending failure keeps its retry URL")
 	require.False(t, fetchDue(t, ctx, ti, id, now.Add(30*time.Minute)))
@@ -1141,7 +1143,7 @@ func TestIssuerMetadataRefresh_Reproject_DecodeFailureReplacesStaleUpstreamError
 	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeReprojectInvalid, outcome)
 
 	after := loadIssuerByID(t, ctx, ti, id)
-	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's endpoints")
+	require.Contains(t, after.MetadataLastError.String, "refusing to adopt another authorization server's metadata")
 	require.True(t, after.MetadataLastErrorAt.Time.After(fetchedAt), "the reprojection failure becomes the latest visit")
 	require.False(t, after.MetadataLastErrorUrl.Valid, "a stale retry URL is not attached to the definitive reprojection failure")
 	require.False(t, reprojectDue(t, ctx, ti, id, time.Now()), "the poison document is not retried on every use")

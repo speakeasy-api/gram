@@ -459,6 +459,60 @@ func (q *Queries) ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx context.Co
 	return i, err
 }
 
+const countActiveEMABindingsForClient = `-- name: CountActiveEMABindingsForClient :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = $1 AND state <> 'unlinked'
+AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
+`
+
+type CountActiveEMABindingsForClientParams struct {
+	ClientID       uuid.NullUUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CountActiveEMABindingsForClient(ctx context.Context, arg CountActiveEMABindingsForClientParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveEMABindingsForClient, arg.ClientID, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countActiveEMABindingsForIssuer = `-- name: CountActiveEMABindingsForIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = $1 AND state <> 'unlinked'
+AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
+`
+
+type CountActiveEMABindingsForIssuerParams struct {
+	IssuerID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CountActiveEMABindingsForIssuer(ctx context.Context, arg CountActiveEMABindingsForIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveEMABindingsForIssuer, arg.IssuerID, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countActiveEMABindingsForUserIssuer = `-- name: CountActiveEMABindingsForUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = $1 AND state <> 'unlinked'
+AND ($2::text = '' OR organization_id = $2) AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = $3)
+`
+
+type CountActiveEMABindingsForUserIssuerParams struct {
+	IssuerID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CountActiveEMABindingsForUserIssuer(ctx context.Context, arg CountActiveEMABindingsForUserIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveEMABindingsForUserIssuer, arg.IssuerID, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countActiveRemoteSessionsByClientID = `-- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
 FROM remote_sessions
@@ -560,6 +614,7 @@ INSERT INTO remote_session_issuers (
     registration_endpoint,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -580,9 +635,10 @@ VALUES (
     $8,
     $9,
     $10,
-    $11,
+    COALESCE($11::text[], ARRAY[]::text[]),
     $12,
     $13,
+    $14,
     FALSE,
     FALSE,
     FALSE
@@ -598,6 +654,7 @@ SET
     registration_endpoint = EXCLUDED.registration_endpoint,
     scopes_supported = EXCLUDED.scopes_supported,
     grant_types_supported = EXCLUDED.grant_types_supported,
+    authorization_grant_profiles_supported = EXCLUDED.authorization_grant_profiles_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
     code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
@@ -628,19 +685,20 @@ RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint,
 `
 
 type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
-	ID                                uuid.UUID
-	Slug                              string
-	Issuer                            string
-	Name                              pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
+	ID                                  uuid.UUID
+	Slug                                string
+	Issuer                              string
+	Name                                pgtype.Text
+	AuthorizationEndpoint               pgtype.Text
+	TokenEndpoint                       pgtype.Text
+	RevocationEndpoint                  pgtype.Text
+	RegistrationEndpoint                pgtype.Text
+	ScopesSupported                     []string
+	GrantTypesSupported                 []string
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
+	CodeChallengeMethodsSupported       []string
 }
 
 // The local Platform MCP fixture owns this fixed global issuer identity. The
@@ -659,6 +717,7 @@ func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Contex
 		arg.RegistrationEndpoint,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -920,6 +979,7 @@ INSERT INTO remote_session_issuers (
     op_tos_uri,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -959,33 +1019,34 @@ VALUES (
     $15,
     $16,
     $17,
-    $18,
+    COALESCE($18::text[], ARRAY[]::text[]),
     $19,
+    $20,
     -- Nullable on purpose: a caller with neither a discovery document nor an
     -- operator-supplied value passes NULL ("not captured"), which must stay
     -- distinct from the empty array ("the issuer advertises no methods").
-    $20,
     $21,
+    $22,
     -- Session-enrichment capabilities, nullable like
     -- code_challenge_methods_supported: a caller without a discovery
     -- document passes NULL ("not captured").
-    $22,
     $23,
     $24,
     $25,
     $26,
     $27,
     $28,
-    -- Operator knobs, nullable: NULL is "not set".
     $29,
+    -- Operator knobs, nullable: NULL is "not set".
     $30,
     $31,
     $32,
-    NULLIF($33::text, ''),
-    CASE WHEN $33::text = '' THEN NULL ELSE clock_timestamp() END,
+    $33,
     NULLIF($34::text, ''),
-    $35,
-    $36
+    CASE WHEN $34::text = '' THEN NULL ELSE clock_timestamp() END,
+    NULLIF($35::text, ''),
+    $36,
+    $37
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -1008,6 +1069,7 @@ type CreateRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -1058,6 +1120,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -1610,6 +1673,31 @@ func (q *Queries) DetachRemoteSessionClientFromUserSessionIssuer(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const ensureEMABinding = `-- name: EnsureEMABinding :exec
+INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_issuer_id, resource) DO NOTHING
+`
+
+type EnsureEMABindingParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+func (q *Queries) EnsureEMABinding(ctx context.Context, arg EnsureEMABindingParams) error {
+	_, err := q.db.Exec(ctx, ensureEMABinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	return err
+}
+
 const forceRemoteSessionClientAuthMethodFixture = `-- name: ForceRemoteSessionClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = $1
@@ -2011,6 +2099,49 @@ func (q *Queries) GetDueRemoteSessionRefreshCandidate(ctx context.Context, arg G
 		&i.RemoteSession.UpdatedAt,
 		&i.RemoteSession.DeletedAt,
 		&i.RemoteSession.Deleted,
+	)
+	return i, err
+}
+
+const getEMABinding = `-- name: GetEMABinding :one
+SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
+WHERE project_id = $1 AND organization_id = $2
+AND user_session_issuer_id = $3 AND remote_session_issuer_id = $4 AND resource = $5
+`
+
+type GetEMABindingParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+func (q *Queries) GetEMABinding(ctx context.Context, arg GetEMABindingParams) (RemoteSessionEmaBinding, error) {
+	row := q.db.QueryRow(ctx, getEMABinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var i RemoteSessionEmaBinding
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.RemoteSessionClientID,
+		&i.Generation,
+		&i.State,
+		&i.GrantSource,
+		&i.RequestedScopes,
+		&i.ClaimID,
+		&i.ClaimedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -2835,6 +2966,7 @@ const getRemoteSessionClientForClientMetadataDocument = `-- name: GetRemoteSessi
 SELECT
     c.id,
     c.client_id_metadata_uri,
+    c.grant_types,
     COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
     CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
     c.scope
@@ -2851,6 +2983,7 @@ WHERE c.id = $1
 type GetRemoteSessionClientForClientMetadataDocumentRow struct {
 	ID                      uuid.UUID
 	ClientIDMetadataUri     pgtype.Text
+	GrantTypes              []string
 	TokenEndpointAuthMethod string
 	HasJsonWebKeySet        bool
 	Scope                   []string
@@ -2868,6 +3001,7 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 	err := row.Scan(
 		&i.ID,
 		&i.ClientIDMetadataUri,
+		&i.GrantTypes,
 		&i.TokenEndpointAuthMethod,
 		&i.HasJsonWebKeySet,
 		&i.Scope,
@@ -3073,6 +3207,7 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_clients AS c
@@ -5160,6 +5295,7 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR COALESCE(i.metadata->'authorization_grant_profiles_supported', '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_client_user_session_issuers AS link
@@ -6075,6 +6211,180 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 	return items, nil
 }
 
+const lockEMABinding = `-- name: LockEMABinding :one
+SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
+WHERE project_id = $1 AND organization_id = $2
+AND user_session_issuer_id = $3 AND remote_session_issuer_id = $4 AND resource = $5 FOR UPDATE
+`
+
+type LockEMABindingParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+func (q *Queries) LockEMABinding(ctx context.Context, arg LockEMABindingParams) (RemoteSessionEmaBinding, error) {
+	row := q.db.QueryRow(ctx, lockEMABinding,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	var i RemoteSessionEmaBinding
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.RemoteSessionClientID,
+		&i.Generation,
+		&i.State,
+		&i.GrantSource,
+		&i.RequestedScopes,
+		&i.ClaimID,
+		&i.ClaimedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockEMAClient = `-- name: LockEMAClient :one
+SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, created_at, updated_at, deleted_at, deleted FROM remote_session_clients WHERE id = $1 AND deleted IS FALSE
+AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3)) FOR UPDATE
+`
+
+type LockEMAClientParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) LockEMAClient(ctx context.Context, arg LockEMAClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockEMAClient, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockEMAIssuer = `-- name: LockEMAIssuer :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted FROM remote_session_issuers WHERE id = $1 AND deleted IS FALSE
+AND (project_id = $2 OR (project_id IS NULL AND (organization_id = $3 OR organization_id IS NULL))) FOR UPDATE
+`
+
+type LockEMAIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) LockEMAIssuer(ctx context.Context, arg LockEMAIssuerParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, lockEMAIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RevocationEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.Jwks,
+		&i.JwksFetchedAt,
+		&i.JwksCacheExpiresAt,
+		&i.JwksEtag,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.AuthorizationGrantProfilesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.CodeChallengeMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.UserinfoEndpoint,
+		&i.IntrospectionEndpoint,
+		&i.IntrospectionEndpointAuthMethodsSupported,
+		&i.IDTokenSigningAlgValuesSupported,
+		&i.ClaimsSupported,
+		&i.BackchannelLogoutSupported,
+		&i.AuthorizationResponseIssParameterSupported,
+		&i.ScopeOverride,
+		&i.ResourceIndicatorSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.MetadataLastErrorUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockEMAUserIssuer = `-- name: LockEMAUserIssuer :one
+SELECT id FROM user_session_issuers WHERE id = $1 AND deleted IS FALSE
+AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3)) FOR UPDATE
+`
+
+type LockEMAUserIssuerParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) LockEMAUserIssuer(ctx context.Context, arg LockEMAUserIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMAUserIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one
 SELECT id
 FROM json_web_key_sets
@@ -6593,22 +6903,24 @@ func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, ar
 const reprojectRemoteSessionIssuerMetadataCapabilities = `-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
 UPDATE remote_session_issuers
 SET
-    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, $1::text[]),
-    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, $2::text[]),
-    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, $3::text[]),
-    claims_supported = COALESCE(claims_supported, $4::text[]),
-    backchannel_logout_supported = COALESCE(backchannel_logout_supported, $5::boolean),
-    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, $6::boolean),
+    authorization_grant_profiles_supported = $1::text[],
+    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, $2::text[]),
+    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, $3::text[]),
+    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, $4::text[]),
+    claims_supported = COALESCE(claims_supported, $5::text[]),
+    backchannel_logout_supported = COALESCE(backchannel_logout_supported, $6::boolean),
+    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, $7::boolean),
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND issuer = $8::text
-  AND project_id IS NOT DISTINCT FROM $9::uuid
-  AND organization_id IS NOT DISTINCT FROM $10::text
+WHERE id = $8
+  AND issuer = $9::text
+  AND project_id IS NOT DISTINCT FROM $10::uuid
+  AND organization_id IS NOT DISTINCT FROM $11::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
+	AuthorizationGrantProfilesSupported        []string
 	CodeChallengeMethodsSupported              []string
 	IntrospectionEndpointAuthMethodsSupported  []string
 	IDTokenSigningAlgValuesSupported           []string
@@ -6621,9 +6933,10 @@ type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
 	OrganizationID                             pgtype.Text
 }
 
-// Fills only the capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
+// Restates advertised grant profiles and fills capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
 func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.Context, arg ReprojectRemoteSessionIssuerMetadataCapabilitiesParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, reprojectRemoteSessionIssuerMetadataCapabilities,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.IntrospectionEndpointAuthMethodsSupported,
 		arg.IDTokenSigningAlgValuesSupported,
@@ -6883,6 +7196,116 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 		arg.ID,
 		arg.OrganizationID,
 		arg.RemoteSessionIssuerID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const setEMABinding = `-- name: SetEMABinding :one
+UPDATE remote_session_ema_bindings SET remote_session_client_id = $1,
+ generation = $2, state = $3, grant_source = $4, requested_scopes = $5,
+ claim_id = $6, claimed_at = $7, updated_at = clock_timestamp()
+WHERE id = $8 AND project_id = $9 AND organization_id = $10 AND generation = $11
+RETURNING id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at
+`
+
+type SetEMABindingParams struct {
+	RemoteSessionClientID uuid.NullUUID
+	Generation            int64
+	State                 string
+	GrantSource           string
+	RequestedScopes       []string
+	ClaimID               uuid.NullUUID
+	ClaimedAt             pgtype.Timestamptz
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ExpectedGeneration    int64
+}
+
+func (q *Queries) SetEMABinding(ctx context.Context, arg SetEMABindingParams) (RemoteSessionEmaBinding, error) {
+	row := q.db.QueryRow(ctx, setEMABinding,
+		arg.RemoteSessionClientID,
+		arg.Generation,
+		arg.State,
+		arg.GrantSource,
+		arg.RequestedScopes,
+		arg.ClaimID,
+		arg.ClaimedAt,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ExpectedGeneration,
+	)
+	var i RemoteSessionEmaBinding
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.Resource,
+		&i.RemoteSessionClientID,
+		&i.Generation,
+		&i.State,
+		&i.GrantSource,
+		&i.RequestedScopes,
+		&i.ClaimID,
+		&i.ClaimedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setEMAClientGrants = `-- name: SetEMAClientGrants :one
+UPDATE remote_session_clients SET grant_types = $1::text[], updated_at = clock_timestamp()
+WHERE id = $2 AND deleted IS FALSE
+AND (project_id = $3 OR (project_id IS NULL AND organization_id = $4)) RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, created_at, updated_at, deleted_at, deleted
+`
+
+type SetEMAClientGrantsParams struct {
+	GrantTypes     []string
+	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+}
+
+func (q *Queries) SetEMAClientGrants(ctx context.Context, arg SetEMAClientGrantsParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setEMAClientGrants,
+		arg.GrantTypes,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -7829,34 +8252,35 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $31 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $32 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -7876,6 +8300,7 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -7913,6 +8338,7 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -8129,34 +8555,35 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $31 AND organization_id = $32 AND deleted IS FALSE
+WHERE id = $32 AND organization_id = $33 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -8176,6 +8603,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -8214,6 +8642,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -8669,34 +9098,35 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $31 AND project_id = $32 AND deleted IS FALSE
+WHERE id = $32 AND project_id = $33 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -8716,6 +9146,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -8761,6 +9192,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -8850,30 +9282,31 @@ SET
     op_tos_uri = CASE WHEN $12::text = '' THEN NULL ELSE $12::text END,
     scopes_supported = $13::text[],
     grant_types_supported = $14::text[],
-    response_types_supported = $15::text[],
-    token_endpoint_auth_methods_supported = $16::text[],
-    code_challenge_methods_supported = $17::text[],
-    client_id_metadata_document_supported = $18::boolean,
-    userinfo_endpoint = CASE WHEN $19::text = '' THEN NULL ELSE $19::text END,
-    introspection_endpoint = CASE WHEN $20::text = '' THEN NULL ELSE $20::text END,
-    introspection_endpoint_auth_methods_supported = $21::text[],
-    id_token_signing_alg_values_supported = $22::text[],
-    claims_supported = $23::text[],
-    backchannel_logout_supported = $24::boolean,
-    authorization_response_iss_parameter_supported = $25::boolean,
-    metadata = NULLIF($26::text, '')::jsonb,
+    authorization_grant_profiles_supported = $15::text[],
+    response_types_supported = $16::text[],
+    token_endpoint_auth_methods_supported = $17::text[],
+    code_challenge_methods_supported = $18::text[],
+    client_id_metadata_document_supported = $19::boolean,
+    userinfo_endpoint = CASE WHEN $20::text = '' THEN NULL ELSE $20::text END,
+    introspection_endpoint = CASE WHEN $21::text = '' THEN NULL ELSE $21::text END,
+    introspection_endpoint_auth_methods_supported = $22::text[],
+    id_token_signing_alg_values_supported = $23::text[],
+    claims_supported = $24::text[],
+    backchannel_logout_supported = $25::boolean,
+    authorization_response_iss_parameter_supported = $26::boolean,
+    metadata = NULLIF($27::text, '')::jsonb,
     -- statement_timestamp() is one instant for the whole statement, so a partial read stamps
     -- metadata_fetched_at and metadata_last_error_at equal: an error is only
     -- an outright failure when it is strictly newer than the last fetch.
     metadata_fetched_at = statement_timestamp(),
-    metadata_last_error = NULLIF($27::text, ''),
-    metadata_last_error_at = CASE WHEN $27::text = '' THEN NULL ELSE statement_timestamp() END,
-    metadata_last_error_url = NULLIF($28::text, ''),
+    metadata_last_error = NULLIF($28::text, ''),
+    metadata_last_error_at = CASE WHEN $28::text = '' THEN NULL ELSE statement_timestamp() END,
+    metadata_last_error_url = NULLIF($29::text, ''),
     updated_at = clock_timestamp()
-WHERE id = $29
-  AND issuer = $30::text
-  AND project_id IS NOT DISTINCT FROM $31::uuid
-  AND organization_id IS NOT DISTINCT FROM $32::text
+WHERE id = $30
+  AND issuer = $31::text
+  AND project_id IS NOT DISTINCT FROM $32::uuid
+  AND organization_id IS NOT DISTINCT FROM $33::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -8893,6 +9326,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	OpTosUri                                   string
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -8981,6 +9415,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,

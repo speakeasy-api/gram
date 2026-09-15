@@ -17,6 +17,220 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildPrepareEMAPayload builds the payload for the remoteSessionClients
+// prepareEMA endpoint from CLI flags.
+func BuildPrepareEMAPayload(remoteSessionClientsPrepareEMABody string, remoteSessionClientsPrepareEMASessionToken string, remoteSessionClientsPrepareEMAApikeyToken string, remoteSessionClientsPrepareEMAProjectSlugInput string) (*remotesessionclients.PrepareEMAPayload, error) {
+	var err error
+	var body PrepareEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsPrepareEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"confirm_grants\": [\n         \"abc123\"\n      ],\n      \"expected_generation\": 1,\n      \"mechanism\": \"cimd\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"resource_metadata\": {\n         \"authorization_servers\": [\n            \"abc123\"\n         ],\n         \"resource\": \"abc123\"\n      },\n      \"scopes\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if body.ClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+		}
+		for _, e := range body.Scopes {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.scopes[*]", e, "^[!#-[\\]-~]+$"))
+			if utf8.RuneCountInString(e) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes[*]", e, utf8.RuneCountInString(e), 128, false))
+			}
+		}
+		if !(body.Mechanism == "manual" || body.Mechanism == "cimd" || body.Mechanism == "dcr") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mechanism", body.Mechanism, []any{"manual", "cimd", "dcr"}))
+		}
+		if body.TokenEndpointAuthMethod != nil {
+			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+			}
+		}
+		if body.ResourceMetadata != nil {
+			if body.ResourceMetadata.AuthorizationServers == nil {
+				err = goa.MergeErrors(err, goa.MissingFieldError("authorization_servers", "body.resource_metadata"))
+			}
+		}
+		if body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", body.ExpectedGeneration, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsPrepareEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsPrepareEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsPrepareEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsPrepareEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsPrepareEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsPrepareEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.PrepareEMAPayload{
+		UserSessionIssuerID:     body.UserSessionIssuerID,
+		RemoteSessionIssuerID:   body.RemoteSessionIssuerID,
+		Resource:                body.Resource,
+		ClientID:                body.ClientID,
+		Mechanism:               body.Mechanism,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+		ExpectedGeneration:      body.ExpectedGeneration,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	}
+	{
+		var zero string
+		if v.Mechanism == zero {
+			v.Mechanism = "manual"
+		}
+	}
+	if body.ResourceMetadata != nil {
+		v.ResourceMetadata = &struct {
+			Resource             string
+			AuthorizationServers []string
+		}{
+			Resource: body.ResourceMetadata.Resource,
+		}
+		if body.ResourceMetadata.AuthorizationServers != nil {
+			v.ResourceMetadata.AuthorizationServers = make([]string, len(body.ResourceMetadata.AuthorizationServers))
+			for i, val := range body.ResourceMetadata.AuthorizationServers {
+				v.ResourceMetadata.AuthorizationServers[i] = val
+			}
+		} else {
+			v.ResourceMetadata.AuthorizationServers = []string{}
+		}
+	}
+	if body.ConfirmGrants != nil {
+		v.ConfirmGrants = make([]string, len(body.ConfirmGrants))
+		for i, val := range body.ConfirmGrants {
+			v.ConfirmGrants[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildReadEMAPayload builds the payload for the remoteSessionClients readEMA
+// endpoint from CLI flags.
+func BuildReadEMAPayload(remoteSessionClientsReadEMABody string, remoteSessionClientsReadEMASessionToken string, remoteSessionClientsReadEMAApikeyToken string, remoteSessionClientsReadEMAProjectSlugInput string) (*remotesessionclients.ReadEMAPayload, error) {
+	var err error
+	var body ReadEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsReadEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsReadEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsReadEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsReadEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsReadEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsReadEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsReadEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.ReadEMAPayload{
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Resource:              body.Resource,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUnlinkEMAPayload builds the payload for the remoteSessionClients
+// unlinkEMA endpoint from CLI flags.
+func BuildUnlinkEMAPayload(remoteSessionClientsUnlinkEMABody string, remoteSessionClientsUnlinkEMASessionToken string, remoteSessionClientsUnlinkEMAApikeyToken string, remoteSessionClientsUnlinkEMAProjectSlugInput string) (*remotesessionclients.UnlinkEMAPayload, error) {
+	var err error
+	var body UnlinkEMARequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionClientsUnlinkEMABody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expected_generation\": 1,\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aaa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.Resource) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.resource", body.Resource, utf8.RuneCountInString(body.Resource), 2048, false))
+		}
+		if body.ExpectedGeneration < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_generation", body.ExpectedGeneration, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionClientsUnlinkEMASessionToken != "" {
+			sessionToken = &remoteSessionClientsUnlinkEMASessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionClientsUnlinkEMAApikeyToken != "" {
+			apikeyToken = &remoteSessionClientsUnlinkEMAApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionClientsUnlinkEMAProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionClientsUnlinkEMAProjectSlugInput
+		}
+	}
+	v := &remotesessionclients.UnlinkEMAPayload{
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		Resource:              body.Resource,
+		ExpectedGeneration:    body.ExpectedGeneration,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCreateRemoteSessionClientPayload builds the payload for the
 // remoteSessionClients createRemoteSessionClient endpoint from CLI flags.
 func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessionClientBody string, remoteSessionClientsCreateRemoteSessionClientSessionToken string, remoteSessionClientsCreateRemoteSessionClientApikeyToken string, remoteSessionClientsCreateRemoteSessionClientProjectSlugInput string) (*remotesessionclients.CreateRemoteSessionClientPayload, error) {

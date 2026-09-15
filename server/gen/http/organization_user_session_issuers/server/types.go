@@ -180,6 +180,9 @@ type GetIssuerDeletePreflightResponseBody struct {
 	Toolsets []*OrganizationUserSessionIssuerReferenceResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 	// True when no live MCP server or toolset references the issuer.
 	CanDelete bool `form:"can_delete" json:"can_delete" xml:"can_delete"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64 `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
 }
 
 // CreateCimdClientResponseBody is the type of the
@@ -2261,6 +2264,7 @@ func NewGetIssuerDeletePreflightResponseBody(res *organizationusersessionissuers
 		ClientCount:      res.ClientCount,
 		LiveSessionCount: res.LiveSessionCount,
 		CanDelete:        res.CanDelete,
+		EmaBindingCount:  res.EmaBindingCount,
 	}
 	if res.McpServers != nil {
 		body.McpServers = make([]*OrganizationUserSessionIssuerReferenceResponseBody, len(res.McpServers))
