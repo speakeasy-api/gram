@@ -1,5 +1,24 @@
 # dashboard
 
+## 0.120.0
+
+### Minor Changes
+
+- c7fa413: Surface the MCP catalog as a tab on the MCP page, next to MCP Servers, Sources and Deployments. The catalog keeps the same Add-from-catalog flow and now lives at `/mcp/catalog` rather than inside the add flow; `/catalog`, `/sources/add-from-catalog` and `/mcp/add/catalog` all redirect there, and "From the catalog" on the Add MCP server page still leads to it.
+  
+  Catalog entries are also searchable from the command palette, in an "MCP Catalog" group kept separate from the "MCP Servers" group so a third-party server you could add is never mistaken for one the project already runs. The group appears once you start typing, and selecting an entry opens its catalog page.
+- 8710c79: Add incremental meter usage reporting for stored-message tokens, MCP ingress/egress bytes, and risk-scanning volume. The additive `usage.getMeterUsage` API returns exact integer daily totals and bounded facet breakdowns for UTC-midnight windows up to three calendar months. The API and dashboard report ordinary usage only; correction readings are excluded.
+  
+  The billing explorer now uses these readings while retaining independent contract-position and invoice estimates. Totals, daily averages, chart axes, and breakdown rows use compact KTok/MTok/BTok or binary KiB/MiB/GiB units, with full values available on hover. Project breakdowns show available project slugs consistently in charts and tables, falling back to IDs when unavailable. Switching breakdowns keeps the chart and legend synchronized, including transitions between total-only and stacked views. Reset sits beside the period controls and matches the Refresh button's sizing. API deployments must configure the dedicated `CLICKHOUSE_READ_*` connection with a SELECT-only reader before rollout; meter reporting never falls back to the writer connection.
+  
+  Insert-triggered materialized views maintain daily SummingMergeTree series without historical rebuilds. Queries sum unmerged increments and rank series in storage order with bounded top-six state. Duplicate deliveries count unless prevented by the producer or corrected out of band; raw-table replacement merges do not retract summary contributions. The single schema migration does not backfill existing readings, and no summary worker or publication privileges are required.
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+- 8936131: Gateway server instructions are editable: the gateway settings tab gains an Instructions section, and the metaMcp update endpoint accepts `instructions` and `instructions_mode`. Custom text is appended to Gram's built-in drill-down guidance by default, or replaces it when the mode is set to replace. Gateways without custom text keep serving the built-in text.
+- 1c632ce: Recover automatically from expired upstream dynamic client registrations. Remote session clients now record the expiry the identity provider reported at registration. When a provider stops recognizing a client (`invalid_client` on refresh), Gram confirms it against the token endpoint and re-registers the client in place at the identity provider's registration endpoint before the next login, revoking the sessions bound to the old client. Organization administrators can also rotate a client on demand from its settings page.
+
 ## 0.119.0
 
 ### Minor Changes
