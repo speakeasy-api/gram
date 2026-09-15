@@ -89,6 +89,7 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
+  const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
@@ -273,7 +274,9 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="eye" />}
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
-              { item: routes.explore, ...accessFor(routes.explore) },
+              ...(isExploreEnabled
+                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                : []),
               { item: routes.insights, ...accessFor(routes.insights) },
               {
                 item: routes.agentSessions,

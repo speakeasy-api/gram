@@ -4,6 +4,8 @@ import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useState, type JSX } from "react";
@@ -45,7 +47,31 @@ function ExploreHeader(): JSX.Element {
   );
 }
 
+/**
+ * Explore is dogfooded before it ships, so the page is gated as well as the
+ * nav entry: hiding the link alone would leave the URL open to anyone who
+ * guessed it. The flag is a rollout control, not authorization — the queries
+ * behind this page are scoped by project:read whatever it says.
+ */
 function ExploreBody(): JSX.Element {
+  const rollout = useFeatureFlag(FEATURE_FLAGS.explore);
+
+  // PostHog answers after the first paint, so wait rather than telling
+  // someone who does have Explore that they do not.
+  if (rollout.status === "loading") return <BuilderSkeleton />;
+  if (rollout.status !== "enabled") {
+    return (
+      <InlineEmptyState
+        icon="telescope"
+        heading="Explore is not available yet"
+        description="It is in preview with a few organizations. Ask your Speakeasy contact to turn it on."
+      />
+    );
+  }
+  return <ExploreCatalog />;
+}
+
+function ExploreCatalog(): JSX.Element {
   const describe = useAnalyticsDescribe();
   const [draft, setDraft] = useState<ExploreSpec | null>(null);
 
