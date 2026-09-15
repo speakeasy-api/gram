@@ -880,7 +880,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
 	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
-	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
+	b.WriteString("- **Admin access.** Collaborators are granted admin permission so they can connect this repository to a platform marketplace — several of those setup flows, including Cursor's \"Serve marketplace from Cursor\", are only available to repository admins. Collaborators added before admin became the default keep their original permission until they are re-added from Speakeasy.\n")
 	b.WriteString("- **Auto-managed by Speakeasy.** Each publish from the Speakeasy dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Speakeasy instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
@@ -917,6 +917,7 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("2. Navigate to **Settings → Plugins → Import**\n")
 	b.WriteString("3. Paste this repository's URL to import the marketplace\n")
 	b.WriteString("4. Plugins will be available to team members\n")
+	b.WriteString("5. Optional: in the marketplace's settings, turn on **Serve Marketplace From Cursor** so teammates can install these plugins without GitHub access to this repository\n")
 	if cfg.HooksAPIKey != "" {
 		fmt.Fprintf(&b, "\nIn Cursor's team marketplace settings, mark the `%s` plugin as required so observability is on by default for all team members.\n", CursorObservabilitySlug(cfg))
 	}

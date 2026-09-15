@@ -8,7 +8,7 @@ This doc covers how the publish flow works end-to-end: what Gram generates, how 
 
 ## Overview
 
-"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — it is read-only to end users and overwritten on every publish.
+"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — its contents are overwritten on every publish, so edits made on GitHub do not survive.
 
 ## Triggering a publish
 
@@ -24,10 +24,10 @@ Gram-Project: <project-slug>
 {}
 ```
 
-Or with a collaborator:
+Or with collaborators:
 
 ```json
-{ "github_collaborator": "octocat" }
+{ "github_usernames": ["octocat"] }
 ```
 
 ## What happens during a publish
@@ -50,7 +50,7 @@ Or with a collaborator:
 
 6. **Store connection.** The `plugin_github_connections` row is upserted with `(project_id, installation_id, repo_owner, repo_name)`.
 
-7. **Add collaborator.** If a GitHub username was provided, `AddCollaborator()` grants `push` permission to the repo.
+7. **Add collaborators.** For each GitHub username provided, `AddCollaborator()` grants `admin` permission on the repo. Admin is what the platform marketplaces need from whoever wires the repo up: Cursor only offers **Serve Marketplace From Cursor** — the synced copy that lets teammates install plugins without GitHub access to the source repo — to repository admins. Re-adding an existing collaborator upgrades them to admin, which is how a repo published before this behavior is brought up to date.
 
 > **Keys are minted before the GitHub push.** If the push fails, the keys are discarded and not persisted to the database. On retry the flow starts over.
 
