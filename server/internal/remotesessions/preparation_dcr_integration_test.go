@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -204,16 +205,19 @@ func TestPreparationDCRIntegration_LifecycleRequiresExplicitUnlink(t *testing.T)
 			require.NoError(t, err)
 			require.Equal(t, "unknown_grants", result.State)
 			mutate := func() error {
+				var err error
 				switch kind {
 				case "client update":
-					_, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: in.ClientID.String(), Audience: conv.PtrEmpty("https://changed.example.com/")})
-					return err
+					_, err = ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{ID: in.ClientID.String(), Audience: conv.PtrEmpty("https://changed.example.com/")})
 				case "client delete":
-					return ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()})
+					err = ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{ID: in.ClientID.String()})
 				default:
-					_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{ID: in.RemoteSessionIssuerID.String(), Issuer: conv.PtrEmpty("https://changed.example.com")})
-					return err
+					_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{ID: in.RemoteSessionIssuerID.String(), Issuer: conv.PtrEmpty("https://changed.example.com")})
 				}
+				if err != nil {
+					return fmt.Errorf("mutate preparation fixture: %w", err)
+				}
+				return nil
 			}
 			requireOopsCode(t, mutate(), oops.CodeConflict)
 			in.ExpectedGeneration = result.Generation

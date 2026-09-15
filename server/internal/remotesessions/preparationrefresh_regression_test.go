@@ -1,6 +1,7 @@
 package remotesessions_test
 
 import (
+	"fmt"
 	"sync/atomic"
 	"testing"
 
@@ -27,7 +28,12 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 			var changedEndpoint, removedCapability atomic.Bool
 			upstream := fakeIssuerServer(t, func(doc map[string]any) {
 				if changedEndpoint.Load() {
-					doc["token_endpoint"] = doc["issuer"].(string) + "/new-token"
+					issuerURL, ok := doc["issuer"].(string)
+					if !ok {
+						t.Error("fixture issuer must be a string")
+						return
+					}
+					doc["token_endpoint"] = issuerURL + "/new-token"
 				}
 				if !removedCapability.Load() {
 					doc["authorization_grant_profiles_supported"] = []string{"urn:ietf:params:oauth:grant-profile:id-jag"}
@@ -53,7 +59,10 @@ func TestPreparationRefresh_EndpointChangesRequireUnlinkButEvidenceDoesNot(t *te
 				case "global":
 					_, err = ti.service.RefreshGlobalIssuerMetadata(ctx, &adminrsgen.RefreshGlobalIssuerMetadataPayload{ID: issuer.ID.String()})
 				}
-				return err
+				if err != nil {
+					return fmt.Errorf("refresh issuer fixture: %w", err)
+				}
+				return nil
 			}
 			require.NoError(t, refresh())
 			key := repo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: issuer.ID, Resource: in.Resource}
