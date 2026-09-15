@@ -15,6 +15,7 @@ import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { StepSection } from "../step-section";
 import { errorMessage } from "./identity-provider-errors";
+import { signOnModeLabel } from "./okta-sign-on-modes";
 
 const STATUS_FILTERS = defineFilters([
   {
@@ -67,55 +68,75 @@ function assignedTo(application: IdentityProviderApplication): string {
   return parts.length > 0 ? parts.join(", ") : "—";
 }
 
-const columns: Column<IdentityProviderApplication>[] = [
-  {
-    key: "label",
-    header: "Application",
-    width: "2.5fr",
-    render: (application) => {
-      const host = signOnHost(application);
-      return (
-        <div className="min-w-0">
-          <Text className="truncate font-medium">{application.label}</Text>
-          {host ? (
-            <Text variant="small" muted className="truncate">
-              {host}
-            </Text>
-          ) : null}
-        </div>
-      );
+/**
+ * Most applications on a tenant sign on at the tenant's own host, so printing
+ * it under every name says nothing. It earns its line only where it differs.
+ */
+function tenantHostOf(tenantIdentifier: string): string {
+  return tenantIdentifier
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "")
+    .toLowerCase();
+}
+
+function buildColumns(
+  tenantHost: string,
+): Column<IdentityProviderApplication>[] {
+  return [
+    {
+      key: "label",
+      header: "Application",
+      width: "2.5fr",
+      render: (application) => {
+        const host = signOnHost(application);
+        const distinct = host && host.toLowerCase() !== tenantHost;
+        return (
+          <div className="min-w-0">
+            <Text className="truncate font-medium">{application.label}</Text>
+            {distinct ? (
+              <Text variant="small" muted className="truncate">
+                {host}
+              </Text>
+            ) : null}
+          </div>
+        );
+      },
     },
-  },
-  {
-    key: "status",
-    header: "Status",
-    width: "1fr",
-    render: (application) =>
-      application.providerStatus ? (
-        <Badge
-          variant={isActive(application) ? "success" : "neutral"}
-          background
-          size="sm"
-        >
-          <Badge.Text>{application.providerStatus}</Badge.Text>
-        </Badge>
-      ) : (
-        <Text muted>—</Text>
+    {
+      key: "status",
+      header: "Status",
+      width: "1fr",
+      render: (application) =>
+        application.providerStatus ? (
+          <Badge
+            variant={isActive(application) ? "success" : "neutral"}
+            background
+            size="sm"
+          >
+            <Badge.Text>{application.providerStatus}</Badge.Text>
+          </Badge>
+        ) : (
+          <Text muted>—</Text>
+        ),
+    },
+    {
+      key: "signOnMode",
+      header: "Sign-on",
+      width: "1.2fr",
+      render: (application) => (
+        <Text muted className="break-words whitespace-normal">
+          {signOnModeLabel(application.signOnMode)}
+        </Text>
       ),
-  },
-  {
-    key: "signOnMode",
-    header: "Sign-on",
-    width: "1.2fr",
-    render: (application) => <Text muted>{application.signOnMode ?? "—"}</Text>,
-  },
-  {
-    key: "assigned",
-    header: "Assigned to",
-    width: "1.5fr",
-    render: (application) => <Text>{assignedTo(application)}</Text>,
-  },
-];
+    },
+    {
+      key: "assigned",
+      header: "Assigned to",
+      width: "1.5fr",
+      render: (application) => <Text>{assignedTo(application)}</Text>,
+    },
+  ];
+}
 
 function readAtLabel(readAt: Date): string {
   return readAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -144,6 +165,8 @@ export function OktaApplicationsSection({
   // Search is not a filter dimension: it narrows a list read for this step and
   // has no meaning once the reader leaves it, so it does not belong in the URL.
   const [search, setSearch] = useState("");
+  const tenantHost = tenantHostOf(connection?.tenantIdentifier ?? "");
+  const columns = useMemo(() => buildColumns(tenantHost), [tenantHost]);
 
   // The tenant list is read whole, so filtering is local; deferring keeps the
   // box responsive on a tenant with hundreds of applications.

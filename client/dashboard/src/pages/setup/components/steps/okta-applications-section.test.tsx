@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IdentityProviderApplication } from "@gram/client/models/components/identityproviderapplication.js";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { OktaApplicationsSection } from "./okta-applications-section";
+import { signOnModeLabel } from "./okta-sign-on-modes";
 
 const applications = vi.hoisted(() => ({
   current: {} as {
@@ -155,6 +156,40 @@ describe("OktaApplicationsSection", () => {
     expect(
       screen.getByText(/Assignment counts were omitted because/),
     ).toBeTruthy();
+  });
+
+  it("says how each application signs people in, in words", () => {
+    expect(signOnModeLabel("OPENID_CONNECT")).toBe("OpenID Connect");
+    expect(signOnModeLabel("SAML_2_0")).toBe("SAML");
+    expect(signOnModeLabel("BROWSER_PLUGIN")).toBe("Browser plugin");
+    expect(signOnModeLabel("BOOKMARK")).toBe("Bookmark");
+    expect(signOnModeLabel("AUTO_LOGIN")).toBe("Auto login");
+    expect(signOnModeLabel("WS_FEDERATION")).toBe("WS-Federation");
+    // A mode this build has no word for is shown as Okta wrote it: an
+    // unfamiliar name beats a wrong friendly one.
+    expect(signOnModeLabel("SECURE_WEB_AUTHENTICATION")).toBe(
+      "SECURE_WEB_AUTHENTICATION",
+    );
+    expect(signOnModeLabel(undefined)).toBe("—");
+  });
+
+  it("prints the sign-on host only where it differs from the tenant", () => {
+    withApplications([
+      application({
+        label: "On the tenant",
+        signOnUrl: "https://example.okta.com/app/one",
+      }),
+      application({
+        sourceApplicationId: "0oaexampleapp2",
+        label: "Somewhere else",
+        signOnUrl: "https://docs.example.test/acs",
+      }),
+    ]);
+    render(<OktaApplicationsSection index={4} connection={connection()} />);
+
+    // Every row on a tenant signs on at the tenant, so saying so says nothing.
+    expect(screen.queryByText("example.okta.com")).toBeNull();
+    expect(screen.getByText("docs.example.test")).toBeTruthy();
   });
 
   it("narrows the list by name without asking Okta again", async () => {
