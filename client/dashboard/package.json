@@ -59,7 +59,7 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-virtual": "^3.14.9",
+    "@tanstack/react-virtual": "^3.14.11",
     "@xstate/react": "^6.1.0",
     "@xyflow/react": "^12.11.1",
     "ai": "catalog:",
