@@ -12,6 +12,13 @@ export interface JourneyStep {
   complete: boolean;
   /** Short marker after the title in the rail, e.g. "Recommended". */
   badge?: string;
+  /**
+   * A step that is on the card's map but cannot be entered yet, because an
+   * earlier step has to land first. It still registers, so the rail counts
+   * the whole journey rather than only the part that is reachable today,
+   * but nothing navigates to it: not the rail, not the footer, not a link.
+   */
+  locked?: boolean;
 }
 
 export interface JourneyStepsRegistry {
@@ -36,15 +43,15 @@ export const ViewContext = createContext<JourneyView>({
 /** Called by a section to appear in the rail. A no-op outside a provider. */
 export function useRegisterJourneyStep(id: string, step: JourneyStep): void {
   const registry = useContext(RegistryContext);
-  const { index, slug, title, complete, badge } = step;
+  const { index, slug, title, complete, badge, locked } = step;
 
   // A layout effect so the provider knows every section before the first
   // paint. With a passive effect the initial mount painted once with no steps
   // registered: every section hidden and the footer reading "Mark done".
   useLayoutEffect(() => {
     if (!registry) return;
-    registry.register(id, { index, slug, title, complete, badge });
-  }, [registry, id, index, slug, title, complete, badge]);
+    registry.register(id, { index, slug, title, complete, badge, locked });
+  }, [registry, id, index, slug, title, complete, badge, locked]);
 
   useEffect(() => {
     if (!registry) return;

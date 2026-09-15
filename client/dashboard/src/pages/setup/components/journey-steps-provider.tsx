@@ -34,7 +34,8 @@ export function JourneyStepsProvider({
         existing.slug === step.slug &&
         existing.title === step.title &&
         existing.complete === step.complete &&
-        existing.badge === step.badge
+        existing.badge === step.badge &&
+        existing.locked === step.locked
       ) {
         return prev;
       }
@@ -67,14 +68,22 @@ export function JourneyStepsProvider({
   const resolvedActive = useMemo(() => {
     if (ordered.length === 0) return null;
     const linked = linkedSlug
-      ? ordered.find((step) => step.slug === linkedSlug)
+      ? ordered.find((step) => step.slug === linkedSlug && !step.locked)
       : undefined;
     if (linked) return linked.index;
-    if (pickedIndex !== null && ordered.some((s) => s.index === pickedIndex)) {
+    if (
+      pickedIndex !== null &&
+      ordered.some((s) => s.index === pickedIndex && !s.locked)
+    ) {
       return pickedIndex;
     }
-    const firstOpen = ordered.find((s) => !s.complete);
-    return (firstOpen ?? ordered[ordered.length - 1]!).index;
+    const firstOpen = ordered.find((s) => !s.complete && !s.locked);
+    if (firstOpen) return firstOpen.index;
+    // Every reachable step is done. Land on the last one that can be opened,
+    // never on a locked step, whose body is a one-line promise with nothing
+    // to do in it.
+    const lastOpen = [...ordered].reverse().find((s) => !s.locked);
+    return (lastOpen ?? ordered[ordered.length - 1]!).index;
   }, [ordered, pickedIndex, linkedSlug]);
 
   // Walking the rail rewrites ?step= so the address bar is always a link to
@@ -82,9 +91,9 @@ export function JourneyStepsProvider({
   // board the reader came from, not to each step they passed through.
   const setActiveIndex = useCallback(
     (index: number) => {
-      setPickedIndex(index);
       const step = ordered.find((s) => s.index === index);
-      if (!step) return;
+      if (!step || step.locked) return;
+      setPickedIndex(index);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);

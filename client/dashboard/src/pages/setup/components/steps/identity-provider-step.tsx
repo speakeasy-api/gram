@@ -19,10 +19,58 @@ import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
+import { OktaConnectSection } from "./okta-connect-section";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
 
 const INITIAL_VISIBLE = 6;
+
+const PORTAL_DESCRIPTION =
+  "Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings.";
+
+const GUIDED_DESCRIPTION =
+  "Connect Okta once. Speakeasy then configures single sign-on, reads your directory, and proposes MCP server access that matches the application assignments you already maintain in Okta.";
+
+// The rest of the guided journey. Each one is named and numbered from the
+// start so the administrator can see what connecting Okta leads to, and each
+// is locked until the step before it lands: the copy is a promise, not a
+// control. They fill in one slice at a time.
+const GUIDED_UPCOMING_STEPS = [
+  {
+    index: 2,
+    slug: "single-sign-on",
+    title: "Single sign-on",
+    description:
+      "Speakeasy creates the sign-in application in Okta and proves it with a real sign-in.",
+    badge: "Waiting",
+  },
+  {
+    index: 3,
+    slug: "directory",
+    title: "Directory",
+    description:
+      "Mirror one Speakeasy role per Okta group so access can follow Okta assignments.",
+    badge: "Waiting",
+  },
+  {
+    index: 4,
+    slug: "applications",
+    title: "Applications and access",
+    description:
+      "Read what Okta assigns to each application and carry it into MCP server access as a reviewed proposal.",
+    badge: "Waiting",
+  },
+  {
+    index: 5,
+    slug: "token-exchange",
+    title: "Token exchange with Okta",
+    // Not a step that is merely later in the queue: setup is complete without
+    // it, and it opens on a capability Speakeasy does not have yet.
+    description:
+      "Setup finishes without this. It becomes available when Speakeasy can acquire Okta credentials on a person's behalf, so people's agents stop signing in to each server separately.",
+    badge: "Later",
+  },
+];
 
 interface IdentityProviderStepProps {
   onComplete: () => void;
@@ -41,6 +89,11 @@ export function IdentityProviderStep({
     undefined,
     { throwOnError: false },
   );
+  // Which provider is picked decides what the whole card is, so the selection
+  // lives here rather than inside the sign-on section that renders the grid.
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
+  const guided = provider?.guided === true;
 
   return (
     <StepContainer
@@ -50,22 +103,55 @@ export function IdentityProviderStep({
         </div>
       }
       title="Set up identity provider"
-      description="Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings."
+      description={guided ? GUIDED_DESCRIPTION : PORTAL_DESCRIPTION}
       onContinue={onComplete}
     >
       <div className="space-y-8">
-        <SingleSignOnSection
-          index={1}
-          configured={!!onboardingStatus?.ssoConfigured}
-          isLoading={isLoading}
-        />
-        <DirectorySyncSection
-          index={2}
-          configured={!!onboardingStatus?.dsyncConfigured}
-          isLoading={isLoading}
-        />
+        {guided ? (
+          <GuidedSections onChangeProvider={() => setSelectedProvider(null)} />
+        ) : (
+          <>
+            <SingleSignOnSection
+              index={1}
+              configured={!!onboardingStatus?.ssoConfigured}
+              isLoading={isLoading}
+              selectedProvider={selectedProvider}
+              onSelectProvider={setSelectedProvider}
+            />
+            <DirectorySyncSection
+              index={2}
+              configured={!!onboardingStatus?.dsyncConfigured}
+              isLoading={isLoading}
+            />
+          </>
+        )}
       </div>
     </StepContainer>
+  );
+}
+
+// Okta's own journey, in place of the two portal round trips. Only the first
+// sub-step is open; the rest are named so the shape of the work is visible
+// from the start.
+function GuidedSections({
+  onChangeProvider,
+}: {
+  onChangeProvider: () => void;
+}): JSX.Element {
+  return (
+    <>
+      <StepSection
+        index={1}
+        slug="connect-okta"
+        title="Connect Okta"
+        description="Give Speakeasy read access to your Okta tenant, and permission to create the sign-in application."
+      >
+        <OktaConnectSection onChangeProvider={onChangeProvider} />
+      </StepSection>
+      {GUIDED_UPCOMING_STEPS.map((step) => (
+        <StepSection key={step.slug} locked {...step} />
+      ))}
+    </>
   );
 }
 
@@ -145,12 +231,19 @@ interface SectionProps {
   isLoading: boolean;
 }
 
+interface SingleSignOnSectionProps extends SectionProps {
+  /** Owned by the card: picking a guided provider replaces this whole flow. */
+  selectedProvider: string | null;
+  onSelectProvider: (id: string) => void;
+}
+
 function SingleSignOnSection({
   index,
   configured,
   isLoading,
-}: SectionProps): JSX.Element {
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  selectedProvider,
+  onSelectProvider,
+}: SingleSignOnSectionProps): JSX.Element {
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [portalOpened, setPortalOpened] = useState(false);
@@ -271,7 +364,7 @@ function SingleSignOnSection({
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setSelectedProvider(p.id)}
+                onClick={() => onSelectProvider(p.id)}
                 disabled={isPending}
                 className={cn(
                   "flex items-center gap-3 border p-4 text-left transition-all",
@@ -291,13 +384,25 @@ function SingleSignOnSection({
                     <span className="text-foreground truncate text-sm font-medium">
                       {p.name}
                     </span>
+                    {p.badge ? (
+                      <Badge variant="success" background size="sm">
+                        <Badge.Text>{p.badge}</Badge.Text>
+                      </Badge>
+                    ) : null}
                     {selectedProvider === p.id && isPending && (
                       <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
                     )}
                   </div>
-                  <span className="text-muted-foreground text-xs">
+                  <span className="text-muted-foreground block text-xs">
                     {p.protocol}
                   </span>
+                  {/* Only the guided entry has a SAML sibling in this grid, and
+                      the two read alike until you say which one to take. */}
+                  {p.guided ? (
+                    <span className="text-muted-foreground block text-xs">
+                      Recommended over SAML
+                    </span>
+                  ) : null}
                 </div>
               </button>
             ))}

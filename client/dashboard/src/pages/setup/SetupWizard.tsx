@@ -64,7 +64,7 @@ function CurrentTaskSteps({
             <button
               type="button"
               aria-current={active ? "step" : undefined}
-              disabled={disabled}
+              disabled={disabled || step.locked}
               onClick={() => setActiveIndex(step.index)}
               className={cn(
                 "flex w-full items-center gap-2 text-left text-sm leading-snug disabled:cursor-not-allowed",

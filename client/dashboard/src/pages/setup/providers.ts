@@ -2,6 +2,18 @@ import type { IdpProvider } from "./types";
 
 export const IDP_PROVIDERS: IdpProvider[] = [
   {
+    id: "okta-oidc",
+    name: "Okta",
+    // Never sent on the guided path: Speakeasy creates the Okta application
+    // and the sign-on connection itself rather than opening the WorkOS portal.
+    // Recorded as the type that connection is, so the field stays truthful.
+    providerType: "GenericOidc",
+    iconSlug: "okta",
+    protocol: "OIDC",
+    guided: true,
+    badge: "Guided",
+  },
+  {
     id: "okta-saml",
     name: "Okta",
     providerType: "OktaSAML",

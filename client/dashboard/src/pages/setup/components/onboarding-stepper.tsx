@@ -15,6 +15,12 @@ export interface Step {
    */
   status?: "done";
   /**
+   * Whether this row is somewhere the reader can go. Defaults to true. A step
+   * that is on the map but cannot be opened yet sets this false: it keeps its
+   * place and its number, and stops being a control.
+   */
+  interactive?: boolean;
+  /**
    * Rendered under the description, inside the step's row. The wizard nests
    * the current card's own sub-steps here so the rail reads as one outline.
    */
@@ -45,8 +51,9 @@ export function OnboardingStepper({
         const isCurrent = index === currentStep;
         const isCompleted = step.status === "done";
         const isUpcoming = !isCurrent && !isCompleted;
+        const isLocked = step.interactive === false;
         const isLast = index === steps.length - 1;
-        const canJump = !isCurrent && !disabled;
+        const canJump = !isCurrent && !disabled && step.interactive !== false;
 
         return (
           // The whole row is the single interactive control for the step. The
@@ -60,8 +67,10 @@ export function OnboardingStepper({
               "group relative flex gap-4",
               canJump &&
                 "focus-visible:ring-ring/50 cursor-pointer outline-none focus-visible:ring-[3px]",
+              isLocked && "opacity-60",
             )}
             aria-current={isCurrent ? "step" : undefined}
+            aria-disabled={isLocked || undefined}
             role={canJump ? "button" : undefined}
             tabIndex={canJump ? 0 : undefined}
             onClick={canJump ? () => onStepClick(index) : undefined}

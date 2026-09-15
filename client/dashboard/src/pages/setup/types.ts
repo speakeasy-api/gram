@@ -7,6 +7,14 @@ export interface IdpProvider {
   /** CDN icon slug used with https://cdn.workos.com/provider-icons/{theme}/{slug}.svg */
   iconSlug: string;
   protocol: string;
+  /**
+   * Speakeasy walks this provider's setup itself instead of handing the
+   * administrator to the WorkOS portal. Picking one forks the identity card
+   * into that provider's own sub-steps.
+   */
+  guided?: boolean;
+  /** Short marker on the provider's card in the grid, e.g. "Guided". */
+  badge?: string;
 }
 
 export type PlatformSetupStatus =

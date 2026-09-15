@@ -21,7 +21,14 @@ interface StepSectionProps {
   badge?: string;
   /** Green for a recommendation, neutral for anything else. */
   badgeVariant?: "success" | "neutral";
-  children: ReactNode;
+  /**
+   * A step the card can name but not yet open, because an earlier one has to
+   * land first. It shows its heading row wherever the card is — a locked step
+   * is context for the step you are on, not a page of its own — greyed, with
+   * no body and nothing to click.
+   */
+  locked?: boolean;
+  children?: ReactNode;
 }
 
 // A numbered sub-step inside an onboarding card. Cards map to outcomes, so
@@ -36,16 +43,29 @@ export function StepSection({
   aside,
   badge,
   badgeVariant = "neutral",
+  locked = false,
   children,
 }: StepSectionProps): JSX.Element {
   const headingId = useId();
   // The task page's rail lists whatever sections the task renders, and shows
   // one at a time; the rest stay mounted but hidden so their state survives.
-  useRegisterJourneyStep(headingId, { index, slug, title, complete, badge });
+  useRegisterJourneyStep(headingId, {
+    index,
+    slug,
+    title,
+    complete,
+    badge,
+    locked,
+  });
   const active = useIsActiveJourneyStep(index);
 
   return (
-    <section aria-labelledby={headingId} className="space-y-3" hidden={!active}>
+    <section
+      aria-labelledby={headingId}
+      aria-disabled={locked || undefined}
+      className={cn("space-y-3", locked && "opacity-60")}
+      hidden={!active && !locked}
+    >
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
@@ -80,7 +100,7 @@ export function StepSection({
         </div>
         {aside ? <div className="flex-shrink-0 pt-1">{aside}</div> : null}
       </div>
-      <div className="sm:pl-10">{children}</div>
+      {locked ? null : <div className="sm:pl-10">{children}</div>}
     </section>
   );
 }

@@ -82,6 +82,7 @@ function StepsRail({
           description: step.complete ? "Done" : "",
           badge: step.badge,
           status: step.complete ? "done" : undefined,
+          interactive: !step.locked,
         }))
       : [
           {
@@ -104,8 +105,10 @@ function StepsRail({
         steps={railSteps}
         currentStep={currentStep === -1 ? 0 : currentStep}
         onStepClick={(position) => {
+          // setActiveIndex refuses a locked step anyway; the rail checks too so
+          // the row never advertises itself as a destination in the first place.
           const step = steps[position];
-          if (step) setActiveIndex(step.index);
+          if (step && !step.locked) setActiveIndex(step.index);
         }}
       />
     </div>

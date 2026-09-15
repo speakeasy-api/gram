@@ -55,17 +55,24 @@ export function StepContainer({
   markDoneLabel,
 }: StepContainerProps): JSX.Element {
   const journey = useJourneyView();
-  const lastStep = journey.steps[journey.steps.length - 1];
-  const isLastStep = !lastStep || journey.activeIndex === lastStep.index;
 
   const currentPosition = journey.steps.findIndex(
     (step) => step.index === journey.activeIndex,
   );
+  // A locked step is on the map but cannot be opened, so it is not somewhere
+  // Next step can go. With nothing left to walk to, the footer is the task's
+  // final action even though later steps are still listed.
+  const nextStep = journey.steps
+    .slice(currentPosition + 1)
+    .find((step) => !step.locked);
+  const isLastStep = !nextStep;
   // Below md the rail is hidden, and with it the only way back to an earlier
   // sub-step, so the footer carries one there. On wider screens the rail is
   // the affordance and a second control would just duplicate it.
-  const previousStep =
-    currentPosition > 0 ? journey.steps[currentPosition - 1] : undefined;
+  const previousStep = journey.steps
+    .slice(0, Math.max(currentPosition, 0))
+    .reverse()
+    .find((step) => !step.locked);
 
   // A card walks its own sub-steps one at a time, so the footer is Next step
   // until the last one, where the task is marked done. A card whose primary
@@ -77,8 +84,7 @@ export function StepContainer({
   ) : (
     <Button
       onClick={() => {
-        const next = journey.steps[currentPosition + 1];
-        if (next) journey.setActiveIndex(next.index);
+        if (nextStep) journey.setActiveIndex(nextStep.index);
       }}
       className="gap-1.5"
     >
