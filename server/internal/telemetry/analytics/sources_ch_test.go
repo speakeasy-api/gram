@@ -76,6 +76,8 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	postCall.ToolName = "Bash"
 	postCall.Outcome = "error"
 	postCall.DurationNano = 5_000_000
+	postCall.MCPServerName = "assistants-dev"
+	postCall.MCPToolName = "whoami"
 	trailingHook := agentEventFixture(orgID, "r8", "s1", "", "r8", "", base+4)
 	trailingHook.RawEventName = "hook_execution_complete"
 	trailingHook.Model = ""
@@ -145,13 +147,13 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		defer func() { require.NoError(t, result.Close()) }()
 
 		type call struct {
-			org, project, id, tool, session, user, surface, status string
-			durationNano, startedAt, endedAt                       int64
+			org, project, id, tool, mcpServer, mcpTool, session, user, surface, status string
+			durationNano, startedAt, endedAt                                           int64
 		}
 		var got []call
 		for result.Next() {
 			var c call
-			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
+			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
 			got = append(got, c)
 		}
 		require.NoError(t, result.Err())
@@ -159,6 +161,8 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Len(t, got, 1)
 		require.Equal(t, "tc1", got[0].id)
 		require.Equal(t, "Bash", got[0].tool)
+		require.Equal(t, "assistants-dev", got[0].mcpServer, "the terminal observation names the MCP server")
+		require.Equal(t, "whoami", got[0].mcpTool)
 		require.Equal(t, "s1", got[0].session)
 		require.Equal(t, "error", got[0].status, "the later observation wins")
 		require.Equal(t, int64(5_000_000), got[0].durationNano)
