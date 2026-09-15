@@ -252,8 +252,14 @@ func (u *Principal) validate() error {
 		return u.err
 	}
 
-	if len(u.ID) > maxSegmentLength {
-		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxSegmentLength, len(u.ID))
+	// A workload principal carries the same identity as its session subject,
+	// so it shares that subject's cap rather than the generic segment bound.
+	maxIDLength := maxSegmentLength
+	if u.Type == PrincipalTypeWorkload {
+		maxIDLength = MaxWorkloadSubjectIDLength
+	}
+	if len(u.ID) > maxIDLength {
+		u.err = fmt.Errorf("%w: id segment is too long (max %d, got %d)", ErrInvalid, maxIDLength, len(u.ID))
 		return u.err
 	}
 

@@ -147,6 +147,29 @@ func TestWorkloadPrincipal_RoundTrip(t *testing.T) {
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
 
+func TestWorkloadPrincipal_SharesTheSessionSubjectCap(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+
+	arn := "arn:aws-us-gov:iam::123456789012:role/" + strings.Repeat("platform/", 20) + strings.Repeat("R", 64)
+	principal := urn.NewWorkloadPrincipal(issuerID, arn)
+	parsed, err := urn.ParsePrincipal(principal.String())
+	require.NoError(t, err, "a long platform subject must fit a workload principal")
+	_, gotSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, arn, gotSubject)
+
+	atCap := strings.Repeat("s", urn.MaxWorkloadExternalSubjectLength)
+	_, err = urn.ParsePrincipal(urn.NewWorkloadPrincipal(issuerID, atCap).String())
+	require.NoError(t, err)
+	_, err = urn.ParsePrincipal(urn.NewWorkloadPrincipal(issuerID, atCap+"s").String())
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	_, err = urn.ParsePrincipal("user:" + strings.Repeat("u", urn.MaxSessionSubjectIDLength+1))
+	require.ErrorIs(t, err, urn.ErrInvalid, "other principal types keep the generic segment bound")
+}
+
 func TestPrincipal_String(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
