@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
@@ -219,6 +220,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	if err := generateCopilotObservabilityPluginInDir(files, "plugin-copilot", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood copilot plugin: %w", err)
 	}
+	if err := generatePiObservabilityPluginInDir(files, "plugin-pi", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood pi plugin: %w", err)
+	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
 			delete(files, p)
@@ -382,7 +386,7 @@ const platformMCPGeneratorVersion = "3"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "40"
+const hooksGeneratorVersion = "41"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -643,6 +647,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	}
 	if err := generateOpenClawObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
+	}
+	if err := generatePiObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate pi observability plugin: %w", err)
 	}
 	return files, nil
 }
@@ -957,6 +964,17 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 		b.WriteString("(`agentRuntime: { id: \"openclaw\" }`) for the models you want covered.\n")
 	}
 
+	// Pi ships only the observability package, and only when a hooks key
+	// exists: there is no marketplace track and no per-plugin Pi output.
+	if cfg.HooksAPIKey != "" {
+		b.WriteString("\n### Pi\n\n")
+		b.WriteString("Pi has no plugin marketplace and no hook configuration; observability ships as a Pi extension. ")
+		fmt.Fprintf(&b, "Copy the contents of `%s/` into `~/.pi/agent/` (all projects) or a repository's `.pi/` (that project only). ", PiObservabilitySlug(cfg))
+		b.WriteString("Pi loads the extension on next start — project-local extensions load only after the project is trusted — and removing the copied files uninstalls it.\n\n")
+		b.WriteString("> **Pi has no MCP client of its own.** Servers reach it through a third-party MCP extension, which registers them as ordinary Pi tools. ")
+		b.WriteString("Speakeasy reads the config those extensions share (`.pi/mcp.json`, `~/.pi/agent/mcp.json`) to report the servers a workspace can reach and to attribute tool calls to them.\n")
+	}
+
 	return []byte(b.String())
 }
 
@@ -1196,6 +1214,9 @@ func CopilotObservabilitySlug(cfg GenerateConfig) string {
 func OpenClawObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-openclaw"
 }
+func PiObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-pi"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -1220,6 +1241,7 @@ func hooksSubtreePrefixes(orgName string) []string {
 func hooksOptionalSubtreePrefixes(orgName string) []string {
 	return []string{
 		conv.ToSlug(orgName) + "-observability-openclaw/",
+		conv.ToSlug(orgName) + "-observability-pi/",
 	}
 }
 
@@ -1948,6 +1970,34 @@ export default {
 }
 `
 
+// generatePiObservabilityPluginFlat emits the per-org observability plugin for
+// Pi at the ZIP root, for extraction into a Pi configuration directory
+// (~/.pi/agent for all projects, or a repository's .pi for one project). Pi has
+// no hook configuration of any kind — observing or gating its agent loop
+// requires a TypeScript extension module loaded into the Pi process — so the
+// package is the generated extension plus the runtime files it spawns. The
+// extension and the relay's frame decoder are two halves of one protocol, so
+// the module itself is rendered by the relay package that decodes it.
+func generatePiObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generatePiObservabilityPluginInDir(files, "", cfg)
+}
+
+func generatePiObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generatePiObservabilityPluginInDir(files, PiObservabilitySlug(cfg), cfg)
+}
+
+func generatePiObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	files[path.Join(subdir, relay.PiExtensionFile)] = relay.RenderPiExtensionForBootstrap()
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// The extension picks the PowerShell bootstrapper on Windows itself: Pi
+	// runs it inside one Node process, so there is no per-platform command
+	// field a config could carry.
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+	return nil
+}
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -1978,6 +2028,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "openclaw":
 		if err := generateOpenClawObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
+		}
+	case "pi":
+		if err := generatePiObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate pi observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)

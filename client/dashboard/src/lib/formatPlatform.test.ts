@@ -29,6 +29,8 @@ describe("formatPlatform", () => {
     expect(formatPlatform("ChatGPT")).toBe("ChatGPT");
     expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
+    expect(formatPlatform("pi")).toBe("Pi");
+    expect(formatPlatform("PI")).toBe("Pi");
     expect(formatPlatform("litellm")).toBe("LiteLLM");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
