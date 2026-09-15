@@ -31,6 +31,7 @@ INSERT INTO remote_session_issuers (id, project_id, organization_id, slug, issue
 SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
  CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
  'fixture-' || n, 'https://issuer.example.invalid/' || n FROM generate_series(1,6) n;
+UPDATE user_session_issuers SET trusted_remote_session_issuer_id = fixture_scope_id(6);
 INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id)
 SELECT fixture_scope_id(n), CASE WHEN n <= 3 THEN fixture_scope_id(n) END,
  CASE WHEN n IN (1,2,4) THEN 'fixture-org-a' WHEN n IN (3,5) THEN 'fixture-org-b' END,
@@ -68,6 +69,8 @@ func TestEMABindingScope(t *testing.T) {
 				tx, err := pool.Begin(ctx)
 				require.NoError(t, err)
 				defer func() { _ = tx.Rollback(ctx) }()
+				_, err = tx.Exec(ctx, `UPDATE user_session_issuers SET trusted_remote_session_issuer_id = fixture_scope_id($2) WHERE id = fixture_scope_id($1)`, u, r)
+				require.NoError(t, err)
 				_, err = tx.Exec(ctx, `INSERT INTO remote_session_ema_bindings
  (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource)
  VALUES (fixture_scope_id(1), 'fixture-org-a', fixture_scope_id($1), fixture_scope_id($2), 'https://resource.example.invalid')`, u, r)
@@ -110,6 +113,48 @@ func TestEMABindingScope(t *testing.T) {
 			requireEMAScopeError(t, err)
 		})
 	}
+	for name, trusted := range map[string]string{"untrusted_sibling": "fixture_scope_id(4)", "no_trusted_issuer": "NULL"} {
+		t.Run(name, func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, "UPDATE user_session_issuers SET trusted_remote_session_issuer_id = "+trusted+" WHERE id = fixture_scope_id(1)")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			requireEMAScopeError(t, err)
+		})
+	}
+	for _, field := range []string{"authorization_endpoint", "token_endpoint", "revocation_endpoint", "registration_endpoint", "jwks_uri", "userinfo_endpoint", "introspection_endpoint", "tunneled_mcp_server_id"} {
+		t.Run(field+"_requires_unlink", func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_issuers SET "+field+" = "+field+" WHERE id = fixture_scope_id(6)")
+			require.NoError(t, err)
+			value := "'https://changed.example.invalid'"
+			if field == "tunneled_mcp_server_id" {
+				value = "fixture_scope_id(99)"
+			}
+			_, err = tx.Exec(ctx, "UPDATE remote_session_issuers SET "+field+" = "+value+" WHERE id = fixture_scope_id(6)")
+			requireEMAScopeError(t, err)
+			require.ErrorContains(t, err, "active identity-chaining binding must be explicitly unlinked")
+		})
+	}
+	for _, generation := range []int{0, 1, 3} {
+		t.Run(fmt.Sprintf("unlink_rejects_generation_%d", generation), func(t *testing.T) {
+			tx, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, emaScopeInsert)
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = $1", generation)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23514", pgErr.Code)
+		})
+	}
 	t.Run("secret_expiry_requires_unlink", func(t *testing.T) {
 		tx, err := pool.Begin(ctx)
 		require.NoError(t, err)
@@ -132,6 +177,26 @@ func TestEMABindingScope(t *testing.T) {
 		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
 UPDATE remote_session_clients SET client_secret_expires_at = '2000-01-01' WHERE id = fixture_scope_id(1)`)
 		require.NoError(t, err)
+	})
+
+	t.Run("revival_requires_next_generation", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = 2")
+		require.NoError(t, err)
+		for _, mutation := range []string{"state = 'ready'", "state = 'ready', generation = 4", "generation = 1"} {
+			_, err = tx.Exec(ctx, "SAVEPOINT revival")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_ema_bindings SET "+mutation)
+			var pgErr *pgconn.PgError
+			require.ErrorAs(t, err, &pgErr)
+			require.Equal(t, "23514", pgErr.Code)
+			_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT revival")
+			require.NoError(t, err)
+		}
 	})
 
 	t.Run("generation_is_binding_incarnation", func(t *testing.T) {
@@ -205,7 +270,7 @@ UPDATE remote_session_ema_bindings SET updated_at = clock_timestamp()`)
 		require.EqualValues(t, 2, generation)
 		_, err = tx.Exec(ctx, "SAVEPOINT revive")
 		require.NoError(t, err)
-		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready'`)
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', generation = generation + 1`)
 		requireEMAScopeError(t, err)
 		_, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT revive; DELETE FROM projects WHERE id = fixture_scope_id(1)`)
 		require.NoError(t, err)

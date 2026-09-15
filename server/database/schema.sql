@@ -8630,6 +8630,15 @@ BEGIN
   -- An unlinked tombstone may outlive parent reconfiguration. Preserve it (and
   -- the project's organization cascade), but revalidate any retarget or revival.
   IF TG_OP = 'UPDATE' THEN
+    -- Unlink/revival changes the incarnation. Do not apply this rule to DCR
+    -- completion: it publishes the selected claim within the same generation.
+    IF NEW.generation < OLD.generation OR (
+      (OLD.state = 'unlinked') IS DISTINCT FROM (NEW.state = 'unlinked')
+      AND NEW.generation <> OLD.generation + 1
+    ) THEN
+      RAISE EXCEPTION 'identity-chaining unlink/revival requires the next generation'
+        USING ERRCODE = '23514', CONSTRAINT = 'remote_session_ema_bindings_generation_check';
+    END IF;
     IF OLD.state = 'unlinked' AND NEW.state = 'unlinked'
       AND OLD.project_id IS NOT DISTINCT FROM NEW.project_id
       AND OLD.user_session_issuer_id IS NOT DISTINCT FROM NEW.user_session_issuer_id
@@ -8649,6 +8658,7 @@ BEGIN
       USING ERRCODE = '23503', CONSTRAINT = 'remote_session_ema_bindings_project_scope_fkey';
   END IF;
   PERFORM 1 FROM user_session_issuers WHERE id = NEW.user_session_issuer_id AND deleted IS FALSE
+    AND trusted_remote_session_issuer_id = NEW.remote_session_issuer_id
     AND (project_id = NEW.project_id OR (project_id IS NULL AND organization_id = NEW.organization_id)) FOR SHARE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'identity-chaining user issuer scope mismatch'
@@ -8735,7 +8745,15 @@ FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 CREATE TRIGGER remote_session_ema_issuer_update_guard
 BEFORE UPDATE ON remote_session_issuers FOR EACH ROW
 WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
- OR OLD.issuer IS DISTINCT FROM NEW.issuer OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at)
+ OR OLD.issuer IS DISTINCT FROM NEW.issuer OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at
+ OR OLD.authorization_endpoint IS DISTINCT FROM NEW.authorization_endpoint
+ OR OLD.token_endpoint IS DISTINCT FROM NEW.token_endpoint
+ OR OLD.revocation_endpoint IS DISTINCT FROM NEW.revocation_endpoint
+ OR OLD.registration_endpoint IS DISTINCT FROM NEW.registration_endpoint
+ OR OLD.jwks_uri IS DISTINCT FROM NEW.jwks_uri
+ OR OLD.userinfo_endpoint IS DISTINCT FROM NEW.userinfo_endpoint
+ OR OLD.introspection_endpoint IS DISTINCT FROM NEW.introspection_endpoint
+ OR OLD.tunneled_mcp_server_id IS DISTINCT FROM NEW.tunneled_mcp_server_id)
 EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
 CREATE TRIGGER remote_session_ema_issuer_delete_guard BEFORE DELETE ON remote_session_issuers
 FOR EACH ROW EXECUTE FUNCTION guard_remote_session_ema_lifecycle();
