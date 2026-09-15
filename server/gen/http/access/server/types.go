@@ -122,8 +122,12 @@ type ResolveChallengeRequestBody struct {
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
 	// How the challenge is being resolved.
 	ResolutionType *string `form:"resolution_type,omitempty" json:"resolution_type,omitempty" xml:"resolution_type,omitempty"`
-	// Role slug to assign (required when resolution_type=role_assigned).
+	// Custom role slug to add to the denied user before resolving (required when
+	// resolution_type=role_assigned).
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. Must be true when resolution_type=role_assigned.
+	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
 }
 
 // ListRolesResponseBody is the type of the "access" service "listRoles"
@@ -5347,6 +5351,9 @@ type AuthzChallengeResponseBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// Resource ID of the check.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 	// Roles the principal had loaded.
 	RoleSlugs []string `form:"role_slugs" json:"role_slugs" xml:"role_slugs"`
 	// Total grants evaluated.
@@ -10045,12 +10052,13 @@ func NewListChallengeBucketsPayload(outcome *string, principalUrn *string, scope
 // payload.
 func NewResolveChallengePayload(body *ResolveChallengeRequestBody, apikeyToken *string, sessionToken *string) *access.ResolveChallengePayload {
 	v := &access.ResolveChallengePayload{
-		PrincipalUrn:   *body.PrincipalUrn,
-		Scope:          *body.Scope,
-		ResourceKind:   body.ResourceKind,
-		ResourceID:     body.ResourceID,
-		ResolutionType: *body.ResolutionType,
-		RoleSlug:       body.RoleSlug,
+		PrincipalUrn:            *body.PrincipalUrn,
+		Scope:                   *body.Scope,
+		ResourceKind:            body.ResourceKind,
+		ResourceID:              body.ResourceID,
+		ResolutionType:          *body.ResolutionType,
+		RoleSlug:                body.RoleSlug,
+		RoleAssignmentConfirmed: body.RoleAssignmentConfirmed,
 	}
 	v.ChallengeIds = make([]string, len(body.ChallengeIds))
 	for i, val := range body.ChallengeIds {
@@ -10250,6 +10258,9 @@ func ValidateResolveChallengeRequestBody(body *ResolveChallengeRequestBody) (err
 	}
 	if body.ResolutionType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resolution_type", "body"))
+	}
+	if len(body.ChallengeIds) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.challenge_ids", body.ChallengeIds, len(body.ChallengeIds), 1, true))
 	}
 	if body.ResolutionType != nil {
 		if !(*body.ResolutionType == "role_assigned" || *body.ResolutionType == "dismissed") {

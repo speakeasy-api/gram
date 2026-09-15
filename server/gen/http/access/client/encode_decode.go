@@ -6468,6 +6468,14 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 		ResolvedBy:          v.ResolvedBy,
 		ResolutionRoleSlug:  v.ResolutionRoleSlug,
 	}
+	if v.Selector != nil {
+		res.Selector = make(map[string]string, len(v.Selector))
+		for key, val := range v.Selector {
+			tk := key
+			tv := val
+			res.Selector[tk] = tv
+		}
+	}
 	res.RoleSlugs = make([]string, len(v.RoleSlugs))
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val

@@ -514,7 +514,7 @@ export class Access extends ClientSDK {
    * resolveChallenge access
    *
    * @remarks
-   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+   * Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
    */
   async resolveChallenge(
     request: ResolveChallengeRequest,

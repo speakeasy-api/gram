@@ -1173,10 +1173,13 @@ func BuildResolveChallengePayload(accessResolveChallengeBody string, accessResol
 	{
 		err = json.Unmarshal([]byte(accessResolveChallengeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"challenge_ids\": [\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_assignment_confirmed\": false,\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }'")
 		}
 		if body.ChallengeIds == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("challenge_ids", "body"))
+		}
+		if len(body.ChallengeIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.challenge_ids", body.ChallengeIds, len(body.ChallengeIds), 1, true))
 		}
 		if !(body.ResolutionType == "role_assigned" || body.ResolutionType == "dismissed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resolution_type", body.ResolutionType, []any{"role_assigned", "dismissed"}))
@@ -1198,12 +1201,13 @@ func BuildResolveChallengePayload(accessResolveChallengeBody string, accessResol
 		}
 	}
 	v := &access.ResolveChallengePayload{
-		PrincipalUrn:   body.PrincipalUrn,
-		Scope:          body.Scope,
-		ResourceKind:   body.ResourceKind,
-		ResourceID:     body.ResourceID,
-		ResolutionType: body.ResolutionType,
-		RoleSlug:       body.RoleSlug,
+		PrincipalUrn:            body.PrincipalUrn,
+		Scope:                   body.Scope,
+		ResourceKind:            body.ResourceKind,
+		ResourceID:              body.ResourceID,
+		ResolutionType:          body.ResolutionType,
+		RoleSlug:                body.RoleSlug,
+		RoleAssignmentConfirmed: body.RoleAssignmentConfirmed,
 	}
 	if body.ChallengeIds != nil {
 		v.ChallengeIds = make([]string, len(body.ChallengeIds))

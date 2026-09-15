@@ -1,6 +1,31 @@
+import {
+  canAssignChallengeRole,
+  countChallenges,
+  scopeChallenges,
+} from "./challengeHelpers";
 import { describe, expect, it } from "vitest";
+
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
-import { countChallenges, scopeChallenges } from "./challengeHelpers";
+
+describe("canAssignChallengeRole", () => {
+  it("allows one concrete user", () => {
+    expect(
+      canAssignChallengeRole({
+        principalType: "user",
+        principalUrn: "user:u1",
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    { principalType: "user" as const, principalUrn: "user:all" },
+    { principalType: "api_key" as const, principalUrn: "api_key:key1" },
+    { principalType: "assistant" as const, principalUrn: "assistant:a1" },
+    { principalType: "agent" as const, principalUrn: "agent:a1" },
+  ])("rejects $principalType principal $principalUrn", (principal) => {
+    expect(canAssignChallengeRole(principal)).toBe(false);
+  });
+});
 
 function makeChallenge(
   overrides: Partial<AuthzChallenge> = {},

@@ -958,6 +958,9 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 	case err != nil:
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "load connected member").LogError(ctx, r.logger)
 	}
+	if connected.DeletedAt.Valid {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeNotFound, nil, "member has not joined this organization").LogError(ctx, r.logger)
+	}
 	if !connected.WorkosID.Valid || connected.WorkosID.String == "" {
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, nil, "member is not linked to WorkOS").LogError(ctx, r.logger)
 	}

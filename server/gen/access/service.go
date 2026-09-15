@@ -85,8 +85,8 @@ type Service interface {
 	// challenges with the same dimensions within a 10-minute window are collapsed
 	// into a single bucket.
 	ListChallengeBuckets(context.Context, *ListChallengeBucketsPayload) (res *ListChallengeBucketsResult, err error)
-	// Record resolutions for one or more denied authz challenges. The caller is
-	// responsible for assigning the role first.
+	// Dismiss one or more denied authz challenges, or atomically add one custom
+	// role to the denied user before recording the challenges as resolved.
 	ResolveChallenge(context.Context, *ResolveChallengePayload) (res *ResolveChallengesResult, err error)
 	// List the MCP servers and skills an identity is authorized to reach, through
 	// grants on the user or on any role they hold, less any blocking grant that
@@ -237,6 +237,9 @@ type AuthzChallenge struct {
 	ResourceKind *string
 	// Resource ID of the check.
 	ResourceID *string
+	// Complete selector captured for the check. Omitted for legacy or malformed
+	// challenge data.
+	Selector map[string]string
 	// Roles the principal had loaded.
 	RoleSlugs []string
 	// Total grants evaluated.
@@ -665,8 +668,12 @@ type ResolveChallengePayload struct {
 	ResourceID *string
 	// How the challenge is being resolved.
 	ResolutionType string
-	// Role slug to assign (required when resolution_type=role_assigned).
+	// Custom role slug to add to the denied user before resolving (required when
+	// resolution_type=role_assigned).
 	RoleSlug *string
+	// Confirms the administrator reviewed and accepts every permission granted by
+	// the complete role. Must be true when resolution_type=role_assigned.
+	RoleAssignmentConfirmed *bool
 }
 
 // ResolveChallengesResult is the result type of the access service
