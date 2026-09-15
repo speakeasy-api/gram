@@ -199,9 +199,8 @@ function SetupBoardInner(): JSX.Element {
     }
   };
 
-  // Assignment emails and the identity-provider callback link to
-  // /setup?step=<task>; that means "open this task", which is now a page.
-  const requestedTaskKey = searchParams.get("step");
+  // Both canonical task links and legacy callbacks open the guided task page.
+  const requestedTaskKey = searchParams.get("task") ?? searchParams.get("step");
   const requestedTask = setupTasks.data?.tasks.find(
     (task) => task.key === requestedTaskKey,
   );
