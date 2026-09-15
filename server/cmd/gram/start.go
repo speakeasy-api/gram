@@ -1834,6 +1834,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:               guardianPolicy,
+						TunnelHTTPClient:             tunnelHTTPClient,
 						DB:                           db,
 						EncryptionClient:             encryptionClient,
 						FeatureProvider:              featureFlags,
