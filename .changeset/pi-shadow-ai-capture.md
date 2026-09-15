@@ -23,7 +23,9 @@ inventory snapshot at session start — with credentials redacted — and attrib
 tool calls to the matching server so Pi traffic is visible to Shadow MCP rather
 than appearing as unattributed local tools.
 
-The package is downloadable per platform from the plugins page and ships in the
+The package is downloadable per platform from the plugins page, ships in the
 published marketplace repo for extraction into `~/.pi/agent/` or a repository's
 `.pi/`, and `speakeasy-hooks install --provider=pi` renders the same extension
-locally.
+locally. Pi also joins the setup walkthrough and the shared agent-provider
+catalog, so it carries its own name and mark everywhere a captured session's
+source is shown.
