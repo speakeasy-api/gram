@@ -14,7 +14,7 @@ func registerListProjectsTool(reg *Registrar, reader Reader) {
 		Title:       "List Projects",
 		Description: "List the projects in this organization. A project is where an administrator's MCP servers and skills are kept before anyone receives them. Constraints: results carry only project identifiers, names, and slugs.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListProjectsOutput{}, err

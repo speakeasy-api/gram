@@ -49,11 +49,21 @@ const (
 	ProjectScopeDefaultable
 )
 
-// ToolMeta is what a tool declares beyond its schemas: who may call it, and
-// how it obtains its target.
+// ExternalAuthorization names the call-time authority required by the external
+// OAuth surface. It is independent from audience membership: members see one
+// stable catalogue, then authorization decides whether each call may run.
+type ExternalAuthorization string
+
+const (
+	ExternalAuthorizationOrgAdmin ExternalAuthorization = "org_admin"
+)
+
+// ToolMeta is what a tool declares beyond its schemas: who may call it, how it
+// obtains its target, and which live policy protects external calls.
 type ToolMeta struct {
-	Audiences    []Audience
-	ProjectScope ProjectScope
+	Authorization ExternalAuthorization
+	Audiences     []Audience
+	ProjectScope  ProjectScope
 }
 
 func (m ToolMeta) servesAudience(audience Audience) bool {
@@ -90,11 +100,13 @@ func (e *ToolRefusalError) Error() string {
 	return e.Payload
 }
 
-// ResourceMeta is what a resource declares beyond its content: who may read
-// it. Resources carry no project scope — a reviewed guide is the same document
-// for every project in the organization.
+// ResourceMeta is what a resource declares beyond its content: who may read it
+// and which live policy protects external reads. Resources carry no project
+// scope — a reviewed guide is the same document for every project in the
+// organization.
 type ResourceMeta struct {
-	Audiences []Audience
+	Authorization ExternalAuthorization
+	Audiences     []Audience
 }
 
 func (m ResourceMeta) servesAudience(audience Audience) bool {
@@ -135,14 +147,21 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
-	server        *mcp.Server
-	descriptors   []Descriptor
-	resources     []ResourceDescriptor
-	riskTelemetry RiskTelemetry
+	server             *mcp.Server
+	descriptors        []Descriptor
+	resources          []ResourceDescriptor
+	riskTelemetry      RiskTelemetry
+	externalAuthorizer Authorizer
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil}
+}
+
+func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
+	if r != nil {
+		r.externalAuthorizer = authorizer
+	}
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -190,6 +209,9 @@ func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescript
 // addResource registers one resource with the MCP server and records the
 // descriptor that lets an admitted non-MCP audience read the same content.
 func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read func(ctx context.Context) (string, error)) {
+	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+		panic(fmt.Sprintf("platformmcp: external resource %q declares no authorization policy", resource.URI))
+	}
 	// Registered with the MCP server only when the external endpoint is an
 	// admitted audience: the server IS that endpoint, so registering regardless
 	// would serve a resource the audience list says it withholds.
@@ -197,6 +219,16 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 		r.server.AddResource(resource, func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 			if request.Params.URI != resource.URI {
 				return nil, mcp.ResourceNotFoundError(request.Params.URI)
+			}
+			if r.externalAuthorizer == nil {
+				return nil, ErrUnavailable
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
+				return nil, fmt.Errorf("authorize external resource: %w", err)
 			}
 			text, err := read(ctx)
 			if err != nil {
@@ -231,6 +263,9 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 // that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
 	inputSchema, resolved := prepareInputSchema[In](tool)
+	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
+		panic(fmt.Sprintf("platformmcp: external tool %q declares no authorization policy", tool.Name))
+	}
 
 	if meta.servesAudience(AudienceExternal) {
 		// Declared here rather than left to the SDK: the SDK infers the output
@@ -238,7 +273,23 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		if tool.OutputSchema == nil {
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
-		mcp.AddTool(r.server, tool, handler)
+		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+			var zero Out
+			if r.externalAuthorizer == nil {
+				return nil, zero, ErrUnavailable
+			}
+			principal, err := principalFromToolContext(ctx)
+			if err != nil {
+				return nil, zero, err
+			}
+			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
+				if result, ok := externalAuthorizationToolResult(err); ok {
+					return result, zero, nil
+				}
+				return nil, zero, fmt.Errorf("authorize external tool %q: %w", tool.Name, err)
+			}
+			return handler(ctx, request, input)
+		})
 	}
 
 	r.descriptors = append(r.descriptors, Descriptor{

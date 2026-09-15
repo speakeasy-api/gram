@@ -339,7 +339,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			Name:        "send_platform_mcp_feedback",
 			Title:       "Send Feedback About This Platform",
 			Description: "Send feedback about this platform. This is not switched on for your organization yet.",
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("platform_mcp_feedback"))
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
@@ -368,7 +368,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
 	}
 }
 
@@ -378,7 +378,7 @@ func registerUnavailableCandidateInspectionTool(reg *Registrar) {
 		Title:       "Inspect an MCP Server",
 		Description: "Look at one MCP server before adding it. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
 }
 
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
@@ -386,7 +386,7 @@ func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Reviewed MCP Server to a Project",
 		Description: "Add a reviewed MCP server to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
 }
 
 func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
@@ -394,7 +394,7 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
 		Description: "Add an MCP server of your own to a project. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
 }
 
 func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
@@ -402,7 +402,7 @@ func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
 		Name:        "update_mcp_metadata",
 		Title:       "Rename an MCP Server",
 		Description: "Rename one MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
 func registerUnavailableSetupHandoffTool(reg *Registrar) {
@@ -410,7 +410,7 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 		Name:        "get_setup_handoff",
 		Title:       "Open Setup in the Dashboard",
 		Description: "Open the dashboard to finish setting up an MCP server. This is not switched on for your organization yet.",
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
 func registerUnavailableTools(reg *Registrar) {
@@ -428,7 +428,7 @@ func registerUnavailableTools(reg *Registrar) {
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
 
@@ -446,7 +446,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 
