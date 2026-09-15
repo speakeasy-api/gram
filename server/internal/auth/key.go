@@ -367,15 +367,15 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 }
 
 // principalAPIKeySupportsTransportScopes gates which routes principal keys may
-// enter. agent_user routes admit them only because their handlers require an
-// explicit agent grant; the key-minting `agent` scope stays closed.
+// enter. agent_user and hooks routes admit them only because their services
+// require an explicit agent grant; the key-minting `agent` scope stays closed.
 func principalAPIKeySupportsTransportScopes(requiredScopes []string) bool {
 	if len(requiredScopes) == 0 {
 		return false
 	}
 	for _, scope := range requiredScopes {
 		switch scope {
-		case APIKeyScopeProducer.String(), APIKeyScopeConsumer.String(), APIKeyScopeAgentUser.String():
+		case APIKeyScopeProducer.String(), APIKeyScopeConsumer.String(), APIKeyScopeAgentUser.String(), APIKeyScopeHooks.String():
 		default:
 			return false
 		}

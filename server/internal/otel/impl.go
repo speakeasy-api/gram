@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -18,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
@@ -84,5 +87,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize otel request: %w", err)
+	}
+	// Agent-principal keys ingest through the hooks service, which enforces their grant.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	return ctx, nil
 }
