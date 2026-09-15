@@ -244,7 +244,8 @@ RETURNING organization_metadata.name, organization_metadata.slug, previous.gram_
 
 -- name: ChangeTrialEndDate :one
 -- Lock before checking lifecycle state, just as ExtendTrial does. Validate the
--- requested end again after acquiring the lock so a waiting write cannot expire it.
+-- requested and locked previous ends again after acquiring the lock. A blocker
+-- may roll back without changing the row after its old deadline has passed.
 WITH previous AS (
     SELECT trials.organization_id, trials.ends_at
     FROM trials
@@ -259,5 +260,6 @@ SET ends_at = @ends_at::timestamptz,
     updated_at = clock_timestamp()
 FROM previous
 WHERE trials.organization_id = previous.organization_id
+  AND previous.ends_at > clock_timestamp()
   AND @ends_at::timestamptz > clock_timestamp()
 RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;

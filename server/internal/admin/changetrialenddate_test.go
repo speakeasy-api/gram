@@ -10,6 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,4 +109,41 @@ func TestChangeTrialEndDate_AFailedAuditEntryRollsBackTheChange(t *testing.T) {
 	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialEndChanged)
 	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestChangeTrialEndDateRechecksExpiryAfterLockWait(t *testing.T) {
+	t.Parallel()
+	for _, commitExtension := range []bool{false, true} {
+		t.Run(fmt.Sprintf("commit_extension_%t", commitExtension), func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn := newTestAdminService(t)
+			const orgID = "org_change_waiting_trial"
+			endsAt := time.Now().UTC().Add(5 * time.Second)
+			requested := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+			seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Waiting Trial", slug: "waiting-trial", accountType: "enterprise"})
+			seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: endsAt})
+			first := testenv.BeginTx(t, ctx, conn)
+			_, err := trialsRepo.New(first).ExtendTrial(ctx, trialsRepo.ExtendTrialParams{OrganizationID: orgID, ExtendByDays: 14})
+			require.NoError(t, err)
+			result := make(chan error, 1)
+			go func() {
+				_, err := svc.ChangeTrialEndDate(ctx, &gen.ChangeTrialEndDatePayload{ID: orgID, EndsAt: requested.Format(time.RFC3339)})
+				result <- err
+			}()
+			testenv.WaitForBlockedBackend(t, ctx, conn)
+			require.Eventually(t, func() bool {
+				clock, err := testrepo.New(conn).GetTransactionClockFixture(ctx)
+				return err == nil && clock.TransactionNow.Time.After(endsAt)
+			}, 30*time.Second, 50*time.Millisecond)
+			if commitExtension {
+				require.NoError(t, first.Commit(ctx))
+				require.NoError(t, <-result)
+				require.True(t, readTrial(t, ctx, conn, orgID).EndsAt.Time.Equal(requested))
+			} else {
+				require.NoError(t, first.Rollback(ctx))
+				requireOopsCode(t, <-result, oops.CodeConflict)
+				require.WithinDuration(t, endsAt, readTrial(t, ctx, conn, orgID).EndsAt.Time, time.Microsecond)
+			}
+		})
+	}
 }

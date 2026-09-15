@@ -2762,7 +2762,7 @@ describe("organizations list write actions", () => {
     ).toBeTruthy();
   });
 
-  it("extends the trial from the panel and repaints the panel with the answer", async () => {
+  it("changes the trial end date from the panel and repaints with the answer", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(TRIALLING_ORG.name);
 
@@ -2779,7 +2779,7 @@ describe("organizations list write actions", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
-    // The default day count, sent without the operator typing anything.
+    // The current end date is selected initially, without adding extra days.
     expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
       id: TRIALLING_ORG.id,
       endsAt: new Date(
@@ -2789,7 +2789,7 @@ describe("organizations list write actions", () => {
     });
     // The panel is drawn from the row it is peeking at, so it repaints from the
     // same cache write the row does. Reading the old date here is the operator
-    // being shown the trial they just extended, unextended.
+    // being shown the previous end date after saving.
     expect(peekPanel().textContent).toContain(shortDate(EXTENDED_TRIAL_END));
     expect(announcement()).toBe(
       `${TRIALLING_ORG.name} trial end date changed to ${shortDate(TRIALLING_ORG.trial_ends_at!)}.`,

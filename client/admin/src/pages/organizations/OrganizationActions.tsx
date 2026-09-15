@@ -1,6 +1,7 @@
 import { CalendarIcon, MoreHorizontalIcon } from "lucide-react";
 import {
   useContext,
+  useSyncExternalStore,
   useId,
   useRef,
   useState,
@@ -112,8 +113,25 @@ function startTrialRange(): DayRange {
   };
 }
 
+// UTC midnight is an external clock boundary, not state derived from a form.
+function subscribeUtcDay(onChange: () => void): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const schedule = (): void => {
+    timer = setTimeout(
+      () => {
+        onChange();
+        schedule();
+      },
+      Math.max(1, (utcTodayDay() + 1) * 86_400_000 - Date.now()),
+    );
+  };
+  schedule();
+  return () => clearTimeout(timer);
+}
+
 function liveRange(range: DayRange): DayRange {
-  if (!range.fromToday) return range;
+  if (!range.fromToday)
+    return { ...range, earliest: Math.max(range.earliest, utcTodayDay() + 1) };
   const anchor = utcTodayDay();
   if (anchor === range.anchor) return range;
   return {
@@ -747,6 +765,7 @@ export function TrialDaysDialog({
   onSubmit: (days: number) => void;
 }): JSX.Element {
   const { announce } = useContext(WriteReportContext);
+  useSyncExternalStore(subscribeUtcDay, utcTodayDay);
   const [days, setDays] = useState(String(DEFAULT_TRIAL_DAYS));
   const [endsOn, setEndsOn] = useState<Date | undefined>(
     () =>

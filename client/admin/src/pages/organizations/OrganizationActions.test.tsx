@@ -774,15 +774,14 @@ describe("the change end date dialog", () => {
 
     await pickAndSubmit(EARLIEST);
 
-    // One day, not two. An anchor read in the reader's zone would put the
-    // trial's last day on the 5th and make the 7th two days away.
+    // The selected calendar date is sent as UTC midnight, regardless of local zone.
     expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
       id: ORG.id,
       endsAt: new Date(`${EARLIEST}T00:00:00.000Z`),
     });
   });
 
-  it("names and counts the same day in a zone ahead of UTC", async () => {
+  it("names and submits the same date in a zone ahead of UTC", async () => {
     // The other side of UTC, which the zone above cannot stand in for. West of
     // UTC a local midnight is a later instant than the day it stands for and
     // east of it an earlier one, so two faults that America/Los_Angeles hides
@@ -835,21 +834,27 @@ describe("the change end date dialog", () => {
 
     await pickDay("2026-06-05");
 
-    // The operator picks a date and the request sends a count. Both are the
-    // record's future, and the dialog is the only place they are shown to
-    // agree.
+    // The confirmation shows the same absolute UTC date that will be sent.
     expect(dialog().textContent).toContain(
       `The trial will end on ${rendered("2026-06-05")} (UTC)`,
     );
   });
 
-  it("offers no day the server would refuse to extend to", async () => {
+  it("refreshes the earliest date when opened after UTC midnight", async () => {
+    await renderMenu();
+    await openExtendDialog();
+    vi.setSystemTime(new Date("2026-05-02T00:01:00Z"));
+    await openCalendar();
+    expect(dayButton("2026-05-02").disabled).toBe(true);
+    expect(dayButton("2026-05-03").disabled).toBe(false);
+  });
+
+  it("allows tomorrow but not today", async () => {
     await renderMenu();
     await openExtendDialog();
     await openCalendar();
 
-    // The trial's own last day is one day short of the minimum extension, so
-    // it is the first day off the bottom of the range.
+    // Today is not a future calendar date.
     expect(dayCell("2026-05-01")?.getAttribute("data-disabled")).toBe("true");
     expect(dayButton(EARLIEST).hasAttribute("disabled")).toBe(false);
     // And the calendar cannot be paged back to a month made entirely of them.
@@ -1051,7 +1056,7 @@ describe("the change end date dialog", () => {
     expect(mocks.changeTrialEndDate).toHaveBeenCalledTimes(1);
   });
 
-  it("says one day rather than 1 days", async () => {
+  it("announces the selected end date", async () => {
     await renderMenu();
     await openExtendDialog();
 

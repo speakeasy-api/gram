@@ -2041,11 +2041,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     (demo.det_uuid('gram-demo-audit-trial-end-changed'), demo_org,
      demo_user_ids[1], 'user', demo_user_names[1],
      'organization:enterprise_trial_end_changed', demo_org, 'organization',
-     jsonb_build_object('trial_ends_at', now() - interval '1 day'),
-     jsonb_build_object('trial_ends_at', now() - interval '3 days'),
-     jsonb_build_object('previous_trial_ends_at', now() - interval '1 day',
-                       'trial_ends_at', now() - interval '3 days'),
-     now() - interval '4 days');
+     jsonb_build_object('trial_ends_at', now() - interval '1 hour'),
+     jsonb_build_object('trial_ends_at', now() - interval '6 hours'),
+     jsonb_build_object('previous_trial_ends_at', now() - interval '1 hour',
+                       'trial_ends_at', now() - interval '6 hours'),
+     now() - interval '12 hours');
 
   -- Quarantine lifecycle events use their own audit subject and action rather
   -- than reusing a generic policy-block row.
