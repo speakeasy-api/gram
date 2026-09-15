@@ -436,6 +436,9 @@ func typedFailureReason(err error, outcome o11y.Outcome) string {
 	if errors.Is(err, errTypedRateLimit) {
 		return "rate_limited"
 	}
+	if outcome == o11y.OutcomeCanceled {
+		return "canceled"
+	}
 	if outcome == o11y.OutcomeTimeout {
 		return "timeout"
 	}

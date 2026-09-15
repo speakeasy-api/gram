@@ -115,6 +115,8 @@ func TestEvaluatePromptGuardrail_FlagsAndIsolates(t *testing.T) {
 
 	require.True(t, res.Flagged)
 	require.Equal(t, 2, res.JudgedCount)
+	require.Equal(t, 2, res.InScopeMessageCount)
+	require.False(t, res.MessageLimitHit)
 	require.InDelta(t, 0.004, res.TotalCostUsd, 0.000001)
 	require.GreaterOrEqual(t, res.TotalLatencyMs, int64(0))
 	require.Len(t, res.Verdicts, 2)

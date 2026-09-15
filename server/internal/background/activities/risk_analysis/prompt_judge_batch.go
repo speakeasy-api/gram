@@ -59,6 +59,14 @@ func judgeFanout(
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
+		if err := ctx.Err(); err != nil {
+			for pos := start; pos < len(indices); pos++ {
+				idx := indices[pos]
+				apply(pos, idx, nil, err, 0)
+			}
+			return
+		}
+
 		end := min(start+judgeConcurrency, len(indices))
 		var wg sync.WaitGroup
 		for pos := start; pos < end; pos++ {

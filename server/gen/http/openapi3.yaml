@@ -54336,7 +54336,7 @@ paths:
                 type: mutation
     /rpc/riskEvals.evaluate:
         post:
-            description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation; message-type scoping and CEL scope predicates are both applied.'
+            description: 'Replay a prompt_based guardrail against a single chat session and return the LLM judge''s per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat''s latest generation and at most the first 200 in-scope messages in transcript order; message-type scoping and CEL scope predicates are both applied.'
             operationId: evaluatePromptGuardrail
             parameters:
                 - allowEmptyValue: true
@@ -87366,10 +87366,17 @@ components:
                 flagged:
                     type: boolean
                     description: True when the guardrail flagged at least one in-scope message.
+                in_scope_message_count:
+                    type: integer
+                    description: Total number of messages matching the guardrail scope before the replay limit.
+                    format: int64
                 judged_count:
                     type: integer
                     description: Number of in-scope messages the judge evaluated.
                     format: int64
+                message_limit_hit:
+                    type: boolean
+                    description: True when the replay judged only the first 200 in-scope messages.
                 total_cost_usd:
                     type: number
                     description: Total OpenRouter cost across in-scope judge calls, in USD.
@@ -87388,6 +87395,8 @@ components:
                 - chat_id
                 - flagged
                 - judged_count
+                - in_scope_message_count
+                - message_limit_hit
                 - total_cost_usd
                 - total_latency_ms
                 - verdicts
