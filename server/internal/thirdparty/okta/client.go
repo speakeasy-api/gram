@@ -3,7 +3,12 @@ package okta
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +38,7 @@ const (
 	tokenRefreshSkew     = 60 * time.Second
 	maxErrorBodyBytes    = 8 * 1024
 	maxResponseBodyBytes = 2 * 1024 * 1024
+	dpopNonceHeader      = "DPoP-Nonce"
 )
 
 // APIError describes an error response from Okta without retaining request credentials.
@@ -220,6 +226,21 @@ type cachedToken struct {
 	tenantDomain string
 	clientID     string
 	scopes       string
+	dpop         bool
+	dpopNonce    string
+}
+
+type dpopProofClaims struct {
+	HTTPMethod      string `json:"htm"`
+	HTTPURI         string `json:"htu"`
+	AccessTokenHash string `json:"ath,omitempty"`
+	Nonce           string `json:"nonce,omitempty"`
+}
+
+type dpopBoundToken struct {
+	key       cacheKey
+	nonce     string
+	expiresAt time.Time
 }
 
 // Client performs authenticated Okta API requests.
@@ -229,8 +250,11 @@ type Client struct {
 	nonRetryingHTTPClient *guardian.HTTPClient
 	endpoint              string
 	now                   func() time.Time
+	dpopKey               *ecdsa.PrivateKey
 	mu                    sync.Mutex
 	tokens                map[cacheKey]cachedToken
+	dpopModes             map[uuid.UUID]string
+	dpopTokens            map[string]dpopBoundToken
 	tokenFlight           singleflight.Group
 }
 
@@ -266,6 +290,10 @@ func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...Cli
 		client.Timeout = 30 * time.Second
 		client.CheckRedirect = refuseRedirect
 	}
+	dpopKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(fmt.Errorf("generate Okta DPoP key: %w", err))
+	}
 
 	return &Client{
 		logger:                logger,
@@ -273,8 +301,11 @@ func NewClient(logger *slog.Logger, guardianPolicy *guardian.Policy, opts ...Cli
 		nonRetryingHTTPClient: nonRetryingHTTPClient,
 		endpoint:              strings.TrimRight(opt.Endpoint, "/"),
 		now:                   time.Now,
+		dpopKey:               dpopKey,
 		mu:                    sync.Mutex{},
 		tokens:                make(map[cacheKey]cachedToken),
+		dpopModes:             make(map[uuid.UUID]string),
+		dpopTokens:            make(map[string]dpopBoundToken),
 		tokenFlight:           singleflight.Group{},
 	}
 }
@@ -324,12 +355,126 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("acquire Okta token: %w", err)
 	}
 
+	key := cacheKey{connectionID: request.ConnectionID, kid: request.KeyID}
+	dpop, nonce := c.dpopMode(key)
+	token, responseNonce, err := c.exchangeToken(ctx, request, tokenEndpoint, dpop, nonce)
+	if responseNonce != "" {
+		nonce = responseNonce
+		if dpop {
+			c.setDPoPMode(key, nonce)
+		}
+	}
+	if !dpop && isDPoPChallenge(err) {
+		dpop = true
+		c.setDPoPMode(key, nonce)
+		token, responseNonce, err = c.exchangeToken(ctx, request, tokenEndpoint, true, nonce)
+		if responseNonce != "" {
+			nonce = responseNonce
+			c.setDPoPMode(key, nonce)
+		}
+	}
+	if dpop && isDPoPNonceChallenge(err) && responseNonce != "" {
+		c.setDPoPMode(key, responseNonce)
+		token, responseNonce, err = c.exchangeToken(ctx, request, tokenEndpoint, true, responseNonce)
+		if responseNonce != "" {
+			nonce = responseNonce
+			c.setDPoPMode(key, nonce)
+		}
+	}
+	if err != nil {
+		if apiErr, ok := errors.AsType[*APIError](err); ok {
+			c.logger.WarnContext(ctx, "Okta token request failed",
+				attr.SlogOAuthError(apiErr.Code),
+				attr.SlogOAuthErrorDescription(apiErr.Description),
+				attr.SlogHTTPResponseStatusCode(apiErr.StatusCode),
+				attr.SlogURLDomain(request.TenantDomain),
+				attr.SlogError(err),
+			)
+		}
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, err
+	}
+	c.mu.Lock()
+	c.tokens[cacheKey{connectionID: request.ConnectionID, kid: request.KeyID}] = cachedToken{
+		token:        cloneToken(token),
+		tenantDomain: request.TenantDomain,
+		clientID:     request.ClientID,
+		scopes:       strings.Join(request.Scopes, "\x00"),
+		dpop:         dpop,
+		dpopNonce:    "",
+	}
+	if dpop {
+		for accessToken, bound := range c.dpopTokens {
+			if !c.now().Before(bound.expiresAt) {
+				delete(c.dpopTokens, accessToken)
+			}
+		}
+		c.dpopTokens[token.AccessToken] = dpopBoundToken{key: key, nonce: "", expiresAt: token.ExpiresAt}
+	}
+	c.mu.Unlock()
+	return token, nil
+}
+
+func (c *Client) exchangeToken(
+	ctx context.Context,
+	request TokenRequest,
+	tokenEndpoint string,
+	dpop bool,
+	nonce string,
+) (Token, string, error) {
+	assertion, err := c.mintClientAssertion(ctx, request, tokenEndpoint)
+	if err != nil {
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, "", err
+	}
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("scope", strings.Join(request.Scopes, " "))
+	form.Set("client_assertion_type", clientAssertionType)
+	form.Set("client_assertion", assertion)
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, "", fmt.Errorf("create Okta token request: %w", err)
+	}
+	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if dpop {
+		proof, err := c.dpopProof(http.MethodPost, tokenEndpoint, "", nonce)
+		if err != nil {
+			return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, "", err
+		}
+		httpRequest.Header.Set("DPoP", proof)
+	}
+
+	var response struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int64  `json:"expires_in"`
+		Scope       string `json:"scope"`
+	}
+	headers, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response)
+	responseNonce := headers.Get(dpopNonceHeader)
+	if err != nil {
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, responseNonce, err
+	}
+	if response.AccessToken == "" || response.ExpiresIn <= 0 {
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, responseNonce, errors.New("decode Okta token response: access_token and positive expires_in are required")
+	}
+	if dpop && !strings.EqualFold(response.TokenType, "DPoP") {
+		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, responseNonce, errors.New("decode Okta token response: token_type DPoP is required")
+	}
+	return Token{
+		AccessToken:   response.AccessToken,
+		ExpiresAt:     c.now().Add(time.Duration(response.ExpiresIn) * time.Second),
+		GrantedScopes: strings.Fields(response.Scope),
+	}, responseNonce, nil
+}
+
+func (c *Client) mintClientAssertion(ctx context.Context, request TokenRequest, tokenEndpoint string) (string, error) {
 	signer, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.RS256, Key: request.PrivateKey},
 		(&jose.SignerOptions{NonceSource: nil, EmbedJWK: false, ExtraHeaders: nil}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), request.KeyID),
 	)
 	if err != nil {
-		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("create Okta assertion signer: %w", err)
+		return "", fmt.Errorf("create Okta assertion signer: %w", err)
 	}
 	now := c.now()
 	claims := jwt.Claims{
@@ -351,56 +496,74 @@ func (c *Client) acquireToken(ctx context.Context, request TokenRequest) (Token,
 	)
 	assertion, err := jwt.Signed(signer).Claims(claims).Serialize()
 	if err != nil {
-		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("sign Okta client assertion: %w", err)
+		return "", fmt.Errorf("sign Okta client assertion: %w", err)
 	}
+	return assertion, nil
+}
 
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	form.Set("scope", strings.Join(request.Scopes, " "))
-	form.Set("client_assertion_type", clientAssertionType)
-	form.Set("client_assertion", assertion)
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
+func (c *Client) dpopProof(method, targetURL, accessToken, nonce string) (string, error) {
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES256, Key: c.dpopKey},
+		(&jose.SignerOptions{NonceSource: nil, EmbedJWK: false, ExtraHeaders: nil}).
+			WithType("dpop+jwt").
+			WithHeader(jose.HeaderKey("jwk"), jose.JSONWebKey{
+				Key:                         &c.dpopKey.PublicKey,
+				KeyID:                       "",
+				Algorithm:                   "",
+				Use:                         "",
+				Certificates:                nil,
+				CertificatesURL:             nil,
+				CertificateThumbprintSHA1:   nil,
+				CertificateThumbprintSHA256: nil,
+			}),
+	)
 	if err != nil {
-		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, fmt.Errorf("create Okta token request: %w", err)
+		return "", fmt.Errorf("create Okta DPoP signer: %w", err)
 	}
-	httpRequest.Header.Set("Accept", "application/json")
-	httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ath := ""
+	if accessToken != "" {
+		hash := sha256.Sum256([]byte(accessToken))
+		ath = base64.RawURLEncoding.EncodeToString(hash[:])
+	}
+	proof, err := jwt.Signed(signer).
+		Claims(jwt.Claims{
+			Issuer:    "",
+			Subject:   "",
+			Audience:  nil,
+			Expiry:    nil,
+			NotBefore: nil,
+			IssuedAt:  jwt.NewNumericDate(c.now()),
+			ID:        uuid.NewString(),
+		}).
+		Claims(dpopProofClaims{HTTPMethod: method, HTTPURI: targetURL, AccessTokenHash: ath, Nonce: nonce}).
+		Serialize()
+	if err != nil {
+		return "", fmt.Errorf("sign Okta DPoP proof: %w", err)
+	}
+	return proof, nil
+}
 
-	var response struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int64  `json:"expires_in"`
-		Scope       string `json:"scope"`
-	}
-	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
-		if apiErr, ok := errors.AsType[*APIError](err); ok {
-			c.logger.WarnContext(ctx, "Okta token request failed",
-				attr.SlogOAuthError(apiErr.Code),
-				attr.SlogOAuthErrorDescription(apiErr.Description),
-				attr.SlogHTTPResponseStatusCode(apiErr.StatusCode),
-				attr.SlogURLDomain(request.TenantDomain),
-				attr.SlogError(err),
-			)
-		}
-		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, err
-	}
-	if response.AccessToken == "" || response.ExpiresIn <= 0 {
-		return Token{AccessToken: "", ExpiresAt: time.Time{}, GrantedScopes: nil}, errors.New("decode Okta token response: access_token and positive expires_in are required")
-	}
-
-	token := Token{
-		AccessToken:   response.AccessToken,
-		ExpiresAt:     c.now().Add(time.Duration(response.ExpiresIn) * time.Second),
-		GrantedScopes: strings.Fields(response.Scope),
-	}
+func (c *Client) dpopMode(key cacheKey) (bool, string) {
 	c.mu.Lock()
-	c.tokens[cacheKey{connectionID: request.ConnectionID, kid: request.KeyID}] = cachedToken{
-		token:        cloneToken(token),
-		tenantDomain: request.TenantDomain,
-		clientID:     request.ClientID,
-		scopes:       strings.Join(request.Scopes, "\x00"),
-	}
-	c.mu.Unlock()
-	return token, nil
+	defer c.mu.Unlock()
+	nonce, ok := c.dpopModes[key.connectionID]
+	return ok, nonce
+}
+
+func (c *Client) setDPoPMode(key cacheKey, nonce string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.dpopModes[key.connectionID] = nonce
+}
+
+func isDPoPChallenge(err error) bool {
+	apiErr, ok := errors.AsType[*APIError](err)
+	return ok && apiErr.StatusCode == http.StatusBadRequest && (apiErr.Code == "invalid_dpop_proof" || apiErr.Code == "use_dpop_nonce")
+}
+
+func isDPoPNonceChallenge(err error) bool {
+	apiErr, ok := errors.AsType[*APIError](err)
+	return ok && (apiErr.StatusCode == http.StatusBadRequest || apiErr.StatusCode == http.StatusUnauthorized) && apiErr.Code == "use_dpop_nonce"
 }
 
 // ListGroups reads one cursor-addressable page of Okta groups.
@@ -462,7 +625,7 @@ func (c *Client) CreateOIDCApplication(ctx context.Context, tenantDomain, access
 	httpRequest.Header.Set("Content-Type", "application/json")
 
 	var response applicationResponse
-	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
 		return Application{}, err
 	}
 	return applicationFromResponse(response), nil
@@ -485,7 +648,7 @@ func (c *Client) GetApplication(ctx context.Context, tenantDomain, accessToken, 
 	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
 
 	var response applicationResponse
-	if _, err := c.do(c.httpClient, httpRequest, &response); err != nil {
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &response); err != nil {
 		return Application{}, err
 	}
 	return applicationFromResponse(response), nil
@@ -561,7 +724,7 @@ func (c *Client) listApplicationResponses(ctx context.Context, tenantDomain, acc
 	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
 
 	var responses []applicationResponse
-	headers, err := c.do(c.httpClient, httpRequest, &responses)
+	headers, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &responses)
 	if err != nil {
 		return nil, "", err
 	}
@@ -597,7 +760,7 @@ func (c *Client) FindEveryoneGroup(ctx context.Context, tenantDomain, accessToke
 			Name string `json:"name"`
 		} `json:"profile"`
 	}
-	if _, err := c.do(c.httpClient, httpRequest, &responses); err != nil {
+	if _, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &responses); err != nil {
 		return Group{}, err
 	}
 	for _, response := range responses {
@@ -627,7 +790,7 @@ func (c *Client) AssignGroupToApplication(ctx context.Context, tenantDomain, acc
 	httpRequest.Header.Set("Content-Type", "application/json")
 
 	var response struct{}
-	if _, err := c.do(c.nonRetryingHTTPClient, httpRequest, &response); err != nil {
+	if _, err := c.doAuthorized(c.nonRetryingHTTPClient, httpRequest, accessToken, &response); err != nil {
 		return err
 	}
 	return nil
@@ -660,7 +823,7 @@ func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path strin
 	httpRequest.Header.Set("Authorization", "Bearer "+accessToken)
 
 	var items []json.RawMessage
-	headers, err := c.do(c.httpClient, httpRequest, &items)
+	headers, err := c.doAuthorized(c.httpClient, httpRequest, accessToken, &items)
 	if err != nil {
 		return Page{}, err
 	}
@@ -669,6 +832,74 @@ func (c *Client) list(ctx context.Context, tenantDomain, accessToken, path strin
 		NextCursor: nextCursor(headers.Get("Link"), parsed),
 		RateLimit:  parseRateLimit(headers),
 	}, nil
+}
+
+func (c *Client) doAuthorized(httpClient *guardian.HTTPClient, request *http.Request, accessToken string, output any) (http.Header, error) {
+	dpop, nonce, key := c.dpopToken(accessToken)
+	if !dpop {
+		request.Header.Set("Authorization", "Bearer "+accessToken)
+		return c.do(httpClient, request, output)
+	}
+
+	proofURL := *request.URL
+	proofURL.RawQuery = ""
+	proofURL.ForceQuery = false
+	proofURL.Fragment = ""
+	for attempt := range 2 {
+		attemptRequest := request
+		if attempt > 0 {
+			attemptRequest = request.Clone(request.Context())
+			if request.GetBody != nil {
+				body, err := request.GetBody()
+				if err != nil {
+					return nil, fmt.Errorf("recreate Okta DPoP request body: %w", err)
+				}
+				attemptRequest.Body = body
+			}
+		}
+		proof, err := c.dpopProof(request.Method, proofURL.String(), accessToken, nonce)
+		if err != nil {
+			return nil, err
+		}
+		attemptRequest.Header.Set("Authorization", "DPoP "+accessToken)
+		attemptRequest.Header.Set("DPoP", proof)
+		headers, err := c.do(c.nonRetryingHTTPClient, attemptRequest, output)
+		responseNonce := headers.Get(dpopNonceHeader)
+		if responseNonce != "" {
+			nonce = responseNonce
+			c.setDPoPNonce(key, accessToken, nonce)
+		}
+		if attempt == 0 && responseNonce != "" && isDPoPNonceChallenge(err) {
+			continue
+		}
+		return headers, err
+	}
+	return nil, errors.New("okta DPoP nonce retry exhausted")
+}
+
+func (c *Client) dpopToken(accessToken string) (bool, string, cacheKey) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	bound, ok := c.dpopTokens[accessToken]
+	if ok {
+		return true, bound.nonce, bound.key
+	}
+	return false, "", cacheKey{connectionID: uuid.Nil, kid: ""}
+}
+
+func (c *Client) setDPoPNonce(key cacheKey, accessToken, nonce string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	bound, ok := c.dpopTokens[accessToken]
+	if ok && bound.key == key {
+		bound.nonce = nonce
+		c.dpopTokens[accessToken] = bound
+	}
+	cached, ok := c.tokens[key]
+	if ok && cached.token.AccessToken == accessToken && cached.dpop {
+		cached.dpopNonce = nonce
+		c.tokens[key] = cached
+	}
 }
 
 func (c *Client) do(httpClient *guardian.HTTPClient, request *http.Request, output any) (http.Header, error) {
@@ -694,6 +925,9 @@ func (c *Client) do(httpClient *guardian.HTTPClient, request *http.Request, outp
 		if code == "" {
 			code = providerError.ErrorCode
 		}
+		if code == "" && oauthChallengeHasError(response.Header.Get("WWW-Authenticate"), "use_dpop_nonce") {
+			code = "use_dpop_nonce"
+		}
 		description := providerError.ErrorDescription
 		if description == "" {
 			description = providerError.ErrorSummary
@@ -703,7 +937,7 @@ func (c *Client) do(httpClient *guardian.HTTPClient, request *http.Request, outp
 		}
 		code = redactRequestCredentials(request, code)
 		description = redactRequestCredentials(request, description)
-		return nil, &APIError{
+		return response.Header.Clone(), &APIError{
 			Method:      request.Method,
 			Path:        request.URL.Path,
 			StatusCode:  response.StatusCode,
@@ -721,6 +955,20 @@ func (c *Client) do(httpClient *guardian.HTTPClient, request *http.Request, outp
 		return nil, fmt.Errorf("decode Okta response: response exceeds %d bytes", maxResponseBodyBytes)
 	}
 	return response.Header.Clone(), nil
+}
+
+func oauthChallengeHasError(challenge, target string) bool {
+	for field := range strings.SplitSeq(challenge, ",") {
+		field = strings.TrimSpace(field)
+		if _, rest, ok := strings.Cut(field, " "); ok {
+			field = rest
+		}
+		name, value, ok := strings.Cut(field, "=")
+		if ok && strings.EqualFold(strings.TrimSpace(name), "error") && strings.Trim(strings.TrimSpace(value), `"`) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) urlFor(tenantDomain, path string) (string, error) {
@@ -783,6 +1031,9 @@ func redactRequestCredentials(request *http.Request, value string) string {
 		if found && credential != "" {
 			credentials = append(credentials, credential)
 		}
+	}
+	if proof := request.Header.Get("DPoP"); proof != "" {
+		credentials = append(credentials, proof)
 	}
 	if request.GetBody != nil {
 		body, err := request.GetBody()

@@ -306,7 +306,7 @@ func tokenFailureResult(checkedAt time.Time, err error) *gen.IdentityProviderVer
 			outcome = "refused"
 			switch {
 			case apiErr.Code == "invalid_client":
-				detail = "Okta could not verify the client assertion. Confirm that the JWKS URL and Client ID match the API Services app in Okta."
+				detail = oktaClientAuthenticationInstruction
 			case apiErr.Description != "":
 				detail = apiErr.Description
 			default:
@@ -315,7 +315,9 @@ func tokenFailureResult(checkedAt time.Time, err error) *gen.IdentityProviderVer
 		} else {
 			detail = fmt.Sprintf("Okta token endpoint returned status %d.", apiErr.StatusCode)
 		}
-		detail += fmt.Sprintf(" Okta said: %s: %s", apiErr.Code, apiErr.Description)
+		if apiErr.Code != "invalid_client" {
+			detail += fmt.Sprintf(" Okta said: %s: %s", apiErr.Code, apiErr.Description)
+		}
 	}
 	return &gen.IdentityProviderVerifyResult{
 		Outcome:       outcome,

@@ -30,7 +30,7 @@ func TestDescribeSetupReturnsConnectStep(t *testing.T) {
 		Instructions: []string{
 			"Granting API scopes to a service app needs an Okta Super Administrator; if that is not you, hand these steps to the person who is.",
 			"Create an API Services app integration in the Okta Admin Console.",
-			"Use the JWKS URL for Public key / Private key client authentication.",
+			"Client authentication must be Public key / Private key with Use a URL; entering the URL alone is not enough",
 			"Grant the API scopes and administrator roles shown below, then enter the app's Client ID in Speakeasy.",
 		},
 		DeepLink: new("https://acme-admin.okta.com/admin/apps/active"),

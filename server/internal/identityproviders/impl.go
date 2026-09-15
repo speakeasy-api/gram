@@ -55,6 +55,7 @@ const (
 	identityProviderSigningKeyBits         = 2048
 	oktaAPIScopes                          = "okta.apps.read okta.groups.read okta.users.read okta.apps.manage"
 	oktaAdministratorRoles                 = "Read-only Administrator, Application Administrator"
+	oktaClientAuthenticationInstruction    = "Client authentication must be Public key / Private key with Use a URL; entering the URL alone is not enough"
 )
 
 type Service struct {
@@ -534,7 +535,7 @@ func buildConnectSetupStep(tenantIdentifier, jwksURL, status string, clientID *s
 		Instructions: []string{
 			"Granting API scopes to a service app needs an Okta Super Administrator; if that is not you, hand these steps to the person who is.",
 			"Create an API Services app integration in the Okta Admin Console.",
-			"Use the JWKS URL for Public key / Private key client authentication.",
+			oktaClientAuthenticationInstruction,
 			"Grant the API scopes and administrator roles shown below, then enter the app's Client ID in Speakeasy.",
 		},
 		DeepLink: oktaAdminAppsURL(tenantIdentifier),
