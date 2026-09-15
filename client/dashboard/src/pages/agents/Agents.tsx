@@ -12,13 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth";
-import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -36,6 +30,10 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
 import {
+  DEMO_UNAVAILABLE_REASON,
+  useAgentManagementAvailability,
+} from "./agent-management-availability";
+import {
   agentPolicyGrantsFromDraft,
   invalidateAgentPolicy,
   type AgentPolicyDraft,
@@ -47,24 +45,15 @@ import { ManagedAgentSessions } from "./ManagedAgentSessions";
 export default function AgentsPage(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const { sessionReason, isDemo } = useAgentManagementAvailability();
   const [searchParams, setSearchParams] = useSearchParams();
   const agentID = searchParams.get("id");
-  const isDemo = organization.slug === DEMO_ORG_SLUG;
-  const hasUnsupportedSession =
-    session.organizationOverride || Boolean(session.impersonatorEmail);
-  const hasScopeOverride =
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) !== null;
 
-  if (hasUnsupportedSession || hasScopeOverride) {
+  if (sessionReason) {
     return (
       <FormPage
         title="Agent management unavailable"
-        description={
-          hasUnsupportedSession
-            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Gram session."
-            : "Agent management is disabled while an RBAC scope override is active."
-        }
+        description={sessionReason}
       >
         {null}
       </FormPage>
@@ -89,7 +78,7 @@ export default function AgentsPage(): JSX.Element {
     return (
       <FormPage
         title="Agent management unavailable"
-        description="Agent management is unavailable in the shared demo because it requires active organization membership."
+        description={DEMO_UNAVAILABLE_REASON}
       >
         {null}
       </FormPage>
@@ -269,7 +258,7 @@ function CreateAgent({
             <Text className="font-medium">Create an agent</Text>
             <Text muted small className="mt-1">
               {disabled
-                ? "Agent management is unavailable in the shared demo because it requires active organization membership."
+                ? DEMO_UNAVAILABLE_REASON
                 : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."}
             </Text>
           </div>

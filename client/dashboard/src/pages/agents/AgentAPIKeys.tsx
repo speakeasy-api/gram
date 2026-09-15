@@ -22,10 +22,13 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import type { Key } from "@gram/client/models/components/key.js";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import {
+  agentKeyExpiry,
   buildRequestedGrants,
+  DEFAULT_AGENT_KEY_EXPIRY_DAYS,
   delegableGrantKey,
   validateAgentAPIKeyName,
 } from "./agent-api-key-grants";
+import { HumanizeDateTime } from "@/lib/dates";
 import { AgentGrantSelector, type GrantNarrowings } from "./AgentGrantSelector";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
@@ -87,7 +90,7 @@ function AgentAPIKeysContent({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
-  const [expiryDays, setExpiryDays] = useState("90");
+  const [expiryDays, setExpiryDays] = useState(DEFAULT_AGENT_KEY_EXPIRY_DAYS);
   const [customExpiry, setCustomExpiry] = useState("");
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -151,7 +154,7 @@ function AgentAPIKeysContent({
     setCopied(false);
     setName("");
     setNarrowings({});
-    setExpiryDays("90");
+    setExpiryDays(DEFAULT_AGENT_KEY_EXPIRY_DAYS);
     setCustomExpiry("");
     setError(null);
     create.reset();
@@ -190,26 +193,8 @@ function AgentAPIKeysContent({
   }
   if (!requestedGrants.length)
     disablingReasons.push("Select at least one valid permission.");
-  const expiryValidation = (now: number) => {
-    // Leave five minutes below the server limit for modest browser clock skew.
-    const maxLifetime = 365 * 86_400_000 - 5 * 60_000;
-    // Date-only selections expire at local midnight, not UTC midnight.
-    const expiresAt =
-      expiryDays === "custom"
-        ? new Date(`${customExpiry}T00:00:00`)
-        : new Date(
-            now + Math.min(Number(expiryDays) * 86_400_000, maxLifetime),
-          );
-    let reason: string | undefined;
-    if (!Number.isFinite(expiresAt.getTime()))
-      reason = "Choose a valid expiration date.";
-    else if (expiresAt.getTime() <= now)
-      reason = "Expiration date must be in the future.";
-    else if (expiresAt.getTime() > now + maxLifetime)
-      reason =
-        "Expiration date must be within 365 days minus a 5-minute clock-skew margin.";
-    return { expiresAt, reason };
-  };
+  const expiryValidation = (now: number) =>
+    agentKeyExpiry(expiryDays, customExpiry, now);
   const expiryReason = expiryValidation(Date.now()).reason;
   if (expiryReason) disablingReasons.push(expiryReason);
   const issue = () => {
@@ -271,6 +256,22 @@ function AgentAPIKeysContent({
           </time>
         ) : (
           "—"
+        ),
+    },
+    {
+      key: "lastAccessedAt",
+      header: "Last used",
+      render: (key) =>
+        key.lastAccessedAt ? (
+          <time
+            className="min-w-0 truncate"
+            title={key.lastAccessedAt.toLocaleString()}
+            dateTime={key.lastAccessedAt.toISOString()}
+          >
+            <HumanizeDateTime date={key.lastAccessedAt} />
+          </time>
+        ) : (
+          "Never"
         ),
     },
     {
