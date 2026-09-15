@@ -204,12 +204,28 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 
 // agentSessionID namespaces a client-reported session id under the agent
 // actor, so an agent can never address a human's or another agent's session.
+// The agent: prefix is reserved: a non-agent's id carrying it is escaped so
+// it can never equal an agent's namespaced id.
 func agentSessionID(ctx context.Context, sessionID string) string {
-	actor, ok := contextvalues.AuthenticatedActor(ctx)
-	if !ok || actor.Type != urn.PrincipalTypeAgent || sessionID == "" {
+	if sessionID == "" {
 		return sessionID
 	}
-	return actor.String() + ":" + sessionID
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return actor.String() + ":" + sessionID
+	}
+	if strings.HasPrefix(sessionID, string(urn.PrincipalTypeAgent)+":") {
+		return "user:" + sessionID
+	}
+	return sessionID
+}
+
+// scopeSessionAttrs applies agentSessionID to the session ids in a row's attrs.
+func scopeSessionAttrs(ctx context.Context, attrs map[attr.Key]any) {
+	for _, key := range otelSessionKeys {
+		if value, ok := attrs[attr.Key(key)].(string); ok && value != "" {
+			attrs[attr.Key(key)] = agentSessionID(ctx, value)
+		}
+	}
 }
 
 // namespaceAgentSession rewrites a payload session id in place for agent actors.
@@ -232,8 +248,8 @@ func strippedTeeKey(key string, agent bool) bool {
 }
 
 // sanitizeTeedLogsPayload applies the stored-row attribution rules to a raw
-// OTLP export before it is teed or stored, so both copies match. For agents
-// it also namespaces session ids, as the hook paths do.
+// OTLP export before it is teed or stored, so both copies match. It also
+// scopes session ids the way the hook paths do.
 func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 	if payload == nil {
 		return
@@ -260,12 +276,14 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 				record.Attributes = slices.DeleteFunc(record.Attributes, func(a *gen.OTELAttribute) bool {
 					return a != nil && strippedTeeKey(a.Key, agent)
 				})
-				if agent {
-					for _, a := range record.Attributes {
-						if a != nil && a.Value != nil && a.Value.StringValue != nil && slices.Contains(otelSessionKeys, a.Key) {
-							a.Value.StringValue = new(agentSessionID(ctx, strings.TrimSpace(*a.Value.StringValue)))
+				for _, a := range record.Attributes {
+					if a != nil && a.Value != nil && a.Value.StringValue != nil && slices.Contains(otelSessionKeys, a.Key) {
+						if scoped := agentSessionID(ctx, *a.Value.StringValue); scoped != *a.Value.StringValue {
+							a.Value.StringValue = new(scoped)
 						}
 					}
+				}
+				if agent {
 					record.Attributes = append(record.Attributes,
 						&gen.OTELAttribute{Key: string(attr.AuthorizationActorTypeKey), Value: &gen.OTELAttributeValue{StringValue: new(string(actor.Type)), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
 						&gen.OTELAttribute{Key: string(attr.AuthorizationActorIDKey), Value: &gen.OTELAttributeValue{StringValue: new(actor.ID), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},

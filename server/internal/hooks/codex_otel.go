@@ -299,6 +299,7 @@ func (s *Service) writeCodexMetricsToClickHouse(ctx context.Context, payload *ge
 
 					attrs := logAttributesMap(dataPoint.Attributes)
 					normalizeCodexLogAttributes(attrs)
+					scopeSessionAttrs(ctx, attrs)
 
 					attrs[attr.EventSourceKey] = string(telemetry.EventSourceHook)
 					attrs[attr.LogBodyKey] = *metric.Name

@@ -396,6 +396,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		// metadata that the same org+project seeded — a colliding or spoofed
 		// session id must not stamp another tenant's attribution or user identity
 		// onto this org's rows.
+		m.SessionID = agentSessionID(ctx, m.SessionID)
 		var sessionMeta SessionMetadata
 		if m.SessionID != "" {
 			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&

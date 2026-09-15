@@ -602,6 +602,99 @@ func TestLocalSessionCache_AgentFallbackHasNoHumanIdentity(t *testing.T) {
 	require.NotEmpty(t, metadata.ProjectID, "routing scope is still resolved")
 }
 
+func TestAgentSessionID_ReservesAgentPrefix(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	actor, ok := contextvalues.AuthenticatedActor(agentCtx)
+	require.True(t, ok)
+
+	spoofed := actor.String() + ":x"
+	require.Equal(t, "user:"+spoofed, agentSessionID(ctx, spoofed), "a human's agent:-prefixed id is escaped")
+	require.NotEqual(t, agentSessionID(agentCtx, "x"), agentSessionID(ctx, spoofed))
+}
+
+func TestIngest_HumanAgentPrefixedSessionNeverReachesAgentChat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	actor, ok := contextvalues.AuthenticatedActor(agentCtx)
+	require.True(t, ok)
+
+	agentPrompt := "agent prompt"
+	agentPayload := canonicalIngestPayload("claude", "prompt.submitted", "x")
+	agentPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &agentPrompt}}
+	_, err := ti.service.Ingest(agentCtx, agentPayload)
+	require.NoError(t, err)
+	agentChat := sessionIDToUUID(agentSessionID(agentCtx, "x"))
+
+	humanPrompt := "human prompt"
+	humanPayload := canonicalIngestPayload("claude", "prompt.submitted", actor.String()+":x")
+	humanPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &humanPrompt}}
+	_, err = ti.service.Ingest(ctx, humanPayload)
+	require.NoError(t, err)
+
+	agentMessages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: agentChat, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, agentMessages, 1, "a human's agent:-prefixed session never lands in the agent's chat")
+	humanMessages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID("user:" + actor.String() + ":x"), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, humanMessages, 1)
+}
+
+func TestMetrics_AgentSessionIDsNamespaced(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	agentCtx := agentKeyContext(t, ctx, ti)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	toolCalls := "codex.tool.call"
+	require.NoError(t, ti.service.Metrics(agentCtx, codexMetricsPayload(&gen.OTELMetric{
+		Name: &toolCalls,
+		Sum: &gen.OTELSum{
+			AggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+			DataPoints: []*gen.OTELNumberDataPoint{{
+				TimeUnixNano: new(nanoString(timestamp)),
+				AsInt:        "1",
+				Attributes:   []*gen.OTELAttribute{strAttr("conversation.id", "conv-agent-metrics")},
+			}},
+		},
+	})))
+	codexRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELMetricsURN, timestamp, 1)
+	require.NotNil(t, codexRows[0].GramChatID)
+	require.Equal(t, agentSessionID(agentCtx, "conv-agent-metrics"), *codexRows[0].GramChatID)
+
+	usage := "claude_code.token.usage"
+	require.NoError(t, ti.service.Metrics(agentCtx, &gen.MetricsPayload{
+		ResourceMetrics: []*gen.OTELResourceMetrics{{
+			ScopeMetrics: []*gen.OTELScopeMetrics{{
+				Metrics: []*gen.OTELMetric{{
+					Name: &usage,
+					Sum: &gen.OTELSum{
+						AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+						DataPoints: []*gen.OTELNumberDataPoint{{
+							TimeUnixNano: new(nanoString(timestamp)),
+							AsInt:        "100",
+							Attributes: []*gen.OTELAttribute{
+								strAttr("session.id", "claude-agent-metrics"),
+								strAttr("model", "claude-opus-4-8"),
+								strAttr("type", "input"),
+							},
+						}},
+					},
+				}},
+			}},
+		}},
+	}))
+	claudeRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "claude-code:usage:metrics", timestamp, 1)
+	require.Contains(t, claudeRows[0].Attributes, agentSessionID(agentCtx, "claude-agent-metrics"))
+}
+
 func TestAgentSessionID_NamespacesAgentsOnly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
