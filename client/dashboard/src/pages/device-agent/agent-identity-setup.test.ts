@@ -9,6 +9,7 @@ import { buildRequestedGrants } from "@/pages/agents/agent-api-key-grants";
 import {
   buildAgentIdentityManagedConfig,
   buildAgentIdentitySnippet,
+  controlPlaneURLError,
   deviceAgentPolicyGrants,
   issuedKeyFor,
   lastSeenKey,
@@ -123,15 +124,25 @@ describe("device agent key grants", () => {
 describe("agent identity snippet", () => {
   const base = {
     agentKey: "gram_live_abc123",
-    os: "linux" as const,
     mode: "ephemeral" as const,
     serverURL: "https://app.getgram.ai",
   };
 
   it("carries no email, version, or checksum", () => {
     const snippet = buildAgentIdentitySnippet(base);
+    expect(snippet).toContain("/etc/speakeasy/managed.json");
+    expect(snippet).toContain('"$BIN_DIR/speakeasyd" sync --once');
+    expect(snippet).not.toContain("loginctl");
+    expect(snippet).not.toMatch(/email|sha256|VERSION/i);
+  });
+
+  it("downloads the installer over HTTPS only before running it", () => {
+    const snippet = buildAgentIdentitySnippet(base);
     expect(snippet).toContain(
-      'curl -fsSL -o "$INSTALLER" https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh',
+      "curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2",
+    );
+    expect(snippet).toContain(
+      '-o "$INSTALLER" https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh',
     );
     expect(snippet).toContain("trap 'rm -f \"$INSTALLER\"' EXIT");
     expect(snippet).toContain('sh "$INSTALLER" --install-dir "$BIN_DIR"');
@@ -139,10 +150,13 @@ describe("agent identity snippet", () => {
     expect(snippet.indexOf("curl -fsSL")).toBeLessThan(
       snippet.indexOf('sh "$INSTALLER"'),
     );
-    expect(snippet).toContain("/etc/speakeasy/managed.json");
-    expect(snippet).toContain('"$BIN_DIR/speakeasyd" sync --once');
-    expect(snippet).not.toContain("loginctl");
-    expect(snippet).not.toMatch(/email|sha256|VERSION/i);
+  });
+
+  it("targets Linux only", () => {
+    for (const mode of ["ephemeral", "service"] as const) {
+      const snippet = buildAgentIdentitySnippet({ ...base, mode });
+      expect(snippet).not.toContain("Library/Application Support");
+    }
   });
 
   it("writes an agent-key config and omits the production control plane", () => {
@@ -168,7 +182,16 @@ describe("agent identity snippet", () => {
     expect(config.auto_update).toBe("automatic");
   });
 
-  it("keeps the Linux service alive after logout", () => {
+  it("refuses a plaintext control plane", () => {
+    expect(() =>
+      buildAgentIdentitySnippet({
+        ...base,
+        serverURL: "http://gram.example.com",
+      }),
+    ).toThrow(/HTTPS/);
+  });
+
+  it("keeps the service alive after logout", () => {
     const snippet = buildAgentIdentitySnippet({ ...base, mode: "service" });
     const linger =
       'if [ -n "$SUDO" ]; then\n  sudo loginctl enable-linger "$(id -un)"\nfi';
@@ -176,22 +199,10 @@ describe("agent identity snippet", () => {
     expect(snippet.indexOf(linger)).toBeLessThan(
       snippet.indexOf('"$BIN_DIR/speakeasyd" -service install'),
     );
+    expect(snippet).toContain('"$BIN_DIR/speakeasyd" -service start');
+    expect(snippet).not.toContain("sync --once");
     // Root installs skip linger, and $USER may be unset in containers.
     expect(snippet).not.toContain("$USER");
-  });
-
-  it("installs the service on persistent macOS hosts", () => {
-    const snippet = buildAgentIdentitySnippet({
-      ...base,
-      os: "macos",
-      mode: "service",
-    });
-    expect(snippet).toContain(
-      "'/Library/Application Support/Speakeasy/managed.json'",
-    );
-    expect(snippet).toContain('"$BIN_DIR/speakeasyd" -service install');
-    expect(snippet).not.toContain("sync --once");
-    expect(snippet).not.toContain("loginctl");
   });
 
   it("rejects a key that would break the JSON", () => {
@@ -204,13 +215,30 @@ describe("agent identity snippet", () => {
   });
 });
 
+describe("control plane URL", () => {
+  it("accepts HTTPS", () => {
+    expect(controlPlaneURLError("https://app.getgram.ai")).toBeNull();
+    expect(controlPlaneURLError("https://dev.getgram.ai/")).toBeNull();
+  });
+
+  it("accepts plain HTTP only on this machine", () => {
+    expect(controlPlaneURLError("http://localhost:8080")).toBeNull();
+    expect(controlPlaneURLError("http://127.0.0.1:8080")).toBeNull();
+  });
+
+  it("rejects plaintext remote hosts and invalid URLs", () => {
+    expect(controlPlaneURLError("http://gram.example.com")).toMatch(/HTTPS/);
+    expect(controlPlaneURLError("http://10.0.0.5")).toMatch(/HTTPS/);
+    expect(controlPlaneURLError("not a url")).toMatch(/invalid/);
+  });
+});
+
 describe("agent identity config permissions", () => {
   it.each(["ephemeral", "service"] as const)(
     "limits the %s config to root and the agent's account",
     (mode) => {
       const snippet = buildAgentIdentitySnippet({
         agentKey: "gram_live_abc123",
-        os: "linux",
         mode,
         serverURL: "https://app.getgram.ai",
       });

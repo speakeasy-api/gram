@@ -17,13 +17,16 @@ const PRODUCTION_SERVER_URL = "https://app.getgram.ai";
 const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
 const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
 
-export type AgentHostOS = "linux" | "macos";
-export type AgentRunMode = "ephemeral" | "service";
+/** Plain HTTP is tolerated only for a control plane on this machine. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
-const MANAGED_CONFIG_PATH: Record<AgentHostOS, string> = {
-  linux: "/etc/speakeasy/managed.json",
-  macos: "/Library/Application Support/Speakeasy/managed.json",
-};
+/** Identifies the key issuance mutation, so selection can lock while it runs. */
+export const ISSUE_AGENT_KEY_MUTATION = ["agent-identity", "issue-key"];
+
+/** Agent identity hosts are Linux; macOS hosts use the signed .pkg via MDM. */
+export const MANAGED_CONFIG_PATH = "/etc/speakeasy/managed.json";
+
+export type AgentRunMode = "ephemeral" | "service";
 
 // Printable ASCII minus quote, backslash, and space: the key lands verbatim in
 // JSON written through a quoted heredoc.
@@ -130,6 +133,22 @@ export function undelegableScopesMessage(missingScopes: string[]): string {
   return `You cannot delegate ${scopes} to this agent. Check the agent's policy, and that you and its owner hold these permissions.`;
 }
 
+/**
+ * Why the agent key must not be sent to this control plane, or null when it
+ * may. The key travels on every request, so anything but HTTPS would expose it.
+ */
+export function controlPlaneURLError(serverURL: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(serverURL);
+  } catch {
+    return "The control-plane URL is invalid, so no install snippet can be generated.";
+  }
+  if (url.protocol === "https:") return null;
+  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) return null;
+  return `The control plane at ${url.origin} is not served over HTTPS, so the agent key would travel in plaintext. No install snippet can be generated.`;
+}
+
 /** The most recent use of any of the agent's keys: the device agent's check-in. */
 export function lastSeenKey(keys: Key[]): Key | null {
   let latest: Key | null = null;
@@ -143,14 +162,9 @@ export function lastSeenKey(keys: Key[]): Key | null {
 
 export type AgentIdentitySnippetInput = {
   agentKey: string;
-  os: AgentHostOS;
   mode: AgentRunMode;
   serverURL: string;
 };
-
-export function managedConfigPath(os: AgentHostOS): string {
-  return MANAGED_CONFIG_PATH[os];
-}
 
 export function buildAgentIdentityManagedConfig(
   input: AgentIdentitySnippetInput,
@@ -158,6 +172,8 @@ export function buildAgentIdentityManagedConfig(
   if (!input.agentKey || !JSON_SAFE_VALUE.test(input.agentKey)) {
     throw new Error("a valid agent key is required");
   }
+  const urlError = controlPlaneURLError(input.serverURL);
+  if (urlError) throw new Error(urlError);
   const serverURL = input.serverURL.replace(/\/+$/, "");
   const config: Record<string, string | number | boolean> = {
     v: 1,
@@ -174,31 +190,27 @@ export function buildAgentIdentityManagedConfig(
 }
 
 /**
- * Install, configure, and start the device agent under an agent identity. No
- * email, version, or checksum: the hosted script resolves the latest stable
- * release and verifies it, and the key is the whole identity.
+ * Install, configure, and start the device agent on a Linux host under an
+ * agent identity. No email, version, or checksum: the hosted script resolves
+ * the latest stable release and verifies it, and the key is the whole identity.
  */
 export function buildAgentIdentitySnippet(
   input: AgentIdentitySnippetInput,
 ): string {
   const config = buildAgentIdentityManagedConfig(input);
-  const path = managedConfigPath(input.os);
+  const path = MANAGED_CONFIG_PATH;
   const dir = path.slice(0, path.lastIndexOf("/"));
-  const linger =
-    input.os === "linux"
-      ? `# Keep the per-user service running after logout; root needs no linger.
-if [ -n "$SUDO" ]; then
-  sudo loginctl enable-linger "$(id -un)"
-fi
-`
-      : "";
   const run =
     input.mode === "ephemeral"
       ? `# 3) Reconcile once and exit. Rerun at the start of each session.
 "$BIN_DIR/speakeasyd" sync --once`
       : `# 3) Register and start the background service. Run as the account
 #    the agent should manage, not as root.
-${linger}"$BIN_DIR/speakeasyd" -service install
+# Keep the per-user service running after logout; root needs no linger.
+if [ -n "$SUDO" ]; then
+  sudo loginctl enable-linger "$(id -un)"
+fi
+"$BIN_DIR/speakeasyd" -service install
 "$BIN_DIR/speakeasyd" -service start`;
   return `#!/usr/bin/env sh
 set -eu
@@ -209,10 +221,11 @@ else
 fi
 
 # 1) Install the device agent (latest stable, checksum-verified). Download
-#    first so a failed or truncated fetch never runs.
+#    over HTTPS only, and first, so a failed or truncated fetch never runs.
 INSTALLER="$(mktemp)"
 trap 'rm -f "$INSTALLER"' EXIT
-curl -fsSL -o "$INSTALLER" ${INSTALL_SCRIPT_URL}
+curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 \\
+  -o "$INSTALLER" ${INSTALL_SCRIPT_URL}
 sh "$INSTALLER" --install-dir "$BIN_DIR"
 
 # 2) Agent identity. The key is this machine's only credential.

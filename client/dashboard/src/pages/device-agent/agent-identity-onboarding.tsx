@@ -16,9 +16,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useFeatureFlag, type FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import { HumanizeDateTime } from "@/lib/dates";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { getServerURL } from "@/lib/utils";
 import {
   agentKeyExpiry,
@@ -28,6 +26,7 @@ import {
 } from "@/pages/agents/agent-api-key-grants";
 import {
   DEMO_UNAVAILABLE_REASON,
+  useAgentIdentityRollout,
   useAgentManagementAvailability,
 } from "@/pages/agents/agent-management-availability";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
@@ -38,6 +37,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import {
   hashKey,
+  useIsMutating,
   useMutation,
   useQuery,
   useQueryClient,
@@ -47,14 +47,15 @@ import { Link } from "react-router";
 
 import {
   buildAgentIdentitySnippet,
+  controlPlaneURLError,
   deviceAgentPolicyGrants,
+  ISSUE_AGENT_KEY_MUTATION,
   issuedKeyFor,
   lastSeenKey,
-  managedConfigPath,
+  MANAGED_CONFIG_PATH,
   missingPolicyGrants,
   selectDeviceAgentKeyGrants,
   undelegableScopesMessage,
-  type AgentHostOS,
   type AgentRunMode,
 } from "./agent-identity-setup";
 
@@ -77,26 +78,12 @@ export default function DeviceAgentAgentIdentity(): JSX.Element {
   );
 }
 
-function flagUnavailableReason(flag: FeatureFlagResult): string | null {
-  switch (flag.status) {
-    case "enabled":
-      return null;
-    case "loading":
-      return "Checking agent API key availability…";
-    case "disabled":
-      return "Agent API keys are disabled for this organization.";
-    case "missing":
-    case "error":
-      return "Agent API key availability could not be determined.";
-  }
-}
-
 function AgentIdentityOnboarding() {
   const { sessionReason, isDemo } = useAgentManagementAvailability();
-  const flag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
+  // Both rollouts must be on before any agent binding or key issuance.
+  const rolloutReason = useAgentIdentityRollout();
   const unavailable =
-    sessionReason ??
-    (isDemo ? DEMO_UNAVAILABLE_REASON : flagUnavailableReason(flag));
+    sessionReason ?? (isDemo ? DEMO_UNAVAILABLE_REASON : rolloutReason);
   return (
     <SettingsPage
       title="Agent identity setup"
@@ -118,13 +105,17 @@ function OnboardingSteps() {
   const grantTarget = agent ? `${agent.id}:${projectId}` : null;
   const granted = grantTarget !== null && grantedFor === grantTarget;
   const issuedKey = issuedKeyFor(issued, agent?.id, projectId);
+  // Switching mid-issuance would unmount IssueKey and orphan the new secret.
+  const issuing = useIsMutating({ mutationKey: ISSUE_AGENT_KEY_MUTATION }) > 0;
   // A key is minted for one agent and project; changing either starts over.
   const selectAgent = (next: ManagedAgent | null) => {
+    if (issuing) return;
     setAgent(next);
     setGrantedFor(null);
     setIssued(null);
   };
   const changeProject = (id: string) => {
+    if (issuing) return;
     setProjectId(id);
     setIssued(null);
   };
@@ -136,7 +127,7 @@ function OnboardingSteps() {
         title="Choose an agent"
         description="The identity the device agent runs as. Its activity is attributed to this agent, not to a person."
       >
-        <AgentPicker agent={agent} onChange={selectAgent} />
+        <AgentPicker agent={agent} onChange={selectAgent} disabled={issuing} />
       </Step>
       {agent && (
         <Step
@@ -150,6 +141,7 @@ function OnboardingSteps() {
             onProjectChange={changeProject}
             granted={granted}
             onGranted={() => setGrantedFor(grantTarget)}
+            disabled={issuing}
           />
         </Step>
       )}
@@ -213,13 +205,15 @@ function Step({
   );
 }
 
-function AgentPicker({
+export function AgentPicker({
   agent,
   onChange,
+  disabled = false,
 }: {
   agent: ManagedAgent | null;
   onChange: (agent: ManagedAgent | null) => void;
-}) {
+  disabled?: boolean;
+}): JSX.Element {
   const organization = useOrganization();
   const sdk = useSdkClient();
   const queryClient = useQueryClient();
@@ -249,6 +243,7 @@ function AgentPicker({
     <div className="flex flex-col gap-4">
       <SegmentedControl
         value={mode}
+        disabled={disabled}
         onChange={(next) => {
           setMode(next);
           onChange(null);
@@ -265,6 +260,7 @@ function AgentPicker({
           isError={agents.isError}
           value={agent}
           onChange={onChange}
+          disabled={disabled}
         />
       ) : (
         <form
@@ -285,13 +281,16 @@ function AgentPicker({
             onChange={setName}
             placeholder="CI runners"
             maxLength={120}
-            disabled={create.isPending}
+            disabled={disabled || create.isPending}
           />
           <Text muted small>
             You will be the owner.
           </Text>
           <div>
-            <Button type="submit" disabled={!name.trim() || create.isPending}>
+            <Button
+              type="submit"
+              disabled={disabled || !name.trim() || create.isPending}
+            >
               {create.isPending ? "Creating…" : "Create agent"}
             </Button>
           </div>
@@ -312,12 +311,14 @@ function ExistingAgentSelect({
   isError,
   value,
   onChange,
+  disabled,
 }: {
   agents: ManagedAgent[];
   isLoading: boolean;
   isError: boolean;
   value: ManagedAgent | null;
   onChange: (agent: ManagedAgent | null) => void;
+  disabled: boolean;
 }) {
   const agentsHref = useOrgRoutes().agents.href();
   if (isLoading) return <Text muted>Loading agents…</Text>;
@@ -328,6 +329,7 @@ function ExistingAgentSelect({
     <div className="flex max-w-md flex-col gap-2">
       <Select
         value={value?.id ?? ""}
+        disabled={disabled}
         onValueChange={(id) =>
           onChange(agents.find((agent) => agent.id === id) ?? null)
         }
@@ -354,19 +356,21 @@ function ExistingAgentSelect({
   );
 }
 
-function GrantAccess({
+export function GrantAccess({
   agent,
   projectId,
   onProjectChange,
   granted,
   onGranted,
+  disabled = false,
 }: {
   agent: ManagedAgent;
   projectId: string;
   onProjectChange: (id: string) => void;
   granted: boolean;
   onGranted: () => void;
-}) {
+  disabled?: boolean;
+}): JSX.Element {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
@@ -404,7 +408,7 @@ function GrantAccess({
         <Select
           value={projectId}
           onValueChange={onProjectChange}
-          disabled={grant.isPending}
+          disabled={disabled || grant.isPending}
         >
           <SelectTrigger aria-label="Hooks project">
             <SelectValue placeholder="Select a project" />
@@ -431,7 +435,9 @@ function GrantAccess({
       <div>
         <Button
           onClick={() => grant.mutate()}
-          disabled={!canWrite || !projectId || granted || grant.isPending}
+          disabled={
+            disabled || !canWrite || !projectId || granted || grant.isPending
+          }
         >
           {granted ? "Access granted" : "Grant access"}
         </Button>
@@ -446,7 +452,7 @@ function GrantAccess({
   );
 }
 
-function IssueKey({
+export function IssueKey({
   agent,
   projectId,
   issued,
@@ -456,7 +462,7 @@ function IssueKey({
   projectId: string;
   issued: boolean;
   onIssued: (key: IssuedKey) => void;
-}) {
+}): JSX.Element {
   const organization = useOrganization();
   const { user } = useSession();
   const sdk = useSdkClient();
@@ -467,7 +473,11 @@ function IssueKey({
   );
   const createKey = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   const issue = useMutation({
+    mutationKey: ISSUE_AGENT_KEY_MUTATION,
     mutationFn: async () => {
+      // Refuse before minting: a key for a plaintext control plane is unusable.
+      const urlError = controlPlaneURLError(getServerURL());
+      if (urlError) throw new Error(urlError);
       const keyName = validateAgentAPIKeyName(name);
       // Fresh read: the candidates must reflect the grants just added.
       const delegable = await queryClient.fetchQuery({
@@ -562,25 +572,21 @@ function IssueKey({
 }
 
 function SetupSnippet({ agentKey }: { agentKey: string }) {
-  const [os, setOS] = useState<AgentHostOS>("linux");
   const [mode, setMode] = useState<AgentRunMode>("ephemeral");
-  const snippet = buildAgentIdentitySnippet({
-    agentKey,
-    os,
-    mode,
-    serverURL: getServerURL(),
-  });
+  const setupHref = useOrgRoutes().deviceAgent.href();
+  const serverURL = getServerURL();
+  const urlError = controlPlaneURLError(serverURL);
+  if (urlError)
+    return (
+      <Alert variant="error">
+        <AlertTitle>No install snippet for this control plane</AlertTitle>
+        <AlertDescription>{urlError}</AlertDescription>
+      </Alert>
+    );
+  const snippet = buildAgentIdentitySnippet({ agentKey, mode, serverURL });
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-3">
-        <SegmentedControl
-          value={os}
-          onChange={setOS}
-          options={[
-            { value: "linux", label: "Linux" },
-            { value: "macos", label: "macOS" },
-          ]}
-        />
         <SegmentedControl
           value={mode}
           onChange={setMode}
@@ -600,10 +606,19 @@ function SetupSnippet({ agentKey }: { agentKey: string }) {
       </div>
       <CodeBlock language="bash">{snippet}</CodeBlock>
       <Text muted small>
-        The agent reads its identity from <code>{managedConfigPath(os)}</code>.{" "}
+        For Linux hosts. The agent reads its identity from{" "}
+        <code>{MANAGED_CONFIG_PATH}</code>.{" "}
         {mode === "ephemeral"
           ? "Run the snippet from the environment's setup script, and rerun speakeasyd sync --once at the start of each session; nothing keeps enforcement reconciled after it exits."
           : "The service keeps plugins and hooks reconciled for as long as the machine runs."}
+      </Text>
+      <Text muted small>
+        macOS agent hosts use the signed <code>.pkg</code> with{" "}
+        <code>managed.json</code> deployed through your MDM; see{" "}
+        <Link to={setupHref} className={LINK_CLASS}>
+          Device Agent setup
+        </Link>
+        .
       </Text>
       <Alert variant="warning">
         <AlertTitle>Copy this now</AlertTitle>
