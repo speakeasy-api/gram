@@ -41,8 +41,27 @@ func (ClaudeCodeLog) InputContent(record *otelv1.InboundLogRecord) (string, gena
 	}}, nil
 }
 
-func (ClaudeCodeLog) OutputContent(*otelv1.InboundLogRecord) (string, genaiconv.OutputMessages, error) {
-	return "", nil, nil
+// OutputContent is the assistant response as one message. Claude Code does
+// not say why the model stopped, so the finish reason is left unstated.
+func (ClaudeCodeLog) OutputContent(record *otelv1.InboundLogRecord) (string, genaiconv.OutputMessages, error) {
+	_, name := claudeCodeEventName(record)
+	if claudeCodeEventType(name) != EventTypeAPIResponse {
+		return "", nil, nil
+	}
+	key, value := claudeCodeContent(record, "response")
+	if key == "" || value == "" {
+		return "", nil, nil
+	}
+
+	return key, genaiconv.OutputMessages{{
+		Role: genaiconv.RoleAssistant,
+		Parts: []genaiconv.Part{&genaiconv.TextPart{
+			Type:    genaiconv.PartTypeText,
+			Content: value,
+		}},
+		FinishReason: "",
+		Name:         nil,
+	}}, nil
 }
 
 func (ClaudeCodeLog) SessionID(record *otelv1.InboundLogRecord) (string, string, error) {

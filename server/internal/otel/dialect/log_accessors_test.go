@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -326,4 +327,53 @@ func TestClaudeCodeLogTreatsRedactedContentAsAbsent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "prompt", key)
 	require.Equal(t, "fix it", text)
+}
+
+func TestClaudeCodeLogReadsMCPAttributionFromToolParameters(t *testing.T) {
+	t.Parallel()
+
+	// How a 2.1 CLI reports an MCP tool with tool details on: the tool is
+	// named mcp_tool and the server and tool live in tool_parameters.
+	record := accessorTestRecord(claudeScope, "tool_result",
+		accessorTestKV("tool_name", "mcp_tool"),
+		accessorTestKV("tool_use_id", "toolu_1"),
+		accessorTestKV("success", "true"),
+		accessorTestKV("tool_parameters", `{"mcp_server_name":"assistants-dev","mcp_tool_name":"whoami"}`),
+	)
+	selected := ForLog(record)
+
+	key, server, err := selected.MCPServerName(record)
+	require.NoError(t, err)
+	require.Equal(t, "tool_parameters.mcp_server_name", key)
+	require.Equal(t, "assistants-dev", server)
+
+	key, tool, err := selected.MCPToolName(record)
+	require.NoError(t, err)
+	require.Equal(t, "tool_parameters.mcp_tool_name", key)
+	require.Equal(t, "whoami", tool)
+}
+
+func TestClaudeCodeLogOutputContentIsTheResponse(t *testing.T) {
+	t.Parallel()
+
+	response := accessorTestRecord(claudeScope, "assistant_response", accessorTestKV("message.uuid", "m2"), accessorTestKV("response", "Done. Two files changed."))
+	key, output, err := ClaudeCodeLog{}.OutputContent(response)
+	require.NoError(t, err)
+	require.Equal(t, "response", key)
+	require.Len(t, output, 1)
+	require.Equal(t, genaiconv.RoleAssistant, output[0].Role)
+	part, ok := output[0].Parts[0].(*genaiconv.TextPart)
+	require.True(t, ok)
+	require.Equal(t, "Done. Two files changed.", part.Content)
+
+	redacted := accessorTestRecord(claudeScope, "assistant_response", accessorTestKV("message.uuid", "m3"), accessorTestKV("response", "<REDACTED>"))
+	_, output, err = ClaudeCodeLog{}.OutputContent(redacted)
+	require.NoError(t, err)
+	require.Nil(t, output)
+
+	// A prompt carries no response, whatever attributes it has.
+	prompt := accessorTestRecord(claudeScope, "user_prompt", accessorTestKV("response", "not a response"))
+	_, output, err = ClaudeCodeLog{}.OutputContent(prompt)
+	require.NoError(t, err)
+	require.Nil(t, output)
 }
