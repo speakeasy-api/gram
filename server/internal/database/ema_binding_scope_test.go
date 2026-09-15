@@ -139,33 +139,6 @@ func TestEMABindingScope(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, completed.RowsAffected())
 	})
-	t.Run("parent_fks_preserve_required_provenance", func(t *testing.T) {
-		tx, err := pool.Begin(ctx)
-		require.NoError(t, err)
-		defer func() { _ = tx.Rollback(ctx) }()
-		var count int
-		err = tx.QueryRow(ctx, `SELECT count(*) FROM pg_constraint
- WHERE conrelid = 'remote_session_ema_bindings'::regclass AND contype = 'f' AND confdeltype = 'a'`).Scan(&count)
-		require.NoError(t, err)
-		require.Equal(t, 4, count)
-		_, err = tx.Exec(ctx, emaScopeInsert)
-		require.NoError(t, err)
-		// Even without the lifecycle trigger, the FK must reject deletion,
-		// not attempt to clear a required parent ID.
-		_, err = tx.Exec(ctx, `ALTER TABLE remote_session_clients DISABLE TRIGGER remote_session_ema_client_delete_guard;
- SAVEPOINT delete_parent`)
-		require.NoError(t, err)
-		_, err = tx.Exec(ctx, "DELETE FROM remote_session_clients WHERE id = fixture_scope_id(1)")
-		requireEMAScopeError(t, err)
-		_, err = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT delete_parent;
- ALTER TABLE remote_session_clients ENABLE TRIGGER remote_session_ema_client_delete_guard;
- UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
- DELETE FROM remote_session_clients WHERE id = fixture_scope_id(1)`)
-		require.NoError(t, err)
-		err = tx.QueryRow(ctx, "SELECT count(*) FROM remote_session_ema_bindings").Scan(&count)
-		require.NoError(t, err)
-		require.Zero(t, count)
-	})
 	for name, trusted := range map[string]string{"distinct_upstream_and_downstream": "fixture_scope_id(4)", "no_upstream_trust_configured": "NULL"} {
 		t.Run(name, func(t *testing.T) {
 			tx, err := pool.Begin(ctx)

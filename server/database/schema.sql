@@ -8647,11 +8647,11 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (id),
   -- Lifecycle guards reject live references and remove unlinked tombstones.
-  -- If cleanup does not run, retain required provenance rather than nulling it.
-  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE NO ACTION,
-  FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE NO ACTION,
-  FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE NO ACTION,
-  FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE NO ACTION
+  -- Required provenance stays NOT NULL: if cleanup is bypassed, deletion fails.
+  FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_bindings_resource_key ON remote_session_ema_bindings
   (project_id, user_session_issuer_id, remote_session_issuer_id, resource);
