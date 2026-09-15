@@ -2242,6 +2242,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Last successful JWK Set fetch, including conditional fetches that confirm
   -- the stored keys remain current.
   jwks_fetched_at timestamptz,
+  -- Public-safe reason and time of the last failed JWK Set consult. Kept
+  -- separate so failed refreshes do not appear to confirm the stored keys.
+  jwks_last_error TEXT,
+  jwks_last_error_at timestamptz,
   -- Cache TTL derived from upstream response headers and bounded by the
   -- resolver's refresh policy. NULL means no cache lifetime is known yet.
   jwks_cache_expires_at timestamptz,
