@@ -69,6 +69,14 @@ in an ordinary local session. Agent names open the shared identity overview at
 selects All, Humans, or Agents; unmatched telemetry identifiers without an email are Unknown, not Agent.
 The shared demo skips the restricted inventory read and keeps its people roster.
 
+Registered-agent profiles read the stored agent policy on Access and Overview;
+saving permissions in Agent Identity invalidates both views. Verify restricted
+resource and tool selectors remain visible. Activity separates human changes to
+the agent from actions attributed to the agent; Connections uses the dedicated
+agent sessions API, with its credential authorization gate. Accounts & devices
+shows agent API keys. Usage, cost, and risk aggregation currently lack a registered
+agent identifier and must show unavailable, never human-owner activity or zeros.
+
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key

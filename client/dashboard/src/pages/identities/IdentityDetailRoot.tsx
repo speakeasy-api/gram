@@ -18,6 +18,7 @@ import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
+import { AgentIdentityProfile } from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
 import { registeredAgentHref } from "./identityRoster";
 import { Button } from "@/components/ui/Button";
@@ -170,7 +171,18 @@ function IdentityDetailContent(): JSX.Element {
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
           <div className="min-w-0 flex-1">
-            <Outlet context={context} />
+            {identity.agent ? (
+              <AgentIdentityProfile
+                key={identity.agent.id}
+                agent={identity.agent}
+                section={
+                  location.pathname.split("/").filter(Boolean).at(-1) ??
+                  "overview"
+                }
+              />
+            ) : (
+              <Outlet context={context} />
+            )}
           </div>
         </div>
       </Page.Body>

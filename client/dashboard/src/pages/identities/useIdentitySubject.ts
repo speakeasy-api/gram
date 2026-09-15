@@ -5,9 +5,12 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { useIdentity } from "@gram/client/react-query/identity.js";
 import { hashKey, useQuery, type UseQueryResult } from "@tanstack/react-query";
 
+export type IdentitySubject = IdentityModel & { agent?: ManagedAgent };
+
 /** Agent ownership does not attribute the owner's human activity to the agent. */
-export function agentIdentitySubject(agent: ManagedAgent): IdentityModel {
+export function agentIdentitySubject(agent: ManagedAgent): IdentitySubject {
   return {
+    agent,
     canonicalUrn: `agent:${agent.id}`,
     kind: "agent",
     displayName: agent.name,
@@ -21,7 +24,7 @@ export function agentIdentitySubject(agent: ManagedAgent): IdentityModel {
 /** The identity resolver handles people; registered agents use their management API. */
 export function useIdentitySubject(
   urn: string,
-): UseQueryResult<IdentityModel, Error> {
+): UseQueryResult<IdentitySubject, Error> {
   const organization = useOrganization();
   const sdk = useSdkClient();
   const isAgent = urn.startsWith("agent:");
