@@ -293,7 +293,11 @@ func (s *TemporalRiskAnalysisSignaler) Signal(ctx context.Context, projectID uui
 // ContinueAsNew chain. NotFound maps to StateNever rather than an error.
 func (s *TemporalRiskAnalysisSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
 	resp, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, coordinatorWorkflowID(projectID), "")
-	return analysisstatus.FromDescribe(resp, err)
+	status, err := analysisstatus.FromDescribe(resp, err)
+	if err != nil {
+		return analysisstatus.Status{}, fmt.Errorf("describe coordinator %s: %w", coordinatorWorkflowID(projectID), err)
+	}
+	return status, nil
 }
 
 // ── Throttled Signaler ───────────────────────────────────────────────────────

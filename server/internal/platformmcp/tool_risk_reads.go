@@ -18,11 +18,12 @@ import (
 // registerRiskToolsWithMutations is the single handler-selection seam used by
 // the external endpoint and assistant catalogue. Policy callbacks may be live
 // while exclusion callbacks remain stable unavailable stubs during rollout.
-func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutations *RiskMutationHandlers) {
+func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, status *RiskAnalysisStatusService, mutations *RiskMutationHandlers) {
 	if risk == nil || !risk.valid() {
 		registerUnavailableRiskToolsWithMutations(reg, mutations)
 		return
 	}
+	registerRiskAnalysisStatusTool(reg, status)
 	addTool(reg, &mcp.Tool{
 		Name:        "list_risk_policies",
 		Title:       "List Risk Policies",
@@ -59,6 +60,35 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 	registerRiskMutationHandlers(reg, risk.catalog, true, mutations)
 }
 
+const (
+	riskAnalysisStatusToolName  = "get_risk_analysis_status"
+	riskAnalysisStatusToolTitle = "Get Watchdog Analysis Status"
+	// riskAnalysisStatusToolStub is the description served when the analysis
+	// run state cannot be described in this deployment.
+	riskAnalysisStatusToolStub = "Report when the Watchdog analysis last ran for a project. This is not switched on for your organization yet."
+)
+
+// registerRiskAnalysisStatusTool serves get_risk_analysis_status live when the
+// analysis run state can be described, and as a stub otherwise, so the tool
+// always exists in the manifest.
+func registerRiskAnalysisStatusTool(reg *Registrar, status *RiskAnalysisStatusService) {
+	if !status.valid() {
+		addTool(reg, &mcp.Tool{Name: riskAnalysisStatusToolName, Title: riskAnalysisStatusToolTitle, Description: riskAnalysisStatusToolStub, Annotations: readOnlyAnnotations(), InputSchema: riskAnalysisStatusSchema()}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, riskAnalysisStatusToolName))
+		return
+	}
+	addTool(reg, &mcp.Tool{
+		Name:        riskAnalysisStatusToolName,
+		Title:       riskAnalysisStatusToolTitle,
+		Description: "Report whether the Watchdog analysis is running for an exact project or the organization's literal default project, and when it last ran. The analysis is event-driven: it starts shortly after new chat traffic is captured rather than on a schedule, so a project with no recent traffic has no recent run. Use this when an administrator asks whether risk findings are up to date or why none have appeared.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskAnalysisStatusSchema(),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskAnalysisStatusInput) (*mcp.CallToolResult, GetRiskAnalysisStatusOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, riskAnalysisStatusToolName, func(principal Principal) (GetRiskAnalysisStatusOutput, error) {
+			return status.Get(ctx, principal, input)
+		})
+	})
+}
+
 func registerUnavailableRiskTools(reg *Registrar) {
 	registerUnavailableRiskToolsWithMutations(reg, nil)
 }
@@ -79,6 +109,7 @@ func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCa
 		{"list_risk_policies", "List Risk Policies", "List risk policy summaries. Risk reads are unavailable in this deployment.", riskListSchema(false)},
 		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
 		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
+		{riskAnalysisStatusToolName, riskAnalysisStatusToolTitle, riskAnalysisStatusToolStub, riskAnalysisStatusSchema()},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
 	}
@@ -270,6 +301,8 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		refusal = featureUnavailableResult{Code: "invalid_request", Feature: "risk_reads", Message: "The risk read input or cursor is invalid. Re-read the tool schema and restart pagination."}
 	case errors.Is(err, ErrRiskReadNotFound):
 		refusal = featureUnavailableResult{Code: "not_found", Feature: "risk_reads", Message: "The requested project or risk resource is not available to this organization."}
+	case errors.Is(err, ErrRiskFeatureNotEnabled):
+		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "This is not switched on for your organization yet."}
 	case errors.Is(err, ErrUnavailable):
 		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "Risk reads are temporarily unavailable."}
 	default:
@@ -296,6 +329,10 @@ func riskListSchema(withPolicy bool) *jsonschema.Schema {
 		properties["policy_id"] = uuidSchema("Optional exact policy ID filter.")
 	}
 	return projectSelectorSchema(properties, nil)
+}
+
+func riskAnalysisStatusSchema() *jsonschema.Schema {
+	return projectSelectorSchema(map[string]*jsonschema.Schema{}, nil)
 }
 
 func riskGetPolicySchema() *jsonschema.Schema {

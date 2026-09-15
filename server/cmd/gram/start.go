@@ -1646,6 +1646,7 @@ func newStartCommand() *cli.Command {
 				RiskPolicySignaler:      riskSignaler,
 				RiskPolicyCache:         shadowMCPClient,
 				RiskExclusionReconciler: &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
+				RiskAnalysisDescriber:   riskSignaler,
 				Telemetry:               telemetryrepo.New(chDB),
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				CanonicalIdentity:       telemSvc,
