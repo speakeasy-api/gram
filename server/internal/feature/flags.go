@@ -120,8 +120,10 @@ const (
 	// client_id_metadata_document_supported, assistants publish a stable
 	// metadata document and send its URL as client_id instead of dynamic
 	// client registration. Off (the default) keeps the DCR reuse path.
-	// Targeted by PostHog organization group (org slug). Removed once CIMD
-	// is GA.
+	// Gram-hosted issuers admit assistant documents ahead of their CIMD
+	// admission policy, so enabling this never depends on a catalog preset
+	// or a per-issuer custom URL. Targeted by PostHog organization group
+	// (org slug). Removed once CIMD is GA.
 	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
 	// FlagMCPApproval gates the MCP approval workflow end to end: the
