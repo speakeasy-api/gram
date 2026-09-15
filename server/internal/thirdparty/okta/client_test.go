@@ -141,7 +141,7 @@ func TestAcquireTokenAdaptsToDPoPAndRetriesTokenAndResourceNonces(t *testing.T) 
 				if r.Header.Get("DPoP") != "" {
 					recordValidationError(errors.New("initial token request unexpectedly used DPoP"))
 				}
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(http.StatusUnauthorized)
 				_, _ = w.Write([]byte(`{"error":"invalid_dpop_proof","error_description":"The DPoP proof JWT header is missing"}`))
 			case 2:
 				key, err := validateDPoPProof(r.Header.Get("DPoP"), http.MethodPost, endpoint+"/oauth2/v1/token", "", "")

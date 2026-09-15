@@ -558,7 +558,7 @@ func (c *Client) setDPoPMode(key cacheKey, nonce string) {
 
 func isDPoPChallenge(err error) bool {
 	apiErr, ok := errors.AsType[*APIError](err)
-	return ok && apiErr.StatusCode == http.StatusBadRequest && (apiErr.Code == "invalid_dpop_proof" || apiErr.Code == "use_dpop_nonce")
+	return ok && (apiErr.StatusCode == http.StatusBadRequest || apiErr.StatusCode == http.StatusUnauthorized) && (apiErr.Code == "invalid_dpop_proof" || apiErr.Code == "use_dpop_nonce")
 }
 
 func isDPoPNonceChallenge(err error) bool {
