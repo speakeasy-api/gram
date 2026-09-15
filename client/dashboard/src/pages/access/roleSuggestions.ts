@@ -41,19 +41,19 @@ function grantCoversSelector(
   grant: RoleGrant,
   check: Record<string, string>,
   strict: boolean,
+  rejectProjectScopedWithoutProject = false,
 ): boolean {
   if (!grant.selectors) return true;
   const matches = strict ? selectorMatchesStrict : selectorMatches;
-  return grant.selectors.some((selector) =>
-    matches(
-      Object.fromEntries(
-        Object.entries(selector).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string",
-        ),
+  return grant.selectors.some((selector) => {
+    const normalized = Object.fromEntries(
+      Object.entries(selector).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
       ),
-      check,
-    ),
-  );
+    );
+    if (rejectProjectScopedWithoutProject && normalized.projectId) return false;
+    return matches(normalized, check);
+  });
 }
 
 function grantCoversResource(
@@ -69,7 +69,12 @@ function grantCoversResource(
     resourceId,
   };
   if (projectId) check.projectId = projectId;
-  return grantCoversSelector(grant, check, strict);
+  return grantCoversSelector(
+    grant,
+    check,
+    strict,
+    scope.startsWith("mcp:") && !projectId,
+  );
 }
 
 /**
@@ -103,9 +108,10 @@ function normalizeCapturedSelector(
 }
 
 /**
- * Challenge assignment must match every captured selector dimension.
- * Tool-specific or wrong-project roles stay hidden rather than being offered
- * and rejected by the server after confirmation.
+ * Challenge assignment keeps roles whose own selector dimensions all match the
+ * captured selector. Roles narrower than the captured facts, such as a
+ * tool-specific or wrong-project role, stay hidden. Roles that omit a captured
+ * dimension remain eligible and are covered by the full-role confirmation.
  */
 export function rolesCoveringChallengeScopes(
   roles: Role[],

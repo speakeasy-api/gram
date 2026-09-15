@@ -134,26 +134,28 @@ func TestResolveChallenge_RoleAssignedAddsCustomRoleAndPreservesExistingRoles(t 
 func TestResolveChallenge_RoleAssignedRequiresFullRoleConfirmation(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newChallengeTestService(t)
-	roleSlug := "editor"
+	for _, confirmation := range []*bool{nil, new(false)} {
+		ctx, ti := newChallengeTestService(t)
+		roleSlug := "editor"
 
-	_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
-		ApikeyToken:             nil,
-		SessionToken:            nil,
-		ChallengeIds:            []string{uuid.NewString()},
-		PrincipalUrn:            "user:denied-user",
-		Scope:                   string(authz.ScopeOrgRead),
-		ResourceKind:            nil,
-		ResourceID:              nil,
-		ResolutionType:          "role_assigned",
-		RoleSlug:                &roleSlug,
-		RoleAssignmentConfirmed: new(false),
-	})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "assigning a role grants all of its permissions")
+		_, err := ti.service.ResolveChallenge(ctx, &gen.ResolveChallengePayload{
+			ApikeyToken:             nil,
+			SessionToken:            nil,
+			ChallengeIds:            []string{uuid.NewString()},
+			PrincipalUrn:            "user:denied-user",
+			Scope:                   string(authz.ScopeOrgRead),
+			ResourceKind:            nil,
+			ResourceID:              nil,
+			ResolutionType:          "role_assigned",
+			RoleSlug:                &roleSlug,
+			RoleAssignmentConfirmed: confirmation,
+		})
+		require.Error(t, err)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+		require.ErrorContains(t, err, "assigning a role grants all of its permissions")
+	}
 }
 
 func TestResolveChallenge_RoleAssignedRejectsRoleThatDoesNotCoverResource(t *testing.T) {

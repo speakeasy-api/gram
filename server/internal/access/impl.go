@@ -1240,7 +1240,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").LogError(ctx, s.logger)
 	}
-	if payload.ResolutionType == "role_assigned" && payload.RoleAssignmentConfirmed != nil && !*payload.RoleAssignmentConfirmed {
+	if payload.ResolutionType == "role_assigned" && (payload.RoleAssignmentConfirmed == nil || !*payload.RoleAssignmentConfirmed) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_assignment_confirmed must be true because assigning a role grants all of its permissions").LogError(ctx, s.logger)
 	}
 	if payload.ResolutionType == "dismissed" && payload.RoleSlug != nil && *payload.RoleSlug != "" {
@@ -1566,7 +1566,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	}
 
 	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope.
+	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
+	// project from the tenant-qualified resource rather than trusting browser
+	// state or a client-supplied project id.
 	manageAccessLink := ""
 	if s.siteURL != nil {
 		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
@@ -1575,6 +1577,16 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q.Set("scope", payload.Scope)
 		if payload.ResourceID != nil && *payload.ResourceID != "" {
 			q.Set("resource_id", *payload.ResourceID)
+			if strings.HasPrefix(payload.Scope, "mcp:") {
+				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
+				if resolveErr != nil {
+					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+						attr.SlogError(resolveErr),
+					)
+				} else {
+					q.Set("project_id", projectID)
+				}
+			}
 		}
 		accessURL.RawQuery = q.Encode()
 		manageAccessLink = accessURL.String()

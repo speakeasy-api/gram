@@ -672,9 +672,7 @@ type ResolveChallengePayload struct {
 	// resolution_type=role_assigned).
 	RoleSlug *string
 	// Confirms the administrator reviewed and accepts every permission granted by
-	// the complete role. New clients should send true when
-	// resolution_type=role_assigned; omission remains accepted for compatibility
-	// with existing clients.
+	// the complete role. Must be true when resolution_type=role_assigned.
 	RoleAssignmentConfirmed *bool
 }
 

@@ -1399,7 +1399,7 @@ var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 		Enum("role_assigned", "dismissed")
 	})
 	Attribute("role_slug", String, "Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).")
-	Attribute("role_assignment_confirmed", Boolean, "Confirms the administrator reviewed and accepts every permission granted by the complete role. New clients should send true when resolution_type=role_assigned; omission remains accepted for compatibility with existing clients.")
+	Attribute("role_assignment_confirmed", Boolean, "Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.")
 })
 
 var ChallengeResolutionModel = Type("ChallengeResolution", func() {

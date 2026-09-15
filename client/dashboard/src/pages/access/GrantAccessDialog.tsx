@@ -1,10 +1,4 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
-import { Icon } from "@/components/ui/Icon";
-import { Text } from "@/components/ui/Text";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import {
   invalidateAllMembers,
   useMembers,
@@ -13,11 +7,18 @@ import {
   invalidateAllRoles,
   useRoles,
 } from "@gram/client/react-query/roles.js";
-import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
+
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Icon } from "@/components/ui/Icon";
+import { Loader2 } from "lucide-react";
+import { Text } from "@/components/ui/Text";
 import { rolesCoveringScope } from "./roleSuggestions";
+import { useQueryClient } from "@tanstack/react-query";
+import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 
 interface GrantAccessDialogProps {
   /** User id of the member who requested access (from the email deep link). */
@@ -26,6 +27,8 @@ interface GrantAccessDialogProps {
   scope: string;
   /** Optional resource the scope was requested for; narrows role suggestions. */
   resourceId?: string;
+  /** Project containing an MCP resource, when known. */
+  projectId?: string;
   onClose: () => void;
 }
 
@@ -47,6 +50,7 @@ export function GrantAccessDialog({
   userId,
   scope,
   resourceId,
+  projectId,
   onClose,
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
@@ -70,8 +74,9 @@ export function GrantAccessDialog({
   );
 
   const suggestedRoles = useMemo(
-    () => rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId),
-    [rolesData?.roles, scope, resourceId],
+    () =>
+      rolesCoveringScope(rolesData?.roles ?? [], scope, resourceId, projectId),
+    [rolesData?.roles, scope, resourceId, projectId],
   );
 
   const updateMemberRoles = useUpdateMemberRolesMutation({

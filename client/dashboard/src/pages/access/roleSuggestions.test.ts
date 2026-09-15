@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+  rolesCoveringChallengeScopes,
+  rolesCoveringScope,
+} from "./roleSuggestions";
 
 import type { Role } from "@gram/client/models/components/role.js";
-import { rolesCoveringChallengeScopes } from "./roleSuggestions";
 
 function role(name: string, grants: Role["grants"]): Role {
   return {
@@ -18,6 +21,55 @@ function role(name: string, grants: Role["grants"]): Role {
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
 }
+
+describe("rolesCoveringScope", () => {
+  it("does not suggest an MCP role scoped to another project", () => {
+    const roles = [
+      role("unrestricted", [
+        {
+          scope: "mcp:connect",
+          selectors: undefined,
+        },
+      ]),
+      role("same-project", [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            {
+              resourceKind: "mcp",
+              resourceId: "server-a",
+              projectId: "project-a",
+            },
+          ],
+        },
+      ]),
+      role("other-project", [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            {
+              resourceKind: "mcp",
+              resourceId: "server-a",
+              projectId: "project-b",
+            },
+          ],
+        },
+      ]),
+    ];
+
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", "server-a", "project-a").map(
+        (item) => item.slug,
+      ),
+    ).toEqual(["unrestricted", "same-project"]);
+
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", "server-a").map(
+        (item) => item.slug,
+      ),
+    ).toEqual(["unrestricted"]);
+  });
+});
 
 describe("rolesCoveringChallengeScopes", () => {
   it("keeps roles that cover the exact resource or an unrestricted resource", () => {

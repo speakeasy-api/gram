@@ -1,8 +1,9 @@
-import type { Role } from "@gram/client/models/components/role.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
   status: "ready" as "ready" | "loading" | "error",
@@ -74,13 +75,14 @@ const role: Role = {
   createdAt: new Date(),
   updatedAt: new Date(),
 };
-function renderEditor(editingRole?: Role) {
+function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <CreateRoleDialog
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
         editingRole={editingRole}
+        confirmAssignmentFor={confirmAssignmentFor}
         presentation="page"
       />
     </QueryClientProvider>,
@@ -92,6 +94,30 @@ beforeEach(() => {
   mocks.status = "ready";
   mocks.enabled = false;
 });
+describe("role assignment confirmation", () => {
+  it("clears an acknowledgement when grants change", () => {
+    renderEditor(undefined, "Denied User");
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+
+    const confirmation = screen.getByRole("checkbox", {
+      name: "Confirm role assignment",
+    });
+    const submit = screen.getByRole("button", { name: "Create Role" });
+    fireEvent.click(confirmation);
+    expect(confirmation.getAttribute("data-state")).toBe("checked");
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+
+    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("agent management rollout", () => {
   it.each(["false", "loading", "missing", "error"] as const)(
     "does not enable the query or show the picker when %s",

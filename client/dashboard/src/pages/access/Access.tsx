@@ -1,15 +1,3 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import {
-  PageTabsList,
-  PageTabsTrigger,
-  Tabs,
-  TabsContent,
-} from "@/components/ui/Tabs";
-import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
-import { Alert } from "@/components/ui/Alert";
-import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   Link,
   Navigate,
@@ -17,9 +5,22 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
+
+import { Alert } from "@/components/ui/Alert";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
+import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
 import { RolesTab } from "./RolesTab";
+import { useOrgRoutes } from "@/routes";
+import { useOrganization } from "@/contexts/Auth";
+import { useRoles } from "@gram/client/react-query/roles.js";
 
 // Member management lives on the Team page; this page is roles and the
 // challenges they produced.
@@ -76,12 +77,14 @@ function AccessInner() {
   const grantUserId = searchParams.get("grant_user");
   const grantScope = searchParams.get("scope");
   const grantResourceId = searchParams.get("resource_id") || undefined;
+  const grantProjectId = searchParams.get("project_id") || undefined;
 
   const closeGrantDialog = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("grant_user");
     next.delete("scope");
     next.delete("resource_id");
+    next.delete("project_id");
     setSearchParams(next, { replace: true });
   };
   const organization = useOrganization();
@@ -150,6 +153,7 @@ function AccessInner() {
           userId={grantUserId}
           scope={grantScope}
           resourceId={grantResourceId}
+          projectId={grantProjectId}
           onClose={closeGrantDialog}
         />
       )}

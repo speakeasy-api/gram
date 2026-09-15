@@ -124,9 +124,7 @@ type ResolveChallengeRequestBody struct {
 	// resolution_type=role_assigned).
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
 	// Confirms the administrator reviewed and accepts every permission granted by
-	// the complete role. New clients should send true when
-	// resolution_type=role_assigned; omission remains accepted for compatibility
-	// with existing clients.
+	// the complete role. Must be true when resolution_type=role_assigned.
 	RoleAssignmentConfirmed *bool `form:"role_assignment_confirmed,omitempty" json:"role_assignment_confirmed,omitempty" xml:"role_assignment_confirmed,omitempty"`
 }
 

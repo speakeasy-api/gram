@@ -321,6 +321,7 @@ export function CreateRoleDialog({
   // ─── Scope / grant operations ─────────────────────────────────
 
   const toggleScope = (scope: Scope) => {
+    setAssignmentConfirmed(false);
     setGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
@@ -381,6 +382,7 @@ export function CreateRoleDialog({
       const hasContent =
         draftRule.selectors === null || draftRule.selectors.length > 0;
       if (hasContent) {
+        setAssignmentConfirmed(false);
         setGrants((prev) => {
           const grant = prev[editingScopeSlug] ?? {
             scope: editingScopeSlug,
@@ -430,6 +432,7 @@ export function CreateRoleDialog({
   // "All servers" is the unrestricted rule, which the model stores as null
   // selectors rather than as a list naming everything.
   const resetRuleToAll = (scopeSlug: string) => {
+    setAssignmentConfirmed(false);
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
@@ -446,6 +449,7 @@ export function CreateRoleDialog({
   };
 
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
+    setAssignmentConfirmed(false);
     setGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
