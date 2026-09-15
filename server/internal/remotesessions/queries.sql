@@ -47,7 +47,8 @@ INSERT INTO remote_session_issuers (
     metadata_last_error_at,
     metadata_last_error_url,
     oidc,
-    passthrough
+    passthrough,
+    tunneled_mcp_server_id
 )
 VALUES (
     @project_id,
@@ -93,7 +94,8 @@ VALUES (
     CASE WHEN @metadata_last_error::text = '' THEN NULL ELSE clock_timestamp() END,
     NULLIF(@metadata_last_error_url::text, ''),
     @oidc,
-    @passthrough
+    @passthrough,
+    @tunneled_mcp_server_id
 )
 RETURNING *;
 
@@ -401,6 +403,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -906,6 +913,7 @@ WHERE organization_id = @organization_id
 -- name: GetRemoteSessionClientByID :one
 SELECT
     sqlc.embed(c),
+    i.tunneled_mcp_server_id,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -914,6 +922,7 @@ SELECT
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE;
@@ -996,6 +1005,18 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetTunneledMcpServerBinding :one
+-- Validates an issuer tunnel binding at create/update time: the tunnel must
+-- exist, be active, and live in the same project and organization as the issuer.
+SELECT t.id, t.project_id, t.name
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND t.status <> 'revoked'
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE;
 -- Serializes the two halves of the private_key_jwt coupling, which live in
 -- different handlers and each read a column the other writes. Under READ
 -- COMMITTED both can pass against the same starting row and commit, landing
@@ -1557,6 +1578,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1632,6 +1654,7 @@ SELECT
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1664,6 +1687,7 @@ SELECT
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.registration_endpoint                AS issuer_registration_endpoint,
@@ -2500,6 +2524,11 @@ SET
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text = '' THEN NULL
+        WHEN sqlc.narg('tunneled_mcp_server_id')::text IS NULL THEN tunneled_mcp_server_id
+        ELSE (sqlc.narg('tunneled_mcp_server_id')::text)::uuid
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;

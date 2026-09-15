@@ -254,10 +254,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		}
 	}
 
-	registered, err := RegisterDynamicClient(ctx, r.policy, r.serverURL, ProxyRegisterRequest{
+	// Direct egress: the rotation row carries no tunnel binding, so a
+	// tunnel-bound issuer's re-registration is not routed yet. See AIS-584.
+	registered, err := RegisterDynamicClient(ctx, r.policy, nil, r.serverURL, ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
+		TunneledMcpServerID:     nil,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("re-register client with issuer: %w", err)

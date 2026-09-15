@@ -942,7 +942,8 @@ INSERT INTO remote_session_issuers (
     metadata_last_error_at,
     metadata_last_error_url,
     oidc,
-    passthrough
+    passthrough,
+    tunneled_mcp_server_id
 )
 VALUES (
     $1,
@@ -988,7 +989,8 @@ VALUES (
     CASE WHEN $33::text = '' THEN NULL ELSE clock_timestamp() END,
     NULLIF($34::text, ''),
     $35,
-    $36
+    $36,
+    $37
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -1030,6 +1032,7 @@ type CreateRemoteSessionIssuerParams struct {
 	MetadataLastErrorUrl                       string
 	Oidc                                       bool
 	Passthrough                                bool
+	TunneledMcpServerID                        uuid.NullUUID
 }
 
 // Remote session issuers — upstream Authorization Server identity records
@@ -1080,6 +1083,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.MetadataLastErrorUrl,
 		arg.Oidc,
 		arg.Passthrough,
+		arg.TunneledMcpServerID,
 	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
@@ -2778,6 +2782,7 @@ func (q *Queries) GetRemoteSessionByIDIncludingDeleted(ctx context.Context, arg 
 const getRemoteSessionClientByID = `-- name: GetRemoteSessionClientByID :one
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+    i.tunneled_mcp_server_id,
     (
         SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
         FROM remote_session_client_user_session_issuers AS link
@@ -2786,6 +2791,7 @@ SELECT
           AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $3
   AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
   AND c.deleted IS FALSE
@@ -2799,6 +2805,7 @@ type GetRemoteSessionClientByIDParams struct {
 
 type GetRemoteSessionClientByIDRow struct {
 	RemoteSessionClient  RemoteSessionClient
+	TunneledMcpServerID  uuid.NullUUID
 	UserSessionIssuerIds []uuid.UUID
 }
 
@@ -2832,6 +2839,7 @@ func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteS
 		&i.RemoteSessionClient.UpdatedAt,
 		&i.RemoteSessionClient.DeletedAt,
 		&i.RemoteSessionClient.Deleted,
+		&i.TunneledMcpServerID,
 		&i.UserSessionIssuerIds,
 	)
 	return i, err
@@ -2995,6 +3003,7 @@ SELECT
     c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -3013,6 +3022,7 @@ type GetRemoteSessionClientRevocationTargetByIDRow struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	JsonWebKeySetID                 uuid.NullUUID
 	RemoteSessionIssuerID           uuid.UUID
+	TunneledMcpServerID             uuid.NullUUID
 	IssuerSlug                      string
 	IssuerUrl                       string
 	IssuerMetadata                  []byte
@@ -3041,6 +3051,7 @@ func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.JsonWebKeySetID,
 		&i.RemoteSessionIssuerID,
+		&i.TunneledMcpServerID,
 		&i.IssuerSlug,
 		&i.IssuerUrl,
 		&i.IssuerMetadata,
@@ -3069,6 +3080,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -3124,6 +3136,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ResourceTosUri                            pgtype.Text
 	UpstreamRejectedAt                        pgtype.Timestamptz
 	RemoteSessionIssuerID                     uuid.UUID
+	TunneledMcpServerID                       uuid.NullUUID
 	IssuerSlug                                string
 	IssuerUrl                                 string
 	IssuerMetadata                            []byte
@@ -3174,6 +3187,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ResourceTosUri,
 		&i.UpstreamRejectedAt,
 		&i.RemoteSessionIssuerID,
+		&i.TunneledMcpServerID,
 		&i.IssuerSlug,
 		&i.IssuerUrl,
 		&i.IssuerMetadata,
@@ -3919,6 +3933,39 @@ func (q *Queries) GetTrustedRemoteSessionIssuerForOrganization(ctx context.Conte
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getTunneledMcpServerBinding = `-- name: GetTunneledMcpServerBinding :one
+SELECT t.id, t.project_id, t.name
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND p.organization_id = $3
+  AND t.status <> 'revoked'
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE
+`
+
+type GetTunneledMcpServerBindingParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetTunneledMcpServerBindingRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+}
+
+// Validates an issuer tunnel binding at create/update time: the tunnel must
+// exist, be active, and live in the same project and organization as the issuer.
+func (q *Queries) GetTunneledMcpServerBinding(ctx context.Context, arg GetTunneledMcpServerBindingParams) (GetTunneledMcpServerBindingRow, error) {
+	row := q.db.QueryRow(ctx, getTunneledMcpServerBinding, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i GetTunneledMcpServerBindingRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.Name)
 	return i, err
 }
 
@@ -5168,6 +5215,7 @@ SELECT
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
     i.name                                 AS issuer_name,
     i.registration_endpoint                AS issuer_registration_endpoint,
@@ -5236,6 +5284,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientSecretExpiresAt                      pgtype.Timestamptz
 	UpstreamRejectedAt                         pgtype.Timestamptz
 	RemoteSessionIssuerID                      uuid.UUID
+	TunneledMcpServerID                        uuid.NullUUID
 	IssuerSlug                                 string
 	IssuerName                                 pgtype.Text
 	IssuerRegistrationEndpoint                 pgtype.Text
@@ -5293,6 +5342,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ClientSecretExpiresAt,
 			&i.UpstreamRejectedAt,
 			&i.RemoteSessionIssuerID,
+			&i.TunneledMcpServerID,
 			&i.IssuerSlug,
 			&i.IssuerName,
 			&i.IssuerRegistrationEndpoint,
@@ -8201,8 +8251,13 @@ SET
     resource_indicator_supported = COALESCE($28, resource_indicator_supported),
     oidc = COALESCE($29, oidc),
     passthrough = COALESCE($30, passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN $31::text = '' THEN NULL
+        WHEN $31::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($31::text)::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $31 AND organization_id = $32 AND deleted IS FALSE
+WHERE id = $32 AND organization_id = $33 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -8237,6 +8292,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       pgtype.Bool
 	Passthrough                                pgtype.Bool
+	TunneledMcpServerID                        pgtype.Text
 	ID                                         uuid.UUID
 	OrganizationID                             pgtype.Text
 }
@@ -8275,6 +8331,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
+		arg.TunneledMcpServerID,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -8743,8 +8800,13 @@ SET
     resource_indicator_supported = COALESCE($28, resource_indicator_supported),
     oidc = COALESCE($29, oidc),
     passthrough = COALESCE($30, passthrough),
+    tunneled_mcp_server_id = CASE
+        WHEN $31::text = '' THEN NULL
+        WHEN $31::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($31::text)::uuid
+    END,
     updated_at = clock_timestamp()
-WHERE id = $31 AND project_id = $32 AND deleted IS FALSE
+WHERE id = $32 AND project_id = $33 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -8779,6 +8841,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       pgtype.Bool
 	Passthrough                                pgtype.Bool
+	TunneledMcpServerID                        pgtype.Text
 	ID                                         uuid.UUID
 	ProjectID                                  uuid.NullUUID
 }
@@ -8824,6 +8887,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
+		arg.TunneledMcpServerID,
 		arg.ID,
 		arg.ProjectID,
 	)

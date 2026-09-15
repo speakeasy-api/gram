@@ -51,6 +51,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -185,6 +186,7 @@ type ChallengeManager struct {
 	db        *pgxpool.Pool
 	enc       *encryption.Client
 	policy    *guardian.Policy
+	tunnels   *tunnelrouting.HTTPClient
 	cache     cache.TypedCacheObject[RemoteLoginState]
 	locks     cache.Cache
 	refresher *RefreshService
@@ -295,16 +297,18 @@ func NewChallengeManager(
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	policy *guardian.Policy,
+	tunnels *tunnelrouting.HTTPClient,
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
 	options ...ChallengeManagerOption,
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
 	manager := &ChallengeManager{
-		logger: logger,
-		db:     db,
-		enc:    enc,
-		policy: policy,
+		logger:  logger,
+		db:      db,
+		enc:     enc,
+		policy:  policy,
+		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
 			logger.With(attr.SlogCacheNamespace("remote_login")),
 			cacheImpl,
@@ -314,7 +318,7 @@ func NewChallengeManager(
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
-		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -331,10 +335,10 @@ func NewChallengeManager(
 	}
 	manager.revoker.assertions = manager.assertions
 	if manager.enricher == nil {
-		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, manager.issuerMetadata)
+		manager.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, manager.issuerMetadata)
 	}
 	// The manager's own refreshes restate identity with the same verifier.
-	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
+	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, cacheImpl, serverURL, manager.revoker, manager.auditLogger)
 	return manager
 }
@@ -1100,6 +1104,16 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if err != nil {
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
+
+	// The exchange rides the issuer's binding as it stands now, like every other
+	// back-channel call. Nothing snapshots the transport at redirect time: only
+	// a platform admin can move a binding, so a change landing mid-flow is an
+	// operator repointing the issuer, and the route this exchange takes is
+	// whichever one they chose.
+	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
+	if err != nil {
+		return none, oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
+	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
 	assertionIssuer := state.AssertionIssuer
 	if authMethod == TokenEndpointAuthMethodPrivateKeyJWT && assertionIssuer == "" {
@@ -1116,7 +1130,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
-	tok, err := m.exchangeCode(ctx, state, tokenEndpointClientAuth{
+	tok, err := m.exchangeCode(ctx, doer, state, tokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,
@@ -1416,6 +1430,7 @@ func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *h
 
 func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
+	doer httpDoer,
 	state RemoteLoginState,
 	clientAuth tokenEndpointClientAuth,
 	audience string,
@@ -1438,7 +1453,7 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}
 
-	resp, err := noRedirectClient(m.policy.PooledClient()).Do(req)
+	resp, err := doer.Do(req)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("post token: %w", err)
 	}
@@ -1521,11 +1536,22 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 	// An issuer with no published key set cannot have its tokens verified;
 	// that is a configuration state, not an event worth a warning per grant.
 	if tok.IDToken != "" && issuer.JwksUri.Valid && issuer.JwksUri.String != "" {
+		// A bound issuer publishes its key set inside the customer network, so
+		// without that transport the token cannot be verified at all. Falling
+		// back to direct egress would read a key set from whatever answers on
+		// the public internet at the same URL, so this stores no identity
+		// rather than trusting one the tunnel never vouched for.
+		transport, terr := issuerTunnelTransport(m.tunnels, issuer.TunneledMcpServerID)
+		if terr != nil {
+			logIdentityFailure(ctx, logger, "id token not verified; key set transport unavailable", terr, attr.SlogRemoteSessionClientID(clientRowID.String()))
+			return nil, nil, noAccess
+		}
 		identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      issuer.IssuerUrl,
 			clientID:    externalClientID,
 			jwksURI:     issuer.JwksUri.String,
 			fetchScope:  issuer.RemoteSessionIssuerID.String(),
+			transport:   transport,
 			signingAlgs: issuer.IDTokenSigningAlgValuesSupported,
 			nonce:       nonce,
 			subject:     "",
