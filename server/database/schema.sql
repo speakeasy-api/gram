@@ -4627,10 +4627,9 @@ WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS agent_role_assignments_org_agent_all_idx
 ON agent_role_assignments (organization_id, agent_id);
 
--- Agents assigned to a workload principal. A workload holds no grants of its
--- own: it inherits the permission policies of the agents assigned to it. The
--- relationship is many-to-many, since one agent can run on several workloads
--- and one workload can host several agents.
+-- The agent assigned to a workload principal. A workload holds no grants of
+-- its own: it inherits the permission policy of its agent. A workload has at
+-- most one live agent, and an agent can serve several workloads.
 CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -4645,10 +4644,6 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
 
   agent_id uuid NOT NULL,
 
-  -- The workload authorizer, the user who made the assignment. Never updated,
-  -- and kept if the user leaves the organization.
-  created_by_user_id TEXT NOT NULL,
-
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -4661,10 +4656,10 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
--- One live assignment per workload principal and agent. Also serves listing a
--- workload's agents.
-CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_agent_key
-ON workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+-- One live agent per workload principal. Also serves looking up a workload's
+-- agent.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_key
+ON workload_agent_assignments (organization_id, workload_issuer_id, subject)
 WHERE deleted IS FALSE;
 
 -- Serves listing an agent's workloads and the agent foreign-key cascade, which
