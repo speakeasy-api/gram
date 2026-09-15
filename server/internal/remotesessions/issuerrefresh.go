@@ -168,7 +168,7 @@ func discoveryFailureMessage(err error) (msg string, transient bool) {
 func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolver *jwks.Resolver, tunnels *tunnelrouting.HTTPClient, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	doer, err := upstreamHTTPDoer(issuerDiscoveryHTTPClient(policy), tunnels, issuer.TunneledMcpServerID)
+	tunnel, err := issuerTunnelTransport(tunnels, issuer.TunneledMcpServerID)
 	if err != nil {
 		return zero, nil, &discoveryError{
 			WellKnownURL: issuer.Issuer,
@@ -176,6 +176,10 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 			cause:        fmt.Errorf("select issuer discovery transport: %w", err),
 			definitive:   false,
 		}
+	}
+	var doer httpDoer = issuerDiscoveryHTTPClient(policy)
+	if tunnel != nil {
+		doer = tunnel
 	}
 
 	discovered, err := discoverIssuerMetadataWithDoer(ctx, doer, issuer.Issuer)
@@ -212,7 +216,11 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 		}
 	}
 
-	keySet, err := refreshIssuerKeySet(ctx, resolver, doc.JwksURI, issuer)
+	// The key set rides the issuer's binding like the discovery document that
+	// advertised it. An issuer inside a customer network publishes its
+	// jwks_uri there too, and a direct fetch of it would fail every refresh
+	// and stamp a last-error on a provider that is working.
+	keySet, err := refreshIssuerKeySet(ctx, resolver, tunnel, doc.JwksURI, issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -227,7 +235,7 @@ type refreshedIssuerKeySet struct {
 	etag      string
 }
 
-func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
+func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, tunnel httpDoer, jwksURI string, issuer repo.RemoteSessionIssuer) (refreshedIssuerKeySet, error) {
 	var zero refreshedIssuerKeySet
 	if jwksURI == "" {
 		return zero, nil
@@ -236,6 +244,9 @@ func refreshIssuerKeySet(ctx context.Context, resolver *jwks.Resolver, jwksURI s
 	source, err := jwks.NewRemoteSource(jwksURI)
 	if err != nil {
 		return zero, &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises an invalid jwks_uri: %v", err)}
+	}
+	if tunnel != nil {
+		source = source.WithTransport(tunnel)
 	}
 
 	cache := jwks.CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}

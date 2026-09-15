@@ -36,8 +36,24 @@ func (d tunnelDoer) Do(req *http.Request) (*http.Response, error) {
 
 // upstreamHTTPDoer picks the transport from the issuer's persisted binding.
 func upstreamHTTPDoer(direct httpDoer, tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) (httpDoer, error) {
-	if !tunneledMcpServerID.Valid {
+	tunnel, err := issuerTunnelTransport(tunnels, tunneledMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	if tunnel == nil {
 		return direct, nil
+	}
+	return tunnel, nil
+}
+
+// issuerTunnelTransport returns the tunnel transport for a bound issuer, and a
+// nil doer for an unbound one. Callers that already hold a client tuned for
+// their own call — a key set fetch, say — use this instead of
+// upstreamHTTPDoer, so the tunnel replaces that client only when there is one
+// and the direct path keeps its own rules.
+func issuerTunnelTransport(tunnels *tunnelrouting.HTTPClient, tunneledMcpServerID uuid.NullUUID) (httpDoer, error) {
+	if !tunneledMcpServerID.Valid {
+		return nil, nil
 	}
 	if tunnels == nil {
 		return nil, fmt.Errorf("tunnel transport is not configured")
