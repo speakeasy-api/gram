@@ -75,8 +75,9 @@ func TestPolicy_Client_Resilience_BreakerTripsOnServerErrors(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        3,
@@ -110,8 +111,9 @@ func TestPolicy_Client_Resilience_RecoversWhenServerHeals(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        2,
@@ -152,9 +154,10 @@ func TestPolicy_Client_Resilience_RateLimited(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       nil,
+		Limit:           guardian.PerHour(1),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	}))
 
 	code, err := doRequest(t, t.Context(), client, server.URL)
@@ -178,9 +181,10 @@ func TestPolicy_Client_Resilience_SubsetSegmentsRateLimit(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       nil,
+		Limit:           guardian.PerHour(1),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	}))
 
 	orgA := guardian.WithSubset(t.Context(), "org-a")
@@ -219,9 +223,10 @@ func TestPolicy_Client_Resilience_SpanPartitionAttributes(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerSecond(10),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       nil,
+		Limit:           guardian.PerSecond(10),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	}))
 
 	code, err := doRequest(t, guardian.WithSubset(t.Context(), "org-a"), client, server.URL)
@@ -258,8 +263,9 @@ func TestPolicy_Client_Resilience_BreakerIgnoresSubset(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        2,
@@ -290,8 +296,9 @@ func TestPolicy_Client_Resilience_BreakerIncludeSubset(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        2,
@@ -327,8 +334,9 @@ func TestPolicy_Client_Resilience_ClientErrorsDoNotTrip(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        2,
@@ -355,8 +363,9 @@ func TestPolicy_Client_Resilience_TooManyRequestsTrips(t *testing.T) {
 	server, _ := newStatusServer(t, &status)
 
 	client := newResiliencePolicy(t).Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        2,
@@ -386,8 +395,9 @@ func TestPolicy_Client_Resilience_RetriesDoNotHammerOpenCircuit(t *testing.T) {
 
 	client := newResiliencePolicy(t).Client(
 		guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-			Partition: nil,
-			Limit:     guardian.NoLimit(),
+			Partition:       nil,
+			Limit:           guardian.NoLimit(),
+			WaitForCapacity: false,
 			Breaker: guardian.BreakerPolicy{
 				FailureRateThreshold: 1,
 				MinThroughput:        1,
@@ -429,8 +439,9 @@ func TestPolicy_Client_Resilience_DefaultsAreNoop(t *testing.T) {
 	require.NoError(t, err)
 
 	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
+		Partition:       nil,
+		Limit:           guardian.PerHour(1),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        1,
@@ -470,9 +481,10 @@ func TestPolicy_Client_Resilience_WithRedisLimiter(t *testing.T) {
 	// so a fixed partition would fail on repeated runs (-count) against the
 	// same container.
 	client := policy.Client(guardian.WithResilience(uuid.NewString(), guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.PerHour(1),
-		Breaker:   guardian.NoBreaker(),
+		Partition:       nil,
+		Limit:           guardian.PerHour(1),
+		WaitForCapacity: false,
+		Breaker:         guardian.NoBreaker(),
 	}))
 
 	code, err := doRequest(t, t.Context(), client, server.URL)
@@ -513,8 +525,9 @@ func TestPolicy_Client_Resilience_WithBreaker(t *testing.T) {
 	require.NoError(t, err)
 
 	client := policy.Client(guardian.WithResilience("test-upstream", guardian.ResilienceConfig{
-		Partition: nil,
-		Limit:     guardian.NoLimit(),
+		Partition:       nil,
+		Limit:           guardian.NoLimit(),
+		WaitForCapacity: false,
 		Breaker: guardian.BreakerPolicy{
 			FailureRateThreshold: 1,
 			MinThroughput:        1,

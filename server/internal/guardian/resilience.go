@@ -105,6 +105,12 @@ type ResilienceConfig struct {
 	// per-caller concern.
 	Limit Limit
 
+	// WaitForCapacity makes rate-limited requests wait for the limiter's
+	// reported capacity and recheck admission before reaching the network.
+	// Waiting is bounded by the request context. The default false value
+	// preserves fail-fast rate-limit denials.
+	WaitForCapacity bool
+
 	// Breaker circuit breaks requests per partition. The zero value — spelled
 	// [NoBreaker] — disables circuit breaking. The breaker key excludes
 	// subset segments unless [BreakerPolicy.IncludeSubset] is set: upstream
@@ -130,9 +136,12 @@ type resilienceOptions struct {
 // and [NoopBreaker], which admit everything, so this configuration is inert
 // until the Policy is constructed with [WithLimiter] and/or [WithBreaker].
 //
-// Denied requests fail with a [ResilienceError] before reaching the network;
-// match with [errors.Is] against [ErrCircuitOpen] or [ErrRateLimited]. When
-// combined with retries, denials are not retried.
+// Rate-limited requests fail with a [ResilienceError] before reaching the
+// network unless [ResilienceConfig.WaitForCapacity] is enabled. Waiting
+// requests recheck admission after each limiter-provided delay and remain
+// bounded by the request context. Circuit-breaker denials always fail fast.
+// Match denials with [errors.Is] against [ErrCircuitOpen] or [ErrRateLimited].
+// When combined with retries, denials are not retried.
 //
 // Outcomes are classified at response-header time: transport errors (except
 // context cancellation), 5xx, and 429 count as breaker failures; everything
@@ -167,22 +176,31 @@ func (t *resilienceTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	key := NewPartition(t.name, strategy(req)...)
 	subset := subsetFrom(ctx)
+	rateLimitKey := key.WithSubset(subset...)
 
 	// The outbound HTTP span does not exist yet — otelhttp creates it inside
 	// t.next — so hand the full partition identity down via the request
 	// context for resilienceSpanAnnotator to stamp on the span.
-	req = req.WithContext(context.WithValue(ctx, partitionContextKey{}, key.WithSubset(subset...)))
+	req = req.WithContext(context.WithValue(ctx, partitionContextKey{}, rateLimitKey))
 
 	limit := t.config.Limit
 	hasRateLimit := limit != NoLimit()
 
 	if hasRateLimit {
-		result, err := t.limiter.AllowN(ctx, key.WithSubset(subset...), limit, 1)
-		if err != nil {
-			return nil, fmt.Errorf("resilience: rate limit check: %w", err)
-		}
-		if result.Allowed == 0 {
-			return nil, &ResilienceError{Reason: ErrRateLimited, RetryAfter: result.RetryAfter}
+		for {
+			result, err := t.limiter.AllowN(ctx, rateLimitKey, limit, 1)
+			if err != nil {
+				return nil, fmt.Errorf("resilience: rate limit check: %w", err)
+			}
+			if result.Allowed > 0 {
+				break
+			}
+			if !t.config.WaitForCapacity || result.RetryAfter <= 0 {
+				return nil, &ResilienceError{Reason: ErrRateLimited, RetryAfter: result.RetryAfter}
+			}
+			if err := result.Wait(ctx); err != nil {
+				return nil, fmt.Errorf("resilience: wait for rate limit capacity: %w", err)
+			}
 		}
 	}
 

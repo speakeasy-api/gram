@@ -130,6 +130,7 @@ func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
 	t.Parallel()
 
 	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
 			"environment":                   "local",
@@ -145,6 +146,7 @@ func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
 	t.Parallel()
 
 	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
 			"environment":                   "local",
@@ -160,6 +162,7 @@ func TestNewStripeMeterEventClientStreamingDisabledUsesNoop(t *testing.T) {
 	t.Parallel()
 
 	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
 			"environment":    "prod",
@@ -174,6 +177,7 @@ func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
 	t.Parallel()
 
 	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
 			"environment":                   "prod",
@@ -370,6 +374,7 @@ func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t
 	t.Parallel()
 
 	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
 			"environment":                  "prod",
