@@ -528,6 +528,37 @@ func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 }
 
+func TestGetCachedMCPList_OwnerNotFoundIsMiss(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "unowned-snapshot-" + uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{testMCPEntry("legacy")}, time.Hour))
+
+	_, err := ti.service.getCachedMCPList(agentKeyContext(t, ctx, ti), sessionID)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an unowned snapshot is a miss for an agent")
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err, "humans keep reading unowned snapshots")
+	require.Equal(t, "legacy", entries[0].Name)
+}
+
+func TestGetCachedMCPList_OwnerReadErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	agentCtx := agentKeyContext(t, ctx, ti)
+
+	sessionID := "corrupt-owner-" + uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{testMCPEntry("human")}, time.Hour))
+	require.NoError(t, ti.service.cache.Set(ctx, mcpListOwnerCacheKey(sessionID), "not-an-owner", time.Hour))
+
+	_, err := ti.service.getCachedMCPList(agentCtx, sessionID)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, redisCache.ErrCacheMiss, "an owner decode failure is not a miss")
+
+	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID)
+	require.Error(t, err, "enforcement fails closed on an owner read failure")
+}
+
 // grantedAgentContext admits a real agent credential holding org:hooks_ingest.
 func grantedAgentContext(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
 	t.Helper()

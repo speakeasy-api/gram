@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -159,6 +161,12 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 	var existing mcpListOwner
 	err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &existing)
 	switch {
+	case err != nil && !errors.Is(err, redisCache.ErrCacheMiss):
+		s.logger.WarnContext(ctx, "failed to read MCP list snapshot owner; skipping write",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+		return false
 	case err == nil && !existing.shares(writer):
 		s.logger.WarnContext(ctx, "refusing MCP list snapshot write from a different owner",
 			attr.SlogEvent("mcp_list_snapshot_owner_mismatch"),
@@ -174,7 +182,7 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 		}
 	case writer.isAgent():
 		var entries []MCPServerEntry
-		if s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries) == nil {
+		if getErr := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); !errors.Is(getErr, redisCache.ErrCacheMiss) {
 			s.logger.WarnContext(ctx, "refusing agent takeover of an unowned MCP list snapshot",
 				attr.SlogEvent("mcp_list_snapshot_owner_mismatch"),
 				attr.SlogGenAIConversationID(sessionID),

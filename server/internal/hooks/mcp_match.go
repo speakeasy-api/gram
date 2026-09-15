@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -226,11 +227,22 @@ func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCP
 	if err := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
 	}
-	// Another scope's snapshot, or one an agent reader does not own, is no snapshot.
 	reader := mcpListOwnerFromContext(ctx)
 	var owner mcpListOwner
-	if err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &owner); (err == nil && !owner.shares(reader)) || (err != nil && reader.isAgent()) {
-		return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
+	switch err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &owner); {
+	case err == nil:
+		// Another scope's snapshot is no snapshot.
+		if !owner.shares(reader) {
+			return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
+		}
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// An unowned snapshot is no snapshot for an agent reader.
+		if reader.isAgent() {
+			return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
+		}
+	default:
+		// Infrastructure failures surface so enforcement fails closed.
+		return nil, fmt.Errorf("get cached mcp list owner: %w", err)
 	}
 	return entries, nil
 }
