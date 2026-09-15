@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/Input";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
-import { IdentityProviderCapabilities } from "./identity-provider-capabilities";
+import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
 /**
  * One plain sentence per way a check can come back short. The server's own

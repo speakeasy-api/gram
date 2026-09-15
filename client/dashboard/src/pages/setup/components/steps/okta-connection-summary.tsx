@@ -2,7 +2,7 @@ import { Check } from "lucide-react";
 import type { IdentityProviderConnection } from "@gram/client/models/components/identityproviderconnection.js";
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
-import { IdentityProviderCapabilities } from "./identity-provider-capabilities";
+import { IdentityProviderCapabilities } from "@/components/identity-provider-capabilities";
 
 function formatTimestamp(value: Date): string {
   return value.toLocaleString([], {

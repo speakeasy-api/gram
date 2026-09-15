@@ -7,6 +7,7 @@ import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
+import { IdentityProviderConnectionSection } from "./identity-provider-connection-section";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Badge } from "@/components/ui/Badge";
@@ -303,6 +304,10 @@ function OrgIdentityInner() {
   return (
     <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
       <div className="flex flex-col gap-6">
+        {/* Only rendered once a guided connection exists; the two sections
+            below stay the way in for every other provider. */}
+        <IdentityProviderConnectionSection />
+
         <IdentitySection
           sectionId="sso"
           heading="Single Sign-On"
