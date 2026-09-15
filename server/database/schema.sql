@@ -2204,6 +2204,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   scopes_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   grant_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Advertised authorization grant profiles. Empty means none recorded, not
+  -- proof that the issuer cannot support a profile or that a client is trusted.
+  authorization_grant_profiles_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   response_types_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   token_endpoint_auth_methods_supported TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   -- Deliberately nullable with no default, unlike the capability arrays
@@ -2811,6 +2814,12 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   token_endpoint_auth_method TEXT,
   json_web_key_set_id uuid,
   scope TEXT[],
+  -- Recorded registration grant types, not authoritative provider policy.
+  -- NULL means unknown; an empty array means explicitly recorded empty.
+  grant_types TEXT[],
+  -- Provider-specific OAuth audience request parameter on authorize/token
+  -- requests, not the ID-JAG resource-AS issuer audience or RFC 8707 resource.
+  -- The signed assertion uses token_endpoint_auth_audience_format instead.
   audience TEXT,
 
   -- Which of the issuer's identifiers Gram places in the `aud` claim of an
