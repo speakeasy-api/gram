@@ -17,9 +17,6 @@ const PRODUCTION_SERVER_URL = "https://app.getgram.ai";
 const DEVICE_AGENT_SYNC_SCOPE = "org:device_agent_sync";
 const HOOKS_INGEST_SCOPE = "org:hooks_ingest";
 
-/** Plain HTTP is tolerated only for a control plane on this machine. */
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
-
 /** Identifies the key issuance mutation, so selection can lock while it runs. */
 export const ISSUE_AGENT_KEY_MUTATION = ["agent-identity", "issue-key"];
 
@@ -144,8 +141,9 @@ export function controlPlaneURLError(serverURL: string): string | null {
   } catch {
     return "The control-plane URL is invalid, so no install snippet can be generated.";
   }
+  // No loopback exception: the snippet runs on the agent host, where
+  // localhost is that machine, not the control plane.
   if (url.protocol === "https:") return null;
-  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) return null;
   return `The control plane at ${url.origin} is not served over HTTPS, so the agent key would travel in plaintext. No install snippet can be generated.`;
 }
 

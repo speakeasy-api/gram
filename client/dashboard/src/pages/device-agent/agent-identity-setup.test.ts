@@ -152,10 +152,11 @@ describe("agent identity snippet", () => {
     );
   });
 
-  it("targets Linux only", () => {
+  it("writes the config to the Linux managed path in both modes", () => {
     for (const mode of ["ephemeral", "service"] as const) {
       const snippet = buildAgentIdentitySnippet({ ...base, mode });
-      expect(snippet).not.toContain("Library/Application Support");
+      expect(snippet).toContain("$SUDO mkdir -p '/etc/speakeasy'");
+      expect(snippet).toContain("$SUDO tee '/etc/speakeasy/managed.json'");
     }
   });
 
@@ -221,9 +222,9 @@ describe("control plane URL", () => {
     expect(controlPlaneURLError("https://dev.getgram.ai/")).toBeNull();
   });
 
-  it("accepts plain HTTP only on this machine", () => {
-    expect(controlPlaneURLError("http://localhost:8080")).toBeNull();
-    expect(controlPlaneURLError("http://127.0.0.1:8080")).toBeNull();
+  it("rejects plain HTTP even on loopback", () => {
+    expect(controlPlaneURLError("http://localhost:8080")).toMatch(/HTTPS/);
+    expect(controlPlaneURLError("http://127.0.0.1:8080")).toMatch(/HTTPS/);
   });
 
   it("rejects plaintext remote hosts and invalid URLs", () => {
