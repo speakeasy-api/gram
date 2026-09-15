@@ -107,7 +107,7 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 	// classify the record, a string body is the closest thing the producer
 	// offered, unless the body is just the event name again.
 	if row.Text == "" && row.EventType == dialect.EventTypeUnclassified {
-		if body := record.GetBody(); body.HasStringValue() && body.GetStringValue() != row.RawEventName {
+		if body := record.GetBody(); body.HasStringValue() && !dialect.BodyRepeatsEventName(body.GetStringValue(), row.RawEventName) {
 			row.Text = body.GetStringValue()
 		}
 	}

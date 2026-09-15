@@ -298,3 +298,32 @@ func TestTokensDisjoint(t *testing.T) {
 	require.Zero(t, input)
 	require.Zero(t, cached)
 }
+
+func TestClaudeCodeLogTreatsRedactedContentAsAbsent(t *testing.T) {
+	t.Parallel()
+
+	prompt := accessorTestRecord(claudeScope, "user_prompt", accessorTestKV("message.uuid", "m1"), accessorTestKV("prompt", "<REDACTED>"))
+	key, text, err := ClaudeCodeLog{}.Text(prompt)
+	require.NoError(t, err)
+	require.Empty(t, key, "a withheld value is not a stated one")
+	require.Empty(t, text)
+	_, input, err := ClaudeCodeLog{}.InputContent(prompt)
+	require.NoError(t, err)
+	require.Nil(t, input)
+
+	response := accessorTestRecord(claudeScope, "assistant_response", accessorTestKV("message.uuid", "m2"), accessorTestKV("response", "<REDACTED>"))
+	_, text, err = ClaudeCodeLog{}.Text(response)
+	require.NoError(t, err)
+	require.Empty(t, text)
+
+	failure := accessorTestRecord(claudeScope, "api_error", accessorTestKV("request_id", "req_1"), accessorTestKV("error", "<REDACTED>"))
+	_, message, err := ClaudeCodeLog{}.OutcomeMessage(failure)
+	require.NoError(t, err)
+	require.Empty(t, message)
+
+	stated := accessorTestRecord(claudeScope, "user_prompt", accessorTestKV("message.uuid", "m3"), accessorTestKV("prompt", "fix it"))
+	key, text, err = ClaudeCodeLog{}.Text(stated)
+	require.NoError(t, err)
+	require.Equal(t, "prompt", key)
+	require.Equal(t, "fix it", text)
+}

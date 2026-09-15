@@ -26,7 +26,7 @@ func (ClaudeCodeLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
 }
 
 func (ClaudeCodeLog) InputContent(record *otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
-	key, value := getOneLogAttrAny(record, claudeCodePromptKey, claudeCodeUserPromptKey)
+	key, value := claudeCodeContent(record, claudeCodePromptKey, claudeCodeUserPromptKey)
 	if key == "" || value == "" {
 		return "", nil, nil
 	}
@@ -69,6 +69,11 @@ func (ClaudeCodeLog) ResponseID(record *otelv1.InboundLogRecord) (string, string
 }
 
 const (
+	// claudeCodeRedacted stands in for content Claude Code was not told to
+	// log (OTEL_LOG_USER_PROMPTS, OTEL_LOG_ASSISTANT_RESPONSES,
+	// OTEL_LOG_TOOL_DETAILS). The producer stated the attribute but withheld
+	// its value, so a reader treats it as absent rather than as words.
+	claudeCodeRedacted         = "<REDACTED>"
 	claudeCodePromptKey        = "prompt"
 	claudeCodeProvider         = "anthropic"
 	claudeCodeSurface          = "claude-code"
@@ -203,12 +208,12 @@ func (ClaudeCodeLog) OutcomeMessage(record *otelv1.InboundLogRecord) (string, st
 	_, name := claudeCodeEventName(record)
 	switch claudeCodeEventType(name) {
 	case EventTypeAPIError:
-		key, value := getOneLogAttr(record, "error")
+		key, value := claudeCodeContent(record, "error")
 		return key, value, nil
 	case EventTypeToolCallResult:
 		// The full error is gated behind tool-detail logging; the category
 		// is not.
-		key, value := getOneLogAttrAny(record, "error", "error_type")
+		key, value := claudeCodeContent(record, "error", "error_type")
 		return key, value, nil
 	}
 	return "", "", nil
@@ -222,13 +227,13 @@ func (ClaudeCodeLog) Text(record *otelv1.InboundLogRecord) (string, string, erro
 	case EventTypePrompt:
 		// prompt is the documented attribute; user_prompt is what older
 		// exporters sent.
-		key, value := getOneLogAttrAny(record, claudeCodePromptKey, claudeCodeUserPromptKey)
+		key, value := claudeCodeContent(record, claudeCodePromptKey, claudeCodeUserPromptKey)
 		return key, value, nil
 	case EventTypeAPIResponse:
-		key, value := getOneLogAttr(record, "response")
+		key, value := claudeCodeContent(record, "response")
 		return key, value, nil
 	case EventTypeAPIError:
-		key, value := getOneLogAttr(record, "error")
+		key, value := claudeCodeContent(record, "error")
 		return key, value, nil
 	case EventTypeToolDecision:
 		key, value := getOneLogAttrAny(record, "decision_type", "decision")
@@ -330,4 +335,21 @@ func claudeCodeAttribution(record *otelv1.InboundLogRecord, apiKey, toolKey stri
 		return claudeCodeToolParamsKey + "." + toolKey, value
 	}
 	return "", ""
+}
+
+// claudeCodeContent reads the first of keys that carries content, treating
+// Claude Code's redaction sentinel as nothing stated at all.
+func claudeCodeContent(record *otelv1.InboundLogRecord, keys ...string) (string, string) {
+	key, value := getOneLogAttrAny(record, keys...)
+	if value == claudeCodeRedacted {
+		return "", ""
+	}
+	return key, value
+}
+
+// BodyRepeatsEventName reports whether a log body is only the event's name
+// again, in any spelling a producer uses: bare, or under Claude Code's legacy
+// claude_code. prefix. Such a body says nothing a row does not already carry.
+func BodyRepeatsEventName(body, name string) bool {
+	return body == name || body == claudeCodeLegacyBodyPrefix+name
 }

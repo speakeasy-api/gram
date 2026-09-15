@@ -501,3 +501,22 @@ func TestAgentEventRowFromLogReadsWhatClaudeCodeActuallySends(t *testing.T) {
 	require.Equal(t, "anthropic-org-1", row.ExternalOrgID)
 	require.Equal(t, "fix the tests", row.Text)
 }
+
+// An unclassified Claude Code event whose body is only its name again, under
+// the legacy claude_code. prefix, has no words worth keeping as text.
+func TestAgentEventRowFromLogDropsABodyThatRepeatsTheEventName(t *testing.T) {
+	t.Parallel()
+
+	record := agentEventTestLog(claudeCodeScopeName, "",
+		logEventTestKV("event.name", "hook_registered"),
+		logEventTestKV("session.id", "session-1"),
+		logEventTestKV("hook_event", "PostToolUse"),
+	)
+	record.SetBody((&otelv1.LogRecord_AnyValue_builder{StringValue: new("claude_code.hook_registered")}).Build())
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, dialect.EventTypeUnclassified, row.EventType)
+	require.Equal(t, "hook_registered", row.RawEventName)
+	require.Empty(t, row.Text)
+}
