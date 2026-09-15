@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 it("initializes the picker on the current end date and submits an absolute UTC day", async () => {
   const anchor = trialEndDay("2090-05-15T13:00:00Z")!;
-  const onSubmit = vi.fn();
+  const onSubmit = vi.fn<(day: number) => void>();
   await renderWithApp(
     <TrialDaysDialog
       bounds={{ min: 1, max: 365 }}
