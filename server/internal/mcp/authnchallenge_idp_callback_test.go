@@ -73,6 +73,22 @@ func TestHandleIDPCallback_SyncsMembershipsBeforeAccessCheck(t *testing.T) {
 	require.Equal(t, []string{mock.upsertResult}, mock.memberChecks, "the gate must judge the user the bootstrap resolved")
 }
 
+func TestHandleIDPCallback_MembershipLookupFailureFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	mock := memberMock()
+	mock.hasAccessErr = errors.New("membership database unavailable")
+	_, _, _, w, err := runIDPCallback(t, mock)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	require.Equal(t, []string{"CompleteIDPLogin", "IsOrganizationMember"}, mock.calls)
+	require.Equal(t, []string{mock.upsertResult}, mock.memberChecks)
+	require.Empty(t, w.Header().Get("Location"))
+}
+
 func TestHandleIDPCallback_BootstrapFailureFailsClosed(t *testing.T) {
 	t.Parallel()
 

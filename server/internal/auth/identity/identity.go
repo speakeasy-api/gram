@@ -493,10 +493,10 @@ func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, o
 			return IDPLoginResult{}, err
 		}
 	}
-	// Built from the database, never read through the cache: a concurrent
-	// request on another instance can re-store a pre-sync organization list
-	// between the sync's invalidation and this read. Storing the fresh value
-	// overwrites any such entry.
+	// Read the login result directly from the database, independent of cache
+	// freshness. Refreshing the cache is best-effort: a concurrent cache-miss
+	// reader can still store an older snapshot afterward. Login membership
+	// gates must use IsOrganizationMember rather than the cached org list.
 	userInfo, err := r.BuildUserInfoFromDB(ctx, upserted.UserID)
 	if err != nil {
 		return IDPLoginResult{}, err
