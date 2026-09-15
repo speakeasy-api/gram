@@ -237,6 +237,10 @@ if [ -z "$SUDO" ]; then
 else
   sudo chown root:"$(id -gn)" '${path}'
   sudo chmod 0640 '${path}'
+  # Safe under a user-private group; otherwise the whole group can read it.
+  if [ "$(id -gn)" != "$(id -un)" ]; then
+    echo "warning: every member of group '$(id -gn)' can read the agent key in ${path}" >&2
+  fi
 fi
 
 ${run}

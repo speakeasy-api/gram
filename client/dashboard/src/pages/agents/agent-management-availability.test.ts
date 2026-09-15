@@ -33,6 +33,19 @@ describe("agent identity rollout", () => {
     expect(agentIdentityRolloutReason(enabled, loading)).toMatch(/Checking/);
   });
 
+  it("fails closed when the flag provider errors on either flag", () => {
+    const error: FeatureFlagResult = { status: "error" };
+    for (const [management, credentials] of [
+      [error, enabled],
+      [enabled, error],
+      [error, error],
+    ] as const) {
+      expect(agentIdentityRolloutReason(management, credentials)).toMatch(
+        /could not be determined/,
+      );
+    }
+  });
+
   it("fails closed when a flag cannot be read", () => {
     expect(agentIdentityRolloutReason(missing, enabled)).toMatch(
       /could not be determined/,

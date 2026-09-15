@@ -251,6 +251,10 @@ describe("agent identity config permissions", () => {
         "sudo chmod 0640 '/etc/speakeasy/managed.json'",
       );
       expect(snippet).not.toContain("0644");
+      expect(snippet).toContain('if [ "$(id -gn)" != "$(id -un)" ]; then');
+      expect(snippet).toMatch(
+        /echo "warning: every member of group '\$\(id -gn\)' can read the agent key in \/etc\/speakeasy\/managed\.json" >&2/,
+      );
     },
   );
 });
