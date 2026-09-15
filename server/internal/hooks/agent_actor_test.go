@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -22,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -481,6 +484,158 @@ func TestLogs_AgentEventFeedCopyMatchesSanitizedRows(t *testing.T) {
 	require.Equal(t, "claude-code", teeAttrByKey(t, record.GetResource().GetAttributes(), "service.name").GetStringValue())
 	require.Equal(t, "agent", teeAttrByKey(t, record.GetAttributes(), "gram.authorization.actor.type").GetStringValue())
 	require.Equal(t, actor.ID, teeAttrByKey(t, record.GetAttributes(), "gram.authorization.actor.id").GetStringValue())
+}
+
+func testMCPEntry(name string) MCPServerEntry {
+	return MCPServerEntry{
+		RawLine: "", Source: "local", PluginName: "", Name: name, URL: "https://" + name + ".example.test/mcp",
+		Command: "", Transport: "HTTP", Status: "connected", StatusRaw: "connected", ConnectorUUID: "", ToolPrefix: name,
+	}
+}
+
+func TestMCPListSnapshot_BoundToOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := agentKeyContext(t, ctx, ti)
+
+	humanSession := "human-snapshot-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(ctx, humanSession, []MCPServerEntry{testMCPEntry("human")}, true)
+
+	_, err := ti.service.getCachedMCPList(agentCtx, humanSession)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an agent never reads another actor's snapshot")
+	ti.service.cacheCanonicalMCPList(agentCtx, humanSession, []MCPServerEntry{testMCPEntry("agent")}, true)
+	humanEntries, err := ti.service.getCachedMCPList(ctx, humanSession)
+	require.NoError(t, err)
+	require.Equal(t, "human", humanEntries[0].Name, "an agent never overwrites another actor's snapshot")
+
+	agentSession := "agent-snapshot-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(agentCtx, agentSession, []MCPServerEntry{testMCPEntry("agent")}, true)
+	agentEntries, err := ti.service.getCachedMCPList(agentCtx, agentSession)
+	require.NoError(t, err, "the owning agent still reads its snapshot")
+	require.Equal(t, "agent", agentEntries[0].Name)
+	_, err = ti.service.getCachedMCPList(ctx, agentSession)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "an agent-owned snapshot is not shared")
+
+	otherOrgSession := "other-org-snapshot-" + uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(otherOrgSession), []MCPServerEntry{testMCPEntry("other")}, time.Hour))
+	require.NoError(t, ti.service.cache.Set(ctx, mcpListOwnerCacheKey(otherOrgSession), mcpListOwner{
+		OrgID: "org-other-" + uuid.NewString(), ProjectID: uuid.NewString(), Actor: "",
+	}, time.Hour))
+	_, err = ti.service.getCachedMCPList(ctx, otherOrgSession)
+	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "another org's snapshot is ignored")
+	require.NotNil(t, authCtx.ProjectID)
+}
+
+// grantedAgentContext admits a real agent credential holding org:hooks_ingest.
+func grantedAgentContext(t *testing.T, ctx context.Context, ti *testInstance) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx, err := admittedAgentContext(t, ctx, ti, true, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	return agentCtx
+}
+
+// requireAgentChat waits for the session's chat and asserts it has no human.
+func requireAgentChat(t *testing.T, ti *testInstance, sessionID string, projectID uuid.UUID) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		chat, err := chatRepo.New(ti.conn).GetChat(t.Context(), chatRepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: projectID})
+		return err == nil && !chat.UserID.Valid && !chat.ExternalUserID.Valid
+	}, 2*time.Second, 25*time.Millisecond, "a granted agent's event is stored and attributed to no human")
+}
+
+// hooksAPIKeyAuth runs the real hooks APIKeyAuth gate for method with an
+// admitted agent credential.
+func hooksAPIKeyAuth(t *testing.T, ti *testInstance, agentCtx context.Context, method string) (context.Context, error) {
+	t.Helper()
+	methodCtx := context.WithValue(agentCtx, goa.MethodKey, method)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) { return methodCtx, nil })
+	authed, err := ti.service.APIKeyAuth(t.Context(), "gram_local_test", &security.APIKeyScheme{
+		Name: constants.KeySecurityScheme, Scopes: []string{}, RequiredScopes: []string{"hooks"},
+	})
+	if err != nil {
+		return authed, fmt.Errorf("hooks api key auth: %w", err)
+	}
+	return authed, nil
+}
+
+func TestClaude_GrantedAgentKeyAccepted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := grantedAgentContext(t, ctx, ti)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) { return agentCtx, nil })
+
+	sessionID := "granted-claude-" + uuid.NewString()
+	_, err := ti.service.Claude(t.Context(), claudePluginPrompt(sessionID))
+	require.NoError(t, err)
+	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+}
+
+func TestCursor_GrantedAgentKeyAccepted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := grantedAgentContext(t, ctx, ti)
+
+	_, err := hooksAPIKeyAuth(t, ti, agentCtx, "skillFeedback")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr, "agent keys only reach ingestion methods")
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	authed, err := hooksAPIKeyAuth(t, ti, agentCtx, "cursor")
+	require.NoError(t, err)
+	sessionID := "granted-cursor-" + uuid.NewString()
+	prompt := "granted cursor prompt"
+	_, err = ti.service.Cursor(authed, &gen.CursorPayload{HookEventName: "beforeSubmitPrompt", ConversationID: &sessionID, Prompt: &prompt})
+	require.NoError(t, err)
+	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+}
+
+func TestCodex_GrantedAgentKeyAccepted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	authed, err := hooksAPIKeyAuth(t, ti, grantedAgentContext(t, ctx, ti), "codex")
+	require.NoError(t, err)
+	sessionID := "granted-codex-" + uuid.NewString()
+	prompt := "granted codex prompt"
+	_, err = ti.service.Codex(authed, &gen.CodexPayload{HookEventName: "UserPromptSubmit", SessionID: &sessionID, Prompt: &prompt})
+	require.NoError(t, err)
+	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
+}
+
+func TestIngest_GrantedAgentKeyAccepted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agentCtx := grantedAgentContext(t, ctx, ti)
+	ti.service.auth = stubAuthorizer(func() (context.Context, error) { return agentCtx, nil })
+
+	sessionID := "granted-ingest-" + uuid.NewString()
+	key := "gram_local_test"
+	slug := "project"
+	prompt := "granted ingest prompt"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.ApikeyToken = &key
+	payload.ProjectSlugInput = &slug
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+
+	_, err := ti.service.Ingest(t.Context(), payload)
+	require.NoError(t, err)
+	requireAgentChat(t, ti, sessionID, *authCtx.ProjectID)
 }
 
 func TestResolveUserByEmail_EmptyEmailSkipsLookup(t *testing.T) {

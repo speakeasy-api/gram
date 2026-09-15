@@ -103,11 +103,92 @@ var selfReportedIdentityKeys = []attr.Key{
 	attr.Key("enduser.id"),
 	attr.AuthUserIDKey,
 	attr.AuthUserEmailKey,
+	attr.AuthUserExternalIDKey,
 	attr.AccountEmailKey,
 	attr.ExternalOrgIDKey,
 	attr.DeviceIDKey,
 	attr.AccountTypeKey,
 	attr.BillingModeKey,
+}
+
+// mcpListOwner binds a session's MCP-list snapshot to the scope that wrote it;
+// the snapshot key is the client-reported session id alone.
+type mcpListOwner struct {
+	OrgID     string `json:"org_id"`
+	ProjectID string `json:"project_id"`
+	Actor     string `json:"actor"`
+}
+
+func mcpListOwnerCacheKey(sessionID string) string {
+	return "session:mcp-list-owner:" + sessionID
+}
+
+func mcpListOwnerFromContext(ctx context.Context) mcpListOwner {
+	owner := mcpListOwner{OrgID: "", ProjectID: "", Actor: ""}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		owner.OrgID = authCtx.ActiveOrganizationID
+		owner.ProjectID = authCtx.ProjectID.String()
+	}
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		owner.Actor = actor.String()
+	}
+	return owner
+}
+
+func (o mcpListOwner) isAgent() bool {
+	principal, err := urn.ParsePrincipal(o.Actor)
+	return err == nil && principal.Type == urn.PrincipalTypeAgent
+}
+
+// shares reports whether o and other may use one session's snapshot: known
+// scopes must agree, and an agent-owned snapshot belongs to that agent alone.
+func (o mcpListOwner) shares(other mcpListOwner) bool {
+	if o.ProjectID != "" && other.ProjectID != "" && (o.OrgID != other.OrgID || o.ProjectID != other.ProjectID) {
+		return false
+	}
+	if o.isAgent() || other.isAgent() {
+		return o.Actor == other.Actor
+	}
+	return true
+}
+
+// claimMCPListSnapshot records ctx as the session snapshot's owner and reports
+// whether ctx may write it. An agent may not take over an unowned snapshot.
+func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bool {
+	writer := mcpListOwnerFromContext(ctx)
+	var existing mcpListOwner
+	err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &existing)
+	switch {
+	case err == nil && !existing.shares(writer):
+		s.logger.WarnContext(ctx, "refusing MCP list snapshot write from a different owner",
+			attr.SlogEvent("mcp_list_snapshot_owner_mismatch"),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+		return false
+	case err == nil:
+		if writer.ProjectID == "" {
+			writer.OrgID, writer.ProjectID = existing.OrgID, existing.ProjectID
+		}
+		if writer.Actor == "" {
+			writer.Actor = existing.Actor
+		}
+	case writer.isAgent():
+		var entries []MCPServerEntry
+		if s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries) == nil {
+			s.logger.WarnContext(ctx, "refusing agent takeover of an unowned MCP list snapshot",
+				attr.SlogEvent("mcp_list_snapshot_owner_mismatch"),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+			return false
+		}
+	}
+	if err := s.cache.Set(ctx, mcpListOwnerCacheKey(sessionID), writer, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to record MCP list snapshot owner",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
+	return true
 }
 
 // strippedTeeKey reports whether a raw OTLP attribute must be dropped from the

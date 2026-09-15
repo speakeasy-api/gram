@@ -176,7 +176,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		sessionLogger := logger.With(
 			attr.SlogServiceName(session.ServiceName),
 			attr.SlogGenAIConversationID(session.SessionID),
-			attr.SlogAuthUserEmail(session.UserEmail),
+			attr.SlogAuthUserEmail(userEmail),
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)

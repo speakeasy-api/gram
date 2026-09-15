@@ -889,7 +889,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, sessionID) {
 		return
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {

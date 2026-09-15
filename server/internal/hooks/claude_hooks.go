@@ -449,7 +449,9 @@ func (s *Service) captureMCPListSnapshot(ctx context.Context, payload *gen.Claud
 	if !ok {
 		return
 	}
-	s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant)
+	if !s.cacheMCPListSnapshot(ctx, *payload.SessionID, entries, variant) {
+		return
+	}
 	orgID := ""
 	projectID := ""
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
@@ -527,14 +529,17 @@ func (s *Service) parseMCPInventoryFromPayload(ctx context.Context, payload *gen
 // session's cache keys. Shared by the SessionStart/ConfigChange capture path
 // and the PreToolUse enforcement resolver, so a payload-carried inventory
 // self-heals the cache that the best-effort telemetry path later reads.
-func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) {
+func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, entries []MCPServerEntry, variant string) bool {
+	if !s.claimMCPListSnapshot(ctx, sessionID) {
+		return false
+	}
 	key := sessionMCPListCacheKey(sessionID)
 	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("claude_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
 		)
-		return
+		return false
 	}
 
 	variantKey := sessionAgentVariantCacheKey(sessionID)
@@ -544,6 +549,7 @@ func (s *Service) cacheMCPListSnapshot(ctx context.Context, sessionID string, en
 			attr.SlogError(err),
 		)
 	}
+	return true
 }
 
 // payloadInventoryIsFresh reports whether the hook payload's MCP inventory was
@@ -625,6 +631,9 @@ func (s *Service) refreshMCPListTTL(ctx context.Context, sessionID string) {
 			attr.SlogEvent("claude_hook_mcp_list_ttl_refresh_failed"),
 			attr.SlogError(err),
 		)
+	}
+	if err := s.cache.Expire(ctx, mcpListOwnerCacheKey(sessionID), sessionMCPListTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to refresh MCP list owner TTL", attr.SlogError(err))
 	}
 	if err := s.cache.Expire(ctx, sessionAgentVariantCacheKey(sessionID), sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to refresh session agent variant TTL",

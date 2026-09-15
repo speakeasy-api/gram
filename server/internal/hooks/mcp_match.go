@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
@@ -223,6 +225,12 @@ func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCP
 	var entries []MCPServerEntry
 	if err := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
+	}
+	// Another scope's snapshot, or one an agent reader does not own, is no snapshot.
+	reader := mcpListOwnerFromContext(ctx)
+	var owner mcpListOwner
+	if err := s.cache.Get(ctx, mcpListOwnerCacheKey(sessionID), &owner); (err == nil && !owner.shares(reader)) || (err != nil && reader.isAgent()) {
+		return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
 	}
 	return entries, nil
 }

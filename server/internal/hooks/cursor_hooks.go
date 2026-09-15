@@ -48,8 +48,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
-		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
+	if !isAgentActor(ctx) {
+		logger = logger.With(attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")))
+	}
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
