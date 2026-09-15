@@ -14,6 +14,20 @@ const (
 	EventTypeToolCall       = "tool_call"
 	EventTypeToolCallResult = "tool_call_result"
 	EventTypeToolDecision   = "tool_decision"
+	// The raw API payloads a producer captures when it is asked to: the whole
+	// request and the whole response, rather than a summary of either. They
+	// are their own types, not more api_request and api_response rows,
+	// because a payload capture is a different kind of record — gated behind
+	// its own consent, and arriving only when someone turned it on — and
+	// because counting API requests must not count them twice.
+	EventTypeAPIRequestBody  = "api_request_body"
+	EventTypeAPIResponseBody = "api_response_body"
+	// Compaction is the session's own housekeeping: the context was
+	// summarized so the conversation could carry on. Its before and after
+	// token counts are not a request's usage and must never be summed as
+	// such, so they stay in the row's attributes rather than the token
+	// columns.
+	EventTypeCompaction = "compaction"
 )
 
 // Outcomes, in agent vocabulary rather than as a protocol status code.
