@@ -139,7 +139,8 @@ type resilienceOptions struct {
 // Rate-limited requests fail with a [ResilienceError] before reaching the
 // network unless [ResilienceConfig.WaitForCapacity] is enabled. Waiting
 // requests recheck admission after each limiter-provided delay and remain
-// bounded by the request context. Circuit-breaker denials always fail fast.
+// bounded by the request context. Open circuits reject requests before each
+// wait; half-open trial permits are only acquired after rate admission.
 // Match denials with [errors.Is] against [ErrCircuitOpen] or [ErrRateLimited].
 // When combined with retries, denials are not retried.
 //
@@ -177,6 +178,12 @@ func (t *resilienceTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	key := NewPartition(t.name, strategy(req)...)
 	subset := subsetFrom(ctx)
 	rateLimitKey := key.WithSubset(subset...)
+	breaker := t.config.Breaker
+	hasBreaker := breaker != NoBreaker()
+	breakerKey := key
+	if breaker.IncludeSubset {
+		breakerKey = rateLimitKey
+	}
 
 	// The outbound HTTP span does not exist yet — otelhttp creates it inside
 	// t.next — so hand the full partition identity down via the request
@@ -198,22 +205,23 @@ func (t *resilienceTransport) RoundTrip(req *http.Request) (*http.Response, erro
 			if !t.config.WaitForCapacity || result.RetryAfter <= 0 {
 				return nil, &ResilienceError{Reason: ErrRateLimited, RetryAfter: result.RetryAfter}
 			}
+			if hasBreaker {
+				delay, err := t.breaker.RemainingDelay(ctx, breakerKey, breaker)
+				if err != nil {
+					return nil, fmt.Errorf("resilience: inspect circuit breaker: %w", err)
+				}
+				if delay > 0 {
+					return nil, &ResilienceError{Reason: ErrCircuitOpen, RetryAfter: delay}
+				}
+			}
 			if err := result.Wait(ctx); err != nil {
 				return nil, fmt.Errorf("resilience: wait for rate limit capacity: %w", err)
 			}
 		}
 	}
 
-	breaker := t.config.Breaker
-	hasBreaker := breaker != NoBreaker()
-
 	report := func(bool) {}
 	if hasBreaker {
-		breakerKey := key
-		if breaker.IncludeSubset {
-			breakerKey = key.WithSubset(subset...)
-		}
-
 		result, err := t.breaker.Allow(ctx, breakerKey, breaker)
 		if err != nil {
 			return nil, fmt.Errorf("resilience: circuit breaker check: %w", err)
