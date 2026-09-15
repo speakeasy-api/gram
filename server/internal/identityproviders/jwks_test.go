@@ -27,7 +27,7 @@ func TestHandleJSONWebKeySetServesPublicKeyWithCaching(t *testing.T) {
 
 	recorder := serveJSONWebKeySet(t, ctx, ti, connection.ID, "", false)
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Equal(t, "application/jwk-set+json", recorder.Header().Get("Content-Type"))
+	require.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 	require.Equal(t, "public, max-age=3600", recorder.Header().Get("Cache-Control"))
 	etag := recorder.Header().Get("ETag")
 	require.NotEmpty(t, etag)

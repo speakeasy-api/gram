@@ -399,7 +399,9 @@ func (s *Service) HandleJSONWebKeySet(w http.ResponseWriter, r *http.Request) er
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load identity provider JSON Web Key Set").LogError(ctx, s.logger)
 	}
-	return httpcache.WriteCacheableJSON(ctx, w, r, s.logger, "application/jwk-set+json", identityProviderJSONWebKeySetMaxAgeSec, body)
+	// Okta "Use a URL" key sources were observed rejecting the RFC 7517
+	// application/jwk-set+json media type on 2026-09-14.
+	return httpcache.WriteCacheableJSON(ctx, w, r, s.logger, "application/json", identityProviderJSONWebKeySetMaxAgeSec, body)
 }
 
 func IdentityProviderJSONWebKeySetURL(publicURL *url.URL, connectionID uuid.UUID) string {
