@@ -1,4 +1,4 @@
-package clientauth
+package privatekeyjwt
 
 import "fmt"
 

@@ -3,7 +3,7 @@ package mcp
 import (
 	"net/http"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -23,7 +23,7 @@ type presentedClientCredentials struct {
 	method string
 
 	// assertion is the client_assertion pair, zero when absent.
-	assertion clientauth.Assertion
+	assertion privatekeyjwt.Assertion
 }
 
 // extractClientCredentials reads every client authentication parameter a
@@ -33,7 +33,7 @@ type presentedClientCredentials struct {
 func extractClientCredentials(r *http.Request) presentedClientCredentials {
 	formID := r.PostForm.Get("client_id")
 	formSecret := r.PostForm.Get("client_secret")
-	assertion := clientauth.Assertion{
+	assertion := privatekeyjwt.Assertion{
 		Value: r.PostForm.Get("client_assertion"),
 		Type:  r.PostForm.Get("client_assertion_type"),
 	}
@@ -73,9 +73,9 @@ func resolvePresentedClientID(creds presentedClientCredentials) (clientID, failu
 	if !creds.assertion.Presented() {
 		return "", "missing_client_id"
 	}
-	claimed, err := clientauth.UnverifiedClientID(creds.assertion.Value)
+	claimed, err := privatekeyjwt.UnverifiedClientID(creds.assertion.Value)
 	if err != nil {
-		return "", string(clientauth.ReasonOf(err))
+		return "", string(privatekeyjwt.ReasonOf(err))
 	}
 	return claimed, ""
 }

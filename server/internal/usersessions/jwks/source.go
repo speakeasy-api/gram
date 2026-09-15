@@ -26,10 +26,12 @@ const (
 // Set document (no fetch at all) or a remote HTTPS URL. Construct one with
 // NewInlineSource or NewRemoteSource.
 type Source struct {
-	kind   sourceKind
-	inline json.RawMessage
-	uri    string
-	origin string
+	kind             sourceKind
+	inline           json.RawMessage
+	uri              string
+	origin           string
+	cacheKey         string
+	refreshNamespace string
 
 	// fetchScope names the party whose fetch budget an upstream consult of
 	// this source is charged to, when the KeyResolver has a fetch limiter.
@@ -46,15 +48,30 @@ func (s Source) WithFetchScope(scope string) Source {
 	return s
 }
 
+// WithRefreshNamespace separates the unknown-kid refresh budget for two
+// assertion profiles that happen to publish the same key-set URL.
+func (s Source) WithRefreshNamespace(namespace string) Source {
+	s.refreshNamespace = namespace
+	return s
+}
+
+// WithCacheKey stores a remote source under a durable configuration-row key
+// bound to the configured URI. The URI remains the network target and part
+// of the refresh-rate-limit key.
+func (s Source) WithCacheKey(key string) Source {
+	s.cacheKey = key
+	return s
+}
+
 // NewInlineSource returns a Source backed by an inline JWK Set document, such
 // as the client_jwks column captured from a registration request. Resolving
 // it never fetches, so it has no cache key and an unknown kid is terminal.
 // The document is parsed and screened at resolve time, not here.
 func NewInlineSource(keySet json.RawMessage) (Source, error) {
 	if len(keySet) == 0 {
-		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, errors.New("inline key set is empty")
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: ""}, errors.New("inline key set is empty")
 	}
-	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", fetchScope: ""}, nil
+	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: ""}, nil
 }
 
 // NewRemoteSource returns a Source for a jwks_uri, whether it came from a
@@ -74,9 +91,9 @@ func NewInlineSource(keySet json.RawMessage) (Source, error) {
 func NewRemoteSource(jwksURI string) (Source, error) {
 	parsed, err := parseJWKSURI(jwksURI)
 	if err != nil {
-		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, err
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: ""}, err
 	}
-	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, fetchScope: ""}, nil
+	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, cacheKey: "", refreshNamespace: "", fetchScope: ""}, nil
 }
 
 // ValidateURI reports whether a jwks_uri satisfies the syntax every remote
@@ -90,14 +107,14 @@ func ValidateURI(jwksURI string) error {
 	return err
 }
 
-// CacheKey is the storage key for this source's resolved key set: the
-// jwks_uri itself. Keying by URL rather than by consumer row is deliberate —
-// OpenAI publishes one jwks_uri shared by every per-connector client_id, so
-// per-consumer storage would refetch the same document once per referrer.
-// Sharing the entry across consumers is safe because it records only what
-// the URL serves: referencing a key set grants nothing without its private
-// keys. Empty for inline sources, which never fetch and are never cached.
+// CacheKey is the storage key for this source's resolved key set. It is the
+// jwks_uri by default, so clients sharing a URI share one cache entry. A
+// trusted issuer can override it with its durable row id and URI. Empty for inline
+// sources, which never fetch and are never cached.
 func (s Source) CacheKey() string {
+	if s.cacheKey != "" {
+		return s.cacheKey
+	}
 	return s.uri
 }
 

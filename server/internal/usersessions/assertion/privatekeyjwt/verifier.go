@@ -1,4 +1,4 @@
-package clientauth
+package privatekeyjwt
 
 import (
 	"context"
@@ -8,13 +8,14 @@ import (
 
 	"github.com/go-jose/go-jose/v4/jwt"
 
+	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
 const (
-	// DefaultMaxLifetime bounds how far an assertion's exp may sit in the
-	// future when an Expectation names no bound of its own.
+	// DefaultMaxLifetime bounds how far a client assertion's exp may sit in
+	// the future.
 	//
 	// One hour matches what real implementations emit and what the strictest
 	// mainstream profile permits: FAPI 2.0 caps client assertion lifetime at
@@ -22,10 +23,6 @@ const (
 	// there, and common client libraries default well inside it. A tighter
 	// ceiling would reject stock clients with an invalid_client they could
 	// not diagnose.
-	//
-	// It is the *client assertion* bound. A profile whose tokens are minted
-	// by someone else's platform carries its own on Expectation.MaxLifetime,
-	// which is also where the reason not to widen this constant lives.
 	//
 	// The bound is not doing replay work — the jti guard covers the whole
 	// validity window — it bounds how long that guard must remember each
@@ -36,32 +33,12 @@ const (
 	// both directions. Client and server clocks genuinely drift; a window
 	// wider than this starts extending the life of an expired assertion for
 	// no interoperability gain.
-	MaxSkew = time.Minute
+	MaxSkew = assertioncore.MaxSkew
 
-	// DefaultMaxReplayHold is the hold a guard must provide to serve
-	// assertions bounded at DefaultMaxLifetime. It is the floor NewVerifier
-	// enforces, because every verifier can be handed a default-bounded
-	// expectation.
+	// DefaultMaxReplayHold is the hold a guard must provide for every client
+	// assertion this verifier accepts.
 	DefaultMaxReplayHold = DefaultMaxLifetime + 2*MaxSkew
 )
-
-// ReplayHoldFor is how long a spent identifier must be remembered for
-// assertions bounded at lifetime: the full window in which an accepted
-// assertion can still verify.
-//
-// The skew counts twice. A party whose clock runs ahead may present an exp up
-// to MaxSkew beyond the bound and still be accepted, and an assertion is then
-// honoured until MaxSkew after that exp. Releasing an identifier anywhere
-// inside that window is exactly what a replay needs.
-//
-// Size a guard with the longest lifetime it will be asked to serve. Verify
-// refuses an expectation whose hold would exceed the guard's cap rather than
-// letting it through, because Guard.Reserve clamps a longer hold silently and
-// nothing at request time would otherwise notice the reservation lapsing
-// while the assertion still verifies.
-func ReplayHoldFor(lifetime time.Duration) time.Duration {
-	return lifetime + 2*MaxSkew
-}
 
 // Verifier authenticates clients presenting assertions. Safe for concurrent
 // use; construct one at wiring time so its dependencies are created once.
@@ -71,8 +48,7 @@ type Verifier struct {
 	// rate limit.
 	keys *jwks.KeyResolver
 
-	// guard remembers spent assertion identifiers for at least
-	// MaxReplayHold.
+	// guard remembers spent assertion identifiers for the acceptance window.
 	guard *replay.Guard
 }
 
@@ -86,20 +62,15 @@ type Verifier struct {
 // request time would notice: the guard would report success and the replay
 // would be accepted. Checked here so the mismatch is a wiring error, not a
 // silent weakening.
-//
-// The check is a floor. An Expectation carrying a longer MaxLifetime needs a
-// proportionally longer hold, which cannot be known here because it varies
-// per request, so Verify re-checks the guard against the expectation it is
-// actually given.
 func NewVerifier(keys *jwks.KeyResolver, guard *replay.Guard) (*Verifier, error) {
 	if keys == nil {
-		return nil, errors.New("clientauth: Verifier requires a key resolver")
+		return nil, errors.New("privatekeyjwt: Verifier requires a key resolver")
 	}
 	if guard == nil {
-		return nil, errors.New("clientauth: Verifier requires a replay guard")
+		return nil, errors.New("privatekeyjwt: Verifier requires a replay guard")
 	}
 	if guard.MaxHold() < DefaultMaxReplayHold {
-		return nil, fmt.Errorf("clientauth: replay guard holds identifiers for %s, but assertions stay acceptable for up to %s", guard.MaxHold(), DefaultMaxReplayHold)
+		return nil, fmt.Errorf("privatekeyjwt: replay guard holds identifiers for %s, but assertions stay acceptable for up to %s", guard.MaxHold(), DefaultMaxReplayHold)
 	}
 	return &Verifier{keys: keys, guard: guard}, nil
 }
@@ -117,14 +88,6 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 	if err := expect.validate(); err != nil {
 		return nil, err
 	}
-	// Before anything is parsed: an expectation whose assertions outlive
-	// what the guard remembers cannot be verified safely at all, and
-	// Reserve would clamp the hold rather than complain. A wiring fault,
-	// labelled as one.
-	hold := expect.replayHold()
-	if v.guard.MaxHold() < hold {
-		return nil, reject(ReasonVerifierMisconfigured, "replay guard holds identifiers for %s, but this assertion stays acceptable for up to %s", v.guard.MaxHold(), hold)
-	}
 	switch {
 	case assertion.Value == "":
 		return nil, reject(ReasonAssertionMissing, "client_assertion is required")
@@ -139,27 +102,14 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 		return nil, err
 	}
 
-	// A compact JWS carries exactly one signature, so Headers[0] is the one
-	// that names the key.
-	key, err := v.keys.VerificationKey(ctx, expect.KeySource, token.Headers[0].KeyID)
-	switch {
-	case err == nil:
-	case errors.Is(err, jwks.ErrKeyNotFound), errors.Is(err, jwks.ErrRefreshRateLimited), errors.Is(err, jwks.ErrFetchRateLimited):
-		// A rate-limited refresh or fetch is reported to the client exactly
-		// like an unknown key: the distinction is operational, not
-		// something the client can act on, and the wrapped cause names it
-		// for the log.
-		return nil, rejectWith(ReasonKeyUnknown, err)
-	default:
-		return nil, rejectWith(ReasonKeyUnresolvable, err)
-	}
-
 	var claims jwt.Claims
-	var replayClaims replayIDClaims
-	// Both destinations are filled from the one verified payload; the extra
-	// claim set carries the replay identifiers the registered set has no
-	// field for.
-	if err := token.Claims(key, &claims, &replayClaims); err != nil {
+	if err := assertioncore.VerifiedClaims(ctx, v.keys, expect.KeySource, token, &claims); err != nil {
+		if verifiedErr, ok := errors.AsType[*assertioncore.VerificationError](err); ok && verifiedErr.Stage == assertioncore.VerificationKeyResolution {
+			if errors.Is(err, jwks.ErrKeyNotFound) || errors.Is(err, jwks.ErrRefreshRateLimited) || errors.Is(err, jwks.ErrFetchRateLimited) {
+				return nil, rejectWith(ReasonKeyUnknown, err)
+			}
+			return nil, rejectWith(ReasonKeyUnresolvable, err)
+		}
 		return nil, rejectWith(ReasonSignatureInvalid, err)
 	}
 
@@ -171,8 +121,8 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 	}
 	now := time.Now()
 	if err := claims.ValidateWithLeeway(jwt.Expected{
-		Issuer:      expect.Issuer,
-		Subject:     expect.Subject,
+		Issuer:      expect.ClientID,
+		Subject:     expect.ClientID,
 		AnyAudience: expect.Audiences.accepted(),
 		Time:        now,
 		ID:          "",
@@ -180,39 +130,33 @@ func (v *Verifier) Verify(ctx context.Context, assertion Assertion, expect Expec
 		return nil, rejectWith(reasonForClaimError(err), err)
 	}
 	expiresAt := claims.Expiry.Time()
-	lifetime := expect.lifetime()
-	if expiresAt.After(now.Add(lifetime + MaxSkew)) {
-		return nil, reject(ReasonLifetimeTooLong, "exp is more than %s in the future", lifetime)
+	if expiresAt.After(now.Add(DefaultMaxLifetime + MaxSkew)) {
+		return nil, reject(ReasonLifetimeTooLong, "exp is more than %s in the future", DefaultMaxLifetime)
 	}
 
 	// The library check proved aud intersects the accepted set; this
 	// reports which member, for the log line.
 	audience, _ := expect.Audiences.Match(claims.Audience)
 
-	replayID, exactID, haveID := resolveReplayID(expect.ReplayID, claims.ID, replayClaims, assertion.Value)
-	if !haveID {
+	if claims.ID == "" {
 		return nil, reject(ReasonIDMissing, "jti is required")
 	}
 	// Last, so an assertion rejected for any other reason does not spend an
 	// identifier and grow the keyspace.
-	claimed, err := v.guard.Reserve(ctx, replay.Key{
+	claimed, err := assertioncore.Reserve(ctx, v.guard, replay.Key{
 		Issuer:  expect.ReplayIssuer,
-		Party:   expect.ReplayParty,
-		Subject: expect.ReplaySubject,
-		ID:      replayID,
-	}, expiresAt.Add(MaxSkew))
+		Party:   expect.ClientID,
+		Subject: "",
+		ID:      claims.ID,
+	}, expiresAt)
 	if err != nil {
 		return nil, rejectWith(ReasonReplayStoreUnavailable, err)
 	}
-	// A repeat of an identifier that names one token is a replay. A repeat
-	// of a digest is the same token arriving twice, which some platforms
-	// serve legitimately from a cache — accepted, and reported so the
-	// tolerance can be revisited with evidence rather than assumption.
-	if !claimed && exactID {
+	if !claimed {
 		return nil, reject(ReasonReplayed, "assertion identifier has already been presented")
 	}
 
-	return &Result{Audience: audience, ExpiresAt: expiresAt, ReusedAssertion: !claimed}, nil
+	return &Result{Audience: audience, ExpiresAt: expiresAt}, nil
 }
 
 // reasonForClaimError maps the library's claim validation sentinels onto this

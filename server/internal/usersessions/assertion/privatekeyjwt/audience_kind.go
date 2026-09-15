@@ -1,4 +1,4 @@
-package clientauth
+package privatekeyjwt
 
 // AudienceKind labels which of the accepted audience values a client actually
 // presented. The choice is unobservable to the client, so recording it is the

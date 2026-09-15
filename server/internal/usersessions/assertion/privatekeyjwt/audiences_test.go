@@ -1,11 +1,11 @@
-package clientauth_test
+package privatekeyjwt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
 
 // Audiences.Match reports the issuer label when a value is both the issuer
@@ -13,8 +13,8 @@ import (
 func TestAudiences_MatchPrefersIssuerLabel(t *testing.T) {
 	t.Parallel()
 
-	audiences := clientauth.Audiences{Issuer: testIssuer, Endpoint: testIssuer}
+	audiences := privatekeyjwt.Audiences{Issuer: testIssuer, Endpoint: testIssuer}
 	kind, ok := audiences.Match([]string{testIssuer})
 	require.True(t, ok)
-	require.Equal(t, clientauth.AudienceKindIssuer, kind)
+	require.Equal(t, privatekeyjwt.AudienceKindIssuer, kind)
 }

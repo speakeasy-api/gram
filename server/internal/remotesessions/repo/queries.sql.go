@@ -1136,6 +1136,48 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 	return i, err
 }
 
+const createTestTrustedIssuerJWKSCache = `-- name: CreateTestTrustedIssuerJWKSCache :one
+INSERT INTO remote_session_issuers (organization_id, slug, issuer, jwks_uri)
+VALUES ($1::text, $2, $3, $4)
+RETURNING id
+`
+
+type CreateTestTrustedIssuerJWKSCacheParams struct {
+	OrganizationID pgtype.Text
+	Slug           string
+	Issuer         string
+	JwksUri        pgtype.Text
+}
+
+// Test fixture for conditional issuer-key cache writes.
+func (q *Queries) CreateTestTrustedIssuerJWKSCache(ctx context.Context, arg CreateTestTrustedIssuerJWKSCacheParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createTestTrustedIssuerJWKSCache,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createTestTrustedIssuerOrganization = `-- name: CreateTestTrustedIssuerOrganization :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES ($1, $2, $3)
+`
+
+type CreateTestTrustedIssuerOrganizationParams struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+func (q *Queries) CreateTestTrustedIssuerOrganization(ctx context.Context, arg CreateTestTrustedIssuerOrganizationParams) error {
+	_, err := q.db.Exec(ctx, createTestTrustedIssuerOrganization, arg.ID, arg.Name, arg.Slug)
+	return err
+}
+
 const deleteGlobalRemoteSessionClient = `-- name: DeleteGlobalRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
@@ -3848,6 +3890,59 @@ func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 	return i, err
 }
 
+const getTrustedIssuerJWKSCache = `-- name: GetTrustedIssuerJWKSCache :one
+SELECT jwks, jwks_uri, jwks_fetched_at, jwks_cache_expires_at, jwks_etag,
+       jwks_last_error, jwks_last_error_at, xmin::text AS revision
+FROM remote_session_issuers
+WHERE id = $1
+  AND (organization_id = $2::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = $3::text
+  AND jwks_uri = $4::text
+  AND deleted IS FALSE
+`
+
+type GetTrustedIssuerJWKSCacheParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Issuer         string
+	JwksUri        string
+}
+
+type GetTrustedIssuerJWKSCacheRow struct {
+	Jwks               []byte
+	JwksUri            pgtype.Text
+	JwksFetchedAt      pgtype.Timestamptz
+	JwksCacheExpiresAt pgtype.Timestamptz
+	JwksEtag           pgtype.Text
+	JwksLastError      pgtype.Text
+	JwksLastErrorAt    pgtype.Timestamptz
+	Revision           string
+}
+
+// Only administrator-configurable organization and global issuers can back
+// ID-JAG verification. The row id is selected through a trusted link first.
+func (q *Queries) GetTrustedIssuerJWKSCache(ctx context.Context, arg GetTrustedIssuerJWKSCacheParams) (GetTrustedIssuerJWKSCacheRow, error) {
+	row := q.db.QueryRow(ctx, getTrustedIssuerJWKSCache,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var i GetTrustedIssuerJWKSCacheRow
+	err := row.Scan(
+		&i.Jwks,
+		&i.JwksUri,
+		&i.JwksFetchedAt,
+		&i.JwksCacheExpiresAt,
+		&i.JwksEtag,
+		&i.JwksLastError,
+		&i.JwksLastErrorAt,
+		&i.Revision,
+	)
+	return i, err
+}
+
 const getTrustedRemoteSessionIssuerForOrganization = `-- name: GetTrustedRemoteSessionIssuerForOrganization :one
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -6456,6 +6551,55 @@ func (q *Queries) MarkRemoteSessionClientUpstreamRejected(ctx context.Context, a
 	return result.RowsAffected(), nil
 }
 
+const markTrustedIssuerJWKSConsultFailure = `-- name: MarkTrustedIssuerJWKSConsultFailure :execrows
+UPDATE remote_session_issuers
+SET jwks_last_error = $1::text,
+    jwks_last_error_at = $2::timestamptz,
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND (organization_id = $4::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = $5::text
+  AND jwks_uri = $6
+  AND deleted IS FALSE
+  AND xmin::text = $7::text
+  AND jwks IS NOT DISTINCT FROM $8::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM $9::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM $10::timestamptz
+`
+
+type MarkTrustedIssuerJWKSConsultFailureParams struct {
+	Reason              string
+	ConsultedAt         pgtype.Timestamptz
+	ID                  uuid.UUID
+	OrganizationID      string
+	Issuer              string
+	JwksUri             pgtype.Text
+	PriorRevision       string
+	PriorJwks           []byte
+	PriorFetchedAt      pgtype.Timestamptz
+	PriorCacheExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) MarkTrustedIssuerJWKSConsultFailure(ctx context.Context, arg MarkTrustedIssuerJWKSConsultFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markTrustedIssuerJWKSConsultFailure,
+		arg.Reason,
+		arg.ConsultedAt,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.JwksUri,
+		arg.PriorRevision,
+		arg.PriorJwks,
+		arg.PriorFetchedAt,
+		arg.PriorCacheExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordRemoteSessionIssuerMetadataRefreshFailure = `-- name: RecordRemoteSessionIssuerMetadataRefreshFailure :execrows
 UPDATE remote_session_issuers
 SET
@@ -7850,10 +7994,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -8153,10 +8299,12 @@ SET
     -- A manually changed key URL invalidates every value derived from the old
     -- source. Omitting the field or explicitly restating the same URL keeps the
     -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    jwks = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -8692,13 +8840,14 @@ SET
         WHEN $9::text = '' THEN NULL
         ELSE COALESCE($9, registration_endpoint)
     END,
-    -- A manually changed key URL invalidates every value derived from the old
-    -- source. Omitting the field or explicitly restating the same URL keeps the
-    -- cache; clearing or replacing it clears the cache atomically.
-    jwks = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks ELSE NULL END,
-    jwks_fetched_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_fetched_at ELSE NULL END,
-    jwks_cache_expires_at = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_cache_expires_at ELSE NULL END,
-    jwks_etag = CASE WHEN $10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri) THEN jwks_etag ELSE NULL END,
+    -- Changing the issuer identity or key URL invalidates every value derived
+    -- from the old source. Restating either value keeps the cache.
+    jwks = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks ELSE NULL END,
+    jwks_fetched_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_fetched_at ELSE NULL END,
+    jwks_last_error = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error ELSE NULL END,
+    jwks_last_error_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_last_error_at ELSE NULL END,
+    jwks_cache_expires_at = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_cache_expires_at ELSE NULL END,
+    jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
         ELSE COALESCE($10, jwks_uri)
@@ -8892,6 +9041,8 @@ SET
     jwks_uri = CASE WHEN $5::text = '' THEN NULL ELSE $5::text END,
     jwks = NULLIF($6::text, '')::jsonb,
     jwks_fetched_at = $7::timestamptz,
+    jwks_last_error = NULL,
+    jwks_last_error_at = NULL,
     jwks_cache_expires_at = $8::timestamptz,
     jwks_etag = NULLIF($9::text, ''),
     service_documentation = CASE WHEN $10::text = '' THEN NULL ELSE $10::text END,
@@ -9209,6 +9360,83 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateTestTrustedIssuerConfiguration = `-- name: UpdateTestTrustedIssuerConfiguration :exec
+UPDATE remote_session_issuers
+SET issuer = $1, jwks_uri = $2, updated_at = clock_timestamp()
+WHERE id = $3
+`
+
+type UpdateTestTrustedIssuerConfigurationParams struct {
+	Issuer  string
+	JwksUri pgtype.Text
+	ID      uuid.UUID
+}
+
+func (q *Queries) UpdateTestTrustedIssuerConfiguration(ctx context.Context, arg UpdateTestTrustedIssuerConfigurationParams) error {
+	_, err := q.db.Exec(ctx, updateTestTrustedIssuerConfiguration, arg.Issuer, arg.JwksUri, arg.ID)
+	return err
+}
+
+const updateTrustedIssuerJWKSCache = `-- name: UpdateTrustedIssuerJWKSCache :execrows
+UPDATE remote_session_issuers
+SET jwks = $1::jsonb,
+    jwks_fetched_at = $2::timestamptz,
+    jwks_cache_expires_at = $3::timestamptz,
+    jwks_etag = NULLIF($4::text, ''),
+    jwks_last_error = NULL,
+    jwks_last_error_at = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $5
+  AND (organization_id = $6::text OR organization_id IS NULL)
+  AND project_id IS NULL
+  AND issuer = $7::text
+  AND jwks_uri = $8
+  AND deleted IS FALSE
+  AND xmin::text = $9::text
+  AND jwks IS NOT DISTINCT FROM $10::jsonb
+  AND jwks_fetched_at IS NOT DISTINCT FROM $11::timestamptz
+  AND jwks_cache_expires_at IS NOT DISTINCT FROM $12::timestamptz
+`
+
+type UpdateTrustedIssuerJWKSCacheParams struct {
+	Jwks                []byte
+	FetchedAt           pgtype.Timestamptz
+	CacheExpiresAt      pgtype.Timestamptz
+	Etag                string
+	ID                  uuid.UUID
+	OrganizationID      string
+	Issuer              string
+	JwksUri             pgtype.Text
+	PriorRevision       string
+	PriorJwks           []byte
+	PriorFetchedAt      pgtype.Timestamptz
+	PriorCacheExpiresAt pgtype.Timestamptz
+}
+
+// A rotated URI or changed cache state must not be overwritten by the
+// result of an older fetch. project_id IS NULL keeps this write on the
+// organization/global trusted-issuer tiers.
+func (q *Queries) UpdateTrustedIssuerJWKSCache(ctx context.Context, arg UpdateTrustedIssuerJWKSCacheParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateTrustedIssuerJWKSCache,
+		arg.Jwks,
+		arg.FetchedAt,
+		arg.CacheExpiresAt,
+		arg.Etag,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.JwksUri,
+		arg.PriorRevision,
+		arg.PriorJwks,
+		arg.PriorFetchedAt,
+		arg.PriorCacheExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertRemoteSession = `-- name: UpsertRemoteSession :one
