@@ -124,8 +124,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		return nil, nil
 	}
 	if err := ctx.Err(); err != nil {
-		j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeCanceled, 0)
-		return nil, fmt.Errorf("llm judge call: %w", err)
+		return nil, j.canceled(ctx, nil, in.OrgID, err)
 	}
 
 	ctx, span := j.tracer.Start(ctx, "risk.judge.evaluate", trace.WithAttributes(
@@ -135,29 +134,18 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	defer span.End()
 
 	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, judgeModel)
-	if err := ctx.Err(); err != nil {
-		j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeCanceled, 0)
-		span.SetAttributes(attr.Outcome(o11y.OutcomeCanceled))
-		span.SetStatus(codes.Error, "llm judge call canceled")
-		return nil, fmt.Errorf("llm judge call: %w", err)
-	}
 
 	// A throttled call is treated like a judge error: the policy's fail-mode
 	// decides. A Store outage is not a throttle, so proceed rather than let
 	// limiter infra disable the guardrail.
 	res, limitErr := j.limiter.Allow(ctx, bucket)
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeCanceled, 0)
-		span.SetAttributes(attr.Outcome(o11y.OutcomeCanceled))
-		span.SetStatus(codes.Error, "llm judge call canceled")
-		return nil, fmt.Errorf("llm judge call: %w", ctxErr)
-	}
 	switch {
-	case errors.Is(limitErr, context.Canceled):
-		j.metrics.RecordEvaluation(ctx, in.OrgID, o11y.OutcomeCanceled, 0)
-		span.SetAttributes(attr.Outcome(o11y.OutcomeCanceled))
+	case ctx.Err() != nil:
 		span.SetStatus(codes.Error, "llm judge call canceled")
-		return nil, fmt.Errorf("llm judge rate limiter: %w", limitErr)
+		return nil, j.canceled(ctx, span, in.OrgID, ctx.Err())
+	case errors.Is(limitErr, context.Canceled):
+		span.SetStatus(codes.Error, "llm judge call canceled")
+		return nil, j.canceled(ctx, span, in.OrgID, limitErr)
 	case limitErr != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(limitErr),
@@ -215,6 +203,17 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		Model:            judgeModel,
 		Provider:         "openrouter",
 	}, nil
+}
+
+// canceled records a caller-abandoned evaluation without the warn log a real
+// failure gets. span is nil when the caller gave up before the span started;
+// callers set span status inline so spancheck can see it.
+func (j *Judge) canceled(ctx context.Context, span trace.Span, orgID string, err error) error {
+	j.metrics.RecordEvaluation(ctx, orgID, o11y.OutcomeCanceled, 0)
+	if span != nil {
+		span.SetAttributes(attr.Outcome(o11y.OutcomeCanceled))
+	}
+	return fmt.Errorf("llm judge call: %w", err)
 }
 
 type judgeCallResult struct {
