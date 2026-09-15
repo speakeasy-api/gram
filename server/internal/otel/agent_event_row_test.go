@@ -11,7 +11,7 @@ import (
 
 const (
 	testObservedAt      = int64(1_724_500_000_000_000_002)
-	claudeCodeScopeName = "com.anthropic.claude_code.tracing"
+	claudeCodeScopeName = "com.anthropic.claude_code.events"
 	codexScopeName      = "codex_otel.log_only"
 )
 
@@ -462,4 +462,42 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 		_, skip = agentEventRowFromSpan(noTime, testObservedAt)
 		require.Equal(t, "missing_timestamp", skip)
 	})
+}
+
+// A record shaped the way Claude Code 2.1 ships it: no OTLP event name, the
+// name repeated as an event.name attribute and as a claude_code.-prefixed
+// body, under the com.anthropic.claude_code.events scope, with every id
+// as a log attribute rather than a resource attribute.
+func TestAgentEventRowFromLogReadsWhatClaudeCodeActuallySends(t *testing.T) {
+	t.Parallel()
+
+	record := agentEventTestLog(claudeCodeScopeName, "",
+		logEventTestKV("event.name", "user_prompt"),
+		logEventTestKV("event.timestamp", "2026-09-15T00:45:12.569Z"),
+		logEventTestKV("session.id", "session-1"),
+		logEventTestKV("prompt.id", "turn-1"),
+		logEventTestKV("message.uuid", "message-1"),
+		logEventTestKV("prompt", "fix the tests"),
+		agentEventTestIntKV("prompt_length", 13),
+		logEventTestKV("user.email", "dev@example.com"),
+		logEventTestKV("user.account_id", "acct-1"),
+		logEventTestKV("user.account_uuid", "acct-uuid-1"),
+		logEventTestKV("organization.id", "anthropic-org-1"),
+		logEventTestKV("terminal.type", "tmux"),
+	)
+	record.SetBody((&otelv1.LogRecord_AnyValue_builder{StringValue: new("claude_code.user_prompt")}).Build())
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, string(dialect.EventTypePrompt), row.EventType)
+	require.Equal(t, "user_prompt", row.RawEventName, "the event.name attribute names it before the body does")
+	require.Equal(t, "message-1", row.EventID)
+	require.Equal(t, "session-1", row.SessionID)
+	require.Equal(t, "turn-1", row.TurnID)
+	require.Equal(t, "anthropic", row.Provider)
+	require.Equal(t, "claude-code", row.Surface)
+	require.Equal(t, "dev@example.com", row.UserEmail)
+	require.Equal(t, "acct-1", row.ExternalUserID)
+	require.Equal(t, "anthropic-org-1", row.ExternalOrgID)
+	require.Equal(t, "fix the tests", row.Text)
 }

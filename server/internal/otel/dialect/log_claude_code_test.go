@@ -13,7 +13,7 @@ func TestClaudeCodeLog(t *testing.T) {
 
 	record := (&otelv1.InboundLogRecord_builder{
 		Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{
-			Name: new("com.anthropic.claude_code.tracing"),
+			Name: new("com.anthropic.claude_code.events"),
 		}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{
 			logDialectStringAttribute("user_prompt", "explain this trace"),
@@ -53,4 +53,30 @@ func TestClaudeCodeLog(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "gen_ai.response.id", key)
 	require.Equal(t, "response-id", value)
+}
+
+func TestClaudeCodeLogAppliesToEveryClaudeCodeScope(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		scope   string
+		applies bool
+	}{
+		// What a 2.1 CLI actually sends its events under.
+		{scope: "com.anthropic.claude_code.events", applies: true},
+		{scope: "com.anthropic.claude_code.tracing", applies: true},
+		{scope: "com.anthropic.claude_code", applies: true},
+		{scope: "codex_otel.log_only", applies: false},
+		{scope: "com.anthropic.other", applies: false},
+		{scope: "", applies: false},
+	}
+	for _, tc := range cases {
+		t.Run("scope "+tc.scope, func(t *testing.T) {
+			t.Parallel()
+			record := (&otelv1.InboundLogRecord_builder{
+				Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(tc.scope)}).Build(),
+			}).Build()
+			require.Equal(t, tc.applies, ClaudeCodeLog{}.AppliesTo(record))
+		})
+	}
 }
