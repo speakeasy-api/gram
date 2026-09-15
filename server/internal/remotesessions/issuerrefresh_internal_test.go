@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-jose/go-jose/v4"
@@ -33,7 +34,7 @@ func TestRefreshIssuerMetadataRequiresConfiguredTunnelTransport(t *testing.T) {
 }
 
 // testJWKSet serves a one-key JWK Set over TLS and counts the fetches it saw.
-func testJWKSet(t *testing.T) (*httptest.Server, *int) {
+func testJWKSet(t *testing.T) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -46,9 +47,9 @@ func testJWKSet(t *testing.T) (*httptest.Server, *int) {
 	}}})
 	require.NoError(t, err)
 
-	fetches := 0
+	var fetches atomic.Int64
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fetches++
+		fetches.Add(1)
 		w.Header().Set("Content-Type", "application/jwk-set+json")
 		_, _ = w.Write(document)
 	}))
@@ -84,7 +85,7 @@ func TestRefreshIssuerKeySetUsesTheIssuerTunnel(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, keySet.document)
 	require.Equal(t, 1, doer.calls, "a bound issuer's key set must be read over its tunnel")
-	require.Equal(t, 1, *fetches)
+	require.Equal(t, int64(1), fetches.Load())
 }
 
 // The counterpart: without a tunnel the fetch takes the resolver's own
@@ -98,5 +99,5 @@ func TestRefreshIssuerKeySetWithoutTunnelUsesDirectEgress(t *testing.T) {
 
 	_, err := refreshIssuerKeySet(t.Context(), resolver, nil, server.URL, repo.RemoteSessionIssuer{Issuer: server.URL})
 	require.Error(t, err)
-	require.Zero(t, *fetches)
+	require.Zero(t, fetches.Load())
 }

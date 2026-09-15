@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -135,7 +134,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			// non-idempotent POST. The address points at a pod that is gone,
 			// so drop it from the store on the way past. Any later failure —
 			// the request is on the wire by then — is returned as-is.
-			if !isDialFailure(err) {
+			if !isDeadGateway(err) {
 				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
 			}
 			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
@@ -171,22 +170,18 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 	)
 }
 
-// isDialFailure reports whether err means the connection to the gateway was
-// never established. Only then is the request provably unsent and therefore
-// safe to replay on another gateway: anything later, including a read failure
-// after the headers went out, may have already reached the backend.
+// isDeadGateway reports whether err means this gateway is definitively gone:
+// the connection was never established, and for a reason that says so about
+// the peer rather than about the network on the way to it.
 //
-// An egress policy rejection also surfaces as a dial error — it is raised from
-// the dialer's control hook — and is deliberately excluded. It says nothing
-// about the pod behind the address, every other candidate in the same cluster
-// range would be refused identically, and unpublishing on it would empty the
-// route store whenever the gateway CIDR allowlist is misconfigured.
-func isDialFailure(err error) bool {
-	if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
-		return false
-	}
-	opErr, ok := errors.AsType[*net.OpError](err)
-	return ok && opErr.Op == "dial"
+// Narrow on purpose. A DNS failure or an egress-policy rejection also surfaces
+// as a dial error, and neither says the pod is dead — unpublishing on them
+// would drain healthy routes during a resolver blip or whenever the gateway
+// CIDR allowlist is misconfigured. guardian.IsDeadPeerDialError covers the
+// definitive cases (connect timeout, ECONNREFUSED, EHOSTUNREACH, ENETUNREACH),
+// all of which also prove the request was never sent and so may be replayed.
+func isDeadGateway(err error) bool {
+	return guardian.IsDeadPeerDialError(err)
 }
 
 // buildForward clones req onto the gateway address, keeping only the path and

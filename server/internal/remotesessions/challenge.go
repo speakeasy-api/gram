@@ -1536,10 +1536,15 @@ func (m *ChallengeManager) identityFromExchange(ctx context.Context, logger *slo
 	// An issuer with no published key set cannot have its tokens verified;
 	// that is a configuration state, not an event worth a warning per grant.
 	if tok.IDToken != "" && issuer.JwksUri.Valid && issuer.JwksUri.String != "" {
+		// A bound issuer publishes its key set inside the customer network, so
+		// without that transport the token cannot be verified at all. Falling
+		// back to direct egress would read a key set from whatever answers on
+		// the public internet at the same URL, so this stores no identity
+		// rather than trusting one the tunnel never vouched for.
 		transport, terr := issuerTunnelTransport(m.tunnels, issuer.TunneledMcpServerID)
 		if terr != nil {
 			logIdentityFailure(ctx, logger, "id token not verified; key set transport unavailable", terr, attr.SlogRemoteSessionClientID(clientRowID.String()))
-			transport = nil
+			return nil, nil, noAccess
 		}
 		identity, err := m.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      issuer.IssuerUrl,
