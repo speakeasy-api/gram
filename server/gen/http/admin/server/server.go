@@ -69,6 +69,7 @@ type Server struct {
 	UploadPlatformImage                   http.Handler
 	ServeImage                            http.Handler
 	StartTrial                            http.Handler
+	ChangeTrialEndDate                    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -146,6 +147,7 @@ func New(
 			{"UploadPlatformImage", "POST", "/admin/assets.uploadImage"},
 			{"ServeImage", "GET", "/admin/assets.serveImage"},
 			{"StartTrial", "POST", "/admin/trial.start"},
+			{"ChangeTrialEndDate", "POST", "/admin/trial.changeEndDate"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -195,6 +197,7 @@ func New(
 		UploadPlatformImage:                   NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
 		ServeImage:                            NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
+		ChangeTrialEndDate:                    NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -251,6 +254,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UploadPlatformImage = m(s.UploadPlatformImage)
 	s.ServeImage = m(s.ServeImage)
 	s.StartTrial = m(s.StartTrial)
+	s.ChangeTrialEndDate = m(s.ChangeTrialEndDate)
 }
 
 // MethodNames returns the methods served.
@@ -306,6 +310,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUploadPlatformImageHandler(mux, h.UploadPlatformImage)
 	MountServeImageHandler(mux, h.ServeImage)
 	MountStartTrialHandler(mux, h.StartTrial)
+	MountChangeTrialEndDateHandler(mux, h.ChangeTrialEndDate)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -2888,6 +2893,59 @@ func NewStartTrialHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "startTrial")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountChangeTrialEndDateHandler configures the mux to serve the "admin"
+// service "changeTrialEndDate" endpoint.
+func MountChangeTrialEndDateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/trial.changeEndDate", f)
+}
+
+// NewChangeTrialEndDateHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "changeTrialEndDate" endpoint.
+func NewChangeTrialEndDateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeChangeTrialEndDateRequest(mux, decoder)
+		encodeResponse = EncodeChangeTrialEndDateResponse(encoder)
+		encodeError    = EncodeChangeTrialEndDateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "changeTrialEndDate")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

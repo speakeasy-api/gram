@@ -1,3 +1,4 @@
+import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
   useMutation,
   useQueryClient,
@@ -26,6 +27,7 @@ import {
   disableOrganization,
   enableOrganization,
   extendTrial,
+  changeTrialEndDate,
   rearmTrial,
   startTrial,
 } from "@/lib/gramAdminClient";
@@ -187,6 +189,19 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequestBody> {
     // Wrapped, so the body is the only argument the client is handed: the
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequestBody) => extendTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+export function useChangeTrialEndDate(): OrganizationWrite<ChangeTrialEndDateRequestBody> {
+  const qc = useQueryClient();
+  return useMutation({
+    // Wrapped, so the body is the only argument the client is handed: the
+    // mutation passes its own context as a second one.
+    mutationFn: (body: ChangeTrialEndDateRequestBody) =>
+      changeTrialEndDate(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),

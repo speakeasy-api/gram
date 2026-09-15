@@ -58,6 +58,7 @@ describe("generated admin boundary", () => {
         "disableOrganization",
         "enableOrganization",
         "extendTrial",
+        "changeTrialEndDate",
         "rearmTrial",
         "startTrial",
         "organizationFromSdk",
@@ -363,6 +364,20 @@ describe("organization writes through the generated client", () => {
       method: "POST",
       contentType: "application/json",
       body: { id: WIRE.id },
+    });
+  });
+
+  it("posts the absolute end date to the change path", async () => {
+    const fetch = stubFetch();
+    const endsAt = new Date("2026-05-02T00:00:00.000Z");
+    await expect(
+      boundary.changeTrialEndDate({ id: WIRE.id, endsAt }),
+    ).resolves.toEqual(RECORD);
+    expect(await requestOf(fetch)).toEqual({
+      path: "/admin/trial.changeEndDate",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: WIRE.id, ends_at: endsAt.toISOString() },
     });
   });
 

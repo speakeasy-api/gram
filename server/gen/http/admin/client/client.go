@@ -208,6 +208,10 @@ type Client struct {
 	// endpoint.
 	StartTrialDoer goahttp.Doer
 
+	// ChangeTrialEndDate Doer is the HTTP client used to make requests to the
+	// changeTrialEndDate endpoint.
+	ChangeTrialEndDateDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -276,6 +280,7 @@ func NewClient(
 		UploadPlatformImageDoer:                   doer,
 		ServeImageDoer:                            doer,
 		StartTrialDoer:                            doer,
+		ChangeTrialEndDateDoer:                    doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -1436,6 +1441,30 @@ func (c *Client) StartTrial() goa.Endpoint {
 		resp, err := c.StartTrialDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "startTrial", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ChangeTrialEndDate returns an endpoint that makes HTTP requests to the admin
+// service changeTrialEndDate server.
+func (c *Client) ChangeTrialEndDate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeChangeTrialEndDateRequest(c.encoder)
+		decodeResponse = DecodeChangeTrialEndDateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildChangeTrialEndDateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ChangeTrialEndDateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "changeTrialEndDate", err)
 		}
 		return decodeResponse(resp)
 	}
