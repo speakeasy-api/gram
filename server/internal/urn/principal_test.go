@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +53,24 @@ func TestNewPrincipal(t *testing.T) {
 			name:    "invalid agent principal id",
 			typ:     urn.PrincipalTypeAgent,
 			id:      "not-a-uuid",
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "valid workload principal",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:repo:acme/payments-api:ref:refs/heads/main",
+			wantErr: nil,
+		},
+		{
+			name:    "workload principal without a subject",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:",
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name:    "workload principal naming the nil issuer",
+			typ:     urn.PrincipalTypeWorkload,
+			id:      "00000000-0000-0000-0000-000000000000:repo:acme/payments-api",
 			wantErr: urn.ErrInvalid,
 		},
 		{
@@ -102,6 +121,30 @@ func TestNewPrincipal(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A workload principal names the same machine as its session subject: the
+// issuer row and the subject survive a round trip, colons in the subject
+// included.
+func TestWorkloadPrincipal_RoundTrip(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	const subject = "system:serviceaccount:payments:checkout-worker"
+
+	principal := urn.NewWorkloadPrincipal(issuerID, subject)
+	parsed, err := urn.ParsePrincipal(principal.String())
+	require.NoError(t, err)
+
+	gotIssuer, gotSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, issuerID, gotIssuer)
+	require.Equal(t, subject, gotSubject)
+	require.Equal(t, urn.NewWorkloadSubject(issuerID, subject).ID, principal.ID,
+		"a workload principal and its session subject must carry the same identity")
+
+	_, _, err = urn.NewPrincipal(urn.PrincipalTypeAgent, issuerID.String()).Workload()
+	require.ErrorIs(t, err, urn.ErrInvalid)
 }
 
 func TestPrincipal_String(t *testing.T) {
@@ -228,6 +271,22 @@ func TestParsePrincipal(t *testing.T) {
 		{
 			name:    "unsupported agent form",
 			input:   "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:child",
+			wantErr: true,
+		},
+		{
+			name:    "valid workload with a colon-heavy subject",
+			input:   "workload:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:system:serviceaccount:payments:checkout-worker",
+			want:    urn.NewPrincipal(urn.PrincipalTypeWorkload, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001:system:serviceaccount:payments:checkout-worker"),
+			wantErr: false,
+		},
+		{
+			name:    "workload without an issuer reference",
+			input:   "workload:repo-acme-payments-api",
+			wantErr: true,
+		},
+		{
+			name:    "non-canonical uppercase workload issuer",
+			input:   "workload:018F8D7B-58D7-7CC4-BB16-9F8C6B99A001:repo:acme/payments-api",
 			wantErr: true,
 		},
 		{
