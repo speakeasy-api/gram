@@ -584,7 +584,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return nil, err
 	}
 
@@ -732,7 +732,15 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 
 	txRepo := repo.New(dbtx)
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	existing, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{ID: clientID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "get organization remote session client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return err
 	}
 
@@ -838,7 +846,7 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, client.ProjectID.UUID, clientID); err != nil {
 		return err
 	}
 

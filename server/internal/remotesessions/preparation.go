@@ -164,6 +164,9 @@ func normalizePreparationInput(in PreparationInput) (PreparationInput, error) {
 			return in, oops.E(oops.CodeBadRequest, nil, "invalid grant type")
 		}
 	}
+	in.ConfirmGrants = slices.Clone(in.ConfirmGrants)
+	slices.Sort(in.ConfirmGrants)
+	in.ConfirmGrants = slices.Compact(in.ConfirmGrants)
 	return in, nil
 }
 func (s *Service) preparationTenant(ctx context.Context, write bool) (uuid.UUID, string, error) {

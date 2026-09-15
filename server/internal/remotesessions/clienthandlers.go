@@ -492,7 +492,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		secretCiphertext = conv.ToPGText(encrypted)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return nil, err
 	}
 
@@ -761,7 +761,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 	// client can be bound to user_session_issuers across projects in the same
 	// org, so without this a project admin could detach another project's
 	// binding through the (project-agnostic) join-table delete.
-	if _, err := txRepo.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
+	if _, err := txRepo.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
 		ID:             userIssuerID,
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -772,12 +772,16 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	// Ownership was checked above. Serialize the join change with preparation,
-	// but only inspect EMA bindings if this request actually removes a join.
-	if err := lockClientForEMALifecycle(ctx, txRepo, clientID); err != nil {
-		return nil, err
+	// Lock in preparation's user-issuer -> client order. The scoped lock
+	// rechecks client ownership after waiting; the issuer remains locked, and
+	// the mutation repeats both tenant predicates rather than trusting IDs.
+	locked, err := txRepo.LockEMAClient(ctx, repo.LockEMAClientParams{ID: clientID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		return nil, lifecycleLockError(err)
 	}
-	removed, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	existing.RemoteSessionClient = locked
+	removed, err := txRepo.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+		ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,
 	})
@@ -786,7 +790,8 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 	}
 	if removed > 0 {
 		// A conflict rolls back the tentative removal with the transaction.
-		if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+		count, err := txRepo.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
+		if err := requireNoEMABindings(count, err); err != nil {
 			return nil, err
 		}
 	}
@@ -889,7 +894,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "lock project remote session client").LogError(ctx, logger)
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, clientID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return err
 	}
 

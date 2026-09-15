@@ -60,6 +60,24 @@ func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+func TestPreparationNormalizesConfirmedGrantSets(t *testing.T) {
+	t.Parallel()
+	in := PreparationInput{UserSessionIssuerID: uuid.New(), RemoteSessionIssuerID: uuid.New(), Resource: "https://resource.example.com/", ConfirmGrants: []string{"refresh_token", "authorization_code", "refresh_token"}}
+	normalized, err := normalizePreparationInput(in)
+	require.NoError(t, err)
+	require.Equal(t, []string{"authorization_code", "refresh_token"}, normalized.ConfirmGrants)
+	require.Equal(t, []string{"refresh_token", "authorization_code", "refresh_token"}, in.ConfirmGrants)
+	in.ConfirmGrants = nil
+	normalized, err = normalizePreparationInput(in)
+	require.NoError(t, err)
+	require.Nil(t, normalized.ConfirmGrants)
+	in.ConfirmGrants = []string{}
+	normalized, err = normalizePreparationInput(in)
+	require.NoError(t, err)
+	require.NotNil(t, normalized.ConfirmGrants)
+	require.Empty(t, normalized.ConfirmGrants)
+}
+
 func TestPreparationDCRValidation(t *testing.T) {
 	t.Parallel()
 	base := preparationDCRResponse{ClientID: "resource-client", ClientSecret: "test-secret", TokenEndpointAuthMethod: "client_secret_basic", GrantTypes: []string{PreparationJWTBearerGrant}}

@@ -327,7 +327,7 @@ func (s *Service) settleClientKeySet(
 		return nil, err
 	}
 
-	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ID); err != nil {
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, existing.ID); err != nil {
 		return nil, err
 	}
 
