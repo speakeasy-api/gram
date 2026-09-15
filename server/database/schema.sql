@@ -8597,6 +8597,10 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_bindings (
   remote_session_issuer_id uuid NOT NULL,
   resource TEXT NOT NULL,
   remote_session_client_id uuid,
+  -- Binding incarnation, not a counter for every status/provenance update.
+  -- Writers CAS against the expected generation; unlink/rebind advances it.
+  -- DCR completion checks claim_id and in_progress state within the same
+  -- generation, then records status/provenance and clears the completed claim.
   generation bigint NOT NULL DEFAULT 1,
   state TEXT NOT NULL DEFAULT 'configuration_required',
   grant_source TEXT NOT NULL DEFAULT 'unknown',
@@ -8721,6 +8725,7 @@ WHEN (OLD.project_id IS DISTINCT FROM NEW.project_id OR OLD.organization_id IS D
  OR OLD.remote_session_issuer_id IS DISTINCT FROM NEW.remote_session_issuer_id OR OLD.deleted_at IS DISTINCT FROM NEW.deleted_at
  OR OLD.audience IS DISTINCT FROM NEW.audience
  OR OLD.client_id IS DISTINCT FROM NEW.client_id OR OLD.client_secret_encrypted IS DISTINCT FROM NEW.client_secret_encrypted
+ OR OLD.client_secret_expires_at IS DISTINCT FROM NEW.client_secret_expires_at
  OR OLD.token_endpoint_auth_method IS DISTINCT FROM NEW.token_endpoint_auth_method OR OLD.json_web_key_set_id IS DISTINCT FROM NEW.json_web_key_set_id
  OR OLD.scope IS DISTINCT FROM NEW.scope OR OLD.client_id_metadata_uri IS DISTINCT FROM NEW.client_id_metadata_uri
  OR OLD.token_endpoint_auth_audience_format IS DISTINCT FROM NEW.token_endpoint_auth_audience_format)

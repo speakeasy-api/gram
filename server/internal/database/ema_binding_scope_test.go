@@ -110,6 +110,79 @@ func TestEMABindingScope(t *testing.T) {
 			requireEMAScopeError(t, err)
 		})
 	}
+	t.Run("secret_expiry_requires_unlink", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, `UPDATE remote_session_clients SET client_secret_expires_at = '2100-01-01' WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		// A no-op assignment does not reconfigure the credential.
+		_, err = tx.Exec(ctx, `UPDATE remote_session_clients SET client_secret_expires_at = client_secret_expires_at WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+		for _, expiry := range []string{"NULL", "'2000-01-01'", "'2101-01-01'"} {
+			_, err = tx.Exec(ctx, "SAVEPOINT expiry")
+			require.NoError(t, err)
+			_, err = tx.Exec(ctx, "UPDATE remote_session_clients SET client_secret_expires_at = "+expiry+" WHERE id = fixture_scope_id(1)")
+			requireEMAScopeError(t, err)
+			_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT expiry")
+			require.NoError(t, err)
+		}
+		_, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = generation + 1;
+UPDATE remote_session_clients SET client_secret_expires_at = '2000-01-01' WHERE id = fixture_scope_id(1)`)
+		require.NoError(t, err)
+	})
+
+	t.Run("generation_is_binding_incarnation", func(t *testing.T) {
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		_, err = tx.Exec(ctx, emaScopeInsert)
+		require.NoError(t, err)
+		// Claim selection advances the incarnation. Status/provenance completion
+		// belongs to that claim, not to a new binding incarnation.
+		selected, err := tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET generation = 2,
+ state = 'in_progress', remote_session_client_id = NULL, claim_id = fixture_scope_id(100), claimed_at = clock_timestamp()
+ WHERE project_id = fixture_scope_id(1) AND organization_id = 'fixture-org-a' AND generation = 1`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, selected.RowsAffected())
+		complete := `UPDATE remote_session_ema_bindings SET state = 'ready', grant_source = 'provider_returned',
+ remote_session_client_id = fixture_scope_id(1), claim_id = NULL, claimed_at = NULL
+ WHERE project_id = fixture_scope_id(1) AND organization_id = 'fixture-org-a'
+ AND generation = $1 AND claim_id = fixture_scope_id($2) AND state = 'in_progress'`
+		for _, stale := range [][2]int{{1, 100}, {2, 101}} {
+			result, err := tx.Exec(ctx, complete, stale[0], stale[1])
+			require.NoError(t, err)
+			require.Zero(t, result.RowsAffected())
+		}
+		result, err := tx.Exec(ctx, complete, 2, 100)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, result.RowsAffected())
+		var generation int64
+		err = tx.QueryRow(ctx, `SELECT generation FROM remote_session_ema_bindings`).Scan(&generation)
+		require.NoError(t, err)
+		require.EqualValues(t, 2, generation)
+		// The cleared claim prevents replay even though generation is unchanged.
+		result, err = tx.Exec(ctx, complete, 2, 100)
+		require.NoError(t, err)
+		require.Zero(t, result.RowsAffected())
+		result, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'unlinked', generation = 3
+ WHERE project_id = fixture_scope_id(1) AND organization_id = 'fixture-org-a' AND generation = 2`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, result.RowsAffected())
+		// A stale expected-generation update cannot restore the old incarnation.
+		result, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready'
+ WHERE project_id = fixture_scope_id(1) AND organization_id = 'fixture-org-a' AND generation = 2`)
+		require.NoError(t, err)
+		require.Zero(t, result.RowsAffected())
+		result, err = tx.Exec(ctx, `UPDATE remote_session_ema_bindings SET state = 'ready', generation = 4,
+ remote_session_client_id = fixture_scope_id(4), grant_source = 'administrator_declared'
+ WHERE project_id = fixture_scope_id(1) AND organization_id = 'fixture-org-a' AND generation = 3`)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, result.RowsAffected())
+	})
+
 	t.Run("tombstone_and_grant_evidence", func(t *testing.T) {
 		tx, err := pool.Begin(ctx)
 		require.NoError(t, err)
