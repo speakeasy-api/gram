@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -123,6 +124,10 @@ func (m *privateIngressTokenReviewerMock) Create(ctx context.Context, review *au
 
 func TestPrivateIngressReadinessFailsAndRecoversWithoutLeakingToken(t *testing.T) {
 	t.Parallel()
+	synctest.Test(t, testPrivateIngressReadinessRecovery)
+}
+
+func testPrivateIngressReadinessRecovery(t *testing.T) {
 	tokenFile := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(tokenFile, []byte("test-service-account-token"), 0600))
 	reviewer := &privateIngressTokenReviewerMock{}
@@ -145,6 +150,7 @@ func TestPrivateIngressReadinessFailsAndRecoversWithoutLeakingToken(t *testing.T
 	require.NotContains(t, response.Body.String(), "test-service-account-token")
 	require.Zero(t, dependenciesCalled)
 
+	time.Sleep(time.Second) // Advance the synctest clock to replenish the readiness limiter.
 	require.NoError(t, os.WriteFile(tokenFile, []byte("rotated-test-token"), 0600))
 	reviewer.On("Create", boundedContext, mock.MatchedBy(func(review *authenticationv1.TokenReview) bool {
 		return review.Spec.Token == "rotated-test-token" && len(review.Spec.Audiences) == 0
@@ -154,6 +160,41 @@ func TestPrivateIngressReadinessFailsAndRecoversWithoutLeakingToken(t *testing.T
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, 1, dependenciesCalled)
 	reviewer.AssertExpectations(t)
+}
+
+func TestPrivateIngressReadinessRateLimitsConcurrentProbes(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		tokenFile := filepath.Join(t.TempDir(), "token")
+		require.NoError(t, os.WriteFile(tokenFile, []byte("test-service-account-token"), 0600))
+		reviewer := &privateIngressTokenReviewerMock{}
+		reviewer.On("Create", mock.Anything, mock.Anything, metav1.CreateOptions{}).
+			Return(&authenticationv1.TokenReview{Status: authenticationv1.TokenReviewStatus{Authenticated: true}}, nil).Once()
+		handler := privateIngressReadinessHandler(reviewer, tokenFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		const probes = 20
+		results := make(chan int, probes)
+		for range probes {
+			go func() {
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
+				results <- response.Code
+			}()
+		}
+		synctest.Wait()
+		accepted := 0
+		for range probes {
+			code := <-results
+			if code == http.StatusOK {
+				accepted++
+			} else {
+				require.Equal(t, http.StatusServiceUnavailable, code)
+			}
+		}
+		require.Equal(t, 1, accepted)
+		reviewer.AssertExpectations(t)
+	})
 }
 
 func TestPrivateIngressReadinessRejectsMissingTokenAndLeavesLivenessAlone(t *testing.T) {

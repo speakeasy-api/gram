@@ -8,13 +8,19 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/netingress"
+	"golang.org/x/time/rate"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func privateIngressReadinessHandler(reviewer netingress.TokenReviewer, tokenFile string, dependencies http.Handler) http.Handler {
+	limiter := rate.NewLimiter(rate.Every(time.Second), 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
+			if !limiter.Allow() {
+				http.Error(w, "private ingress readiness rate limited", http.StatusServiceUnavailable)
+				return
+			}
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
 			// Read on each probe so projected service-account token rotation is respected.
