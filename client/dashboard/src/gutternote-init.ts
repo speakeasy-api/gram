@@ -7,7 +7,7 @@
 // standalone classic-script chunk either — a side-effect import is enough.)
 //
 // Configuration arrives as meta tags that the dashboard image's entrypoint
-// (preview-runtime-values.sh) substitutes from the environment at container
+// (41-preview-runtime-values.sh) substitutes from the environment at container
 // start. Under `vite dev` the entrypoint never runs, so the tags hold literal
 // "${...}" text and both checks below fail — the widget stays off locally.
 
