@@ -657,6 +657,7 @@ func newStripeClient(
 }
 
 func newStripeMeterEventClient(
+	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
@@ -667,7 +668,7 @@ func newStripeMeterEventClient(
 	apiKey := c.String("stripe-api-key")
 	switch {
 	case stripeclient.IsConfigured(apiKey):
-		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+		return stripeclient.NewV2MeterEventClient(logger, guardianPolicy, apiKey), nil
 	case c.String("environment") == "local":
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	default:
