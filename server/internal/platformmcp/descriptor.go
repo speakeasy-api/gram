@@ -55,6 +55,10 @@ const (
 type ExternalAuthorization string
 
 const (
+	// ExternalAuthorizationMember relies on live membership established while
+	// preparing the external request. The handler must enforce any narrower
+	// resource, ownership, or domain policy it needs.
+	ExternalAuthorizationMember   ExternalAuthorization = "member"
 	ExternalAuthorizationOrgAdmin ExternalAuthorization = "org_admin"
 )
 

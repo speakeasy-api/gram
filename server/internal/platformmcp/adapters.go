@@ -316,6 +316,7 @@ type PostgresReader struct {
 	dataExportMutations *dataExportMutationService
 	recentToolCalls     *RecentToolCallReadService
 	eventFeed           *EventFeedReadService
+	authz               *authz.Engine
 	shadowInventory     *ShadowInventoryService
 	shadowDecisions     *ShadowDecisionService
 }
@@ -333,9 +334,17 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExportMutations: nil,
 		recentToolCalls:     nil,
 		eventFeed:           nil,
+		authz:               nil,
 		shadowInventory:     nil,
 		shadowDecisions:     nil,
 	}
+}
+
+func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
+	if r != nil {
+		r.authz = engine
+	}
+	return r
 }
 
 func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
@@ -364,25 +373,39 @@ func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 }
 
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
-	if r.reader == nil {
+	if r.reader == nil || r.authz == nil {
 		return ListProjectsOutput{}, ErrUnavailable
 	}
-	limit := boundedLimit(input.Limit)
-	rows, err := r.reader.ListProjectsLimited(ctx, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
+	rows, err := r.reader.ListProjects(ctx, principal.OrganizationID)
 	if err != nil {
 		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
 	}
-
-	rows, truncated := boundedRows(rows, limit)
-	output := ListProjectsOutput{Projects: make([]Project, 0, len(rows)), Truncated: truncated}
+	checks := make([]authz.Check, 0, len(rows))
 	for _, row := range rows {
-		output.Projects = append(output.Projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+		checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
 	}
-	return output, nil
+	allowed, err := r.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return ListProjectsOutput{}, fmt.Errorf("filter platform mcp projects: %w", err)
+	}
+	limit := boundedLimit(input.Limit)
+	projects := make([]Project, 0, min(limit+1, len(rows)))
+	filtered := false
+	for i, row := range rows {
+		if !allowed[i] {
+			filtered = true
+			continue
+		}
+		if len(projects) <= limit {
+			projects = append(projects, Project{ID: row.ID.String(), Name: row.Name, Slug: row.Slug})
+		}
+	}
+	projects, truncated := boundedRows(projects, limit)
+	return ListProjectsOutput{Projects: projects, Truncated: truncated, Filtered: filtered}, nil
 }
 
 func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error) {
-	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil {
+	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil || r.authz == nil {
 		return FindMCPOutput{}, ErrUnavailable
 	}
 	if input.ProjectID != "" && input.ProjectSlug != "" {
@@ -422,10 +445,18 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	if query != "" {
 		limit = min(limit, 10)
 	}
+	allowedMCPIDs, err := r.allowedMCPIDs(ctx, principal.OrganizationID)
+	if err != nil {
+		return FindMCPOutput{}, err
+	}
+	if len(allowedMCPIDs) == 0 {
+		return FindMCPOutput{MCPs: []MCP{}, NextCursor: ""}, nil
+	}
 	rows, err := r.inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
 		OrganizationID: principal.OrganizationID,
 		ConnectionID:   connectionID, ConnectionGeneration: generation,
 		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		SkipAuthorizationFilter: false, AllowedMcpIds: allowedMCPIDs,
 		ProjectID: projectID, AfterMcpID: afterID, QueryText: query, ReadinessState: inventoryText(input.Readiness),
 		LimitValue: int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
 	})
@@ -474,7 +505,7 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 }
 
 func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
-	if r.reader == nil || r.inventory == nil {
+	if r.reader == nil || r.inventory == nil || r.authz == nil {
 		return MCP{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -484,6 +515,9 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+	}
+	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+		return MCP{}, err
 	}
 	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
@@ -536,6 +570,28 @@ func inventoryMCPDisplayName(mcp *MCP) string {
 		return mcp.Slug
 	}
 	return mcp.ID
+}
+
+func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	servers, err := r.inventory.ListPlatformMCPInventoryAuthorizationCandidates(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list platform mcp authorization candidates: %w", err)
+	}
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String()))
+	}
+	matched, err := r.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
+	}
+	ids := make([]uuid.UUID, 0, len(servers))
+	for i, server := range servers {
+		if matched[i] {
+			ids = append(ids, server.ID)
+		}
+	}
+	return ids, nil
 }
 
 func (r *PostgresReader) resolveInventoryProject(ctx context.Context, organizationID string, input FindMCPInput) (ResolvedProject, error) {

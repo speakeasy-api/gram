@@ -70,7 +70,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Title:       "List Skills",
 		Description: "List the skills in a named project, newest change first. A skill is a written set of instructions an agent loads when it applies. Returns names and how many versions each has; the instructions themselves are read separately with get_skill.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillsToolInput) (*mcp.CallToolResult, ListSkillsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillsToolInput) (*mcp.CallToolResult, ListSkillsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillsOutput, error) {
 			return skills.ListSkills(ctx, principal, ListSkillsInput(input))
 		})
@@ -81,7 +81,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Title:       "Get Skill",
 		Description: "Read one skill in a named project. Constraints: set include_content to read the instructions themselves; it is off by default because they run to 64 KiB.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillToolInput) (*mcp.CallToolResult, GetSkillOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillToolInput) (*mcp.CallToolResult, GetSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (GetSkillOutput, error) {
 			return skills.GetSkill(ctx, principal, GetSkillInput(input))
 		})
@@ -92,7 +92,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 		Title:       "List Skill Versions",
 		Description: "List a skill's versions, newest first. A version is a fixed snapshot of the instructions: it is never edited in place, so a correction is recorded as a new version with add_skill_version.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillVersionsToolInput) (*mcp.CallToolResult, ListSkillVersionsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillVersionsToolInput) (*mcp.CallToolResult, ListSkillVersionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillVersionsOutput, error) {
 			return skills.ListSkillVersions(ctx, principal, ListSkillVersionsInput(input))
 		})
@@ -148,14 +148,15 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		title       string
 		description string
 		readOnly    bool
+		authority   ExternalAuthorization
 	}{
-		{"list_skills", "List Skills", "List the skills in a project. This is not switched on for your organization yet.", true},
-		{"get_skill", "Get Skill", "Read one skill in a project. This is not switched on for your organization yet.", true},
-		{"list_skill_versions", "List Skill Versions", "List a skill's versions. This is not switched on for your organization yet.", true},
-		{"create_skill", "Create Skill", "Write a new skill from complete SKILL.md content. This is not switched on for your organization yet.", false},
-		{"add_skill_version", "Add Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false},
-		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false},
-		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false},
+		{"list_skills", "List Skills", "List the skills in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember},
+		{"get_skill", "Get Skill", "Read one skill in a project. This is not switched on for your organization yet.", true, ExternalAuthorizationMember},
+		{"list_skill_versions", "List Skill Versions", "List a skill's versions. This is not switched on for your organization yet.", true, ExternalAuthorizationMember},
+		{"create_skill", "Create Skill", "Write a new skill from complete SKILL.md content. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
+		{"add_skill_version", "Add Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
+		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
+		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false, ExternalAuthorizationOrgAdmin},
 	} {
 		manifest := &mcp.Tool{
 			Name:        tool.name,
@@ -165,7 +166,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
-		addTool(reg, manifest, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("skills"))
+		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("skills"))
 	}
 }
 

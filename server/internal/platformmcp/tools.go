@@ -56,10 +56,9 @@ type PlatformContext struct {
 // platformOverview is the one plain-language account of this platform a caller
 // gets. It names the stages in the order a person experiences them and glosses
 // the two words — project and plugin — that have no meaning outside Gram.
-const platformOverview = "An administrator sets MCP servers and skills up here, then hands them to the people in their organization. " +
-	"A project is where that work is kept before anyone receives it. A plugin is a bundle of MCP servers and skills you share with people. " +
-	"An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin, and published to the people it is shared with. " +
-	"A skill is a written set of instructions an agent loads when it applies; it also reaches people through a plugin or an assistant."
+const platformOverview = "This session exposes one shared tool catalogue. Your current organization membership and RBAC grants decide which calls can run and which resources are returned. " +
+	"Use list_projects, find_mcp, list_skills, and list_my_sessions to discover work you can access. A denied call does not mean the connection failed; it returns the permission required and, when safe, a request-access link. " +
+	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
 
 type ListProjectsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`
@@ -74,6 +73,7 @@ type Project struct {
 type ListProjectsOutput struct {
 	Projects  []Project `json:"projects"`
 	Truncated bool      `json:"truncated"`
+	Filtered  bool      `json:"filtered"`
 }
 
 type FindMCPInput struct {

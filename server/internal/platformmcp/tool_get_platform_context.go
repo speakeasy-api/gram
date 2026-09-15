@@ -11,9 +11,9 @@ func registerGetPlatformContextTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_platform_context",
 		Title:       "Show the Current Organization",
-		Description: "Show which organization this session is working in, and how an MCP server reaches people here. Call this first in a new conversation: the overview it returns is the shape of every other request.",
+		Description: "Show which organization this session is working in and explain how live RBAC affects the shared Platform MCP catalogue. Call this first in a new conversation before choosing a permitted workflow.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, PlatformContext{}, err
