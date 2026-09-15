@@ -449,6 +449,69 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	}, nil
 }
 
+// IDPLoginOptions controls the bootstrap that follows a successful IDP code
+// exchange.
+type IDPLoginOptions struct {
+	// SkipMembershipSync leaves local organization memberships as they are.
+	// Support logins set it so a platform admin's session never reconciles
+	// memberships against WorkOS.
+	SkipMembershipSync bool
+}
+
+// IDPLoginResult is the Gram identity established by CompleteIDPLogin.
+type IDPLoginResult struct {
+	// UserID is the Gram user selected for the IDP identity.
+	UserID string
+
+	// Reactivated reports that the login revived a user previously deleted
+	// by WorkOS.
+	Reactivated bool
+
+	// UserInfo is the user's fresh profile and organization list, read after
+	// memberships were reconciled.
+	UserInfo *sessions.CachedUserInfo
+}
+
+// CompleteIDPLogin is the single bootstrap every IDP-backed login runs after
+// the code exchange: it upserts the user, reconciles local organization
+// memberships from WorkOS, and returns user info that reflects those rows.
+// Every login surface (dashboard, MCP server, Platform MCP) goes through it so
+// an organization access check made right after cannot disagree with WorkOS
+// or with a cached organization list.
+func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, opts IDPLoginOptions) (IDPLoginResult, error) {
+	upserted, err := r.UpsertUserFromIDPWithResult(ctx, idpUser)
+	if err != nil {
+		return IDPLoginResult{}, err
+	}
+
+	if !opts.SkipMembershipSync && idpUser.Sub != "" {
+		sync := r.SyncMembershipsFromWorkOS
+		if upserted.Reactivated {
+			sync = r.SyncMembershipsFromWorkOSPreservingExisting
+		}
+		if err := sync(ctx, upserted.UserID, idpUser.Sub); err != nil {
+			return IDPLoginResult{}, err
+		}
+	}
+	// Built from the database, never read through the cache: a concurrent
+	// request on another instance can re-store a pre-sync organization list
+	// between the sync's invalidation and this read. Storing the fresh value
+	// overwrites any such entry.
+	userInfo, err := r.BuildUserInfoFromDB(ctx, upserted.UserID)
+	if err != nil {
+		return IDPLoginResult{}, err
+	}
+	if err := r.userInfoCache.Store(ctx, *userInfo); err != nil {
+		return IDPLoginResult{}, fmt.Errorf("store user info: %w", err)
+	}
+
+	return IDPLoginResult{
+		UserID:      upserted.UserID,
+		Reactivated: upserted.Reactivated,
+		UserInfo:    userInfo,
+	}, nil
+}
+
 // SyncMembershipsFromWorkOS refreshes local WorkOS organization memberships
 // and invalidates cached user info so the next read observes the synced rows.
 func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) error {
@@ -638,6 +701,20 @@ func (r *Resolver) GetUserInfo(ctx context.Context, userID string) (*sessions.Ca
 	}
 
 	return userInfo, false, nil
+}
+
+// IsOrganizationMember reports whether the user holds an active membership in
+// an enabled organization, read from the database. Login gates use it instead
+// of HasAccessToOrganization so a stale cached organization list can never
+// deny a member who was just synced.
+func (r *Resolver) IsOrganizationMember(ctx context.Context, organizationID, userID string) (bool, error) {
+	orgs, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	if err != nil {
+		return false, fmt.Errorf("list organizations for user: %w", err)
+	}
+	return slices.ContainsFunc(orgs, func(org orgRepo.ListOrganizationsForUserRow) bool {
+		return org.ID == organizationID
+	}), nil
 }
 
 // HasAccessToOrganization checks whether the user belongs to the given org.
