@@ -128,18 +128,36 @@ export function QueryBuilder({
               dataset={dataset}
               measure={measure}
               onChange={(next) => setMeasure(index, next)}
-              onRemove={
-                spec.measures.length > 1
-                  ? () => patch(withMeasures(removeAt(spec.measures, index)))
-                  : undefined
+              onRemove={() =>
+                patch(withMeasures(removeAt(spec.measures, index)))
               }
               trailing={
                 index === spec.measures.length - 1 ? (
-                  <AddRowButton label="Add measure" onClick={addMeasure} />
+                  <AddRowButton
+                    label="Add another measure"
+                    onClick={addMeasure}
+                  />
                 ) : undefined
               }
             />
           ))}
+          {spec.measures.length === 0 ? (
+            // Nothing measured is still a question: the rows themselves.
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon="plus"
+                onClick={addMeasure}
+              >
+                Add measure
+              </Button>
+              <span className="text-muted-foreground text-xs">
+                Nothing measured, so the results are rows at the dataset's
+                grain.
+              </span>
+            </div>
+          ) : null}
         </div>
       </ClauseRow>
 
