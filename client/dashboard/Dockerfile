@@ -22,13 +22,16 @@ ENV GRAM_CDN_URL=""
 ENV GRAM_ADMIN_SERVER_URL=""
 
 # Deployment provenance, set per environment by the deployment (see the Helm
-# values in gram-infra). GRAM_IS_PREVIEW is the sole gate on the Gutternote
-# feedback widget in index.html and must equal "true" to enable it, so the
-# empty default keeps the widget off everywhere it is not deliberately set.
+# values in gram-infra). The Gutternote widget in index.html needs both
+# GRAM_IS_PREVIEW="true" and a non-empty GRAM_GUTTERNOTE_KEY, so these empty
+# defaults keep it off everywhere it is not deliberately configured.
+# GRAM_GUTTERNOTE_KEY is a public client-side key served in the HTML, not a
+# secret; it lives in the environment so it can be rotated without a rebuild.
 ENV GRAM_BRANCH=""
 ENV GRAM_COMMIT_SHA=""
 ENV GRAM_PR_NUMBER=""
 ENV GRAM_IS_PREVIEW=""
+ENV GRAM_GUTTERNOTE_KEY=""
 
 EXPOSE 3000
 
