@@ -3,13 +3,14 @@
 # traces, metrics and logs pipelines into Tempo, Prometheus and Loki --- is
 # untouched. This file only adds a second logs pipeline beside them.
 #
-# Why it exists: `mise run demo:agent-activity` drives real Claude Code
-# sessions and wants each one attributed to a seeded demo user. Claude Code
-# gives no way to override the record-level `user.email` it reports --- that
-# comes from the signed-in Anthropic account --- but it does honour
+# Why it exists: `mise run demo:agent-activity` drives real agent sessions and
+# wants each one attributed to a seeded demo user. No harness lets you override
+# the record-level `user.email` it reports --- that comes from the account
+# signed in at the keyboard --- but Claude Code and Codex both honour
 # OTEL_RESOURCE_ATTRIBUTES. So the generator marks each run with the identity
 # it wants, in the resource, and this pipeline moves that value onto the
-# attribute Gram's dialect actually reads into agent_events.user_email.
+# attribute Gram's dialect actually reads into agent_events.user_email. The
+# attribute is the same one for every harness, so this stays one pipeline.
 #
 # This container is shared by every worktree on the machine, so the pipeline
 # is gated: it forwards only records carrying the generator's marker and is
@@ -45,6 +46,11 @@ processors:
     logs:
       log_record:
         - 'resource.attributes["gram.demo.user_email"] == nil'
+        # Second gate, within a marked run: forward only what a dialect can
+        # read. Codex exports its own internal tracing over the same OTLP
+        # connection as its agent events, and those records would otherwise
+        # arrive at Gram as unclassifiable rows in the middle of the demo data.
+        - 'not (IsMatch(instrumentation_scope.name, "^com.anthropic.claude_code") or instrumentation_scope.name == "codex_otel.log_only")'
 
   transform/gram_demo:
     error_mode: ignore
