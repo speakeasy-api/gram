@@ -3685,6 +3685,8 @@ UPDATE remote_session_ema_bindings SET remote_session_client_id = sqlc.narg('rem
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id AND generation = @expected_generation
 RETURNING *;
 
+-- Global clients are platform-owned: tenant preparation must not mutate their
+-- credentials or grant evidence. Keep this lock scoped like SetEMAClientGrants.
 -- name: LockEMAClient :one
 SELECT * FROM remote_session_clients WHERE id = @id AND deleted IS FALSE
 AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;
@@ -3713,3 +3715,100 @@ AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@pr
 -- name: LockEMAUserIssuer :one
 SELECT id FROM user_session_issuers WHERE id = @id AND deleted IS FALSE
 AND (project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)) FOR UPDATE;
+
+-- name: SetPreparationFixtureIssuerCapability :exec
+UPDATE remote_session_issuers
+SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureClientGrants :exec
+UPDATE remote_session_clients SET grant_types = @grant_types::text[]
+WHERE id = @id AND project_id = @project_id;
+
+-- name: GetPreparationFixtureClientGrants :one
+SELECT grant_types FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
+
+-- name: CountPreparationFixtureBindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id;
+
+-- name: SetPreparationFixtureClientSecret :exec
+UPDATE remote_session_clients SET token_endpoint_auth_method = 'client_secret_basic', client_secret_encrypted = @secret
+WHERE id = @id AND project_id = @project_id;
+
+-- name: ExpirePreparationFixtureClientSecret :exec
+UPDATE remote_session_clients SET client_secret_expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id AND project_id = @project_id;
+
+-- Scoped fixtures for DCR preparation and lifecycle integration tests.
+-- name: SetPreparationFixtureDCREndpoint :exec
+UPDATE remote_session_issuers SET registration_endpoint = @endpoint, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureInteractiveClient :exec
+UPDATE remote_session_clients SET client_secret_encrypted='interactive-ciphertext', token_endpoint_auth_method='client_secret_basic', grant_types=ARRAY['authorization_code','refresh_token'], scope=ARRAY['openid'] WHERE id = @id AND project_id = @project_id;
+
+-- name: AttachPreparationFixtureInteractiveClient :exec
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id,user_session_issuer_id) SELECT id,@user_id FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
+
+-- name: GetPreparationFixtureInteractiveClient :one
+SELECT client_id,client_secret_encrypted,grant_types,scope FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
+
+-- name: CountPreparationFixtureAttachments :one
+SELECT count(*) FROM remote_session_client_user_session_issuers l JOIN remote_session_clients c ON c.id=l.remote_session_client_id WHERE c.project_id = @project_id AND l.remote_session_client_id = @id AND l.user_session_issuer_id = @user_id;
+
+-- name: CountPreparationFixtureIssuerClients :one
+SELECT count(*) FROM remote_session_clients WHERE project_id = @project_id AND remote_session_issuer_id = @issuer_id;
+
+-- name: AgePreparationFixtureClaim :exec
+UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = @id AND project_id = @project_id;
+
+-- name: GetPreparationFixtureRegistration :one
+SELECT b.remote_session_client_id,b.requested_scopes,c.grant_types,c.client_secret_encrypted FROM remote_session_ema_bindings b JOIN remote_session_clients c ON c.id=b.remote_session_client_id WHERE b.id = @id AND b.project_id = @project_id AND b.organization_id = @organization_id;
+
+-- name: SetPreparationFixtureTrust :exec
+UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WHERE id = @id AND project_id = @project_id;
+
+-- name: MovePreparationFixtureIssuerTier :execrows
+UPDATE remote_session_issuers SET project_id=NULL WHERE id = @id AND project_id = @project_id;
+
+-- name: ChangePreparationFixtureIssuerIdentity :execrows
+UPDATE remote_session_issuers SET issuer='https://replacement.example.com' WHERE id = @id AND project_id = @project_id;
+
+-- name: DisconnectPreparationFixtureTrust :execrows
+UPDATE user_session_issuers SET trusted_remote_session_issuer_id=NULL WHERE id = @id AND project_id = @project_id;
+
+-- name: SoftDeletePreparationFixtureUserIssuer :execrows
+UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE id = @id AND project_id = @project_id;
+
+-- name: SoftDeletePreparationFixtureClient :execrows
+UPDATE remote_session_clients SET deleted_at=clock_timestamp() WHERE id = @id AND project_id = @project_id;
+
+-- name: DeletePreparationFixtureClient :exec
+DELETE FROM remote_session_clients WHERE id = @id AND project_id = @project_id;
+
+-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureTestClientSecret :exec
+UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic',client_secret_encrypted='test-ciphertext' WHERE id = @id AND project_id = @project_id;
+
+-- name: LockPreparationFixtureIssuer :one
+SELECT id FROM remote_session_issuers WHERE id = @id AND project_id = @project_id FOR UPDATE;
+
+-- name: SetPreparationFixtureIssuerPostAuth :exec
+UPDATE remote_session_issuers SET token_endpoint_auth_methods_supported=ARRAY['client_secret_post'] WHERE id = @id AND project_id = @project_id;
+
+-- name: FailPreparationFixtureIssuerMetadata :exec
+UPDATE remote_session_issuers SET metadata_last_error='discovery unavailable', metadata_last_error_at=clock_timestamp(), metadata_last_error_url='https://issuer.example.com/metadata' WHERE id = @id AND project_id = @project_id;
+
+-- name: EnablePreparationFixtureCIMD :exec
+UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, token_endpoint_auth_methods_supported = array_append(token_endpoint_auth_methods_supported, 'none') WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureCIMDURI :exec
+UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
+
+-- name: DeletePreparationFixtureIssuer :exec
+DELETE FROM remote_session_issuers WHERE id = @id AND project_id = @project_id;
+
+-- name: DeletePreparationFixtureUserIssuer :exec
+DELETE FROM user_session_issuers WHERE id = @id AND project_id = @project_id;

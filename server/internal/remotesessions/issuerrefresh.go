@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -82,17 +81,6 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		ResourceIndicatorSupported: nil,
 		DiscoveryWarnings:          warnings,
 	}
-}
-
-// issuerOrigin reduces an issuer URL to its scheme and host. Returns the input
-// unchanged when it does not parse as an absolute URL, so a caller comparing
-// against it simply finds no match rather than matching everything.
-func issuerOrigin(issuerURL string) string {
-	u, err := url.Parse(issuerURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return issuerURL
-	}
-	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // mapDiscoveryError turns the errors discovery raises into the response a fetch
@@ -196,13 +184,8 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 	// A partial discovery is not a successful refresh. Keep the entire last
 	// known snapshot and its fetched timestamp until all candidates answer;
 	// otherwise an outage can masquerade as capability withdrawal or freshness.
-	if discovered.unreadable != "" {
-		return zero, nil, &discoveryError{
-			WellKnownURL: discovered.unreadable,
-			Status:       0,
-			cause:        errors.New("issuer discovery was incomplete"),
-			definitive:   false,
-		}
+	if discovered.unreadableErr != nil {
+		return zero, nil, discovered.unreadableErr
 	}
 
 	// The key set rides the issuer's binding like the discovery document that
@@ -418,7 +401,7 @@ func discoveryRetryURL(err error) string {
 // in-flight request from overwriting a newer refresh or a concurrent tier move.
 func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
 	msg, _ := discoveryFailureMessage(discoveryErr)
-	_, err := repo.New(s.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
+	rows, err := repo.New(s.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
 		MetadataLastErrorUrl:      discoveryRetryURL(discoveryErr),
 		ObservedMetadataFetchedAt: existing.MetadataFetchedAt,
@@ -430,6 +413,9 @@ func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record issuer discovery failure").LogError(ctx, logger)
+	}
+	if rows == 0 {
+		return oops.E(oops.CodeConflict, nil, refreshConflictMessage).LogWarn(ctx, logger)
 	}
 	return mapDiscoveryError(ctx, logger, discoveryErr, oops.CodeGatewayError)
 }

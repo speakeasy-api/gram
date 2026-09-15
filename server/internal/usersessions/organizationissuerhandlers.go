@@ -571,6 +571,7 @@ func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger,
 		toolsets = append(toolsets, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
 	}
 	return &orggen.OrganizationUserSessionIssuerDeletePreflight{
+		EmaBindingCount:  0,
 		ClientCount:      int(clients),
 		LiveSessionCount: int(sessions),
 		McpServers:       mcpServers,

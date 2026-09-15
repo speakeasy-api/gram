@@ -37,7 +37,7 @@ func identityChainingMethods() {
 				security.ProjectPayload()
 				Attribute("user_session_issuer_id", String, func() { Format(FormatUUID) })
 				Attribute("remote_session_issuer_id", String, func() { Format(FormatUUID) })
-				Attribute("resource", String, "Canonical intended resource URI.", func() { MaxLength(2048) })
+				Attribute("resource", String, "Canonical intended resource URI.", func() { Format(FormatURI); MinLength(1); MaxLength(2048) })
 				if name == "prepareEMA" {
 					Attribute("client_id", String, "Explicit selected client row ID; never inferred.", func() { Format(FormatUUID) })
 					Attribute("scopes", ArrayOf(String), func() { ScopeAttribute("Requested scope tokens.") })
@@ -50,6 +50,8 @@ func identityChainingMethods() {
 					})
 					Attribute("confirm_grants", ArrayOf(String), "Administrator-declared grants, not provider verification.")
 				}
+				// Reads discover the current generation, including before a binding exists.
+				// Mutations require that generation to prevent stale writes.
 				if name != "readEMA" {
 					Attribute("expected_generation", Int64, "Optimistic binding generation.", func() { Minimum(0) })
 					Required("expected_generation")

@@ -17,7 +17,7 @@ import {
  */
 export type OrganizationUserSessionIssuerDeletePreflight = {
   /**
-   * True when no live MCP server or toolset references the issuer.
+   * True when no live MCP server, toolset, or active identity-chaining binding references the issuer.
    */
   canDelete: boolean;
   /**

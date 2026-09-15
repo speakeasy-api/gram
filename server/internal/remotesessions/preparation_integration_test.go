@@ -9,7 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -30,14 +32,14 @@ func preparationFixture(t *testing.T) (context.Context, *testInstance, remoteses
 func preparationAdvertise(t *testing.T, ctx context.Context, ti *testInstance, issuer uuid.UUID) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, err := ti.conn.Exec(ctx, `UPDATE remote_session_issuers SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'], grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'] WHERE id=$1 AND project_id=$2`, issuer, *auth.ProjectID)
+	err := repo.New(ti.conn).SetPreparationFixtureIssuerCapability(ctx, repo.SetPreparationFixtureIssuerCapabilityParams{ID: issuer, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 }
 
 func preparationRecordGrants(t *testing.T, ctx context.Context, ti *testInstance, client uuid.UUID, grants []string) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, err := ti.conn.Exec(ctx, `UPDATE remote_session_clients SET grant_types=$1 WHERE id=$2 AND project_id=$3`, grants, client, *auth.ProjectID)
+	err := repo.New(ti.conn).SetPreparationFixtureClientGrants(ctx, repo.SetPreparationFixtureClientGrantsParams{ID: client, ProjectID: conv.ToNullUUID(*auth.ProjectID), GrantTypes: grants})
 	require.NoError(t, err)
 }
 
@@ -61,8 +63,9 @@ func TestPreparationIntegration_ManualGrantEvidence(t *testing.T) {
 			require.Equal(t, tc.state, result.State)
 			require.NotEmpty(t, result.Stage)
 			require.NotEmpty(t, result.Remediation)
-			var recorded []string
-			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT grant_types FROM remote_session_clients WHERE id=$1`, in.ClientID).Scan(&recorded))
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			recorded, err := repo.New(ti.conn).GetPreparationFixtureClientGrants(ctx, repo.GetPreparationFixtureClientGrantsParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+			require.NoError(t, err)
 			require.Equal(t, tc.grants, recorded, "preparation must not infer grants")
 			in.ConfirmGrants = []string{preparationJWTGrant}
 			in.ExpectedGeneration = result.Generation
@@ -103,8 +106,9 @@ func TestPreparationIntegration_TenantAndIssuerSubstitution(t *testing.T) {
 			in.ConfirmGrants = []string{preparationJWTGrant}
 			_, err := ti.service.PrepareIdentityChaining(ctx, in)
 			require.Error(t, err, "substituted identifiers must not authorize preparation")
-			var count int
-			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM remote_session_ema_bindings`).Scan(&count))
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			count, err := repo.New(ti.conn).CountPreparationFixtureBindings(ctx, *auth.ProjectID)
+			require.NoError(t, err)
 			require.Zero(t, count, "rejected selection must not create a binding")
 		})
 	}
@@ -235,7 +239,7 @@ func preparationManualClient(t *testing.T, ctx context.Context, ti *testInstance
 	client := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, project, issuer, external)
 	encrypted, err := testenv.NewEncryptionClient(t).Encrypt([]byte("preparation-test-secret"))
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `UPDATE remote_session_clients SET token_endpoint_auth_method='client_secret_basic', client_secret_encrypted=$1 WHERE id=$2 AND project_id=$3`, encrypted, client, project)
+	err = repo.New(ti.conn).SetPreparationFixtureClientSecret(ctx, repo.SetPreparationFixtureClientSecretParams{ID: client, ProjectID: conv.ToNullUUID(project), Secret: conv.ToPGText(encrypted)})
 	require.NoError(t, err)
 	return client
 }
@@ -281,7 +285,7 @@ func TestPreparationIntegration_ReadRevalidatesExpiredCredential(t *testing.T) {
 	require.Equal(t, "ready", prepared.State)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	// Simulate time advancing past an otherwise unchanged credential's expiry.
-	_, err = ti.conn.Exec(ctx, `UPDATE remote_session_clients SET client_secret_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1 AND project_id=$2`, in.ClientID, *auth.ProjectID)
+	err = repo.New(ti.conn).ExpirePreparationFixtureClientSecret(ctx, repo.ExpirePreparationFixtureClientSecretParams{ID: in.ClientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
 	current, err := ti.service.ReadIdentityChaining(ctx, in)
 	require.NoError(t, err)

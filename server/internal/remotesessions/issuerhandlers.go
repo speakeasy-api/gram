@@ -127,6 +127,8 @@ type discoveryResult struct {
 	// so a refresh keeps the stored document's members for it instead of
 	// withdrawing them; "" when every candidate answered definitively.
 	unreadable string
+	// unreadableErr retains the upstream status and cause for refresh failures.
+	unreadableErr *discoveryError
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -1308,9 +1310,10 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 
 	if primary != nil {
 		result := discoveryResult{
-			doc:        *primary,
-			warnings:   collectDiscoveryWarnings(issuerURL, *primary),
-			unreadable: conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+			doc:           *primary,
+			warnings:      collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:    conv.Default(unreadable[primaryFamily.other()], unreadable[primaryFamily]),
+			unreadableErr: unreadableErr,
 		}
 		if result.unreadable != "" {
 			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable))
@@ -1322,7 +1325,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// issuer has. With a candidate unread, the real document may be behind
 	// the outage, so the run is transient rather than a verdict on the issuer.
 	if fallback != nil && unreadableErr == nil {
-		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: ""}, nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil}, nil
 	}
 	if unreadableErr != nil {
 		return discoveryResult{}, unreadableErr
@@ -1518,7 +1521,7 @@ func decodeIssuerDocument(body []byte, requested *url.URL) (rfc8414Document, err
 		for _, value := range values {
 			var entry any
 			if err := json.Unmarshal(value, &entry); err != nil {
-				return rfc8414Document{}, err
+				return rfc8414Document{}, fmt.Errorf("decode %s entry: %w", name, err)
 			}
 			if _, ok := entry.(string); !ok {
 				return rfc8414Document{}, fmt.Errorf("%s must contain only strings", name)

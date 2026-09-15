@@ -36,6 +36,7 @@ func assertPreparationGrantWire(t *testing.T, encode func(*gen.IdentityChainingP
 		{"populated", []string{"urn:ietf:params:oauth:grant-type:jwt-bearer"}, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			wire, err := json.Marshal(encode(&gen.IdentityChainingPreparation{GrantTypes: tc.grants}))
 			require.NoError(t, err)
 			var fields map[string]json.RawMessage

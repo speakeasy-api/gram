@@ -708,8 +708,13 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// User-session issuers that trust the source and block migration until
 	// explicitly unlinked or re-linked.
 	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReferenceResponseBody `form:"trusted_user_session_issuers,omitempty" json:"trusted_user_session_issuers,omitempty" xml:"trusted_user_session_issuers,omitempty"`
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate *bool `form:"can_migrate,omitempty" json:"can_migrate,omitempty" xml:"can_migrate,omitempty"`
 }
 
@@ -5163,8 +5168,9 @@ func NewMoveIssuerGatewayError(body *MoveIssuerGatewayErrorResponseBody) *goa.Se
 // endpoint result from a HTTP "OK" response.
 func NewGetIssuerMigratePreflightOrganizationIssuerMigratePreflightOK(body *GetIssuerMigratePreflightResponseBody) *organizationremotesessionissuers.OrganizationIssuerMigratePreflight {
 	v := &organizationremotesessionissuers.OrganizationIssuerMigratePreflight{
-		ClientCount: *body.ClientCount,
-		CanMigrate:  *body.CanMigrate,
+		ClientCount:     *body.ClientCount,
+		EmaBindingCount: *body.EmaBindingCount,
+		CanMigrate:      *body.CanMigrate,
 	}
 	v.McpServerNames = make([]string, len(body.McpServerNames))
 	for i, val := range body.McpServerNames {
@@ -6224,6 +6230,9 @@ func ValidateMoveIssuerResponseBody(body *MoveIssuerResponseBody) (err error) {
 // ValidateGetIssuerMigratePreflightResponseBody runs the validations defined
 // on GetIssuerMigratePreflightResponseBody
 func ValidateGetIssuerMigratePreflightResponseBody(body *GetIssuerMigratePreflightResponseBody) (err error) {
+	if body.EmaBindingCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
+	}
 	if body.ClientCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_count", "body"))
 	}

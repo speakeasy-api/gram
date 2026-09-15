@@ -124,18 +124,19 @@ func (c *ClientConfigurator) ensureIssuer(ctx context.Context) (remotesessionsre
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		issuer, err = queries.CreateLocalFixtureGlobalRemoteSessionIssuer(ctx, remotesessionsrepo.CreateLocalFixtureGlobalRemoteSessionIssuerParams{
-			ID:                                c.config.RemoteSessionIssuerID(),
-			Slug:                              fixtureIssuerSlug,
-			Issuer:                            c.config.OAuthIssuerURL(),
-			Name:                              conv.ToPGText(fixtureServerName),
-			AuthorizationEndpoint:             conv.ToPGText(c.config.OAuthAuthorizationURL()),
-			TokenEndpoint:                     conv.ToPGText(c.config.OAuthTokenURL()),
-			RevocationEndpoint:                conv.ToPGText(c.config.OAuthRevocationURL()),
-			RegistrationEndpoint:              conv.ToPGText(c.config.OAuthRegistrationURL()),
-			ScopesSupported:                   []string{"tools:read"},
-			GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-			ResponseTypesSupported:            []string{"code"},
-			TokenEndpointAuthMethodsSupported: []string{"none"},
+			ID:                                  c.config.RemoteSessionIssuerID(),
+			Slug:                                fixtureIssuerSlug,
+			Issuer:                              c.config.OAuthIssuerURL(),
+			Name:                                conv.ToPGText(fixtureServerName),
+			AuthorizationEndpoint:               conv.ToPGText(c.config.OAuthAuthorizationURL()),
+			TokenEndpoint:                       conv.ToPGText(c.config.OAuthTokenURL()),
+			RevocationEndpoint:                  conv.ToPGText(c.config.OAuthRevocationURL()),
+			RegistrationEndpoint:                conv.ToPGText(c.config.OAuthRegistrationURL()),
+			ScopesSupported:                     []string{"tools:read"},
+			GrantTypesSupported:                 []string{"authorization_code", "refresh_token"},
+			AuthorizationGrantProfilesSupported: nil,
+			ResponseTypesSupported:              []string{"code"},
+			TokenEndpointAuthMethodsSupported:   []string{"none"},
 			// Matches what validateMetadata requires the fixture IdP to
 			// advertise. Deliberately absent from validIssuer: rows created
 			// before this column existed hold NULL, and rejecting them would
