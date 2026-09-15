@@ -1191,6 +1191,71 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial extension")
 }
 
+func (s *Service) ChangeTrialEndDate(ctx context.Context, payload *gen.ChangeTrialEndDatePayload) (*gen.AdminOrganization, error) {
+	endsAt, err := time.Parse(time.RFC3339, payload.EndsAt)
+	if err != nil || !endsAt.After(time.Now()) {
+		return nil, oops.E(oops.CodeInvalid, err, "trial end date must be in the future")
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial end date change transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	changed, err := trialsRepo.New(tx).ChangeTrialEndDate(ctx, trialsRepo.ChangeTrialEndDateParams{
+		OrganizationID: payload.ID,
+		EndsAt:         conv.ToPGTimestamptz(endsAt),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unchanged trial",
+			"organization has no running enterprise trial to change")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "change trial end date").LogError(ctx, logger)
+	}
+
+	// Include the organization's display name in the audit entry.
+	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial end date change").LogError(ctx, logger)
+	}
+
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialEndChanged(ctx, tx, audit.LogOrganizationEnterpriseTrialEndChangedEvent{
+		OrganizationID:      payload.ID,
+		Actor:               actor,
+		ActorDisplayName:    actorDisplayName,
+		ActorSlug:           nil,
+		OrganizationName:    organization.Name,
+		OrganizationSlug:    organization.Slug,
+		PreviousTrialEndsAt: changed.PreviousEndsAt.Time,
+		TrialEndsAt:         changed.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial end date change").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial end date change").LogError(ctx, logger)
+	}
+
+	// Speakeasy-only, and the only place the email meets the entry's subject.
+	logger.InfoContext(ctx, "changed enterprise trial end date",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial end date change")
+}
+
 // rejectTrialChange turns a trial write that touched no row into the error the
 // operator should act on. There are two causes and only the second is a
 // conflict: the organization does not exist at all, or it exists and its trial

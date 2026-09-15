@@ -1,3 +1,5 @@
+import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
+import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -240,6 +242,16 @@ const disableOrganizationMutation =
   buildAdminDisableOrganizationMutation(redirectingClient);
 const enableOrganizationMutation =
   buildAdminEnableOrganizationMutation(redirectingClient);
+const changeTrialEndDateMutation =
+  buildAdminChangeTrialEndDateMutation(redirectingClient);
+export async function changeTrialEndDate(
+  request: ChangeTrialEndDateRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(changeTrialEndDateMutation.mutationFn({ request })),
+  );
+}
+
 const extendTrialMutation = buildAdminExtendTrialMutation(redirectingClient);
 const rearmTrialMutation = buildAdminRearmTrialMutation(redirectingClient);
 

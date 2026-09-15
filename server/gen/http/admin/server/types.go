@@ -343,6 +343,15 @@ type StartTrialRequestBody struct {
 	Days *int `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
 }
 
+// ChangeTrialEndDateRequestBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP request body.
+type ChangeTrialEndDateRequestBody struct {
+	// Organization ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// New trial end date in UTC.
+	EndsAt *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -1370,6 +1379,46 @@ type UploadPlatformImageResponseBody struct {
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
 // endpoint HTTP response body.
 type StartTrialResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Gram account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ChangeTrialEndDateResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body.
+type ChangeTrialEndDateResponseBody struct {
 	// The ID of the organization
 	ID string `form:"id" json:"id" xml:"id"`
 	// The name of the organization
@@ -10680,6 +10729,190 @@ type StartTrialGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ChangeTrialEndDateUnauthorizedResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "unauthorized" error.
+type ChangeTrialEndDateUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateForbiddenResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "forbidden" error.
+type ChangeTrialEndDateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateBadRequestResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "bad_request" error.
+type ChangeTrialEndDateBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateNotFoundResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "not_found" error.
+type ChangeTrialEndDateNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateConflictResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "conflict" error.
+type ChangeTrialEndDateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateUnsupportedMediaResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ChangeTrialEndDateUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateInvalidResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "invalid" error.
+type ChangeTrialEndDateInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateInvariantViolationResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ChangeTrialEndDateInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateUnexpectedResponseBody is the type of the "admin" service
+// "changeTrialEndDate" endpoint HTTP response body for the "unexpected" error.
+type ChangeTrialEndDateUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ChangeTrialEndDateGatewayErrorResponseBody is the type of the "admin"
+// service "changeTrialEndDate" endpoint HTTP response body for the
+// "gateway_error" error.
+type ChangeTrialEndDateGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -12021,6 +12254,31 @@ func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPla
 // the "startTrial" endpoint of the "admin" service.
 func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponseBody {
 	body := &StartTrialResponseBody{
+		ID:                   res.ID,
+		Name:                 res.Name,
+		Slug:                 res.Slug,
+		AccountType:          res.AccountType,
+		WorkosID:             res.WorkosID,
+		StripeCustomerID:     res.StripeCustomerID,
+		StripeSubscriptionID: res.StripeSubscriptionID,
+		Whitelisted:          res.Whitelisted,
+		DisabledAt:           res.DisabledAt,
+		TrialState:           res.TrialState,
+		TrialTier:            res.TrialTier,
+		TrialEndsAt:          res.TrialEndsAt,
+		TrialConvertedAt:     res.TrialConvertedAt,
+		TrialDemotedAt:       res.TrialDemotedAt,
+		MemberCount:          res.MemberCount,
+		CreatedAt:            res.CreatedAt,
+		UpdatedAt:            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateResponseBody builds the HTTP response body from the
+// result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTrialEndDateResponseBody {
+	body := &ChangeTrialEndDateResponseBody{
 		ID:                   res.ID,
 		Name:                 res.Name,
 		Slug:                 res.Slug,
@@ -19306,6 +19564,148 @@ func NewStartTrialGatewayErrorResponseBody(res *goa.ServiceError) *StartTrialGat
 	return body
 }
 
+// NewChangeTrialEndDateUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateUnauthorizedResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnauthorizedResponseBody {
+	body := &ChangeTrialEndDateUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateForbiddenResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateForbiddenResponseBody(res *goa.ServiceError) *ChangeTrialEndDateForbiddenResponseBody {
+	body := &ChangeTrialEndDateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateBadRequestResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateBadRequestResponseBody(res *goa.ServiceError) *ChangeTrialEndDateBadRequestResponseBody {
+	body := &ChangeTrialEndDateBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateNotFoundResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateNotFoundResponseBody(res *goa.ServiceError) *ChangeTrialEndDateNotFoundResponseBody {
+	body := &ChangeTrialEndDateNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateConflictResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateConflictResponseBody(res *goa.ServiceError) *ChangeTrialEndDateConflictResponseBody {
+	body := &ChangeTrialEndDateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "changeTrialEndDate" endpoint of the "admin"
+// service.
+func NewChangeTrialEndDateUnsupportedMediaResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnsupportedMediaResponseBody {
+	body := &ChangeTrialEndDateUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateInvalidResponseBody builds the HTTP response body from
+// the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateInvalidResponseBody(res *goa.ServiceError) *ChangeTrialEndDateInvalidResponseBody {
+	body := &ChangeTrialEndDateInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "changeTrialEndDate" endpoint of the "admin"
+// service.
+func NewChangeTrialEndDateInvariantViolationResponseBody(res *goa.ServiceError) *ChangeTrialEndDateInvariantViolationResponseBody {
+	body := &ChangeTrialEndDateInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateUnexpectedResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateUnexpectedResponseBody(res *goa.ServiceError) *ChangeTrialEndDateUnexpectedResponseBody {
+	body := &ChangeTrialEndDateUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewChangeTrialEndDateGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "changeTrialEndDate" endpoint of the "admin" service.
+func NewChangeTrialEndDateGatewayErrorResponseBody(res *goa.ServiceError) *ChangeTrialEndDateGatewayErrorResponseBody {
+	body := &ChangeTrialEndDateGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -19981,6 +20381,18 @@ func NewStartTrialPayload(body *StartTrialRequestBody, adminSessionToken *string
 	return v
 }
 
+// NewChangeTrialEndDatePayload builds a admin service changeTrialEndDate
+// endpoint payload.
+func NewChangeTrialEndDatePayload(body *ChangeTrialEndDateRequestBody, adminSessionToken *string) *admin.ChangeTrialEndDatePayload {
+	v := &admin.ChangeTrialEndDatePayload{
+		ID:     *body.ID,
+		EndsAt: *body.EndsAt,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -20357,6 +20769,26 @@ func ValidateStartTrialRequestBody(body *StartTrialRequestBody) (err error) {
 		if *body.Days > 365 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 365, false))
 		}
+	}
+	return
+}
+
+// ValidateChangeTrialEndDateRequestBody runs the validations defined on
+// ChangeTrialEndDateRequestBody
+func ValidateChangeTrialEndDateRequestBody(body *ChangeTrialEndDateRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.EndsAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ends_at", "body"))
+	}
+	if body.ID != nil {
+		if utf8.RuneCountInString(*body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", *body.ID, utf8.RuneCountInString(*body.ID), 1, true))
+		}
+	}
+	if body.EndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", *body.EndsAt, goa.FormatDateTime))
 	}
 	return
 }
