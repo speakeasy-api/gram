@@ -132,6 +132,11 @@ func TestChatGPTClassicIsDetectableInstalledAndRunning(t *testing.T) {
 		"the bundle id Classic kept is what distinguishes it from the current ChatGPT app")
 	require.Contains(t, classic.Signatures.ProcessNames, "ChatGPT Classic",
 		"without the process name an agent can only ever report Classic as installed")
+	// Deliberately no config dir. Classic inherited the original desktop app's
+	// support directory, which macOS leaves behind after an uninstall, so it
+	// would report Classic for anyone who has since moved to the current app.
+	require.Empty(t, classic.Signatures.ConfigDirs,
+		"the inherited support directory would fire for people who no longer run Classic")
 }
 
 // builtinRow is the row BuiltInUpsertParams writes for a built-in: the
