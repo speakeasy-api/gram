@@ -81,7 +81,11 @@ func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, session
 	}
 	orgID := project.OrganizationID
 	projectID := project.ID.String()
-	userID, userEmail := c.localFallbackUser(ctx, orgID)
+	userID, userEmail := "", ""
+	// Agent actors never borrow the local fallback human identity.
+	if !isAgentActor(ctx) {
+		userID, userEmail = c.localFallbackUser(ctx, orgID)
+	}
 
 	metadata := SessionMetadata{
 		SessionID:           sessionID,

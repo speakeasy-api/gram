@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	redisCache "github.com/go-redis/cache/v9"
 
@@ -190,14 +191,36 @@ func (s *Service) claimMCPListSnapshot(ctx context.Context, sessionID string) bo
 			return false
 		}
 	}
+	// A snapshot without its owner binding would reopen cross-actor reuse.
 	if err := s.cache.Set(ctx, mcpListOwnerCacheKey(sessionID), writer, sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to record MCP list snapshot owner",
+		s.logger.WarnContext(ctx, "failed to record MCP list snapshot owner; skipping write",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)
+		return false
 	}
 	return true
 }
+
+// agentSessionID namespaces a client-reported session id under the agent
+// actor, so an agent can never address a human's or another agent's session.
+func agentSessionID(ctx context.Context, sessionID string) string {
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeAgent || sessionID == "" {
+		return sessionID
+	}
+	return actor.String() + ":" + sessionID
+}
+
+// namespaceAgentSession rewrites a payload session id in place for agent actors.
+func namespaceAgentSession(ctx context.Context, sessionID *string) {
+	if sessionID != nil {
+		*sessionID = agentSessionID(ctx, strings.TrimSpace(*sessionID))
+	}
+}
+
+// otelSessionKeys are the raw OTLP log attributes that carry a session id.
+var otelSessionKeys = []string{"session.id", "conversation.id", string(attr.GenAIConversationIDKey)}
 
 // strippedTeeKey reports whether a raw OTLP attribute must be dropped from the
 // event-feed copy: spoofed actor keys always, identity keys for agents.
@@ -209,7 +232,8 @@ func strippedTeeKey(key string, agent bool) bool {
 }
 
 // sanitizeTeedLogsPayload applies the stored-row attribution rules to a raw
-// OTLP export before it is teed, so the event-feed copy matches the rows.
+// OTLP export before it is teed or stored, so both copies match. For agents
+// it also namespaces session ids, as the hook paths do.
 func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 	if payload == nil {
 		return
@@ -237,6 +261,11 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 					return a != nil && strippedTeeKey(a.Key, agent)
 				})
 				if agent {
+					for _, a := range record.Attributes {
+						if a != nil && a.Value != nil && a.Value.StringValue != nil && slices.Contains(otelSessionKeys, a.Key) {
+							a.Value.StringValue = new(agentSessionID(ctx, strings.TrimSpace(*a.Value.StringValue)))
+						}
+					}
 					record.Attributes = append(record.Attributes,
 						&gen.OTELAttribute{Key: string(attr.AuthorizationActorTypeKey), Value: &gen.OTELAttributeValue{StringValue: new(string(actor.Type)), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
 						&gen.OTELAttribute{Key: string(attr.AuthorizationActorIDKey), Value: &gen.OTELAttributeValue{StringValue: new(actor.ID), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},

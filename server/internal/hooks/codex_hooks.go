@@ -60,6 +60,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 	orgID := authCtx.ActiveOrganizationID
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
+	namespaceAgentSession(ctx, payload.SessionID)
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
 	if metadata.UserEmail == "" && !isAgentActor(ctx) {
 		return nil, oops.E(oops.CodeInvalid, nil, "codex hook payload missing user_email")

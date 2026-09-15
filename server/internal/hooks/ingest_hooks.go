@@ -203,6 +203,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if payload.Session != nil {
+		namespaceAgentSession(ctx, payload.Session.ID)
+	}
 	actor := s.resolveCanonicalActor(ctx, payload, authCtx)
 
 	sessionID := canonicalSessionID(payload)

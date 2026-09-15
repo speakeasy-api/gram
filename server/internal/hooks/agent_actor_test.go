@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -557,6 +559,119 @@ func TestGetCachedMCPList_OwnerReadErrorFailsClosed(t *testing.T) {
 
 	_, err = ti.service.resolveMCPListForEnforcement(agentCtx, &gen.ClaudePayload{HookEventName: "PreToolUse", SessionID: &sessionID}, sessionID)
 	require.Error(t, err, "enforcement fails closed on an owner read failure")
+}
+
+// ownerWriteFailingCache fails every MCP-list owner write.
+type ownerWriteFailingCache struct {
+	cache.Cache
+}
+
+func (c ownerWriteFailingCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.HasPrefix(key, "session:mcp-list-owner:") {
+		return errors.New("owner write failed")
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set: %w", err)
+	}
+	return nil
+}
+
+func TestMCPListSnapshot_OwnerWriteFailureSkipsSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	base := ti.service.cache
+	ti.service.cache = ownerWriteFailingCache{Cache: base}
+
+	sessionID := "owner-write-fail-" + uuid.NewString()
+	ti.service.cacheCanonicalMCPList(ctx, sessionID, []MCPServerEntry{testMCPEntry("human")}, true)
+
+	var entries []MCPServerEntry
+	require.ErrorIs(t, base.Get(ctx, sessionMCPListCacheKey(sessionID), &entries), redisCache.ErrCacheMiss,
+		"no snapshot is written without its owner binding")
+}
+
+func TestLocalSessionCache_AgentFallbackHasNoHumanIdentity(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	localCache := NewLocalSessionCache(cache.NewRedisCacheAdapter(ti.redisClient), ti.conn)
+
+	var metadata SessionMetadata
+	require.NoError(t, localCache.Get(agentKeyContext(t, ctx, ti), sessionCacheKey("agent-local-"+uuid.NewString()), &metadata))
+	require.Empty(t, metadata.UserID, "the local-dev fallback never lends an agent a human identity")
+	require.Empty(t, metadata.UserEmail)
+	require.NotEmpty(t, metadata.ProjectID, "routing scope is still resolved")
+}
+
+func TestAgentSessionID_NamespacesAgentsOnly(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	agentCtx := agentKeyContext(t, ctx, ti)
+
+	require.Equal(t, "shared-session", agentSessionID(ctx, "shared-session"))
+	namespaced := agentSessionID(agentCtx, "shared-session")
+	require.NotEqual(t, "shared-session", namespaced)
+	require.Equal(t, namespaced, agentSessionID(agentCtx, "shared-session"), "namespacing is deterministic")
+	require.NotEqual(t, sessionIDToUUID("shared-session"), sessionIDToUUID(namespaced))
+}
+
+func TestIngest_AgentReusingHumanSessionLandsInSeparateChat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "shared-ingest-" + uuid.NewString()
+	humanPrompt := "human prompt"
+	humanPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	humanPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &humanPrompt}}
+	_, err := ti.service.Ingest(ctx, humanPayload)
+	require.NoError(t, err)
+	ti.service.cacheCanonicalMCPList(ctx, sessionID, []MCPServerEntry{testMCPEntry("human")}, true)
+
+	agentCtx := agentKeyContext(t, ctx, ti)
+	agentPrompt := "agent prompt"
+	agentPayload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	agentPayload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &agentPrompt}}
+	_, err = ti.service.Ingest(agentCtx, agentPayload)
+	require.NoError(t, err)
+
+	requireAgentChat(t, ti, agentSessionID(agentCtx, sessionID), *authCtx.ProjectID)
+	humanMessages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, humanMessages, 1, "the agent's event never lands in the human's chat")
+	humanEntries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, "human", humanEntries[0].Name, "the human's MCP snapshot is untouched")
+}
+
+func TestCodex_AgentReusingHumanSessionLandsInSeparateChat(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID := "shared-codex-" + uuid.NewString()
+	humanEmail := "codex-human@example.com"
+	humanPrompt := "human codex prompt"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{HookEventName: "UserPromptSubmit", SessionID: new(sessionID), UserEmail: &humanEmail, Prompt: &humanPrompt})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		msgs, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	agentCtx, err := hooksAPIKeyAuth(t, ti, grantedAgentContext(t, ctx, ti), "codex")
+	require.NoError(t, err)
+	agentPrompt := "agent codex prompt"
+	_, err = ti.service.Codex(agentCtx, &gen.CodexPayload{HookEventName: "UserPromptSubmit", SessionID: new(sessionID), Prompt: &agentPrompt})
+	require.NoError(t, err)
+
+	requireAgentChat(t, ti, agentSessionID(agentCtx, sessionID), *authCtx.ProjectID)
+	humanMessages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, humanMessages, 1, "the agent's event never lands in the human's chat")
 }
 
 // grantedAgentContext admits a real agent credential holding org:hooks_ingest.

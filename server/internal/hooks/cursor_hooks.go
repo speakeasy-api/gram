@@ -70,6 +70,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgID := authCtx.ActiveOrganizationID
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
+	namespaceAgentSession(ctx, payload.ConversationID)
+	namespaceAgentSession(ctx, payload.SessionID)
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 	actorUserID := ""
 	switch {
