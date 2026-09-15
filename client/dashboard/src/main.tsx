@@ -1,6 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
+import { initGutternote } from "./gutternote-init.ts";
+
+// No-op unless the deployment marked this host a PR preview and supplied a
+// widget key (see gutternote-init.ts).
+initGutternote();
 
 // react-grab: dev-only overlay to copy any UI element's file/component/HTML
 // context to the clipboard for pasting into a coding agent (⌘C / Ctrl+C on
