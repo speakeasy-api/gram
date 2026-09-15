@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ExternalLink,
   KeyRound,
-  Loader2,
   Search,
 } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
@@ -27,49 +26,32 @@ import type { IdpProvider } from "../../types";
 
 const INITIAL_VISIBLE = 6;
 
-const PORTAL_DESCRIPTION =
-  "Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings.";
+const DEFAULT_DESCRIPTION =
+  "Pick the identity provider your organization already runs, then connect sign-in, mirror its directory, and carry the access those two give you into your MCP servers.";
 
 const GUIDED_DESCRIPTION =
   "Connect Okta once. Speakeasy then configures single sign-on, reads your directory, and proposes MCP server access that matches the application assignments you already maintain in Okta.";
 
-// The rest of the guided journey. Each one is named and numbered from the
-// start so the administrator can see what connecting Okta leads to, and each
-// is locked until the step before it lands: the copy is a promise, not a
-// control. They fill in one slice at a time.
-const GUIDED_UPCOMING_STEPS = [
-  {
-    index: 2,
-    slug: "single-sign-on",
-    title: "Single sign-on",
-    description:
-      "Speakeasy creates the sign-in application in Okta and proves it with a real sign-in.",
-    badge: "Waiting",
-  },
-  {
-    index: 3,
-    slug: "directory",
-    title: "Directory",
-    description:
-      "Mirror one Speakeasy role per Okta group so access can follow Okta assignments.",
-    badge: "Waiting",
-  },
+// The two outcomes no provider can reach yet. They are named and numbered from
+// the start so the shape of the journey is the same whoever is walking it, and
+// locked because nothing behind them exists to open.
+const LOCKED_STEPS = [
   {
     index: 4,
     slug: "applications",
     title: "Applications and access",
     description:
-      "Read what Okta assigns to each application and carry it into MCP server access as a reviewed proposal.",
+      "Read what your identity provider assigns to each application and carry it into MCP server access as a reviewed proposal.",
     badge: "Waiting",
   },
   {
     index: 5,
-    slug: "token-exchange",
-    title: "Token exchange with Okta",
-    // Not a step that is merely later in the queue: setup is complete without
-    // it, and it opens on a capability Speakeasy does not have yet.
+    slug: "enterprise-managed-auth",
+    title: "Enterprise managed auth setup",
+    // Not merely later in the queue: setup is complete without it, and it opens
+    // on a capability Speakeasy does not have yet.
     description:
-      "Setup finishes without this. It becomes available when Speakeasy can acquire Okta credentials on a person's behalf, so people's agents stop signing in to each server separately.",
+      "Setup finishes without this. It becomes available when Speakeasy can acquire credentials on a person's behalf, so people's agents stop signing in to each server separately.",
     badge: "Later",
   },
 ];
@@ -91,8 +73,6 @@ export function IdentityProviderStep({
     undefined,
     { throwOnError: false },
   );
-  // Which provider is picked decides what the whole card is, so the selection
-  // lives here rather than inside the sign-on section that renders the grid.
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
   const identityProvider = useIdentityProvider(undefined, undefined, {
@@ -112,68 +92,40 @@ export function IdentityProviderStep({
         </div>
       }
       title="Set up identity provider"
-      description={guided ? GUIDED_DESCRIPTION : PORTAL_DESCRIPTION}
+      description={guided ? GUIDED_DESCRIPTION : DEFAULT_DESCRIPTION}
       onContinue={onComplete}
     >
+      {/* The same five steps whoever the provider is. Picking one fills them
+          in rather than replacing them: a provider Speakeasy walks itself
+          takes over step 1 and waits on the rest, and one it does not hands
+          steps 2 and 3 to the portal. */}
       <div className="space-y-8">
-        {guided ? (
-          <GuidedSections
-            onChangeProvider={() => setSelectedProvider(null)}
-            connection={connection}
-            isLoadingConnection={identityProvider.isPending}
-          />
-        ) : (
-          <>
-            <SingleSignOnSection
-              index={1}
-              configured={!!onboardingStatus?.ssoConfigured}
-              isLoading={isLoading}
-              selectedProvider={selectedProvider}
-              onSelectProvider={setSelectedProvider}
-            />
-            <DirectorySyncSection
-              index={2}
-              configured={!!onboardingStatus?.dsyncConfigured}
-              isLoading={isLoading}
-            />
-          </>
-        )}
+        <SelectIdpSection
+          index={1}
+          selectedProvider={selectedProvider}
+          onSelectProvider={setSelectedProvider}
+          guided={guided}
+          connection={connection}
+          isLoadingConnection={identityProvider.isPending}
+        />
+        <SingleSignOnSection
+          index={2}
+          configured={!!onboardingStatus?.ssoConfigured}
+          isLoading={isLoading}
+          provider={provider}
+          locked={guided}
+        />
+        <DirectorySyncSection
+          index={3}
+          configured={!!onboardingStatus?.dsyncConfigured}
+          isLoading={isLoading}
+          locked={guided}
+        />
+        {LOCKED_STEPS.map((step) => (
+          <StepSection key={step.slug} locked {...step} />
+        ))}
       </div>
     </StepContainer>
-  );
-}
-
-// Okta's own journey, in place of the two portal round trips. Only the first
-// sub-step is open; the rest are named so the shape of the work is visible
-// from the start.
-function GuidedSections({
-  onChangeProvider,
-  connection,
-  isLoadingConnection,
-}: {
-  onChangeProvider: () => void;
-  connection: IdentityProviderConnection | undefined;
-  isLoadingConnection: boolean;
-}): JSX.Element {
-  return (
-    <>
-      <StepSection
-        index={1}
-        slug="connect-okta"
-        title="Connect Okta"
-        description="Give Speakeasy read access to your Okta tenant, and permission to create the sign-in application."
-        complete={connection?.status === "active"}
-      >
-        <OktaConnectSection
-          onChangeProvider={onChangeProvider}
-          connection={connection}
-          isLoadingConnection={isLoadingConnection}
-        />
-      </StepSection>
-      {GUIDED_UPCOMING_STEPS.map((step) => (
-        <StepSection key={step.slug} locked {...step} />
-      ))}
-    </>
   );
 }
 
@@ -251,30 +203,34 @@ interface SectionProps {
   index: number;
   configured: boolean;
   isLoading: boolean;
+  /**
+   * The provider Speakeasy walks itself owns this outcome, so the portal round
+   * trip that normally sits here is not the way to reach it. The step keeps its
+   * place and says what is coming instead.
+   */
+  locked: boolean;
 }
 
-interface SingleSignOnSectionProps extends SectionProps {
-  /** Owned by the card: picking a guided provider replaces this whole flow. */
-  selectedProvider: string | null;
-  onSelectProvider: (id: string) => void;
-}
-
-function SingleSignOnSection({
+// Step one for everybody: which identity provider this organization runs. A
+// provider Speakeasy walks itself takes the rest of this step over, because
+// connecting to it is the same decision continued rather than a new one.
+function SelectIdpSection({
   index,
-  configured,
-  isLoading,
   selectedProvider,
   onSelectProvider,
-}: SingleSignOnSectionProps): JSX.Element {
+  guided,
+  connection,
+  isLoadingConnection,
+}: {
+  index: number;
+  selectedProvider: string | null;
+  onSelectProvider: (id: string | null) => void;
+  guided: boolean;
+  connection: IdentityProviderConnection | undefined;
+  isLoadingConnection: boolean;
+}): JSX.Element {
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
-  const [portalOpened, setPortalOpened] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
 
   const filteredProviders = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -291,6 +247,116 @@ function SingleSignOnSection({
   if (isSearching) visibleProviders = filteredProviders;
   else if (showAll) visibleProviders = IDP_PROVIDERS;
 
+  // Picked and, where there is one to make, connected.
+  const complete = guided
+    ? connection?.status === "active"
+    : !!selectedProvider;
+
+  return (
+    <StepSection
+      index={index}
+      slug="select-idp"
+      title="Select IDP"
+      description="The identity provider your team already signs in with."
+      complete={complete}
+    >
+      {guided ? (
+        <OktaConnectSection
+          onChangeProvider={() => onSelectProvider(null)}
+          connection={connection}
+          isLoadingConnection={isLoadingConnection}
+        />
+      ) : (
+        <div>
+          <div className="relative">
+            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              type="search"
+              value={query}
+              onChange={setQuery}
+              placeholder="Search providers"
+              className="pl-9"
+            />
+          </div>
+          {isSearching && filteredProviders.length === 0 && (
+            <p className="text-muted-foreground mt-3 text-sm">
+              No providers match &quot;{query}&quot;.
+            </p>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {visibleProviders.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onSelectProvider(p.id)}
+                className={cn(
+                  "flex items-center gap-3 border p-4 text-left transition-all",
+                  selectedProvider === p.id
+                    ? "border-foreground bg-secondary"
+                    : "border-border bg-card hover:border-foreground/30",
+                )}
+              >
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
+                  <ProviderIcon provider={p} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-foreground truncate text-sm font-medium">
+                      {p.name}
+                    </span>
+                    {p.badge ? (
+                      <Badge variant="success" background size="sm">
+                        <Badge.Text>{p.badge}</Badge.Text>
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <span className="text-muted-foreground block text-xs">
+                    {p.protocol}
+                  </span>
+                  {/* Only the guided entry has a SAML sibling in this grid, and
+                      the two read alike until you say which one to take. */}
+                  {p.guided ? (
+                    <span className="text-muted-foreground block text-xs">
+                      Recommended over SAML
+                    </span>
+                  ) : null}
+                </div>
+              </button>
+            ))}
+          </div>
+          {!isSearching &&
+            !showAll &&
+            IDP_PROVIDERS.length > INITIAL_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
+              >
+                <ChevronDown className="h-4 w-4" />
+                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
+              </button>
+            )}
+        </div>
+      )}
+    </StepSection>
+  );
+}
+
+function SingleSignOnSection({
+  index,
+  configured,
+  isLoading,
+  provider,
+  locked,
+}: SectionProps & { provider: IdpProvider | undefined }): JSX.Element {
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -300,8 +366,6 @@ function SingleSignOnSection({
       );
     },
   });
-
-  const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
 
   const handleConnect = () => {
     if (!provider) return;
@@ -361,88 +425,6 @@ function SingleSignOnSection({
   } else {
     body = (
       <div className="space-y-4">
-        <div>
-          <label className="text-foreground text-sm font-medium">
-            Select provider<span className="text-accent">*</span>
-          </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              type="search"
-              value={query}
-              onChange={setQuery}
-              placeholder="Search providers"
-              className="pl-9"
-              disabled={isPending}
-            />
-          </div>
-          {isSearching && filteredProviders.length === 0 && (
-            <p className="text-muted-foreground mt-3 text-sm">
-              No providers match &quot;{query}&quot;.
-            </p>
-          )}
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            {visibleProviders.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onSelectProvider(p.id)}
-                disabled={isPending}
-                className={cn(
-                  "flex items-center gap-3 border p-4 text-left transition-all",
-                  selectedProvider === p.id
-                    ? "border-foreground bg-secondary"
-                    : "border-border bg-card hover:border-foreground/30",
-                  isPending &&
-                    selectedProvider !== p.id &&
-                    "cursor-not-allowed opacity-50",
-                )}
-              >
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
-                  <ProviderIcon provider={p} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-foreground truncate text-sm font-medium">
-                      {p.name}
-                    </span>
-                    {p.badge ? (
-                      <Badge variant="success" background size="sm">
-                        <Badge.Text>{p.badge}</Badge.Text>
-                      </Badge>
-                    ) : null}
-                    {selectedProvider === p.id && isPending && (
-                      <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-                    )}
-                  </div>
-                  <span className="text-muted-foreground block text-xs">
-                    {p.protocol}
-                  </span>
-                  {/* Only the guided entry has a SAML sibling in this grid, and
-                      the two read alike until you say which one to take. */}
-                  {p.guided ? (
-                    <span className="text-muted-foreground block text-xs">
-                      Recommended over SAML
-                    </span>
-                  ) : null}
-                </div>
-              </button>
-            ))}
-          </div>
-          {!isSearching &&
-            !showAll &&
-            IDP_PROVIDERS.length > INITIAL_VISIBLE && (
-              <button
-                type="button"
-                onClick={() => setShowAll(true)}
-                className="text-muted-foreground hover:text-foreground mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm transition-colors"
-              >
-                <ChevronDown className="h-4 w-4" />
-                Show {IDP_PROVIDERS.length - INITIAL_VISIBLE} more providers
-              </button>
-            )}
-        </div>
-
         {provider && !isPending && (
           <PortalNote>
             {portalOpened
@@ -481,9 +463,15 @@ function SingleSignOnSection({
       index={index}
       slug="single-sign-on"
       title="Single sign-on"
-      description="Let your team sign in with the credentials they already have."
+      description={
+        locked
+          ? "Speakeasy creates the sign-in application in Okta and proves it with a real sign-in."
+          : "Let your team sign in with the credentials they already have."
+      }
       complete={configured}
-      aside={configured ? <ConnectedBadge /> : null}
+      locked={locked}
+      badge={locked ? "Waiting" : undefined}
+      aside={configured && !locked ? <ConnectedBadge /> : null}
     >
       {body}
     </StepSection>
@@ -494,6 +482,7 @@ function DirectorySyncSection({
   index,
   configured,
   isLoading,
+  locked,
 }: SectionProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -596,9 +585,15 @@ function DirectorySyncSection({
       index={index}
       slug="directory-sync"
       title="Directory sync"
-      description="Keep users, groups, and roles in step with your identity provider automatically."
+      description={
+        locked
+          ? "Mirror one Speakeasy role per Okta group so access can follow the assignments Okta already holds."
+          : "Keep users, groups, and roles in step with your identity provider automatically."
+      }
       complete={configured}
-      aside={configured ? <ConnectedBadge /> : null}
+      locked={locked}
+      badge={locked ? "Waiting" : undefined}
+      aside={configured && !locked ? <ConnectedBadge /> : null}
     >
       {body}
     </StepSection>

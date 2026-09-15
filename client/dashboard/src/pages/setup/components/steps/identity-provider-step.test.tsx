@@ -125,24 +125,30 @@ describe("IdentityProviderStep", () => {
     expect(screen.getByText("Recommended over SAML")).toBeTruthy();
   });
 
-  it("forks the card into the guided journey when Okta over OIDC is picked", () => {
+  it("keeps the same five steps and fills them in when Okta is picked", () => {
     render(<IdentityProviderStep onComplete={() => {}} />);
-    fireEvent.click(guidedOkta());
 
-    for (const title of [
-      "Connect Okta",
+    const steps = [
+      "Select IDP",
       "Single sign-on",
-      "Directory",
+      "Directory sync",
       "Applications and access",
-      "Token exchange with Okta",
-    ]) {
+      "Enterprise managed auth setup",
+    ];
+    // The list is the same before and after a provider is chosen; picking one
+    // fills the steps in rather than swapping them for a different set.
+    for (const title of steps) {
       expect(screen.getByRole("heading", { name: title })).toBeTruthy();
     }
 
-    // With nothing connected the step asks for the tenant first.
-    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
+    fireEvent.click(guidedOkta());
 
-    // The portal round trip is gone: this provider is walked in-product.
+    for (const title of steps) {
+      expect(screen.getByRole("heading", { name: title })).toBeTruthy();
+    }
+    // Step one carries the exchange, and the portal round trip is gone: Okta's
+    // sign-on and directory are Speakeasy's own work, not the portal's.
+    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
     expect(
       screen.queryByText(/WorkOS portal opens in a new browser tab/),
     ).toBeNull();
@@ -173,14 +179,15 @@ describe("IdentityProviderStep", () => {
   it("lets the administrator back out to the grid before anything is submitted", () => {
     render(<IdentityProviderStep onComplete={() => {}} />);
     fireEvent.click(guidedOkta());
-    expect(screen.getByRole("heading", { name: "Connect Okta" })).toBeTruthy();
+    expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Choose a different provider" }),
     );
 
-    expect(screen.queryByRole("heading", { name: "Connect Okta" })).toBeNull();
-    expect(screen.getByText("Directory sync")).toBeTruthy();
+    expect(screen.queryByLabelText("Okta organization URL")).toBeNull();
+    // Back to the grid, with the portal path available again.
+    expect(guidedOkta()).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled"),
     ).toBe(true);
