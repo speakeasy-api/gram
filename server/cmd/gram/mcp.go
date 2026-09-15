@@ -353,15 +353,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	shutdown.funcs = append(shutdown.funcs, stopControl)
 
 	tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
+	var serveErr error
 	if tlsEnabled {
 		logger.InfoContext(ctx, "mcp server started with tls", attr.SlogServerAddress(srv.Addr))
-		err = srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file"))
+		serveErr = srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file"))
 	} else {
 		logger.InfoContext(ctx, "mcp server started", attr.SlogServerAddress(srv.Addr))
-		err = srv.ListenAndServe()
+		serveErr = srv.ListenAndServe()
 	}
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.ErrorContext(ctx, "mcp server error", attr.SlogError(err))
+	if errors.Is(serveErr, http.ErrServerClosed) {
+		serveErr = nil // Shutdown was requested; the drain below is the normal exit.
+	}
+	if serveErr != nil {
+		logger.ErrorContext(ctx, "mcp server error", attr.SlogError(serveErr))
 		sigcancel()
 	}
 	// ListenAndServe returns the instant Shutdown is called. Wait for the drain
@@ -369,6 +373,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	group.Wait()
 	remoteSessionDeps.Refresher.Shutdown()
 	cancel()
+	if serveErr != nil {
+		return fmt.Errorf("serve mcp: %w", serveErr)
+	}
 	return nil
 }
 
