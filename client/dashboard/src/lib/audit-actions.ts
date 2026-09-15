@@ -124,6 +124,7 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
@@ -531,6 +532,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":

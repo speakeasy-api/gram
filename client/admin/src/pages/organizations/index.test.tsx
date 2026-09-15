@@ -63,8 +63,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   enableOrganization:
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
-  extendTrial:
-    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  changeTrialEndDate:
+    vi.fn<(body: { id: string; endsAt: Date }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   startTrial:
@@ -104,7 +104,7 @@ vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
     ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
-    extendTrial: mocks.extendTrial,
+    changeTrialEndDate: mocks.changeTrialEndDate,
     rearmTrial: mocks.rearmTrial,
     startTrial: mocks.startTrial,
   };
@@ -139,7 +139,7 @@ const ORGS: AdminOrganization[] = [
     created_at: "2026-06-08T00:00:00Z",
     updated_at: "2026-06-09T00:00:00Z",
   },
-  // Live, and mid-trial. Extend trial is offered on this row and on no other:
+  // Live, and mid-trial. Change end date is offered on this row and on no other:
   // the first row's trial is running too, but the organization is disabled and
   // a disabled organization is not offered more of a trial nobody can use.
   {
@@ -386,6 +386,8 @@ function urlFor(search: Record<string, unknown>): string {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
   mocks.listOrganizations.mockReset();
   mocks.listOrganizations.mockResolvedValue({
     total: ORGS.length,
@@ -415,8 +417,8 @@ beforeEach(() => {
   mocks.enableOrganization.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), disabled_at: undefined }),
   );
-  mocks.extendTrial.mockReset();
-  mocks.extendTrial.mockImplementation(({ id }) =>
+  mocks.changeTrialEndDate.mockReset();
+  mocks.changeTrialEndDate.mockImplementation(({ id }) =>
     Promise.resolve({ ...orgByID(id), trial_ends_at: EXTENDED_TRIAL_END }),
   );
   // No default answer: the one describe that re-arms owns a record none of the
@@ -2443,7 +2445,9 @@ describe("organizations list write actions", () => {
     await openRowMenu(LIVE.name);
 
     expect(screen.getByRole("menuitem", { name: "Start trial" })).toBeTruthy();
-    expect(screen.queryByRole("menuitem", { name: "Extend trial" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Change end date" }),
+    ).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "Re-arm trial" })).toBeNull();
   });
 
@@ -2686,7 +2690,7 @@ describe("organizations list write actions", () => {
   it("speaks the same refusal twice when the operator presses through it", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await openRowMenu(TRIALLING_ORG.name);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Change end date" }));
     await screen.findByRole("dialog");
 
     // The one refusal the calendar's own bounds cannot prevent: pressing the
@@ -2703,20 +2707,20 @@ describe("organizations list write actions", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
     const first = liveRegion().textContent;
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     // Word for word the same sentence, and the region still changed: the
     // zero-width space alternates, so the second refusal reaches the
     // accessibility tree as a change rather than as silence. Nothing on screen
     // moves on that press, which is the whole reason this path announces.
-    expect(announcement()).toContain("Pick a date between");
+    expect(announcement()).toContain("Pick a future date (UTC).");
     expect(liveRegion().textContent).not.toBe(first);
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
   });
 
   it("will not let the Columns menu take the row menu away", async () => {
@@ -2758,34 +2762,37 @@ describe("organizations list write actions", () => {
     ).toBeTruthy();
   });
 
-  it("extends the trial from the panel and repaints the panel with the answer", async () => {
+  it("changes the trial end date from the panel and repaints with the answer", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(TRIALLING_ORG.name);
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
-    // The default day count, sent without the operator typing anything.
-    expect(mocks.extendTrial).toHaveBeenCalledWith({
+    // The current end date is selected initially, without adding extra days.
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
       id: TRIALLING_ORG.id,
-      days: 14,
+      endsAt: new Date(
+        new Date(TRIALLING_ORG.trial_ends_at!).toISOString().slice(0, 10) +
+          "T00:00:00.000Z",
+      ),
     });
     // The panel is drawn from the row it is peeking at, so it repaints from the
     // same cache write the row does. Reading the old date here is the operator
-    // being shown the trial they just extended, unextended.
+    // being shown the previous end date after saving.
     expect(peekPanel().textContent).toContain(shortDate(EXTENDED_TRIAL_END));
     expect(announcement()).toBe(
-      `${TRIALLING_ORG.name} trial extended by 14 days.`,
+      `${TRIALLING_ORG.name} trial end date changed to ${shortDate(TRIALLING_ORG.trial_ends_at!)}.`,
     );
   });
 
@@ -2820,13 +2827,13 @@ describe("organizations list write actions", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     await peekOn(TRIALLING_ORG.name);
     const extend = within(peekPanel()).getByRole("button", {
-      name: `Extend trial for ${TRIALLING_ORG.name}`,
+      name: `Change end date for ${TRIALLING_ORG.name}`,
     });
 
     fireEvent.click(extend);
     await screen.findByRole("dialog");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
 
     await waitFor(() => {
@@ -2850,7 +2857,7 @@ describe("organizations list write actions", () => {
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
@@ -2883,7 +2890,7 @@ describe("organizations list write actions", () => {
 
     fireEvent.click(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${TRIALLING_ORG.name}`,
+        name: `Change end date for ${TRIALLING_ORG.name}`,
       }),
     );
     await screen.findByRole("dialog");
@@ -2900,7 +2907,7 @@ describe("organizations list write actions", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
     expect(peekPanel()).toBeTruthy();
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
   });
 });
 
@@ -4248,7 +4255,7 @@ describe("re-arming a trial from the peek panel", () => {
     expect(control.isConnected).toBe(false);
     expect(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${DEMOTED_ORG.name}`,
+        name: `Change end date for ${DEMOTED_ORG.name}`,
       }),
     ).toBeTruthy();
 
@@ -4302,7 +4309,7 @@ describe("starting a trial from the peek panel", () => {
     expect(control.isConnected).toBe(false);
     expect(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${org.name}`,
+        name: `Change end date for ${org.name}`,
       }),
     ).toBeTruthy();
 
@@ -4312,3 +4319,5 @@ describe("starting a trial from the peek panel", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 });
+
+afterEach(() => vi.useRealTimers());
