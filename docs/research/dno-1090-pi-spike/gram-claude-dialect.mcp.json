@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "crm": {
+      "type": "http",
+      "url": "http://127.0.0.1:8931/mcp",
+      "headers": {
+        "Authorization": "Bearer gram-consumer-key"
+      }
+    }
+  }
+}

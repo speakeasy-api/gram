@@ -1,0 +1,12 @@
+{
+  "name": "dno-1090-pi-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Throwaway spike for DNO-1090: MCP distribution into the Pi coding agent.",
+  "type": "module",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "^3.25.76"
+  }
+}
