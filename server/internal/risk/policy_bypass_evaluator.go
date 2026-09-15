@@ -144,8 +144,8 @@ type policyBypassPrincipalKey struct {
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID string, userID string, policyID string) ([]authz.Grant, bool) {
 	var principals []urn.Principal
 	var err error
-	// An agent actor is evaluated as itself and its roles, never as an empty user.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent && userID == "" {
+	// An agent actor is evaluated as itself and its roles, never as a supplied user.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
 		principals, err = authz.ResolveAgentPrincipals(ctx, e.db, organizationID, actor)
 	} else {
 		principals, err = authz.ResolveUserPrincipals(ctx, e.db, organizationID, userID)

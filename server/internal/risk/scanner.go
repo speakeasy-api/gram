@@ -595,8 +595,8 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
 	var principals []urn.Principal
 	var err error
-	// An agent actor is evaluated as itself and its roles, never as an empty user.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent && userID == "" {
+	// An agent actor is evaluated as itself and its roles, never as a supplied user.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
 		principals, err = authz.ResolveAgentPrincipals(ctx, s.db, organizationID, actor)
 	} else {
 		principals, err = authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
