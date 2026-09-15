@@ -143,7 +143,9 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		attr.SlogNetworkIngressDuration(duration),
 	}
 	if err != nil {
-		attrs = append(attrs, attr.SlogError(err))
+		// Provider errors can contain Kubernetes request data. Only bounded
+		// classifications may leave the provider boundary through telemetry.
+		attrs = append(attrs, attr.SlogError(fmt.Errorf("network ingress provider: %s", errorCode)))
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
 		return
 	}

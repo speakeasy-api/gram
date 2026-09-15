@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -67,11 +68,35 @@ func NewSyncIdentityMap(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse
 
 type SyncIdentityMapResult struct {
 	Entries int
+	// Deferred reports that another replacement held the lock, so this
+	// attempt did nothing and the holder or the next tick delivers the refresh.
+	Deferred bool
 }
 
 func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error) {
+	// Single-writer claim across the whole replacement. Losing the race is
+	// not a failure: the holder or the next tick delivers the refresh, and
+	// retrying here only adds activity failures. A claim leaked by a crashed
+	// attempt lapses at the TTL, after which no statement from that attempt
+	// can still be in flight.
+	leases, ok := s.cache.(cache.LeaseCache)
+	if !ok {
+		return nil, fmt.Errorf("identity map cache does not support ownership-aware leases")
+	}
+	owner := uuid.NewString()
+	claimed, err := leases.AcquireLease(ctx, identityMapReplaceLockKey, owner, identityMapReplaceLockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("claim identity map replacement lock: %w", err)
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "identity map sync deferred: replacement already in progress")
+		return &SyncIdentityMapResult{Entries: 0, Deferred: true}, nil
+	}
+
 	rows, err := s.store.ListIdentityMapEntries(ctx)
 	if err != nil {
+		// Nothing has reached ClickHouse yet, so the claim is safe to release.
+		s.releaseLock(ctx, leases, owner)
 		return nil, fmt.Errorf("list identity map entries: %w", err)
 	}
 
@@ -85,18 +110,6 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		})
 	}
 
-	// Single-writer claim across the whole replacement. Losing the race defers
-	// to the holder (the retry or the next tick picks up after the claim
-	// clears); a claim leaked by a crashed attempt lapses at the TTL, after
-	// which no statement from that attempt can still be in flight.
-	claimed, err := s.cache.Add(ctx, identityMapReplaceLockKey, identityMapReplaceLockTTL)
-	if err != nil {
-		return nil, fmt.Errorf("claim identity map replacement lock: %w", err)
-	}
-	if !claimed {
-		return nil, fmt.Errorf("identity map replacement already in progress")
-	}
-
 	if err := s.telemetry.ReplaceIdentityMap(ctx, entries); err != nil {
 		// Deliberately keep the claim: this attempt may have statements in
 		// flight, and the TTL is what guarantees they are dead before the
@@ -104,16 +117,26 @@ func (s *SyncIdentityMap) Do(ctx context.Context) (*SyncIdentityMapResult, error
 		return nil, fmt.Errorf("replace identity map: %w", err)
 	}
 
-	// Release on success only, so the schedule and link-event triggers are
-	// not blocked for the remainder of the TTL. Best effort: a leaked claim
-	// merely delays the next refresh.
-	if err := s.cache.Delete(context.WithoutCancel(ctx), identityMapReplaceLockKey); err != nil {
-		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
-	}
+	// Release on success so the schedule and link-event triggers are not
+	// blocked for the remainder of the TTL.
+	s.releaseLock(ctx, leases, owner)
 
 	// This success line is the staleness signal: a quiet component means the
 	// map is drifting from Postgres until the next successful pass.
 	s.logger.InfoContext(ctx, "identity map synced", attr.SlogIdentityMapEntryCount(len(entries)))
 
-	return &SyncIdentityMapResult{Entries: len(entries)}, nil
+	return &SyncIdentityMapResult{Entries: len(entries), Deferred: false}, nil
+}
+
+// releaseLock only clears this attempt's own claim, so a run that outlived
+// the TTL cannot evict a successor's. Best effort: a leaked claim merely
+// delays the next refresh.
+func (s *SyncIdentityMap) releaseLock(ctx context.Context, leases cache.LeaseCache, owner string) {
+	released, err := leases.ReleaseLeaseIfOwner(context.WithoutCancel(ctx), identityMapReplaceLockKey, owner)
+	switch {
+	case err != nil:
+		s.logger.WarnContext(ctx, "failed to release identity map replacement lock", attr.SlogError(err))
+	case !released:
+		s.logger.WarnContext(ctx, "identity map replacement lock expired before release")
+	}
 }

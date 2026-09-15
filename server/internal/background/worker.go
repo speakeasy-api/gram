@@ -120,6 +120,9 @@ type WorkerOptions struct {
 	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
 	// the constructing caller owns it and must call Wait after those producers stop.
 	IssuerMetadataRefresher *remotesessions.IssuerMetadataRefresher
+	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
+	// authenticate with private_key_jwt.
+	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -157,49 +160,50 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                       db,
-		GuardianPolicy:           guardianPolicy,
-		EncryptionClient:         enc,
-		FeatureProvider:          f,
-		AssetStorage:             assetStorage,
-		FunctionsDeployer:        deployer,
-		FunctionsVersion:         "local", // Test deployers don't use baked versions
-		MCPRegistryClient:        mcpRegistryClient,
-		AuditLogger:              auditLogger,
-		SlackClient:              nil,
-		ChatMessageWriter:        nil,
-		ChatClient:               nil,
-		OpenRouter:               nil,
-		OpenRouterSpend:          nil,
-		K8sClient:                nil,
-		ExpectedTargetCNAME:      "",
-		ExpectedARecords:         nil,
-		GitHubEvidenceToken:      "",
-		SiteURL:                  nil,
-		BillingTracker:           nil,
-		BillingRepository:        nil,
-		StripeClient:             nil,
-		TUMMeterStreamingEnabled: false,
-		RagService:               nil,
-		RedisClient:              nil,
-		PosthogClient:            nil,
-		TelemetryLogger:          nil,
-		TelemetryRepo:            nil,
-		TriggersApp:              nil,
-		CacheAdapter:             nil,
-		IssuerMetadataRefresher:  nil,
-		EmailService:             nil,
-		AssistantsCore:           nil,
-		TemporalEnv:              nil,
-		PIIScanner:               nil,
-		PIScanner:                nil,
-		CustomRuleScanner:        nil,
-		BuiltinPresets:           nil,
-		ShadowMCPClient:          nil,
-		WorkOSClient:             workos.NewStubClient(),
-		ProductFeatures:          nil,
-		ClickhouseConn:           nil,
-		PluginPublisher:          nil,
+		DB:                           db,
+		GuardianPolicy:               guardianPolicy,
+		EncryptionClient:             enc,
+		FeatureProvider:              f,
+		AssetStorage:                 assetStorage,
+		FunctionsDeployer:            deployer,
+		FunctionsVersion:             "local", // Test deployers don't use baked versions
+		MCPRegistryClient:            mcpRegistryClient,
+		AuditLogger:                  auditLogger,
+		RemoteSessionAssertionSigner: nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		TUMMeterStreamingEnabled:     false,
+		RagService:                   nil,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		TelemetryLogger:              nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  nil,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
 		Publishers: &Publishers{
 			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
@@ -220,6 +224,14 @@ func ForDeploymentProcessing(
 	}
 }
 
+func newWorkerInterceptors() []interceptor.WorkerInterceptor {
+	return []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+}
+
 func NewTemporalWorker(
 	env *tenv.Environment,
 	logger *slog.Logger,
@@ -228,112 +240,110 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
-		GuardianPolicy:            nil,
-		DB:                        nil,
-		EncryptionClient:          nil,
-		FeatureProvider:           nil,
-		AssetStorage:              nil,
-		SlackClient:               nil,
-		ChatMessageWriter:         nil,
-		ChatClient:                nil,
-		OpenRouter:                nil,
-		OpenRouterSpend:           nil,
-		K8sClient:                 nil,
-		ExpectedTargetCNAME:       "",
-		ExpectedARecords:          nil,
-		GitHubEvidenceToken:       "",
-		SiteURL:                   nil,
-		BillingTracker:            nil,
-		BillingRepository:         nil,
-		StripeClient:              nil,
-		TUMMeterStreamingEnabled:  false,
-		RedisClient:               nil,
-		PosthogClient:             nil,
-		FunctionsDeployer:         nil,
-		FunctionsVersion:          "",
-		RagService:                nil,
-		MCPRegistryClient:         nil,
-		TelemetryLogger:           nil,
-		TelemetryRepo:             nil,
-		TriggersApp:               nil,
-		CacheAdapter:              nil,
-		IssuerMetadataRefresher:   nil,
-		EmailService:              nil,
-		AssistantsCore:            nil,
-		TemporalEnv:               env,
-		PIIScanner:                nil,
-		PIScanner:                 nil,
-		CustomRuleScanner:         nil,
-		BuiltinPresets:            nil,
-		ShadowMCPClient:           nil,
-		AuditLogger:               nil,
-		WorkOSClient:              workos.NewStubClient(),
-		ProductFeatures:           nil,
-		ClickhouseConn:            nil,
-		PluginPublisher:           nil,
-		Publishers:                nil,
-		TrialEmailsService:        nil,
-		RiskFingerprinter:         risk.Fingerprinter{},
-		DisableRiskRetroReconcile: false,
+		GuardianPolicy:               nil,
+		DB:                           nil,
+		EncryptionClient:             nil,
+		FeatureProvider:              nil,
+		AssetStorage:                 nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		TUMMeterStreamingEnabled:     false,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		FunctionsDeployer:            nil,
+		FunctionsVersion:             "",
+		RagService:                   nil,
+		MCPRegistryClient:            nil,
+		TelemetryLogger:              nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		RemoteSessionAssertionSigner: nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  env,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		AuditLogger:                  nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
+		Publishers:                   nil,
+		TrialEmailsService:           nil,
+		RiskFingerprinter:            risk.Fingerprinter{},
+		DisableRiskRetroReconcile:    false,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			GuardianPolicy:            conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			DB:                        conv.Default(o.DB, opts.DB),
-			EncryptionClient:          conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:           conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:              conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
-			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
-			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
-			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
-			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
-			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			ExpectedARecords:          conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
-			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
-			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
-			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
-			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
-			TUMMeterStreamingEnabled:  conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
-			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:          conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
-			RagService:                conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:         conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryLogger:           conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
-			TelemetryRepo:             conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
-			TriggersApp:               conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:              conv.Default(o.CacheAdapter, opts.CacheAdapter),
-			IssuerMetadataRefresher:   conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
-			EmailService:              conv.Default(o.EmailService, opts.EmailService),
-			AssistantsCore:            conv.Default(o.AssistantsCore, opts.AssistantsCore),
-			TemporalEnv:               conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:                conv.Default(o.PIIScanner, opts.PIIScanner),
-			PIScanner:                 conv.Default(o.PIScanner, opts.PIScanner),
-			CustomRuleScanner:         conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
-			BuiltinPresets:            conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
-			ShadowMCPClient:           conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
-			AuditLogger:               conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSClient:              conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			ProductFeatures:           conv.Default(o.ProductFeatures, opts.ProductFeatures),
-			ClickhouseConn:            conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
-			PluginPublisher:           conv.Default(o.PluginPublisher, opts.PluginPublisher),
-			Publishers:                conv.Default(o.Publishers, opts.Publishers),
-			TrialEmailsService:        conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
-			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
-			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			GuardianPolicy:               conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			DB:                           conv.Default(o.DB, opts.DB),
+			EncryptionClient:             conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
+			ChatClient:                   conv.Default(o.ChatClient, opts.ChatClient),
+			K8sClient:                    conv.Default(o.K8sClient, opts.K8sClient),
+			ExpectedTargetCNAME:          conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
+			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
+			TUMMeterStreamingEnabled:     conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
+			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:                   conv.Default(o.RagService, opts.RagService),
+			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
+			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
+			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
+			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
+			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
+			PIIScanner:                   conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:                    conv.Default(o.PIScanner, opts.PIScanner),
+			CustomRuleScanner:            conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
+			BuiltinPresets:               conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
+			ShadowMCPClient:              conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:                  conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSClient:                 conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
+			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
+			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
 		}
 	}
 
-	workerInterceptors := []interceptor.WorkerInterceptor{
-		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-	}
+	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
 		Interceptors: workerInterceptors,
@@ -367,11 +377,14 @@ func NewTemporalWorker(
 
 	// Identity capture is best effort: without a policy the sweep stores no identity.
 	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	var remoteSessionEnricher *remotesessions.SessionEnricher
 	if opts.GuardianPolicy != nil {
 		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
 			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
 		} else {
 			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.IssuerMetadataRefresher)
 		}
 	}
 
@@ -428,6 +441,8 @@ func NewTemporalWorker(
 		opts.TUMMeterStreamingEnabled,
 		idTokenVerifier,
 		opts.IssuerMetadataRefresher,
+		remoteSessionEnricher,
+		opts.RemoteSessionAssertionSigner,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -674,14 +689,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
 
 	return &Workers{
-		main:              temporalWorker,
-		riskAnalysis:      riskWorker,
-		aiUsage:           aiUsageWorker,
-		skillEfficacy:     skillEfficacyWorker,
-		env:               env,
-		logger:            logger,
-		opts:              opts,
-		hasSkillSuggester: activities.skillSuggestionAnalyzer != nil,
+		main:                temporalWorker,
+		riskAnalysis:        riskWorker,
+		aiUsage:             aiUsageWorker,
+		skillEfficacy:       skillEfficacyWorker,
+		env:                 env,
+		logger:              logger,
+		opts:                opts,
+		hasSkillSuggester:   activities.skillSuggestionAnalyzer != nil,
+		networkIngressQueue: "",
 	}
 }
 
@@ -691,6 +707,11 @@ func NewTemporalWorker(
 // degrades a background pipeline rather than the request path.
 func (w *Workers) registerSchedules(ctx context.Context) {
 	env, logger, opts := w.env, w.logger, w.opts
+	if w.networkIngressQueue != "" {
+		if err := addNetworkIngressSweep(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))
+		}
+	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -869,10 +890,11 @@ type Workers struct {
 
 	// Retained so Run can install the recurring schedules; see
 	// registerSchedules.
-	env               *tenv.Environment
-	logger            *slog.Logger
-	opts              *WorkerOptions
-	hasSkillSuggester bool
+	env                 *tenv.Environment
+	logger              *slog.Logger
+	opts                *WorkerOptions
+	hasSkillSuggester   bool
+	networkIngressQueue string
 }
 
 // Run registers the recurring schedules, starts the dedicated workers, then

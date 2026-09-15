@@ -84,6 +84,7 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
+	mcp.TestInfra = res
 
 	code := m.Run()
 
@@ -300,7 +301,7 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 // newTestMCPServiceWithValidationTimeout shortens the probe deadline so a hanging upstream fails fast.
 func newTestMCPServiceWithValidationTimeout(t *testing.T, meterProvider metric.MeterProvider, validationTimeout time.Duration) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout, AutoVerifyWait: 0})
+	return newTestMCPServiceWithMetaRuntime(t, meterProvider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 }
 
 func newTestMCPServiceWithMetaRuntime(t *testing.T, meterProvider metric.MeterProvider, metaRuntime mcp.MetaRuntimeConfig) (context.Context, *testInstance) {

@@ -22,6 +22,7 @@ import (
 
 const GenerateToolsetEmbeddingsPermanentErrorType = "GenerateToolsetEmbeddingsPermanent"
 const GenerateToolsetEmbeddingsSupersededErrorType = "GenerateToolsetEmbeddingsSuperseded"
+const GenerateToolsetEmbeddingsKeyDisabledErrorType = "GenerateToolsetEmbeddingsKeyDisabled"
 
 type GenerateToolsetEmbeddings struct {
 	logger     *slog.Logger
@@ -94,6 +95,13 @@ func newGenerateToolsetEmbeddingsError(err error) error {
 		return temporal.NewNonRetryableApplicationError(
 			wrapped.Error(),
 			GenerateToolsetEmbeddingsSupersededErrorType,
+			wrapped,
+		)
+	}
+	if openrouter.IsPlatformKeyDisabled(err) {
+		return temporal.NewNonRetryableApplicationError(
+			wrapped.Error(),
+			GenerateToolsetEmbeddingsKeyDisabledErrorType,
 			wrapped,
 		)
 	}

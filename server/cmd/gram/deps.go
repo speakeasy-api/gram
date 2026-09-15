@@ -3,10 +3,11 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -69,6 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -163,55 +165,104 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+type clickhouseClientOptions struct {
+	component    string
+	host         string
+	database     string
+	username     string
+	password     string
+	nativePort   string
+	insecure     bool
+	rootCAFile   string
+	maxOpenConns int
+	maxIdleConns int
+}
+
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
-	logger = logger.With(attr.SlogComponent("clickhouse"))
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse",
+		host:         c.String("clickhouse-host"),
+		database:     c.String("clickhouse-database"),
+		username:     c.String("clickhouse-username"),
+		password:     c.String("clickhouse-password"),
+		nativePort:   c.String("clickhouse-native-port"),
+		insecure:     c.Bool("clickhouse-insecure"),
+		maxOpenConns: 32,
+		maxIdleConns: 16,
+		rootCAFile:   "",
+	})
+}
+
+func newClickhouseReadClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
+	return openClickhouseClient(ctx, logger, clickhouseClientOptions{
+		component:    "clickhouse-reader",
+		host:         c.String("clickhouse-read-host"),
+		database:     c.String("clickhouse-read-database"),
+		username:     c.String("clickhouse-read-username"),
+		password:     c.String("clickhouse-read-password"),
+		nativePort:   c.String("clickhouse-read-native-port"),
+		rootCAFile:   c.Path("clickhouse-read-ca-file"),
+		maxOpenConns: 8,
+		maxIdleConns: 4,
+		insecure:     false,
+	})
+}
+
+func openClickhouseClient(ctx context.Context, logger *slog.Logger, opts clickhouseClientOptions) (clickhouse.Conn, func(context.Context) error, error) {
+	logger = logger.With(attr.SlogComponent(opts.component))
 	nilFunc := noopShutdown
 
-	host := c.String("clickhouse-host")
-	database := c.String("clickhouse-database")
-	username := c.String("clickhouse-username")
-	password := c.String("clickhouse-password")
-	nativePort := c.String("clickhouse-native-port")
-	insecure := c.Bool("clickhouse-insecure")
-
-	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host must be set", host != "",
-		"clickhouse database must be set", database != "",
-		"clickhouse username must be set", username != "",
-		"clickhouse password must be set", password != "",
-		"clickhouse native port must be set", nativePort != "",
+		"clickhouse host must be set", opts.host != "",
+		"clickhouse database must be set", opts.database != "",
+		"clickhouse username must be set", opts.username != "",
+		"clickhouse password must be set", opts.password != "",
+		"clickhouse native port must be set", opts.nativePort != "",
+		"clickhouse max open connections must be positive", opts.maxOpenConns > 0,
+		"clickhouse max idle connections must not be negative", opts.maxIdleConns >= 0,
+		"clickhouse max idle connections must not exceed max open connections", opts.maxIdleConns <= opts.maxOpenConns,
 	)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
-	opts := &clickhouse.Options{
+	var rootCAs *x509.CertPool
+	if opts.rootCAFile != "" {
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("load system certificate pool: %w", err)
+		}
+		caPEM, err := os.ReadFile(opts.rootCAFile)
+		if err != nil {
+			return nil, nilFunc, fmt.Errorf("read clickhouse CA file: %w", err)
+		}
+		if ok := rootCAs.AppendCertsFromPEM(caPEM); !ok {
+			return nil, nilFunc, errors.New("clickhouse CA file contains no certificates")
+		}
+	}
+
+	driverOpts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
-		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
+		Addr:     []string{fmt.Sprintf("%s:%s", opts.host, opts.nativePort)},
 		Auth: clickhouse.Auth{
-			Database: database,
-			Username: username,
-			Password: password,
+			Database: opts.database,
+			Username: opts.username,
+			Password: opts.password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
-		// The driver defaults to MaxIdleConns+5 open connections, which is far
-		// too few for the streams process: one pool is shared by every
-		// subscription's ClickHouse writer. DialTimeout doubles as the pool
-		// acquisition timeout, so keep it short enough that saturation surfaces
-		// as a fast failure instead of parking each message for 30s.
-		MaxOpenConns: 32,
-		MaxIdleConns: 16,
+		MaxOpenConns: opts.maxOpenConns,
+		MaxIdleConns: opts.maxIdleConns,
 		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
-			// #nosec G402 -- we're reading the value from an environment variable.
-			InsecureSkipVerify: insecure,
+			RootCAs: rootCAs,
+			// #nosec G402 -- only the existing writer flag can enable this.
+			InsecureSkipVerify: opts.insecure,
 		},
 	}
 
-	conn, err := clickhouse.Open(opts)
+	conn, err := clickhouse.Open(driverOpts)
 	if err != nil {
 		return nil, nilFunc, fmt.Errorf("failed to open clickhouse connection: %w", err)
 	}
@@ -248,6 +299,11 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	}
 
 	if pingErr != nil {
+		closeErr := conn.Close()
+		if closeErr != nil {
+			logger.ErrorContext(ctx, "failed to close clickhouse client after ping failure", attr.SlogError(closeErr))
+			pingErr = errors.Join(pingErr, fmt.Errorf("close clickhouse client connection: %w", closeErr))
+		}
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse after %d attempts: %w", maxRetries+1, pingErr)
 	}
 
@@ -602,6 +658,7 @@ func newStripeClient(
 }
 
 func newStripeMeterEventClient(
+	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
@@ -612,7 +669,7 @@ func newStripeMeterEventClient(
 	apiKey := c.String("stripe-api-key")
 	switch {
 	case stripeclient.IsConfigured(apiKey):
-		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+		return stripeclient.NewV2MeterEventClient(logger, guardianPolicy, apiKey), nil
 	case c.String("environment") == "local":
 		return stripeclient.NewNoopV2MeterEventClient(), nil
 	default:
@@ -1458,13 +1515,84 @@ func newKMSSigningClients(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	logger.WarnContext(ctx, fmt.Sprintf("using in-process kms signing client signing %s: local development has no cloud kms to reach", alg))
 
-	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
-		client, err := gcpkms.NewLocalSigningClient(alg)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve local kms signing key directory: %w", err)
+	}
+	keyName := strings.ToLower(string(alg)) + ".pem"
+	keyPath := filepath.Join(configDir, "gram", "local-kms", keyName)
+	if _, err := os.Stat(keyPath); errors.Is(err, fs.ErrNotExist) {
+		cacheDir, err := os.UserCacheDir()
 		if err != nil {
-			return nil, fmt.Errorf("build local signing client: %w", err)
+			return nil, fmt.Errorf("resolve previous local kms signing key cache: %w", err)
 		}
+		if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
+			return nil, fmt.Errorf("create local kms signing key directory: %w", err)
+		}
+		legacyPath := filepath.Join(cacheDir, "gram", "local-kms", keyName)
+		if err := preserveLegacyLocalSigningKey(legacyPath, keyPath); err != nil {
+			return nil, fmt.Errorf("preserve previous local kms signing key: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("inspect local kms signing key: %w", err)
+	}
+	client, err := gcpkms.NewPersistentLocalSigningClient(
+		alg,
+		keyPath,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load local kms signing key: %w", err)
+	}
+
+	// Close is a no-op for the local client, so every caller can retain the
+	// production ownership contract while server and worker reuse one key.
+	return func(_ context.Context, _ oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return client, nil
 	}, nil
+}
+
+// preserveLegacyLocalSigningKey publishes a private copy without replacing a
+// key another process has already installed. The source and destination may
+// reside on different filesystems.
+func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
+	source, err := os.Open(sourcePath) //nolint:gosec // the path is derived from the local user's cache directory.
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open cached local kms signing key: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return source.Close() })
+
+	info, err := source.Stat()
+	if err != nil {
+		return fmt.Errorf("inspect cached local kms signing key: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return errors.New("cached local kms signing key must be a regular file accessible only to its owner")
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(targetPath), ".local-kms-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create local kms signing key temporary file: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return os.Remove(tmp.Name()) })
+	if err := tmp.Chmod(0o600); err != nil {
+		return errors.Join(fmt.Errorf("secure local kms signing key temporary file: %w", err), tmp.Close())
+	}
+	if _, err := io.Copy(tmp, source); err != nil {
+		return errors.Join(fmt.Errorf("copy cached local kms signing key: %w", err), tmp.Close())
+	}
+	if err := tmp.Sync(); err != nil {
+		return errors.Join(fmt.Errorf("sync local kms signing key temporary file: %w", err), tmp.Close())
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close local kms signing key temporary file: %w", err)
+	}
+	if err := os.Link(tmp.Name(), targetPath); err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("publish cached local kms signing key: %w", err)
+	}
+	return nil
 }
 
 // newGrowthSignalsEmitter builds the emitter that reports notable moments to

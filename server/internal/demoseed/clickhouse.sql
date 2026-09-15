@@ -81,6 +81,8 @@ DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_daily_summaries WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
 -- runner polls this same condition before advancing past the delete phase, and
@@ -88,8 +90,12 @@ DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspa
 SELECT throwIf(
   (SELECT count() FROM telemetry_logs WHERE gram_project_id IN
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
-   ) != 0,
-  'demo seed preflight: telemetry rows remain after scoped deletes');
+   )
+  + (SELECT count() FROM billing_meter_readings_by_time
+     WHERE organization_id = 'org_gram_demo_workspace')
+  + (SELECT count() FROM billing_meter_daily_summaries
+     WHERE organization_id = 'org_gram_demo_workspace') != 0,
+  'demo seed preflight: source or summary rows remain after scoped deletes');
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -818,6 +824,20 @@ FROM (
 -- signal) matching the ReplacingMergeTree key. Priya carries two devices so
 -- the users/devices counts differ. Versions stamp installed rows only —
 -- running detections usually cannot extract one.
+-- Cline and Continue are the editor-extension case: both ship a CLI and both
+-- carry a wildcard config dir for their version-stamped VS Code extension
+-- directory, so they are also the rows that exercise the glob path end to
+-- end. Zed and Goose are the two new targets that publish CIMD, so they are
+-- the ones carrying a real decision below.
+--
+-- The two assistants are deliberately a pair: both speak MCP to Gram like a
+-- harness does without being coding tools, but Hermes publishes a CIMD
+-- document and OpenClaw does not. So a decision on Hermes is enforceable and
+-- shows as one, while OpenClaw reads unreviewed however hard somebody wants
+-- to block it — the same contrast the Harnesses tab draws between Codex and
+-- Cursor.
+-- Keep every comment above this statement: ClickHouse parses the VALUES list
+-- as data and cannot skip a comment between rows.
 INSERT INTO ai_detections
   (organization_id, target_id, device_serial, user_email, signal, category,
    version, first_seen, last_seen, updated_at)
@@ -873,11 +893,66 @@ VALUES
   ('org_gram_demo_workspace', 'lmstudio', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
    'local_model', '0.3.9', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 72 HOUR, now64(9)),
   ('org_gram_demo_workspace', 'aider', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
-   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9));
+   'harness', '0.86.1', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 120 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 11 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '0.4.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 40 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'assistant', '0.4.1', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 6 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'openclaw', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'assistant', '0.3.8', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 64 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.2.0', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'running',
+   'assistant', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 14 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'hermes-agent', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'assistant', '1.1.4', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 30 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 3 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'harness', '4.1.12', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 20 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'cline', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '4.1.17', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 9 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'continue', 'DEMO-MBP-MATEO', 'mateo@demo.getgram.ai', 'installed',
+   'harness', '2.1.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 44 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 7 DAY, now64(9) - INTERVAL 5 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'zed', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'harness', '0.221.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 16 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MBP-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.34.2', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 34 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'goose', 'DEMO-MSTUDIO-PRIYA', 'priya@demo.getgram.ai', 'installed',
+   'harness', '1.33.0', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 58 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-AMARA', 'amara@demo.getgram.ai', 'running',
+   'harness', '', now64(9) - INTERVAL 8 DAY, now64(9) - INTERVAL 7 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'warp', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'harness', '0.2026.08.19', now64(9) - INTERVAL 6 DAY, now64(9) - INTERVAL 21 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-JONAS', 'jonas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.2', now64(9) - INTERVAL 4 DAY, now64(9) - INTERVAL 26 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'msty', 'DEMO-MBP-LUCAS', 'lucas@demo.getgram.ai', 'installed',
+   'assistant', '1.9.0', now64(9) - INTERVAL 3 DAY, now64(9) - INTERVAL 52 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'installed',
+   'local_model', '0.8.4', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9)),
+  ('org_gram_demo_workspace', 'jan', 'DEMO-MBP-HANA', 'hana@demo.getgram.ai', 'running',
+   'local_model', '', now64(9) - INTERVAL 5 DAY, now64(9) - INTERVAL 13 HOUR, now64(9));
 
 -- Scan receipts: one per device per day over the trailing 5 days, proving
 -- every enrolled device scanned recently (the page's freshness story and the
--- provable-coverage contract for zero-match devices).
+-- provable-coverage contract for zero-match devices). match_count is the
+-- number of matches the agent reported, and every reported match becomes one
+-- ai_detections row, so each device's count here must equal that device's row
+-- count in the detections insert above — add a detection, update this array.
 INSERT INTO ai_scan_receipts
   (organization_id, device_serial, user_email, scan_started_at,
    scan_completed_at, target_list_version, match_count, received_at)
@@ -892,7 +967,7 @@ SELECT
   ts - toIntervalSecond(6),
   ts - toIntervalSecond(1),
   3,
-  arrayElement([4, 4, 7, 2, 6, 2, 1], didx),
+  arrayElement([10, 8, 9, 4, 8, 9, 4], didx),
   ts
 FROM (
   SELECT
@@ -1505,6 +1580,118 @@ FROM (
   FROM numbers(40)
 );
 
+-- Meter usage is independent of telemetry-derived invoice estimates. Every
+-- meter has 96 immutable facts across 12 days, with enough facets for a remainder.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT
+  toUUID(concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
+                '-8', substring(h, 18, 3), '-', substring(h, 21, 12))),
+  'org_gram_demo_workspace',
+  toUUID('dec0de00-0000-4000-a000-000000000001'),
+  meter,
+  concat('gram-demo-meter-operation-', toString(number)),
+  if(meter_index IN (2, 3), 'bytes', 'stokens'),
+  if(meter_index IN (2, 3), 'http_body_bytes', 'tiktoken_o200k_base'),
+  toInt64((1000 + cityHash64('meter-volume', number) % 9000)
+    * if(meter_index IN (2, 3), 64, 1)),
+  least(toDateTime64(toStartOfDay(now('UTC')), 9, 'UTC') - toIntervalDay(intDiv(sample, 8))
+    + toIntervalHour(8 + sample % 8), now64(9, 'UTC') - toIntervalMinute(30)),
+  now64(9, 'UTC'),
+  NULL,
+  multiIf(
+    meter_index = 1,
+    map(
+      'codec', 'o200k_base',
+      'model', arrayElement(['claude-sonnet-4', 'gpt-4.1'], 1 + sample % 2),
+      'provider', arrayElement(['anthropic', 'openai'], 1 + sample % 2),
+      'hook_source', arrayElement(['claude-code', 'cursor'], 1 + sample % 2),
+      'hook_hostname', concat('gram-demo-device-', toString(1 + sample % 8)),
+      'account_type', if(sample % 3 = 0, 'personal', 'enterprise'),
+      'billing_mode', if(sample % 3 = 0, 'flat_rate', 'usage_based'),
+      'workload_source', arrayElement(['hook', 'import', 'assistant', 'native'], 1 + sample % 4),
+      'assistant_id', if(sample % 4 = 2, 'gram-demo-managed-agent-1', ''),
+      'billing_user_id', concat('user_demo_', person),
+      'billing_user_account_email', concat(person, '@demo.getgram.ai'),
+      'billing_user_division_name', if(sample % 2 = 0, 'Product', 'Operations'),
+      'billing_user_department_name', arrayElement(
+        ['Engineering', 'Support', 'Security', 'Design', 'Finance', 'Sales', 'Research', ''], 1 + sample % 8),
+      'billing_user_job_title', if(sample % 2 = 0, 'Engineer', 'Specialist'),
+      'billing_user_employee_type', if(sample % 3 = 0, 'Contractor', 'Full-time'),
+      'billing_user_cost_center_name', concat('DEMO-', toString(1 + sample % 8)),
+      'billing_user_rbac_roles', if(sample % 2 = 0, '["member"]', '["admin","member"]'),
+      'billing_user_directory_groups', if(sample % 2 = 0, '["Engineering"]', '["Operations","Security"]')),
+    meter_index IN (2, 3),
+    map(
+      'mcp_server_type', if(sample % 2 = 0, 'externalmcp', 'toolset'),
+      'mcp_server_id', concat('gram-demo-meter-server-', toString(1 + sample % 8)),
+      'mcp_server_slug', concat('acme-demo-server-', toString(1 + sample % 4)),
+      'custom_domain', if(sample % 3 = 0, 'mcp.demo.getgram.ai', ''),
+      'request_path', concat('/mcp/acme-demo-server-', toString(1 + sample % 4))),
+    map(
+      'codec', 'o200k_base',
+      'risk_policy_id', if(sample % 4 = 0, '', 'dec0de00-0000-4000-a000-00000000f001'),
+      'risk_policy_version', if(sample % 4 = 0, '', toString(1 + sample % 2)),
+      'risk_policy_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'risk_policy_link_reason', if(sample % 4 = 0, 'direct_scan', ''),
+      'scan_execution_path', if(sample % 2 = 0, 'inline', 'background'),
+      'message_type', arrayElement(['user', 'assistant', 'tool_result'], 1 + sample % 3),
+      'message_link_status', if(sample % 4 = 0, 'unlinked', 'linked'),
+      'message_link_reason', if(sample % 4 = 0, 'no_message', ''),
+      'hook_source', if(sample % 2 = 0, 'claude-code', 'cursor'),
+      'message_user_id', concat('user_demo_', person),
+      'model', if(meter_index IN (6, 7), 'gpt-4.1-mini', ''),
+      'provider', if(meter_index IN (6, 7), 'openai', ''),
+      'tool_name', if(sample % 3 = 2, 'search_code', '')))
+FROM (
+  SELECT
+    number,
+    1 + number % 9 AS meter_index,
+    intDiv(number, 9) AS sample,
+    arrayElement([
+      'gram.agent_session.storage', 'gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress',
+      'gram.risk.scan.gitleaks', 'gram.risk.scan.presidio', 'gram.risk.scan.prompt_injection',
+      'gram.risk.scan.prompt_policy', 'gram.risk.scan.custom_rules', 'gram.risk.scan.cli_destructive'
+    ], meter_index) AS meter,
+    arrayElement(['amara', 'jonas', 'priya', 'mateo', 'hana', 'lucas'], 1 + sample % 6) AS person,
+    lower(hex(MD5(concat('gram-demo-meter-reading-', toString(number))))) AS h
+  FROM numbers(864)
+);
+
+-- One identical physical redelivery per meter. Raw FINAL still collapses the
+-- ledger read, while the incremental summary intentionally counts each delivery.
+INSERT INTO billing_meter_readings_by_time
+  (id, organization_id, project_id, meter_id, operation_id, unit,
+   measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes)
+SELECT id, organization_id, project_id, meter_id, operation_id, unit,
+       measurement_method, value, occurred_at, produced_at, corrects_reading_id, attributes
+FROM billing_meter_readings_by_time FINAL
+WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage'
+ORDER BY meter_id, operation_id
+LIMIT 1 BY meter_id
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT count() FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 864,
+  'demo seed postflight: meter usage missing or duplicated')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT uniqExact(meter_id) FROM billing_meter_readings_by_time FINAL
+   WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind = 'usage') != 9
+  OR (SELECT count() FROM billing_meter_readings_by_time FINAL
+      WHERE organization_id = 'org_gram_demo_workspace' AND reading_kind != 'usage') != 0,
+  'demo seed postflight: meter families missing or unexpected non-usage readings')
+SETTINGS do_not_merge_across_partitions_select_final = 1;
+
+SELECT throwIf(
+  (SELECT sum(reading_count) FROM billing_meter_daily_summaries
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND facet = 'total') != 873,
+  'demo seed postflight: ordinary meter deliveries missing or duplicated');
+
 -- Postflight asserts: rows landed, the cost/session MVs actually fired, and
 -- nothing leaked outside the demo scope. throwIf aborts the script (non-zero
 -- exit for the runner) when violated.
@@ -1605,8 +1792,17 @@ SELECT throwIf(
 
 SELECT throwIf(
   (SELECT uniqExact(target_id) FROM ai_detections
-   WHERE organization_id = 'org_gram_demo_workspace') < 6,
+   WHERE organization_id = 'org_gram_demo_workspace') < 15,
   'demo seed postflight: ai_detections missing targets');
+
+-- Each AI Discovery tab reads one category, so a category with no rows is an
+-- empty page. Assert all three survived the reseed rather than only the
+-- target count, which cannot tell a missing tab from a missing tool.
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND category IN ('harness', 'assistant', 'local_model')) < 3,
+  'demo seed postflight: ai_detections must cover harness, assistant and local_model');
 
 SELECT throwIf(
   (SELECT count() FROM ai_scan_receipts
@@ -1653,3 +1849,20 @@ SELECT throwIf(
      AND toString(resource_attributes.gram.deployment.id) != 'demo-seed'
    ) > 0,
   'demo seed postflight: demo-project telemetry rows missing the demo-seed marker');
+
+-- The Shadow AI inventory is pinned exactly, not bounded. Its size is what
+-- seed/demo/PAGES.md documents and what the per-device receipt counts above
+-- must add up to, and both drifted once already when detections were added
+-- without either being updated. An exact count fails the seed the moment the
+-- three stop agreeing, and the category check guards that every kind of tool
+-- the catalog distinguishes is represented on the page, since a category with
+-- no rows renders as an empty filter.
+SELECT throwIf(
+  (SELECT count() FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 52,
+  'demo seed postflight: expected exactly 52 demo AI detection rows, so update PAGES.md and the receipt match counts alongside any change');
+
+SELECT throwIf(
+  (SELECT uniqExact(category) FROM ai_detections
+   WHERE organization_id = 'org_gram_demo_workspace') <> 3,
+  'demo seed postflight: demo AI detections must cover harness, assistant and local_model');

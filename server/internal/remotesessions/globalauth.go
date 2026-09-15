@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -38,6 +39,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		auditLogger:     nil,
 		serverURL:       nil,
 		refresher:       nil,
+		rotator:         nil,
 		productFeatures: nil,
 		logger:          logger,
 		tracer:          tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
@@ -45,5 +47,6 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		enc:             enc,
 		policy:          policy,
 		revoker:         NewUpstreamRevoker(logger, tp, mp, db, enc, policy),
+		jwksResolver:    jwks.NewResolver(policy, mp, logger),
 	}
 }

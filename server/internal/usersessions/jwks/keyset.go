@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/go-jose/go-jose/v4"
 )
@@ -176,6 +177,9 @@ func parseKeySet(raw json.RawMessage) (jose.JSONWebKeySet, error) {
 	if len(raw) == 0 {
 		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf("empty key set document: %w", ErrKeySetInvalid)
 	}
+	if containsNULEscape(raw) {
+		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf("key set contains a NUL escape: %w", ErrKeySetInvalid)
+	}
 
 	// One pass over the document: the envelope is unmarshalled once and each
 	// key is screened from its raw members before go-jose sees it, rather
@@ -215,12 +219,37 @@ func parseKeySet(raw json.RawMessage) (jose.JSONWebKeySet, error) {
 		if key.Use != "" && key.Use != "sig" {
 			continue
 		}
+		if !allowsVerification(members) {
+			continue
+		}
 		if key.Algorithm != "" && !isAllowedSignatureAlgorithm(key.Algorithm) {
 			continue
 		}
 		keys = append(keys, key)
 	}
 	return jose.JSONWebKeySet{Keys: keys}, nil
+}
+
+// allowsVerification keeps a key that omits key_ops; an explicit key_ops
+// (RFC 7517 §4.3) must name "verify", and a malformed one skips the key.
+func allowsVerification(members map[string]json.RawMessage) bool {
+	raw, ok := members["key_ops"]
+	if !ok {
+		return true
+	}
+	var encodedOperations []json.RawMessage
+	if err := json.Unmarshal(raw, &encodedOperations); err != nil {
+		return false
+	}
+	operations := make([]string, 0, len(encodedOperations))
+	for _, encoded := range encodedOperations {
+		var operation string
+		if err := json.Unmarshal(encoded, &operation); err != nil || operation == "" {
+			return false
+		}
+		operations = append(operations, operation)
+	}
+	return slices.Contains(operations, "verify")
 }
 
 // selectKey picks the verification key for kid out of an already-screened

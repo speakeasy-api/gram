@@ -72,16 +72,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-func newWorkerCommand() *cli.Command {
-	var shutdownFuncs []func(context.Context) error
-
-	flags := []cli.Flag{
-		&cli.StringFlag{
-			Name:     "server-url",
-			Usage:    "The public URL of the server",
-			EnvVars:  []string{"GRAM_SERVER_URL"},
-			Required: true,
-		},
+func workerRuntimeFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -101,12 +93,6 @@ func newWorkerCommand() *cli.Command {
 			Value:   "default",
 		},
 		&cli.StringFlag{
-			Name:    "temporal-task-queue",
-			Usage:   "Task queue of the Temporal server",
-			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
-			Value:   "main",
-		},
-		&cli.StringFlag{
 			Name:    "temporal-client-cert",
 			Usage:   "Client cert of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
@@ -115,12 +101,6 @@ func newWorkerCommand() *cli.Command {
 			Name:    "temporal-client-key",
 			Usage:   "Client key of the Temporal server",
 			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "control-address",
-			Value:   ":8081",
-			Usage:   "HTTP address to listen on",
-			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -143,6 +123,31 @@ func newWorkerCommand() *cli.Command {
 			Name:    "with-otel-metrics",
 			Usage:   "Enable OpenTelemetry metrics",
 			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+		},
+	}
+}
+
+func newWorkerCommand() *cli.Command {
+	var shutdownFuncs []func(context.Context) error
+
+	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{
+			Name:     "server-url",
+			Usage:    "The public URL of the server",
+			EnvVars:  []string{"GRAM_SERVER_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "HTTP address to listen on",
+			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
@@ -312,7 +317,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_EMAIL_TEMPLATE_IDS"},
 			Required: false,
 		},
-	}
+	)
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
@@ -757,55 +762,62 @@ func newWorkerCommand() *cli.Command {
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, auditLogger)
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("build kms signing client factory: %w", err)
+			}
+			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				GuardianPolicy:            guardianPolicy,
-				DB:                        db,
-				EncryptionClient:          encryptionClient,
-				FeatureProvider:           featureFlags,
-				AssetStorage:              assetStorage,
-				SlackClient:               slackClient,
-				ChatMessageWriter:         chatWriter,
-				ChatClient:                chatClient,
-				OpenRouter:                openRouter,
-				OpenRouterSpend:           openRouter,
-				K8sClient:                 k8sClient,
-				ExpectedTargetCNAME:       c.String("custom-domain-cname"),
-				ExpectedARecords:          customDomainARecords,
-				GitHubEvidenceToken:       c.String("github-evidence-token"),
-				SiteURL:                   siteURL,
-				BillingTracker:            billingTracker,
-				BillingRepository:         billingRepo,
-				StripeClient:              stripeClient,
-				TUMMeterStreamingEnabled:  c.Bool(stripeTUMMeterStreamingFlagName),
-				RedisClient:               redisClient,
-				PosthogClient:             posthogClient,
-				EmailService:              emailService,
-				FunctionsDeployer:         functionsOrchestrator,
-				FunctionsVersion:          runnerVersion,
-				RagService:                ragService,
-				MCPRegistryClient:         mcpRegistryClient,
-				TelemetryLogger:           telemetryLogger,
-				ClickhouseConn:            chDB,
-				TelemetryRepo:             telemetryrepo.New(chDB),
-				TriggersApp:               triggerApp,
-				CacheAdapter:              remoteSessionsCache,
-				IssuerMetadataRefresher:   issuerMetadataRefresher,
-				AssistantsCore:            assistantsCore,
-				TemporalEnv:               temporalEnv,
-				PIIScanner:                piiScanner,
-				PIScanner:                 piScanner,
-				CustomRuleScanner:         customRuleScanner,
-				BuiltinPresets:            builtinPresets,
-				ShadowMCPClient:           shadowMCPClient,
-				AuditLogger:               auditLogger,
-				WorkOSClient:              backgroundWorkOSClient,
-				ProductFeatures:           productFeatures,
-				PluginPublisher:           pluginPublisher,
-				Publishers:                publishers,
-				TrialEmailsService:        trialEmailsService,
-				RiskFingerprinter:         riskFingerprinter,
-				DisableRiskRetroReconcile: c.Bool("disable-clickhouse-risk-retro-reconcile"),
+				GuardianPolicy:               guardianPolicy,
+				DB:                           db,
+				EncryptionClient:             encryptionClient,
+				FeatureProvider:              featureFlags,
+				AssetStorage:                 assetStorage,
+				SlackClient:                  slackClient,
+				ChatMessageWriter:            chatWriter,
+				ChatClient:                   chatClient,
+				OpenRouter:                   openRouter,
+				OpenRouterSpend:              openRouter,
+				K8sClient:                    k8sClient,
+				ExpectedTargetCNAME:          c.String("custom-domain-cname"),
+				ExpectedARecords:             customDomainARecords,
+				GitHubEvidenceToken:          c.String("github-evidence-token"),
+				SiteURL:                      siteURL,
+				BillingTracker:               billingTracker,
+				BillingRepository:            billingRepo,
+				StripeClient:                 stripeClient,
+				TUMMeterStreamingEnabled:     c.Bool(stripeTUMMeterStreamingFlagName),
+				RedisClient:                  redisClient,
+				PosthogClient:                posthogClient,
+				EmailService:                 emailService,
+				FunctionsDeployer:            functionsOrchestrator,
+				FunctionsVersion:             runnerVersion,
+				RagService:                   ragService,
+				MCPRegistryClient:            mcpRegistryClient,
+				TelemetryLogger:              telemetryLogger,
+				ClickhouseConn:               chDB,
+				TelemetryRepo:                telemetryrepo.New(chDB),
+				TriggersApp:                  triggerApp,
+				CacheAdapter:                 remoteSessionsCache,
+				IssuerMetadataRefresher:      issuerMetadataRefresher,
+				RemoteSessionAssertionSigner: clientAssertionSigner,
+				AssistantsCore:               assistantsCore,
+				TemporalEnv:                  temporalEnv,
+				PIIScanner:                   piiScanner,
+				PIScanner:                    piScanner,
+				CustomRuleScanner:            customRuleScanner,
+				BuiltinPresets:               builtinPresets,
+				ShadowMCPClient:              shadowMCPClient,
+				AuditLogger:                  auditLogger,
+				WorkOSClient:                 backgroundWorkOSClient,
+				ProductFeatures:              productFeatures,
+				PluginPublisher:              pluginPublisher,
+				Publishers:                   publishers,
+				TrialEmailsService:           trialEmailsService,
+				RiskFingerprinter:            riskFingerprinter,
+				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 			})
 
 			// Flush the throttle's queued trailing risk signals before this Action

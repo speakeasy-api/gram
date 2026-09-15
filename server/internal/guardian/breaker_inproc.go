@@ -7,6 +7,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/failsafe-go/failsafe-go/circuitbreaker"
 	"go.opentelemetry.io/otel/metric"
@@ -65,22 +66,10 @@ type breakerEntry struct {
 func (b *InProcBreaker) Allow(ctx context.Context, key Partition, policy BreakerPolicy) (BreakerResult, error) {
 	var zero BreakerResult
 
-	switch {
-	// NaN compares false against both bounds, so it must be rejected
-	// explicitly or it would silently configure a breaker that never trips.
-	case math.IsNaN(policy.FailureRateThreshold) || policy.FailureRateThreshold <= 0 || policy.FailureRateThreshold > 1:
-		return zero, fmt.Errorf("in-proc breaker: failure rate threshold must be in (0, 1], got %v", policy.FailureRateThreshold)
-	case policy.MinThroughput == 0:
-		return zero, fmt.Errorf("in-proc breaker: min throughput must be positive")
-	case policy.Window <= 0:
-		return zero, fmt.Errorf("in-proc breaker: window must be positive, got %s", policy.Window)
-	case policy.Delay <= 0:
-		return zero, fmt.Errorf("in-proc breaker: delay must be positive, got %s", policy.Delay)
-	case policy.SuccessThreshold == 0:
-		return zero, fmt.Errorf("in-proc breaker: success threshold must be positive")
+	cb, err := b.breakerFor(ctx, key, policy)
+	if err != nil {
+		return zero, err
 	}
-
-	cb := b.breakerFor(ctx, key, policy)
 
 	if !cb.TryAcquirePermit() {
 		b.metrics.recordRequest(ctx, key, false)
@@ -114,7 +103,32 @@ func (b *InProcBreaker) Allow(ctx context.Context, key Partition, policy Breaker
 	}, nil
 }
 
-func (b *InProcBreaker) breakerFor(ctx context.Context, key Partition, policy BreakerPolicy) circuitbreaker.CircuitBreaker[any] {
+// RemainingDelay inspects the open delay without acquiring a half-open permit.
+func (b *InProcBreaker) RemainingDelay(ctx context.Context, key Partition, policy BreakerPolicy) (time.Duration, error) {
+	cb, err := b.breakerFor(ctx, key, policy)
+	if err != nil {
+		return 0, err
+	}
+	return cb.RemainingDelay(), nil
+}
+
+func (b *InProcBreaker) breakerFor(ctx context.Context, key Partition, policy BreakerPolicy) (circuitbreaker.CircuitBreaker[any], error) {
+	var zero circuitbreaker.CircuitBreaker[any]
+	switch {
+	// NaN compares false against both bounds, so it must be rejected
+	// explicitly or it would silently configure a breaker that never trips.
+	case math.IsNaN(policy.FailureRateThreshold) || policy.FailureRateThreshold <= 0 || policy.FailureRateThreshold > 1:
+		return zero, fmt.Errorf("in-proc breaker: failure rate threshold must be in (0, 1], got %v", policy.FailureRateThreshold)
+	case policy.MinThroughput == 0:
+		return zero, fmt.Errorf("in-proc breaker: min throughput must be positive")
+	case policy.Window <= 0:
+		return zero, fmt.Errorf("in-proc breaker: window must be positive, got %s", policy.Window)
+	case policy.Delay <= 0:
+		return zero, fmt.Errorf("in-proc breaker: delay must be positive, got %s", policy.Delay)
+	case policy.SuccessThreshold == 0:
+		return zero, fmt.Errorf("in-proc breaker: success threshold must be positive")
+	}
+
 	// IncludeSubset only affects key derivation upstream, so it is not part
 	// of the fingerprint.
 	fingerprint := fmt.Sprintf("%g|%d|%s|%s|%d",
@@ -122,7 +136,7 @@ func (b *InProcBreaker) breakerFor(ctx context.Context, key Partition, policy Br
 
 	if val, ok := b.breakers.Load(key.String()); ok {
 		if entry, ok := val.(*breakerEntry); ok && entry.fingerprint == fingerprint {
-			return entry.cb
+			return entry.cb, nil
 		}
 	}
 
@@ -131,7 +145,7 @@ func (b *InProcBreaker) breakerFor(ctx context.Context, key Partition, policy Br
 	if loaded {
 		if existing, ok := actual.(*breakerEntry); ok {
 			if existing.fingerprint == fingerprint {
-				return existing.cb
+				return existing.cb, nil
 			}
 
 			// The discarded breaker never transitions again, so settle the
@@ -148,7 +162,7 @@ func (b *InProcBreaker) breakerFor(ctx context.Context, key Partition, policy Br
 		b.breakers.Store(key.String(), entry)
 	}
 
-	return entry.cb
+	return entry.cb, nil
 }
 
 func (b *InProcBreaker) newBreaker(key Partition, policy BreakerPolicy) circuitbreaker.CircuitBreaker[any] {

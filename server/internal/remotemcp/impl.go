@@ -50,6 +50,8 @@ type Service struct {
 	audit                 *audit.Logger
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
+	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
+	beforeClaim func(previousURL string)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -79,6 +81,7 @@ func NewService(
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(nil, nil),
+		beforeClaim:           nil,
 	}
 }
 
@@ -269,8 +272,8 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
 	}
 
-	// Fetch current state for before-snapshot
-	existingServer, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	// Locked so the previous URL the claim moves from is the one current at commit time.
+	existingServer, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -336,9 +339,19 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server update").LogError(ctx, logger)
 	}
 
+	// The claim moves with the URL in the same transaction; the probe that
+	// fills it runs after commit. Every save runs it: a client still
+	// recording another resource retries.
+	claimed, err := s.claimProtectedResource(ctx, dbtx, authCtx, updatedServer.ID, existingServer.Url, updatedServer.Url)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "claim protected resource for remote session clients").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	s.refreshProtectedResourceDisplay(ctx, logger, authCtx, updatedServer.ID, updatedServer.Url, claimed)
 
 	return afterView, nil
 }

@@ -74,6 +74,22 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- Onboarding state is organization-scoped, independent of any project.
+-- Unlike retained records, this state has no lifetime beyond its owning organization.
+CREATE TABLE IF NOT EXISTS organization_onboarding (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  preset TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT organization_onboarding_pkey PRIMARY KEY (id),
+  CONSTRAINT organization_onboarding_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS organization_onboarding_organization_id_key
+ON organization_onboarding (organization_id);
+
 -- One enterprise-trial lifecycle per organization. Lifecycle operations update
 -- the row in place. Unrelated to organization_metadata.free_trial_*, another
 -- concept.
@@ -1277,46 +1293,63 @@ CREATE TABLE IF NOT EXISTS device_agent_configurations (
   CONSTRAINT device_agent_configurations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- device_agent_ai_scan_targets holds an organization's own additions to the
--- Shadow AI scan target catalog its device agents probe for, and its
--- overrides of the Speakeasy defaults compiled into the server. A row whose
--- id matches a default replaces that default for the organization, which is
--- how a default is disabled; any other row is an extra target. The served
--- list is the defaults overlaid with these rows. Category and signature
--- shapes are validated in application code.
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_targets (
+-- ai_scan_targets is an organization's overlay on the Shadow AI scan target
+-- catalog its device agents probe for. A row is whatever the organization has
+-- said about one target: an extra tool it added, or its decision about a
+-- built-in compiled into the server.
+--
+-- The definition columns are filled only for a target the organization added.
+-- A row under a built-in's id carries no definition — the built-in's own stays
+-- authoritative, so a registry update still reaches an organization that has
+-- decided about it. Only status and rationale come from the row in that case.
+--
+-- status is one table with the target rather than beside it so that deciding
+-- about a tool and editing it are one write under one lock, and a decision
+-- cannot outlive the target it names. Its values are validated in application
+-- code, as are the category and signature shapes.
+CREATE TABLE IF NOT EXISTS ai_scan_targets (
   organization_id TEXT NOT NULL,
   id TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  category TEXT NOT NULL,
+
+  display_name TEXT,
+  category TEXT,
   bundle_ids TEXT[] NOT NULL DEFAULT '{}',
   binaries TEXT[] NOT NULL DEFAULT '{}',
   config_dirs TEXT[] NOT NULL DEFAULT '{}',
   process_names TEXT[] NOT NULL DEFAULT '{}',
   version_plist_key TEXT,
-  enabled boolean NOT NULL DEFAULT true,
+  -- Recognizes the same tool again when it calls the MCP gateway. The first
+  -- two match verified credentials; client_info_names is self-reported and
+  -- detection-only.
+  cimd_vendor_keys TEXT[] NOT NULL DEFAULT '{}',
+  oauth_client_ids TEXT[] NOT NULL DEFAULT '{}',
+  client_info_names TEXT[] NOT NULL DEFAULT '{}',
+
+  -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
+  -- blocked. Who set it and when is the audit log's job, not a column here.
+  --
+  -- The only per-organization state there is. Two kinds of row share this
+  -- table and the id alone tells them apart, by whether it names a compiled-in
+  -- default. A built-in's row records only this decision, because the
+  -- definition is compiled in and stays there: display_name, category and
+  -- version_plist_key stay null, and the list-valued columns stay at their
+  -- empty-array default, since they are NOT NULL. An organization's own
+  -- target's row carries the full definition as well.
+  -- Being in the organization's inventory is what makes a target probed for;
+  -- there is no separate on/off switch that could leave a recorded decision
+  -- inert or disagree with this column mid-write. A built-in leaves the
+  -- inventory by being deleted from the registry, an organization's own
+  -- target by having this row deleted.
+  status TEXT NOT NULL DEFAULT 'unreviewed',
+  rationale TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT device_agent_ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
-  CONSTRAINT device_agent_ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT ai_scan_targets_pkey PRIMARY KEY (organization_id, id),
+  CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- device_agent_ai_scan_catalogs counts an organization's edits to its scan
--- target list. Added to the defaults' own version, the counter is the
--- list_version agents receive and echo on scan receipts, so it moves whenever
--- either side of the served list changes.
-CREATE TABLE IF NOT EXISTS device_agent_ai_scan_catalogs (
-  organization_id TEXT NOT NULL,
-  list_version integer NOT NULL DEFAULT 0,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-
-  CONSTRAINT device_agent_ai_scan_catalogs_pkey PRIMARY KEY (organization_id),
-  CONSTRAINT device_agent_ai_scan_catalogs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
-);
 
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2177,6 +2210,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Last successful JWK Set fetch, including conditional fetches that confirm
   -- the stored keys remain current.
   jwks_fetched_at timestamptz,
+  -- Public-safe reason and time of the last failed JWK Set consult. Kept
+  -- separate so failed refreshes do not appear to confirm the stored keys.
+  jwks_last_error TEXT,
+  jwks_last_error_at timestamptz,
   -- Cache TTL derived from upstream response headers and bounded by the
   -- resolver's refresh policy. NULL means no cache lifetime is known yet.
   jwks_cache_expires_at timestamptz,
@@ -2306,6 +2343,12 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   organization_id TEXT,
+  -- Stable FK target for project, organization, and platform-global scope.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
@@ -2330,6 +2373,9 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
     FOREIGN KEY (trusted_remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL
 );
 
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_attachment_scope_key
+ON user_session_issuers (id, attachment_scope);
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
@@ -2771,6 +2817,12 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   organization_id TEXT,
+  -- Stable FK target for project, organization, and platform-global scope.
+  attachment_scope TEXT GENERATED ALWAYS AS (
+    CASE WHEN project_id IS NOT NULL THEN 'project:' || project_id::text
+         WHEN organization_id IS NOT NULL THEN 'organization:' || organization_id
+         ELSE 'global' END
+  ) STORED,
   remote_session_issuer_id uuid NOT NULL,
 
   client_id TEXT NOT NULL,
@@ -2840,6 +2892,14 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   resource_policy_uri TEXT,
   resource_tos_uri TEXT,
 
+  -- When the issuer's token endpoint last answered invalid_client for this
+  -- client_id. Set by the refresh path and cleared by a successful
+  -- re-registration, a successful refresh, or a manually replaced secret. The
+  -- next remote login confirms the rejection against the token endpoint and
+  -- re-registers the client at the registration_endpoint of its
+  -- remote_session_issuer, which discovery keeps current.
+  upstream_rejected_at timestamptz,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2874,6 +2934,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   )
 );
 
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
+ON remote_session_clients (id, attachment_scope);
 CREATE INDEX IF NOT EXISTS remote_session_clients_organization_id_idx
 ON remote_session_clients (organization_id)
 WHERE deleted IS FALSE;
@@ -2898,6 +2961,8 @@ ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_se
 -- been granted to a single Gram subject
 CREATE TABLE IF NOT EXISTS remote_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Changes on fresh OAuth authorization, never on token refresh.
+  grant_generation bigint NOT NULL DEFAULT 1,
   subject_urn TEXT NOT NULL,
   user_session_issuer_id uuid NOT NULL,
   remote_session_client_id uuid NOT NULL,
@@ -2970,6 +3035,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   CONSTRAINT remote_sessions_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE CASCADE
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_issuer_id_key
+ON remote_sessions (remote_session_client_id, user_session_issuer_id, id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
 ON remote_sessions (subject_urn, remote_session_client_id)
 WHERE deleted IS FALSE;
@@ -2983,6 +3051,15 @@ ON remote_sessions (updated_at, id)
 WHERE deleted IS FALSE
   AND refresh_token_encrypted IS NOT NULL
   AND auto_refresh IS TRUE;
+
+-- Keepalive re-check claim (AIM-285): the no-refresh-token population ordered by
+-- its due clock, so ClaimDueRemoteSessionRecheckCandidates range-scans instead of
+-- sequentially scanning the table every tick.
+CREATE INDEX IF NOT EXISTS remote_sessions_recheck_due_idx
+ON remote_sessions ((COALESCE(last_validated_at, created_at)), id)
+WHERE deleted IS FALSE
+  AND refresh_token_encrypted IS NULL
+  AND refresh_expires_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -4392,6 +4469,70 @@ ON agents (organization_id, owner_user_id);
 CREATE INDEX IF NOT EXISTS agents_owner_all_idx
 ON agents (owner_user_id);
 
+-- Bind a concrete user-owned session, never an agent credential or inbound code.
+CREATE TABLE IF NOT EXISTS principal_remote_session_bindings (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  project_id UUID NOT NULL,
+  organization_id TEXT NOT NULL,
+  principal_id UUID NOT NULL,
+  user_session_issuer_id UUID NOT NULL,
+  remote_session_client_id UUID NOT NULL,
+  remote_session_id UUID NOT NULL,
+  -- Filled by the trigger, then pinned to the parent by composite foreign keys.
+  issuer_attachment_scope TEXT NOT NULL,
+  client_attachment_scope TEXT NOT NULL,
+  grant_generation bigint NOT NULL,
+  attached_by_subject_id TEXT NOT NULL,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT principal_remote_session_bindings_pkey PRIMARY KEY (id),
+  CONSTRAINT principal_remote_session_bindings_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_principal_tenant_fkey FOREIGN KEY (organization_id, principal_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_issuer_scope_fkey FOREIGN KEY (user_session_issuer_id, issuer_attachment_scope) REFERENCES user_session_issuers (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_client_scope_fkey FOREIGN KEY (remote_session_client_id, client_attachment_scope) REFERENCES remote_session_clients (id, attachment_scope) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_client_issuer_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id) REFERENCES remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id) ON DELETE CASCADE,
+  CONSTRAINT principal_remote_session_bindings_session_fkey FOREIGN KEY (remote_session_client_id, user_session_issuer_id, remote_session_id) REFERENCES remote_sessions (remote_session_client_id, user_session_issuer_id, id) ON DELETE CASCADE,
+  -- Scope checks bind the copied FK keys to this attachment's tenant. The
+  -- client may be platform-global, but its issuer must belong to this tenant.
+  CONSTRAINT principal_remote_session_bindings_issuer_scope_check CHECK (
+    issuer_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id)
+  ),
+  CONSTRAINT principal_remote_session_bindings_client_scope_check CHECK (
+    client_attachment_scope IN ('project:' || project_id::text, 'organization:' || organization_id, 'global')
+  )
+);
+
+-- Capture scope without changing the attachment insert API. The composite
+-- foreign keys, not this lookup's snapshot, enforce concurrent parent changes.
+CREATE OR REPLACE FUNCTION set_principal_remote_session_binding_scopes()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  SELECT attachment_scope INTO NEW.issuer_attachment_scope
+  FROM user_session_issuers WHERE id = NEW.user_session_issuer_id;
+  SELECT attachment_scope INTO NEW.client_attachment_scope
+  FROM remote_session_clients WHERE id = NEW.remote_session_client_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER principal_remote_session_bindings_scopes
+BEFORE INSERT OR UPDATE ON principal_remote_session_bindings
+FOR EACH ROW EXECUTE FUNCTION set_principal_remote_session_binding_scopes();
+
+CREATE UNIQUE INDEX IF NOT EXISTS principal_remote_session_bindings_active_key
+ON principal_remote_session_bindings (project_id, principal_id, user_session_issuer_id, remote_session_client_id)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_session_idx
+ON principal_remote_session_bindings (remote_session_id);
+
+CREATE INDEX IF NOT EXISTS principal_remote_session_bindings_project_idx
+ON principal_remote_session_bindings (project_id);
+
 CREATE TABLE IF NOT EXISTS organization_invitations (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -5484,6 +5625,11 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   user_session_issuer_id uuid,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  -- Operator-authored server instructions answered by the gateway's initialize
+  -- and server/discover responses. NULL serves Gram's built-in gateway
+  -- instructions instead, so an unset row keeps the drill-down guidance every
+  -- gateway needs. Length is validated in application code.
+  instructions TEXT,
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',
@@ -5708,19 +5854,25 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
--- Reusable dynamic client registrations for assistant-initiated MCP OAuth flows.
--- OAuth issuer identity lets one client serve MCP resources that share an
--- authorization server, even if its endpoint paths change.
+-- Reusable OAuth clients for assistant-initiated MCP auth flows. One live
+-- row per (project, assistant, issuer): confidential DCR clients (secret
+-- present) or public CIMD clients (client_id_metadata_uri present). Issuer
+-- identity lets one client serve MCP resources that share an authorization
+-- server, even if its endpoint paths change.
 CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   oauth_server_issuer TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
-  -- Assistant MCP auth only registers confidential client_secret_basic clients.
   client_id TEXT,
   client_secret_encrypted TEXT,
   client_secret_expires_at timestamptz,
+  -- CIMD: when non-null, Gram publishes a Client ID Metadata Document at
+  -- this URL and sends the URL as client_id. Public clients carry no secret.
+  -- draft-ietf-oauth-client-id-metadata-document requires client_id equal
+  -- this URL; the CHECK below enforces that.
+  client_id_metadata_uri TEXT,
   registration_owner uuid,
   registration_started_at timestamptz,
 
@@ -5733,18 +5885,40 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
   CONSTRAINT assistant_mcp_oauth_clients_registration_state_check CHECK (
     (
+      -- Confidential DCR client (complete).
       client_id IS NOT NULL
       AND client_secret_encrypted IS NOT NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NULL
       AND registration_started_at IS NULL
     )
     OR
     (
+      -- Public CIMD client (complete). client_secret_expires_at may be set
+      -- to invalidate the row so the next flow can fall back to DCR.
+      client_id IS NOT NULL
+      AND client_secret_encrypted IS NULL
+      AND client_id_metadata_uri IS NOT NULL
+      AND registration_owner IS NULL
+      AND registration_started_at IS NULL
+    )
+    OR
+    (
+      -- In-progress registration claim.
       client_id IS NULL
       AND client_secret_encrypted IS NULL
       AND client_secret_expires_at IS NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NOT NULL
       AND registration_started_at IS NOT NULL
+    )
+  ),
+  CONSTRAINT assistant_mcp_oauth_clients_client_id_metadata_uri_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_secret_encrypted IS NULL
+      AND client_id = client_id_metadata_uri
     )
   ),
   -- Intentional exception to the usual SET NULL policy: tenant and owner IDs

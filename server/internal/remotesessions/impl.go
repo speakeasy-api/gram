@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 type Service struct {
@@ -60,6 +61,10 @@ type Service struct {
 	serverURL    *url.URL
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
+	jwksResolver *jwks.Resolver
+	// rotator backs the administrator's rotate action with the same
+	// re-registration the authorize path runs automatically.
+	rotator *ClientRotator
 	// Only the JSON Web Key Set attach and detach paths consult this. The rest
 	// of remote_session_client management is not entitlement-gated, and must
 	// not become so: a set is always backed by a customer-provisioned KMS key,
@@ -86,6 +91,7 @@ var (
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, refresher.assertions)
 
 	return &Service{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
@@ -100,7 +106,11 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
-		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		jwksResolver: jwks.NewResolver(policy, meterProvider, logger),
+		revoker:      revoker,
+		// The refresher's lease cache single-flights rotations the same way it
+		// single-flights refreshes, so the two never race on one client.
+		rotator: NewClientRotator(logger, db, enc, policy, refresher.locks, serverURL, revoker, auditLogger),
 
 		productFeatures: productFeatures,
 	}

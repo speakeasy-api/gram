@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -88,11 +89,11 @@ type v2MeterEventClient struct {
 }
 
 // NewV2MeterEventClient creates a Stripe v2 meter-event client using the repository HTTP policy.
-func NewV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey string) V2MeterEventClient {
-	return newV2MeterEventClient(guardianPolicy, apiKey, stripesdk.APIURL)
+func NewV2MeterEventClient(logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey string) V2MeterEventClient {
+	return newV2MeterEventClient(logger, guardianPolicy, apiKey, stripesdk.APIURL)
 }
 
-func newV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey, apiURL string) V2MeterEventClient {
+func newV2MeterEventClient(logger *slog.Logger, guardianPolicy *guardian.Policy, apiKey, apiURL string) V2MeterEventClient {
 	retries := guardian.DefaultRetryConfig()
 	retries.WaitMax = 10 * time.Second
 	retries.MaxAttempts = 1
@@ -108,13 +109,15 @@ func newV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey, apiURL strin
 				Burst:  100,
 				Period: time.Second,
 			},
-			Breaker: guardian.NoBreaker(),
+			Breaker:         guardian.NoBreaker(),
+			WaitForCapacity: true,
 		}),
 	)
 	httpClient.Timeout = 30 * time.Second
 
 	backendConfig := new(stripesdk.BackendConfig)
 	backendConfig.HTTPClient = httpClient
+	backendConfig.LeveledLogger = &sdkLogger{logger: logger}
 	backendConfig.URL = stripesdk.String(apiURL)
 	// Guardian owns retries so the two retry layers cannot amplify each other.
 	backendConfig.MaxNetworkRetries = stripesdk.Int64(0)

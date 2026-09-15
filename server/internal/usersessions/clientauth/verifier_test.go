@@ -856,3 +856,37 @@ func TestVerify_UnknownReplayIDStrategyIsMisconfiguration(t *testing.T) {
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 }
+
+// keySourceWithOps republishes s's single key with an explicit key_ops member.
+func keySourceWithOps(t *testing.T, s *signer, ops string) jwks.Source {
+	t.Helper()
+
+	var set struct {
+		Keys []map[string]json.RawMessage `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(s.jwks, &set))
+	require.Len(t, set.Keys, 1)
+	set.Keys[0]["key_ops"] = json.RawMessage(ops)
+	raw, err := json.Marshal(set)
+	require.NoError(t, err)
+	source, err := jwks.NewInlineSource(raw)
+	require.NoError(t, err)
+	return source
+}
+
+// An explicit key_ops keeps the key as long as it names verify, whatever else
+// it lists; one that leaves verify out publishes no key the assertion can use.
+func TestVerify_KeyOpsMustIncludeVerify(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	expect := expectationFor(t, s)
+	expect.KeySource = keySourceWithOps(t, s, `["verify","encrypt"]`)
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	require.NoError(t, err)
+
+	expect.KeySource = keySourceWithOps(t, s, `["sign"]`)
+	_, err = newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonKeyUnknown)
+}

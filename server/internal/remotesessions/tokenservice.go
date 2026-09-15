@@ -36,6 +36,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,11 +61,25 @@ import (
 // public clients) via the body. Double-sending client_id is rejected by some
 // upstreams (e.g. Pylon) as ambiguous client identification.
 //
-// method must come from ResolveTokenEndpointAuthMethod, which guarantees a
+// Method must come from ResolveTokenEndpointAuthMethod, which guarantees a
 // Basic or Post client carries a non-empty secret and a secret-less client is
 // public.
-func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, method TokenEndpointAuthMethod, clientID, clientSecret string) (*http.Request, error) {
-	switch method {
+type tokenEndpointClientAuth struct {
+	Method                TokenEndpointAuthMethod
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+	JSONWebKeySetID       uuid.UUID
+	ClientID              string
+	ClientSecret          string
+	AssertionAudience     string
+	AssertionSigner       TokenEndpointAssertionSigner
+}
+
+func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, auth tokenEndpointClientAuth) (*http.Request, error) {
+	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return nil, fmt.Errorf("token endpoint must be an absolute https URL, or http on loopback")
+	}
+	switch auth.Method {
 	case TokenEndpointAuthMethodBasic:
 		// Credentials ride the Authorization header only, set below once req
 		// exists. Strip any body copies so a caller-seeded client_id cannot
@@ -71,16 +87,28 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Del("client_id")
 		form.Del("client_secret")
 	case TokenEndpointAuthMethodPost:
-		form.Set("client_id", clientID)
-		form.Set("client_secret", clientSecret)
+		form.Set("client_id", auth.ClientID)
+		form.Set("client_secret", auth.ClientSecret)
 	case TokenEndpointAuthMethodNone:
-		form.Set("client_id", clientID)
+		form.Set("client_id", auth.ClientID)
 	case TokenEndpointAuthMethodPrivateKeyJWT:
-		// AIM-156 builds the RFC 7523 assertion this method needs. No client can
-		// store the value yet (it is absent from tokenEndpointAuthMethodEnum), so
-		// this is unreachable; it fails loudly rather than falling through to an
-		// unauthenticated request that the upstream rejects as an opaque 401.
-		return nil, fmt.Errorf("token endpoint auth method %q is not implemented", method)
+		if auth.AssertionSigner == nil {
+			return nil, fmt.Errorf("private_key_jwt signing is unavailable")
+		}
+		assertion, err := auth.AssertionSigner.SignClientAssertion(ctx, ClientAssertionRequest{
+			RemoteSessionClientID: auth.RemoteSessionClientID,
+			OrganizationID:        auth.OrganizationID,
+			JSONWebKeySetID:       auth.JSONWebKeySetID,
+			ClientID:              auth.ClientID,
+			Audience:              auth.AssertionAudience,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("sign private_key_jwt client assertion: %w", err)
+		}
+		form.Del("client_secret")
+		form.Set("client_id", auth.ClientID)
+		form.Set("client_assertion_type", clientAssertionType)
+		form.Set("client_assertion", assertion)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
@@ -89,11 +117,11 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	if method == TokenEndpointAuthMethodBasic {
+	if auth.Method == TokenEndpointAuthMethodBasic {
 		// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
 		// going into the Basic authorization header. Upstreams that decode per
 		// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
-		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
+		req.SetBasicAuth(url.QueryEscape(auth.ClientID), url.QueryEscape(auth.ClientSecret))
 	}
 	return req, nil
 }
@@ -576,7 +604,7 @@ func (s *RefreshService) refreshSessionTokens(
 	}
 
 	var clientSecret string
-	if client.ClientSecretEncrypted.Valid {
+	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		clientSecret, err = s.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
 			return zero, noToken, newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
@@ -586,6 +614,14 @@ func (s *RefreshService) refreshSessionTokens(
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
 		return zero, noToken, newTokenRefreshError("the client's authentication configuration is invalid; check the issuer's configuration", err)
+	}
+	assertionAudience, err := ResolveTokenEndpointAuthAudience(
+		client.TokenEndpointAuthAudienceFormat.String,
+		clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl),
+		client.TokenEndpoint.String,
+	)
+	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
+		return zero, noToken, newTokenRefreshError("the client's assertion audience is invalid; check the issuer's configuration", err)
 	}
 
 	form := url.Values{}
@@ -606,7 +642,17 @@ func (s *RefreshService) refreshSessionTokens(
 	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
 	defer cancel()
 
-	tok, err := s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+	clientAuth := tokenEndpointClientAuth{
+		Method:                authMethod,
+		RemoteSessionClientID: client.ClientID,
+		OrganizationID:        client.ClientOrganizationID.String,
+		JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
+		ClientID:              client.ExternalClientID,
+		ClientSecret:          clientSecret,
+		AssertionAudience:     assertionAudience,
+		AssertionSigner:       s.assertions,
+	}
+	tok, err := s.postRefreshGrant(postCtx, client, form, clientAuth)
 	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok && sendResource && refreshErr.invalidTarget() {
 		// RFC 8707 invalid_target rejects this resource; the grant itself may
 		// still refresh without it, as the login did.
@@ -617,7 +663,7 @@ func (s *RefreshService) refreshSessionTokens(
 			attr.SlogError(err),
 		)
 		form.Del("resource")
-		tok, err = s.postRefreshGrant(postCtx, client, form, authMethod, clientSecret)
+		tok, err = s.postRefreshGrant(postCtx, client, form, clientAuth)
 	}
 	if err != nil {
 		return zero, noToken, err
@@ -654,7 +700,7 @@ func (s *RefreshService) refreshSessionTokens(
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
 	scopes := tok.Scopes()
-	if len(scopes) == 0 {
+	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.
 		scopes = sess.Scopes
@@ -686,8 +732,9 @@ func (s *RefreshService) refreshSessionTokens(
 	return updated, tok, nil
 }
 
-// identityRestatementBudget bounds one restatement on a context detached from the request.
-const identityRestatementBudget = idTokenVerifyBudget + 5*time.Second
+// identityRestatementBudget bounds one restatement on a context detached from
+// the request: an ID-token verify, a JWT access-token verify, and the write.
+const identityRestatementBudget = 2*idTokenVerifyBudget + 5*time.Second
 
 // restateIdentity writes what a refresh said about the grant's owner after the
 // tokens are stored, outside the lease. Any rejection, including a different
@@ -698,6 +745,7 @@ func (s *RefreshService) restateIdentity(
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	tok tokenResponse,
+	previousSubject string,
 ) remotesessions_repo.RemoteSession {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityRestatementBudget)
 	defer cancel()
@@ -708,6 +756,9 @@ func (s *RefreshService) restateIdentity(
 		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 	}
 	var identity *UpstreamIdentity
+	interfaces := map[string]interfaceRecord{}
+	var access jwtAccessTokenResult
+	idTokenRejected := storedInterfaceRecords(sess.Enrichment)[IdentitySourceIDToken].Status == interfaceStatusRejected
 	if tok.IDToken != "" && client.JwksUri.Valid && client.JwksUri.String != "" {
 		verified, err := s.idTokens.Verify(ctx, tok.IDToken, IDTokenExpectation{
 			issuer:      client.IssuerUrl,
@@ -716,26 +767,53 @@ func (s *RefreshService) restateIdentity(
 			fetchScope:  client.RemoteSessionIssuerID.String(),
 			signingAlgs: client.IDTokenSigningAlgValuesSupported,
 			nonce:       "",
-			subject:     sess.UpstreamSubject.String,
+			subject:     previousSubject,
 		})
 		switch {
 		case errors.Is(err, errIDTokenVerificationDisabled):
+			// Silence, not a rejection: the JWT step below may still run.
 		case err != nil:
+			idTokenRejected = true
 			logIdentityFailure(ctx, s.logger, "refresh id token rejected; stored identity kept", err, attrs...)
+			noteUnknownSigningKey(ctx, s.issuerMetadata, client, err)
 		default:
+			// A verified ID token supersedes an exchange-time rejection for this grant.
+			if idTokenRejected {
+				interfaces[IdentitySourceIDToken] = interfaceRecord{Status: interfaceStatusOK, At: time.Now(), HTTPStatus: 0, Reason: ""}
+			}
+			idTokenRejected = false
 			identity = &verified
 		}
 	}
-	enrichment, err := buildEnrichment(tok, identity, nil)
+	needsIdentity := identity == nil && (!sess.IdentitySource.Valid || slices.Contains(overwritableIdentitySources(IdentitySourceJWTAccessToken), sess.IdentitySource.String))
+	needsScope := !tok.ScopeReported()
+	if s.enricher != nil && !idTokenRejected && (needsIdentity || needsScope) {
+		target := enrichmentTargetFromClient(client, "")
+		target.resource = conv.FromPGTextOrEmpty[string](sess.Resource)
+		access = s.enricher.jwtAccessToken(ctx, target, tok.AccessToken)
+		s.enricher.rejectJWTForOtherSubject(ctx, target, &access, previousSubject)
+		if access.ran {
+			interfaces[IdentitySourceJWTAccessToken] = access.interfaceRecord
+		}
+		if needsIdentity && access.ok() {
+			identity = access.identity
+		}
+	}
+	enrichment, err := buildEnrichment(tok, identity, interfaces, access.retained())
 	if err != nil {
 		logIdentityFailure(ctx, s.logger, "enrichment document dropped; stored document kept", err, attrs...)
 	}
-	if identity == nil && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
+	if identity == nil && len(interfaces) == 0 && (enrichment == nil || tokenResponseUnchanged(sess.Enrichment, tok.extras())) {
 		return sess
 	}
 
 	cols := identity.columns()
+	var scopes []string
+	if !tok.ScopeReported() && access.ok() && access.scopePresent {
+		scopes = access.scopes
+	}
 	restated, err := q.UpdateRemoteSessionIdentity(ctx, remotesessions_repo.UpdateRemoteSessionIdentityParams{
+		Scopes:                scopes,
 		OverwritableSources:   overwritableIdentitySources(cols.Source.String),
 		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
@@ -767,12 +845,11 @@ func (s *RefreshService) postRefreshGrant(
 	ctx context.Context,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	form url.Values,
-	authMethod TokenEndpointAuthMethod,
-	clientSecret string,
+	clientAuth tokenEndpointClientAuth,
 ) (tokenResponse, error) {
 	var zero tokenResponse
 
-	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, clientAuth)
 	if err != nil {
 		return zero, fmt.Errorf("new refresh request: %w", err)
 	}

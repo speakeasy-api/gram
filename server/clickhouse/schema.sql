@@ -191,6 +191,8 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     toolset_slug SimpleAggregateFunction(max, String),
     external_user_id SimpleAggregateFunction(max, String),
     user_id SimpleAggregateFunction(max, String),
+    -- Managed runtime actor, not the credential owner or approving human.
+    agent_id SimpleAggregateFunction(max, String),
     mcp_match SimpleAggregateFunction(max, String),
     mcp_server_url SimpleAggregateFunction(max, String),
 
@@ -269,6 +271,7 @@ SELECT
     anyIf(toolset_slug, toolset_slug != '') AS toolset_slug,
     anyIf(external_user_id, external_user_id != '') AS external_user_id,
     anyIf(user_id, user_id != '') AS user_id,
+    max(if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')) AS agent_id,
     anyIf(toString(attributes.gram.mcp.match), toString(attributes.gram.mcp.match) != '') AS mcp_match,
     anyIf(toString(attributes.gram.mcp.server_url), toString(attributes.gram.mcp.server_url) != '') AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
@@ -689,10 +692,10 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw report per-turn tokens and cost on their
+    -- opencode, openclaw and Pi report per-turn tokens and cost on their
     -- unified-ingest assistant.responded rows, under the canonical
     -- gen_ai.usage.* keys that every fallback branch below already reads.
-    -- Neither has an OTEL stream and the unified ingest path stamps no
+    -- None of them has an OTEL stream and the unified ingest path stamps no
     -- gram_urn, so provenance anchors on hook_source instead. The
     -- AfterAgentResponse event guard scopes this to the turn-closing row: a
     -- session's other rows (thoughts, usage.reported, tool calls, session
@@ -701,9 +704,10 @@ WITH
     -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
     -- KindStop, with usage spliced from the cached llm_output frame; it has no
     -- raw-vocabulary parser, so it resolves through the canonical event map to
-    -- the same AfterAgentResponse name.
+    -- the same AfterAgentResponse name. Pi reports usage on its message_end
+    -- event, decoded as the same stop kind and resolved through the same map.
     (
-        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -720,14 +724,14 @@ WITH
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
-    -- Codex/Cursor/opencode/openclaw tool calls arrive as hook rows, one
+    -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
     -- source). The hook.event guard is required: every call also emits a
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw')
+        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -1088,13 +1092,13 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode and openclaw usage rides on their unified-ingest
+    -- opencode, openclaw and Pi usage rides on their unified-ingest
     -- assistant.responded rows, anchored on hook_source because that path
     -- stamps no gram_urn, and gated on the AfterAgentResponse event so
     -- thoughts/usage.reported/tool-call rows are not double-counted as usage
     -- turns; see attribute_metrics_summaries_mv above.
     (
-        hook_source IN ('opencode', 'openclaw')
+        hook_source IN ('opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
@@ -1107,7 +1111,7 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw')
+        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
         AND toString(attributes.gram.tool.name) != ''
         AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
         AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
@@ -1258,10 +1262,10 @@ SETTINGS index_granularity = 8192
 COMMENT 'Raw usage ledger with producer-time stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
 
 -- Usage quantity, occurrence time, and reporting attributes are frozen upstream.
--- Redeliveries retain the full sorting key and occurrence month. Readers must use
--- FINAL with SETTINGS do_not_merge_across_partitions_select_final = 1 before
--- aggregating: background replacement alone does not guarantee unique reads.
--- Adjustments remain separate signed facts and do not replace original usage.
+-- Redeliveries retain the full sorting key and occurrence month. Ledger readers
+-- that require logical-reading convergence use FINAL with
+-- do_not_merge_across_partitions_select_final = 1. Incremental reporting instead
+-- counts each physical delivery. Adjustments remain separate signed facts.
 CREATE TABLE IF NOT EXISTS billing_meter_readings_by_time (
     id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
     organization_id String COMMENT 'Organization that owns the workload.',
@@ -1286,7 +1290,199 @@ PARTITION BY toYYYYMM(occurred_at)
 PRIMARY KEY (organization_id, meter_id, occurred_at)
 ORDER BY (organization_id, meter_id, occurred_at, project_id, id)
 SETTINGS index_granularity = 8192
-COMMENT 'Time-windowed usage ledger with redelivery convergence requiring FINAL before aggregation';
+COMMENT 'Time-windowed usage ledger with optional FINAL convergence for logical-reading queries';
+
+-- Each incoming delivery block is expanded into independent family facets and
+-- aggregated at UTC-day precision. SummingMergeTree combines partial sums from
+-- later blocks and background merges; duplicate physical deliveries therefore
+-- count independently.
+CREATE TABLE IF NOT EXISTS billing_meter_daily_summaries (
+    organization_id String,
+    family LowCardinality(String),
+    reading_kind LowCardinality(String),
+    facet LowCardinality(String),
+    day Date,
+    series_kind LowCardinality(String),
+    series_key String,
+    label String,
+    unit LowCardinality(String),
+    measurement_method LowCardinality(String),
+    quantity Int128,
+    reading_count Int64
+) ENGINE = SummingMergeTree((quantity, reading_count))
+PARTITION BY toYYYYMM(day)
+PRIMARY KEY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day
+)
+ORDER BY (
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    series_kind,
+    series_key,
+    day,
+    unit,
+    measurement_method,
+    label
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Incremental daily meter family and facet marginals';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS billing_meter_daily_summaries_mv TO billing_meter_daily_summaries AS
+SELECT
+    organization_id,
+    family,
+    reading_kind,
+    facet_identity.1 AS facet,
+    toDate(occurred_at, 'UTC') AS day,
+    facet_identity.2 AS series_kind,
+    facet_identity.3 AS series_key,
+    max(facet_label) AS label,
+    unit,
+    measurement_method,
+    sum(toInt128(value)) AS quantity,
+    toInt64(count()) AS reading_count
+FROM
+(
+    SELECT
+        organization_id,
+        reading_kind,
+        occurred_at,
+        unit,
+        measurement_method,
+        value,
+        multiIf(
+            meter_id = 'gram.agent_session.storage', 'agent_session_storage',
+            meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'), 'mcp_bandwidth',
+            'risk_content_scans'
+        ) AS family,
+        arrayJoin(
+            multiIf(
+                meter_id = 'gram.agent_session.storage',
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple('model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('billing_mode', if(billing_mode = '', 'unset', 'value'), billing_mode, if(billing_mode = '', '(unset)', billing_mode)),
+                    tuple('assistant', if(assistant_id = '', 'unset', 'value'), assistant_id, if(assistant_id = '', '(unset)', assistant_id)),
+                    tuple('billing_user', if(billing_user_id = '', 'unset', 'value'), billing_user_id, if(billing_user_id = '', '(unset)', billing_user_id)),
+                    tuple('division', if(billing_user_division_name = '', 'unset', 'value'), billing_user_division_name, if(billing_user_division_name = '', '(unset)', billing_user_division_name)),
+                    tuple('department', if(billing_user_department_name = '', 'unset', 'value'), billing_user_department_name, if(billing_user_department_name = '', '(unset)', billing_user_department_name)),
+                    tuple('job_title', if(billing_user_job_title = '', 'unset', 'value'), billing_user_job_title, if(billing_user_job_title = '', '(unset)', billing_user_job_title)),
+                    tuple('employee_type', if(billing_user_employee_type = '', 'unset', 'value'), billing_user_employee_type, if(billing_user_employee_type = '', '(unset)', billing_user_employee_type)),
+                    tuple('cost_center', if(billing_user_cost_center_name = '', 'unset', 'value'), billing_user_cost_center_name, if(billing_user_cost_center_name = '', '(unset)', billing_user_cost_center_name)),
+                    tuple(
+                        'directory_group_set',
+                        if(empty(normalized_directory_groups), 'unset', 'value'),
+                        if(empty(normalized_directory_groups), '', toJSONString(normalized_directory_groups)),
+                        if(empty(normalized_directory_groups), '(unset)', arrayStringConcat(normalized_directory_groups, ', '))
+                    )
+                ],
+                meter_id IN ('gram.mcp.bandwidth.ingress', 'gram.mcp.bandwidth.egress'),
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'direction',
+                        'value',
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'ingress', 'egress'),
+                        if(meter_id = 'gram.mcp.bandwidth.ingress', 'Ingress', 'Egress')
+                    ),
+                    tuple(
+                        'mcp_server',
+                        if(mcp_server_type = '' OR mcp_server_id = '', 'unset', 'value'),
+                        if(mcp_server_type = '' OR mcp_server_id = '', '', concat(mcp_server_type, ':', mcp_server_id)),
+                        if(
+                            mcp_server_type = '' OR mcp_server_id = '',
+                            '(unset)',
+                            if(mcp_server_slug = '', concat(mcp_server_type, ':', mcp_server_id), mcp_server_slug)
+                        )
+                    ),
+                    tuple('server_type', if(mcp_server_type = '', 'unset', 'value'), mcp_server_type, if(mcp_server_type = '', '(unset)', mcp_server_type))
+                ],
+                [
+                    tuple('total', 'value', 'total', 'Total'),
+                    tuple('project', 'value', toString(project_id), toString(project_id)),
+                    tuple(
+                        'scanner',
+                        'value',
+                        meter_id,
+                        multiIf(
+                            meter_id = 'gram.risk.scan.gitleaks', 'Gitleaks',
+                            meter_id = 'gram.risk.scan.presidio', 'Presidio',
+                            meter_id = 'gram.risk.scan.prompt_injection', 'Prompt injection',
+                            meter_id = 'gram.risk.scan.prompt_policy', 'Prompt policy',
+                            meter_id = 'gram.risk.scan.custom_rules', 'Custom rules',
+                            'CLI destructive'
+                        )
+                    ),
+                    tuple('policy', if(risk_policy_id = '', 'unset', 'value'), risk_policy_id, if(risk_policy_id = '', '(unset)', risk_policy_id)),
+                    tuple('judge_model', if(model = '', 'unset', 'value'), model, if(model = '', '(unset)', model)),
+                    tuple('judge_provider', if(provider = '', 'unset', 'value'), provider, if(provider = '', '(unset)', provider)),
+                    tuple('tool_name', if(tool_name = '', 'unset', 'value'), tool_name, if(tool_name = '', '(unset)', tool_name))
+                ]
+            )
+        ) AS facet_identity,
+        facet_identity.4 AS facet_label
+    FROM
+    (
+        SELECT
+            organization_id,
+            project_id,
+            meter_id,
+            reading_kind,
+            occurred_at,
+            unit,
+            measurement_method,
+            value,
+            attributes['assistant_id'] AS assistant_id,
+            attributes['billing_mode'] AS billing_mode,
+            attributes['billing_user_cost_center_name'] AS billing_user_cost_center_name,
+            attributes['billing_user_department_name'] AS billing_user_department_name,
+            arraySort(arrayDistinct(JSONExtract(if(attributes['billing_user_directory_groups'] = '', '[]', attributes['billing_user_directory_groups']), 'Array(String)'))) AS normalized_directory_groups,
+            attributes['billing_user_division_name'] AS billing_user_division_name,
+            attributes['billing_user_employee_type'] AS billing_user_employee_type,
+            attributes['billing_user_id'] AS billing_user_id,
+            attributes['billing_user_job_title'] AS billing_user_job_title,
+            attributes['mcp_server_id'] AS mcp_server_id,
+            attributes['mcp_server_slug'] AS mcp_server_slug,
+            attributes['mcp_server_type'] AS mcp_server_type,
+            attributes['model'] AS model,
+            attributes['provider'] AS provider,
+            attributes['risk_policy_id'] AS risk_policy_id,
+            attributes['tool_name'] AS tool_name
+        FROM billing_meter_readings_by_time
+    )
+    WHERE meter_id IN (
+        'gram.agent_session.storage',
+        'gram.mcp.bandwidth.ingress',
+        'gram.mcp.bandwidth.egress',
+        'gram.risk.scan.gitleaks',
+        'gram.risk.scan.presidio',
+        'gram.risk.scan.prompt_injection',
+        'gram.risk.scan.prompt_policy',
+        'gram.risk.scan.custom_rules',
+        'gram.risk.scan.cli_destructive'
+    )
+)
+GROUP BY
+    organization_id,
+    family,
+    reading_kind,
+    facet,
+    day,
+    series_kind,
+    series_key,
+    unit,
+    measurement_method;
 
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity

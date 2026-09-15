@@ -575,7 +575,7 @@ paths:
         name: Role
   /rpc/access.getShadowMCPInventoryServer:
     get:
-      description: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+      description: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: getShadowMCPInventoryServer
       parameters:
         - allowEmptyValue: true
@@ -672,7 +672,7 @@ paths:
         name: ShadowMCPInventoryServer
   /rpc/access.listAIDetections:
     get:
-      description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+      description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
       operationId: listAIDetections
       parameters:
         - allowEmptyValue: true
@@ -683,6 +683,7 @@ paths:
             description: Filter to detection targets of one category.
             enum:
               - harness
+              - assistant
               - local_model
             type: string
         - allowEmptyValue: true
@@ -1185,7 +1186,7 @@ paths:
         name: Challenges
   /rpc/access.listEmployeeAIDetections:
     get:
-      description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.
+      description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
       operationId: listEmployeeAIDetections
       parameters:
         - allowEmptyValue: true
@@ -1843,7 +1844,7 @@ paths:
         name: ListScopes
   /rpc/access.listShadowMCPInventory:
     get:
-      description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+      description: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: listShadowMCPInventory
       parameters:
         - allowEmptyValue: true
@@ -2467,6 +2468,95 @@ paths:
       x-speakeasy-name-override: resolveShadowMCPInventoryRequest
       x-speakeasy-react-hook:
         name: ResolveShadowMCPInventoryRequest
+        type: mutation
+  /rpc/access.setAIToolDecision:
+    post:
+      description: 'Record whether a detected AI tool may reach this organization''s MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization''s scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.'
+      operationId: setAIToolDecision
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAIToolDecisionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetAIToolDecisionResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setAIToolDecision access
+      tags:
+        - access
+      x-speakeasy-name-override: setAIToolDecision
+      x-speakeasy-react-hook:
+        name: SetAIToolDecision
         type: mutation
   /rpc/access.setResourceAudience:
     post:
@@ -5526,7 +5616,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateRemoteSessionClientForm'
+              $ref: '#/components/schemas/UpdateGlobalRemoteSessionClientForm'
         required: true
       responses:
         "200":
@@ -5790,8 +5880,8 @@ paths:
         name: CreateAgentSessionHandoff
   /rpc/agent.deleteAiScanTarget:
     post:
-      description: Remove a target the organization added, or drop the organization's customization of a Speakeasy default so the default is served again. Requires a session with the org:admin scope.
-      operationId: deleteDeviceAgentAiScanTarget
+      description: Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
+      operationId: deleteAiScanTarget
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -5875,7 +5965,7 @@ paths:
         - agent
       x-speakeasy-name-override: deleteAiScanTarget
       x-speakeasy-react-hook:
-        name: DeleteDeviceAgentAiScanTarget
+        name: DeleteAiScanTarget
   /rpc/agent.getConfiguration:
     get:
       description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -6180,8 +6270,8 @@ paths:
         name: AgentSessionMeta
   /rpc/agent.listAiScanTargets:
     get:
-      description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy defaults overlaid with the organization''s own additions and customizations, with the list version agents echo on scan receipts. Requires a session with the org:admin scope.'
-      operationId: listDeviceAgentAiScanTargets
+      description: 'List the Shadow AI scan targets this organization''s device agents probe for: the Speakeasy built-ins plus the organization''s own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy''s catalog, an organization target by being deleted. Requires a session with the org:admin scope.'
+      operationId: listAiScanTargets
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -6259,7 +6349,7 @@ paths:
         - agent
       x-speakeasy-name-override: listAiScanTargets
       x-speakeasy-react-hook:
-        name: DeviceAgentAiScanTargets
+        name: AiScanTargets
   /rpc/agent.listSyncedUsers:
     get:
       description: List users in the current organization who are actively running the Speakeasy device agent, attributed by the email each agent reports on sync. Dashboard-only; requires an org admin session.
@@ -6635,8 +6725,8 @@ paths:
         name: UpdateDeviceAgentConfiguration
   /rpc/agent.upsertAiScanTarget:
     post:
-      description: Add a scan target for this organization, replace one it added earlier, or customize a Speakeasy default under the same id, which is how a default is disabled for the organization. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
-      operationId: upsertDeviceAgentAiScanTarget
+      description: 'Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in''s id is accepted only when it carries that built-in''s definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target''s matchers; sending gateway_client with empty lists still clears them. Clearing a target''s last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.'
+      operationId: upsertAiScanTarget
       parameters:
         - allowEmptyValue: true
           description: Session header
@@ -6720,7 +6810,7 @@ paths:
         - agent
       x-speakeasy-name-override: upsertAiScanTarget
       x-speakeasy-react-hook:
-        name: UpsertDeviceAgentAiScanTarget
+        name: UpsertAiScanTarget
   /rpc/agents.create:
     post:
       operationId: createAgent
@@ -31270,7 +31360,7 @@ paths:
       x-speakeasy-name-override: deleteIngress
   /rpc/networkIngress.get:
     get:
-      description: Get the active network ingress for the current organization.
+      description: Get the active network ingress for the current organization, when configured.
       operationId: getNetworkIngress
       parameters:
         - allowEmptyValue: true
@@ -31285,7 +31375,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworkIngress'
+                $ref: '#/components/schemas/NetworkIngressResult'
           description: OK response.
         "400":
           content:
@@ -32706,6 +32796,102 @@ paths:
       x-speakeasy-name-override: removeFromMcpServer
       x-speakeasy-react-hook:
         name: RemoveOrganizationRemoteSessionClientFromMcpServer
+  /rpc/organizationRemoteSessionClients.rotate:
+    post:
+      description: Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The replacement is registered at the registration_endpoint the client's issuer publishes, so the issuer must publish one. Requires org:admin.
+      operationId: rotateOrganizationRemoteSessionClient
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionClient'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: rotateClient organizationRemoteSessionClients
+      tags:
+        - organizationRemoteSessionClients
+      x-speakeasy-name-override: rotate
+      x-speakeasy-react-hook:
+        name: RotateOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionClients.update:
     post:
       description: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.
@@ -34425,7 +34611,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateUserSessionIssuerForm'
+              $ref: '#/components/schemas/CreateOrganizationUserSessionIssuerForm'
         required: true
       responses:
         "200":
@@ -35269,7 +35455,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateUserSessionIssuerForm'
+              $ref: '#/components/schemas/UpdateOrganizationUserSessionIssuerForm'
         required: true
       responses:
         "200":
@@ -63835,6 +64021,121 @@ paths:
       x-speakeasy-name-override: getInferenceSpendCaps
       x-speakeasy-react-hook:
         name: getInferenceSpendCaps
+  /rpc/usage.getMeterUsage:
+    get:
+      description: Get incrementally aggregated ordinary meter usage by UTC day over a maximum of three calendar months. Duplicate deliveries count unless prevented by the producer.
+      operationId: getMeterUsage
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: family
+          required: true
+          schema:
+            enum:
+              - agent_session_storage
+              - mcp_bandwidth
+              - risk_content_scans
+            type: string
+        - allowEmptyValue: true
+          description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+          in: query
+          name: from
+          schema:
+            description: Inclusive UTC midnight reporting boundary. Must be paired with to.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+          in: query
+          name: to
+          schema:
+            description: Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Family-compatible reporting facet
+          in: query
+          name: breakdown
+          schema:
+            description: Family-compatible reporting facet
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterUsageResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getMeterUsage usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getMeterUsage
+      x-speakeasy-react-hook:
+        name: getMeterUsage
   /rpc/usage.getPaygBillingSummary:
     get:
       description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
@@ -67456,11 +67757,14 @@ components:
     AIDetection:
       type: object
       properties:
+        access:
+          $ref: '#/components/schemas/AIToolAccessSummary'
         category:
           type: string
-          description: 'Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.'
+          description: 'Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.'
           enum:
             - harness
+            - assistant
             - local_model
         device_count:
           type: integer
@@ -67632,9 +67936,10 @@ components:
       properties:
         category:
           type: string
-          description: 'Target category the agent scanned under: harness or local_model. The server catalog''s category wins for targets it knows; this is what gets stored for the rest.'
+          description: 'Target category the agent scanned under: harness, assistant, or local_model. The server catalog''s category wins for targets it knows; this is what gets stored for the rest.'
           enum:
             - harness
+            - assistant
             - local_model
           maxLength: 32
         signal:
@@ -67658,6 +67963,34 @@ components:
         - target_id
         - category
         - signal
+    AIToolAccessSummary:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.
+          enum:
+            - unreviewed
+            - approved
+            - blocked
+        enforceable:
+          type: boolean
+          description: 'Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.'
+        rationale:
+          type: string
+          description: Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.
+        state:
+          type: string
+          description: 'The effective decision as a table renders it: allowed and blocked mean an organization decision is recorded and in force, unreviewed means nothing is enforced — either because nobody has decided or because the tool is not enforceable, in which case a stored decision is projected as unreviewed. Read enforceable to tell the two apart.'
+          enum:
+            - allowed
+            - blocked
+            - unreviewed
+      description: The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+      required:
+        - state
+        - decision
+        - enforceable
     AccessMember:
       type: object
       properties:
@@ -68378,9 +68711,10 @@ components:
       properties:
         category:
           type: string
-          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
+          description: 'Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).'
           enum:
             - harness
+            - assistant
             - local_model
         created_at:
           type: string
@@ -68388,21 +68722,20 @@ components:
           format: date-time
         customized:
           type: boolean
-          description: For a default, whether the organization has replaced it with its own row, for example to disable it. Always false for organization targets.
+          description: For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.
         display_name:
           type: string
           description: Name shown in the dashboard.
           maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for this target.
+        gateway_client:
+          $ref: '#/components/schemas/AiScanTargetGatewayClient'
         id:
           type: string
           description: Stable id agents report and detections key on.
           pattern: ^[a-z0-9][a-z0-9-]{0,63}$
         origin:
           type: string
-          description: 'Where the target comes from: default (compiled into Gram) or organization (added by the organization).'
+          description: 'Where the target comes from: default (a Speakeasy built-in, whose definition is read-only) or organization (added by the organization, fully editable). Every target listed here is probed for; a built-in leaves the list by being removed from Speakeasy''s catalog, an organization target by being deleted.'
           enum:
             - default
             - organization
@@ -68416,15 +68749,44 @@ components:
           type: string
           description: Info.plist key the installed version is read from on a bundle match; defaults to CFBundleShortVersionString when omitted.
           pattern: ^[A-Za-z0-9]{1,64}$
-      description: 'One Shadow AI scan target in an organization''s list: a Speakeasy default, or a target the organization added or customized.'
+      description: 'One Shadow AI scan target in an organization''s list: a Speakeasy built-in, or a target the organization added.'
       required:
         - id
         - display_name
         - category
         - signatures
-        - enabled
+        - gateway_client
         - origin
         - customized
+    AiScanTargetGatewayClient:
+      type: object
+      properties:
+        cimd_vendor_keys:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+          description: 'Vendor keys from Gram''s CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.'
+          maxItems: 16
+        client_info_names:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+          description: 'Names an MCP client reports at initialize. Detection only, never authorization: the value is self-reported and any client can claim any name.'
+          maxItems: 16
+        oauth_client_ids:
+          type: array
+          items:
+            type: string
+            maxLength: 512
+          description: Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.
+          maxItems: 16
+      description: 'How a target detected on a device is recognized again when the same tool calls Gram''s MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.'
+      required:
+        - cimd_vendor_keys
+        - oauth_client_ids
+        - client_info_names
     AiScanTargetMutationResult:
       type: object
       properties:
@@ -68458,7 +68820,7 @@ components:
           type: array
           items:
             type: string
-          description: Directories whose existence marks the tool as installed, taken as home-relative unless they start with /.
+          description: Directories whose existence marks the tool as installed, taken as home-relative unless they start with /. A `*` is a wildcard matching any run of characters within ONE path segment, never crossing a `/`, for tools installed under a version-stamped directory name such as an editor extension.
           maxItems: 16
         process_names:
           type: array
@@ -71287,9 +71649,17 @@ components:
         client_id:
           type: string
           description: client_id supplied by the caller, e.g. from Dynamic Client Registration.
+        client_id_issued_at:
+          type: string
+          description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+          format: date-time
         client_secret:
           type: string
           description: Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
+        client_secret_expires_at:
+          type: string
+          description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+          format: date-time
         project_id:
           type: string
           description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
@@ -71305,6 +71675,12 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        token_endpoint_auth_audience_format:
+          type: string
+          description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+          enum:
+            - issuer
+            - token_endpoint
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -71312,10 +71688,38 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
+            - private_key_jwt
       description: Form for an org admin to register a standalone remote_session_client under an existing issuer, with no user_session_issuer attachments.
       required:
         - remote_session_issuer_id
         - client_id
+    CreateOrganizationUserSessionIssuerForm:
+      type: object
+      properties:
+        authn_challenge_mode:
+          type: string
+          description: 'How multi-remote authn challenges are presented: chain | interactive.'
+          enum:
+            - chain
+            - interactive
+        session_duration_hours:
+          type: integer
+          description: Maximum issued user session lifetime, in hours.
+          format: int64
+          minimum: 1
+          maximum: 2.562047e+06
+        slug:
+          type: string
+          description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.
+          format: uuid
+      description: Form for creating an organization-owned user_session_issuer.
+      required:
+        - slug
+        - authn_challenge_mode
+        - session_duration_hours
     CreateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -71520,9 +71924,17 @@ components:
         client_id:
           type: string
           description: client_id supplied by the caller.
+        client_id_issued_at:
+          type: string
+          description: When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.
+          format: date-time
         client_secret:
           type: string
           description: client_secret supplied by the caller. Gram encrypts before persisting.
+        client_secret_expires_at:
+          type: string
+          description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
+          format: date-time
         remote_session_issuer_id:
           type: string
           description: The owning remote_session_issuer id.
@@ -71534,6 +71946,12 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        token_endpoint_auth_audience_format:
+          type: string
+          description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
+          enum:
+            - issuer
+            - token_endpoint
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
@@ -71541,6 +71959,7 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
+            - private_key_jwt
         user_session_issuer_ids:
           type: array
           items:
@@ -75753,11 +76172,16 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients owned by an organization or project that are registered with this issuer. These block a delete but only their owning organization can remove them.
           format: int64
-      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus its global and tenant-owned client counts.'
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of active tenant-owned user_session_issuers that trust this issuer. These block deletion and must be unlinked by their owning organizations.
+          format: int64
+      description: 'A platform-administrator view of a global remote_session_issuer: the issuer plus the reference counts that can block deletion.'
       required:
         - issuer
         - global_client_count
         - tenant_client_count
+        - trusted_user_session_issuer_count
     HTTPToolDefinition:
       type: object
       properties:
@@ -76786,7 +77210,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -76810,6 +77234,10 @@ components:
           type: integer
           description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
           format: int64
+        trusted_user_session_issuer_count:
+          type: integer
+          description: Number of user_session_issuers that trust the source. Any non-zero value blocks migration.
+          format: int64
         warnings:
           type: array
           items:
@@ -76822,6 +77250,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuer_count
         - can_migrate
         - target_tenant_client_count
     JSONWebKey:
@@ -77428,16 +77857,16 @@ components:
       properties:
         etag:
           type: string
-          description: Fingerprint of the served list; changes whenever the enabled set changes.
+          description: Fingerprint of the served list; changes whenever the targets or their definitions change.
         list_version:
           type: integer
-          description: Version of the served list; the value agents echo as target_list_version once they receive it.
+          description: Version of the served catalog; the value agents echo as target_list_version once they receive it.
           format: int64
         targets:
           type: array
           items:
             $ref: '#/components/schemas/AiScanTarget'
-          description: Every target in the organization's list, enabled or not, ordered by id.
+          description: Every target in the organization's list, ordered by id.
       required:
         - list_version
         - etag
@@ -80119,6 +80548,9 @@ components:
           type: string
           description: The ID of the meta MCP server
           format: uuid
+        instructions:
+          type: string
+          description: Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
         member_count:
           type: integer
           description: The number of live members. Only populated by listMetaMcpServers.
@@ -80164,6 +80596,150 @@ components:
         - network_access_mode
         - created_at
         - updated_at
+    MeterUsageBreakdown:
+      type: object
+      properties:
+        dimension:
+          type: string
+          description: Selected family-compatible breakdown dimension
+          enum:
+            - total
+            - project
+            - model
+            - provider
+            - billing_mode
+            - assistant
+            - billing_user
+            - division
+            - department
+            - job_title
+            - employee_type
+            - cost_center
+            - directory_group_set
+            - direction
+            - mcp_server
+            - server_type
+            - scanner
+            - policy
+            - judge_model
+            - judge_provider
+            - tool_name
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageSeries'
+          description: At most six selected facet series plus a remainder
+      required:
+        - dimension
+        - series
+    MeterUsageBucket:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive bucket boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive bucket boundary
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage quantity as a decimal string
+      required:
+        - from
+        - to
+        - total
+    MeterUsageResponse:
+      type: object
+      properties:
+        billing_cycles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageWindow'
+          description: Trailing twelve billing-cycle date windows
+        breakdown:
+          $ref: '#/components/schemas/MeterUsageBreakdown'
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeterUsageBucket'
+          description: Dense UTC daily ordinary usage buckets, including in-progress days
+        family:
+          type: string
+          enum:
+            - agent_session_storage
+            - mcp_bandwidth
+            - risk_content_scans
+        measurement_method:
+          type: string
+        queried_at:
+          type: string
+          description: Retrieval timestamp, not an ingestion watermark
+          format: date-time
+        total:
+          type: string
+          description: Exact integer ordinary usage period total as a decimal string
+        unit:
+          type: string
+          enum:
+            - stokens
+            - bytes
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      required:
+        - family
+        - window
+        - billing_cycles
+        - unit
+        - measurement_method
+        - total
+        - buckets
+        - breakdown
+        - queried_at
+    MeterUsageSeries:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Canonical identity; present for value series and omitted for unset and remainder
+        kind:
+          type: string
+          description: Identity kind for this series
+          enum:
+            - value
+            - unset
+            - remainder
+        label:
+          type: string
+          description: Display label, never chart identity
+        total:
+          type: string
+          description: Exact integer ordinary usage series total as a decimal string
+        values:
+          type: array
+          items:
+            type: string
+          description: Exact integer ordinary usage values aligned one-for-one with buckets
+      required:
+        - kind
+        - label
+        - total
+        - values
+    MeterUsageWindow:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Inclusive UTC midnight window boundary
+          format: date-time
+        to:
+          type: string
+          description: Exclusive UTC midnight window boundary
+          format: date-time
+      required:
+        - from
+        - to
     MigrateIssuerRequestBody:
       type: object
       properties:
@@ -80408,6 +80984,12 @@ components:
         - mcp_servers_private_only
         - meta_mcp_servers_dual
         - meta_mcp_servers_private_only
+    NetworkIngressResult:
+      type: object
+      properties:
+        ingress:
+          $ref: '#/components/schemas/NetworkIngress'
+      description: The organization's active private network ingress, when configured.
     NotModified:
       type: object
       properties:
@@ -80929,16 +81511,22 @@ components:
           items:
             type: string
           description: Display names of MCP servers attached to this issuer's clients.
-      description: 'Authoritative impact summary for deleting a remote_session_issuer: how many clients reference it and the names of the MCP servers those clients are attached to.'
+        trusted_user_session_issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
+          description: Organization-owned user_session_issuers that trust this issuer and block deletion.
+      description: 'Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.'
       required:
         - client_count
         - mcp_server_names
+        - trusted_user_session_issuers
     OrganizationIssuerMigratePreflight:
       type: object
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -80958,6 +81546,11 @@ components:
           items:
             type: string
           description: Display names of MCP servers attached to the source issuer's clients.
+        trusted_user_session_issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
+          description: User-session issuers that trust the source and block migration until explicitly unlinked or re-linked.
         warnings:
           type: array
           items:
@@ -80970,6 +81563,7 @@ components:
         - endpoint_mismatches
         - conflicting_mcp_server_names
         - warnings
+        - trusted_user_session_issuers
         - can_migrate
     OrganizationMcpServer:
       type: object
@@ -82528,6 +83122,15 @@ components:
         resource_documentation:
           type: string
           description: URL of human-readable documentation for the resource server.
+        resource_name:
+          type: string
+          description: Human-readable display name of the resource server.
+        resource_policy_uri:
+          type: string
+          description: URL of the resource server's data-usage policy.
+        resource_tos_uri:
+          type: string
+          description: URL of the resource server's terms of service.
         scopes_supported:
           type: array
           items:
@@ -83223,6 +83826,12 @@ components:
           items:
             type: string
           description: Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.
+        token_endpoint_auth_audience_format:
+          type: string
+          description: Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
+          enum:
+            - issuer
+            - token_endpoint
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
@@ -83230,8 +83839,13 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
+            - private_key_jwt
         updated_at:
           type: string
+          format: date-time
+        upstream_rejected_at:
+          type: string
+          description: When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.
           format: date-time
         user_session_issuer_ids:
           type: array
@@ -83309,6 +83923,14 @@ components:
         issuer:
           type: string
           description: Issuer URL; matches the iss claim.
+        jwks_cache_expires_at:
+          type: string
+          description: When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.
+          format: date-time
+        jwks_fetched_at:
+          type: string
+          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          format: date-time
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
@@ -86466,6 +87088,38 @@ components:
         - total_tokens
         - total_cost
         - status
+    SetAIToolDecisionRequestBody:
+      type: object
+      properties:
+        decision:
+          type: string
+          description: The decision to record. unreviewed clears an earlier one.
+          enum:
+            - unreviewed
+            - approved
+            - blocked
+        rationale:
+          type: string
+          description: Why the decision was made. Shown beside it and carried into the audit trail.
+          maxLength: 1024
+        target_id:
+          type: string
+          description: Id of the detection target to decide on, as agents report it.
+          pattern: ^[a-z0-9][a-z0-9-]{0,63}$
+      required:
+        - target_id
+        - decision
+    SetAIToolDecisionResult:
+      type: object
+      properties:
+        access:
+          $ref: '#/components/schemas/AIToolAccessSummary'
+        target_id:
+          type: string
+          description: The detection target the decision was recorded for.
+      required:
+        - target_id
+        - access
     SetBillingMetadataRequestBody:
       type: object
       properties:
@@ -87098,10 +87752,12 @@ components:
           type: array
           items:
             type: string
+          description: The users who reached this server most.
         url_host:
           type: string
         user_count:
           type: integer
+          description: Distinct users who reached this server.
           format: int64
       required:
         - canonical_server_url
@@ -90774,6 +91430,20 @@ components:
           format: uuid
       required:
         - id
+    TrustedUserSessionIssuerReference:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user_session_issuer id.
+          format: uuid
+        slug:
+          type: string
+          description: The user_session_issuer slug.
+      description: An organization-owned user_session_issuer that uses a remote_session_issuer as its trust anchor.
+      required:
+        - id
+        - slug
     TumDetailsBreakdown:
       type: object
       properties:
@@ -91557,6 +92227,38 @@ components:
         - id
         - external_credential_id
         - name
+    UpdateGlobalRemoteSessionClientForm:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        client_secret:
+          type: string
+          description: Rotate the client secret. Gram re-encrypts before persisting.
+        id:
+          type: string
+          description: The remote_session_client id.
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
+        token_endpoint_auth_method:
+          type: string
+          description: Change how the client authenticates at the issuer's token endpoint.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+      description: Form for updating a global remote_session_client without organization-owned signing keys.
+      required:
+        - id
     UpdateIngressRequestBody:
       type: object
       properties:
@@ -91735,6 +92437,9 @@ components:
           type: string
           description: The ID of the meta MCP server to update
           format: uuid
+        instructions:
+          type: string
+          description: Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
         name:
           type: string
           description: The display name of the meta MCP server
@@ -91761,6 +92466,41 @@ components:
       required:
         - id
         - name
+    UpdateOrganizationUserSessionIssuerForm:
+      type: object
+      properties:
+        authn_challenge_mode:
+          type: string
+          description: chain | interactive.
+          enum:
+            - chain
+            - interactive
+        client_id_metadata_admission_mode:
+          type: string
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+          enum:
+            - disabled
+            - presets
+            - open
+        id:
+          type: string
+          description: The user_session_issuer id.
+          format: uuid
+        session_duration_hours:
+          type: integer
+          description: Maximum issued user session lifetime, in hours.
+          format: int64
+          minimum: 1
+          maximum: 2.562047e+06
+        slug:
+          type: string
+          description: Rename the slug.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.
+      description: Form for updating an organization-owned user_session_issuer. All non-id fields are optional patches.
+      required:
+        - id
     UpdateOtelDestinationHeaderInput:
       type: object
       properties:
@@ -91963,6 +92703,12 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.
+        token_endpoint_auth_audience_format:
+          type: string
+          description: Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.
+          enum:
+            - issuer
+            - token_endpoint
         token_endpoint_auth_method:
           type: string
           description: Change how the client authenticates at the issuer's token endpoint.
@@ -91970,6 +92716,7 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
+            - private_key_jwt
       description: Form for updating a remote_session_client. All non-id fields are optional patches.
       required:
         - id
@@ -92663,19 +93410,18 @@ components:
       properties:
         category:
           type: string
-          description: 'Target category: harness (an AI coding tool) or local_model (a local model runtime).'
+          description: 'Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).'
           enum:
             - harness
+            - assistant
             - local_model
         display_name:
           type: string
           description: Name shown in the dashboard.
           minLength: 1
           maxLength: 128
-        enabled:
-          type: boolean
-          description: Whether the organization's agents probe for the target. Defaults to true.
-          default: true
+        gateway_client:
+          $ref: '#/components/schemas/AiScanTargetGatewayClient'
         id:
           type: string
           description: Stable id agents report and detections key on. Never reused for a different tool.
@@ -93224,6 +93970,10 @@ components:
         slug:
           type: string
           description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+        trusted_remote_session_issuer_id:
+          type: string
+          description: The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.
+          format: uuid
         updated_at:
           type: string
           format: date-time
@@ -93490,6 +94240,9 @@ components:
         detail:
           type: string
           description: Human-readable explanation, safe to display to the operator.
+        document:
+          type: string
+          description: The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.
         http_status:
           type: integer
           description: Status the document endpoint returned; omitted when no response was received.

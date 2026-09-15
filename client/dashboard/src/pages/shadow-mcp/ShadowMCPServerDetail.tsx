@@ -7,6 +7,7 @@ import {
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
+import { shadowAIBreadcrumbSubstitutions } from "@/pages/shadow-ai/tabs";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -691,12 +692,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs
           substitutions={{
-            ["shadow-mcp"]: "Shadow MCP",
+            ...shadowAIBreadcrumbSubstitutions,
             [serverSlug]: server?.serverName || server?.urlHost,
           }}
         />
       </Page.Header>
       <Page.Body fullHeight className="pb-8">
+        {/* Organization admin to view: the server and users reads behind
+            this page both require org:admin, so a narrower gate would show
+            the chrome and rename control over a detail that never loads. */}
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
             {/* No area eyebrow: "SECURE" over a server under review reads as

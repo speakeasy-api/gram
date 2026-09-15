@@ -29,6 +29,12 @@ human in the local organization, not through impersonation.
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
+0. **Network Access safety**: with `gram-network-ingress-rollout` absent or off
+   for the demo organization, `/domains` retains the custom-domain surface but
+   shows no Tailscale setup controls. Generic MCP server settings show no Network
+   access mutation section. Confirm there is no `network_ingress` entitlement,
+   ingress row, credential, or related console/network error.
+
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.
@@ -253,6 +259,20 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
+
+18. **Billing meter usage** — select a custom trailing 14-day window. Storage
+    shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
+    and risk content shows all six scanners. Department breakdown includes
+    missing attribution and a remainder. Chart series and table totals sum to
+    the headline exactly, including after weekly/monthly and cumulative toggles.
+    Hide/show a legend series and drill into a day without losing the selected
+    family. The dashboard and API report ordinary usage only. A historical empty
+    range shows “No meter readings recorded,” not legacy telemetry usage.
+    Invoice/contract estimates remain in their separate section. Compare the API
+    totals with the 864 ordinary rows in `billing_meter_readings_by_time FINAL`
+    across all nine meters. The nine intentional duplicate physical deliveries
+    must not increase API usage, while the incremental summary records all 873
+    deliveries. Run the seed twice and repeat.
 
 ## On failure
 

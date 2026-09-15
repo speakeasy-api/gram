@@ -73,6 +73,9 @@ func BuildScheduleOptions(instance triggerrepo.TriggerInstance, schedule string,
 }
 
 func ScheduleTriggerCronWorkflow(ctx context.Context, temporalEnv *tenv.Environment, opts ScheduleTriggerCronWorkflowOptions) error {
+	if temporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	tclient := temporalEnv.Client()
 	queue := temporalEnv.Queue()
 
@@ -123,6 +126,9 @@ func ScheduleTriggerCronWorkflow(ctx context.Context, temporalEnv *tenv.Environm
 }
 
 func DeleteTriggerCronWorkflowSchedule(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID) error {
+	if temporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	handle := temporalEnv.Client().ScheduleClient().GetHandle(ctx, triggerCronWorkflowScheduleID(instanceID))
 	if err := handle.Delete(ctx); err != nil && !isTemporalNotFound(err) {
 		return fmt.Errorf("delete schedule: %w", err)
@@ -131,6 +137,9 @@ func DeleteTriggerCronWorkflowSchedule(ctx context.Context, temporalEnv *tenv.En
 }
 
 func ExecuteTriggerDispatchWorkflow(ctx context.Context, temporalEnv *tenv.Environment, input TriggerDispatchWorkflowInput) error {
+	if temporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	tclient := temporalEnv.Client()
 	queue := temporalEnv.Queue()
 
@@ -159,6 +168,9 @@ func isTemporalNotFound(err error) bool {
 // workflow ID makes repeated scheduling of the same wake a Temporal-level
 // no-op (WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE).
 func ExecuteTriggerWakeWorkflow(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID, fireAt time.Time) error {
+	if temporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	tclient := temporalEnv.Client()
 	queue := temporalEnv.Queue()
 
@@ -188,6 +200,9 @@ func ExecuteTriggerWakeWorkflow(ctx context.Context, temporalEnv *tenv.Environme
 // exiting before dispatch. NotFound is swallowed so cancelling an already-
 // fired or never-started wake is a no-op.
 func CancelTriggerWakeWorkflow(ctx context.Context, temporalEnv *tenv.Environment, instanceID uuid.UUID) error {
+	if temporalEnv == nil {
+		return tenv.ErrNotConfigured
+	}
 	if err := temporalEnv.Client().CancelWorkflow(ctx, TriggerWakeWorkflowID(instanceID), ""); err != nil && !isTemporalNotFound(err) {
 		return fmt.Errorf("cancel trigger wake workflow: %w", err)
 	}
