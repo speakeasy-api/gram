@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -179,7 +180,7 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		ContentBytes:     len(payload.Content),
 		TTLSeconds:       int(ttl / time.Second),
 		ExpiresAt:        expiresAt,
-		DeviceSerial:     normalizeSerial(payload.SerialNumber),
+		DeviceSerial:     deviceidentity.NormalizeSerial(payload.SerialNumber),
 		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
 	}
 	if err := s.audit.LogChatSessionHandoffExport(ctx, dbtx, event); err != nil {
