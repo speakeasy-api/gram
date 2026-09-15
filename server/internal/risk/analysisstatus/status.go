@@ -18,6 +18,14 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 )
 
+// SignalCooldown is the per-project throttle applied to the chat-write signal
+// that wakes the risk analysis coordinator. The first write signals at once
+// and later writes inside the window coalesce into one trailing signal, so
+// analysis starts within about this long of new chat traffic. It lives here
+// so the wiring (server and worker) and the administrator-facing explanation
+// (Platform MCP) read one value.
+const SignalCooldown = 30 * time.Second
+
 // State is the coarse run state of a project's risk analysis coordinator.
 type State string
 

@@ -33,9 +33,7 @@ export function AnalysisStatusBadge(): JSX.Element | null {
 
   if (statusQuery.isPending) {
     return (
-      <Skeleton>
-        <span className="h-5 w-28" />
-      </Skeleton>
+      <Skeleton className="w-28" />
     );
   }
   if (!statusQuery.isSuccess) return null;
@@ -70,7 +68,7 @@ function StatusBadge({
     case "never":
       return (
         <Badge variant="neutral" background={false}>
-          No analysis yet
+          No recent analysis
         </Badge>
       );
   }

@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -292,6 +293,9 @@ func (s *TemporalRiskAnalysisSignaler) Signal(ctx context.Context, projectID uui
 // Temporal for the most recent run, which is what "last ran" means for a
 // ContinueAsNew chain. NotFound maps to StateNever rather than an error.
 func (s *TemporalRiskAnalysisSignaler) Describe(ctx context.Context, projectID uuid.UUID) (analysisstatus.Status, error) {
+	if s.TemporalEnv == nil {
+		return analysisstatus.Status{}, errors.New("risk analysis signaler has no temporal environment")
+	}
 	resp, err := s.TemporalEnv.Client().DescribeWorkflowExecution(ctx, coordinatorWorkflowID(projectID), "")
 	status, err := analysisstatus.FromDescribe(resp, err)
 	if err != nil {

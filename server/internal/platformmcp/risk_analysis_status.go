@@ -22,10 +22,9 @@ import (
 var ErrRiskFeatureNotEnabled = errors.New("platform mcp risk capability not enabled")
 
 // riskAnalysisWakeDelay is how long after new chat traffic the Watchdog
-// analysis is expected to start. It mirrors the per-project throttle the
-// server applies when it wakes the analysis, and only shapes the
-// human-readable explanation.
-const riskAnalysisWakeDelay = 30 * time.Second
+// analysis is expected to start. It is the same value the server hands the
+// throttled signaler, so the explanation cannot drift from the wiring.
+const riskAnalysisWakeDelay = analysisstatus.SignalCooldown
 
 // RiskAnalysisStatusService answers "when did the Watchdog analysis last run"
 // for one project. The analysis is event-driven rather than scheduled, so the

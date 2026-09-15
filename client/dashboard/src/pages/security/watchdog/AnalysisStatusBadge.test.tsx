@@ -84,7 +84,7 @@ describe("AnalysisStatusBadge", () => {
   it("says so when nothing has been analyzed yet", () => {
     useRiskAnalysisStatus.mockReturnValue(loaded({ state: "never" }));
     renderBadge();
-    expect(screen.getByText("No analysis yet")).toBeTruthy();
+    expect(screen.getByText("No recent analysis")).toBeTruthy();
   });
 
   it("renders a placeholder while loading", () => {

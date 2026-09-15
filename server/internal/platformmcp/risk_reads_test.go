@@ -321,7 +321,7 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 8)
+	require.Len(t, reg.Descriptors(), 7)
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))

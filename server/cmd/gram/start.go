@@ -126,6 +126,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
@@ -1612,9 +1613,16 @@ func newStartCommand() *cli.Command {
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			riskSignaler := background.NewThrottledSignaler(
 				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
+				analysisstatus.SignalCooldown,
 				logger,
 			)
+			// Without Temporal there is no coordinator to describe, so Platform MCP
+			// serves get_risk_analysis_status as its stub instead of a live service
+			// that would fail on every call.
+			var riskAnalysisDescriber analysisstatus.Describer
+			if temporalEnv != nil {
+				riskAnalysisDescriber = riskSignaler
+			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                  logger,
 				MeterProvider:           meterProvider,
@@ -1646,7 +1654,7 @@ func newStartCommand() *cli.Command {
 				RiskPolicySignaler:      riskSignaler,
 				RiskPolicyCache:         shadowMCPClient,
 				RiskExclusionReconciler: &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
-				RiskAnalysisDescriber:   riskSignaler,
+				RiskAnalysisDescriber:   riskAnalysisDescriber,
 				Telemetry:               telemetryrepo.New(chDB),
 				TelemetryDrilldown:      telemetryrepo.New(chDB),
 				CanonicalIdentity:       telemSvc,
